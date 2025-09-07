@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Server Dashboard Design System - Dark theme with neon accents */
+
+@layer base {
+  :root {
+    /* Dark dashboard theme */
+    --background: 220 27% 8%;
+    --foreground: 220 9% 95%;
+
+    --card: 220 27% 12%;
+    --card-foreground: 220 9% 95%;
+
+    --popover: 220 27% 12%;
+    --popover-foreground: 220 9% 95%;
+
+    --primary: 142 76% 56%;
+    --primary-foreground: 220 27% 8%;
+
+    --secondary: 220 27% 16%;
+    --secondary-foreground: 220 9% 85%;
+
+    --muted: 220 27% 16%;
+    --muted-foreground: 220 9% 65%;
+
+    --accent: 217 91% 65%;
+    --accent-foreground: 220 27% 8%;
+
+    --destructive: 0 76% 60%;
+    --destructive-foreground: 220 9% 95%;
+
+    --border: 220 27% 20%;
+    --input: 220 27% 16%;
+    --ring: 142 76% 56%;
+
+    /* Status colors */
+    --status-online: 142 76% 56%;
+    --status-offline: 0 76% 60%;
+    --status-warning: 48 96% 56%;
+    --status-info: 217 91% 65%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(142 76% 56% / 0.8), hsl(142 76% 36%));
+    --gradient-card: linear-gradient(135deg, hsl(220 27% 12%), hsl(220 27% 16%));
+    --gradient-background: linear-gradient(135deg, hsl(220 27% 8%), hsl(220 27% 12%));
+
+    /* Shadows and glows */
+    --shadow-card: 0 8px 32px hsl(220 27% 4% / 0.5);
+    --glow-online: 0 0 20px hsl(142 76% 56% / 0.3);
+    --glow-offline: 0 0 20px hsl(0 76% 60% / 0.3);
+    --glow-accent: 0 0 20px hsl(217 91% 65% / 0.3);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --animation-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+    --radius: 0.75rem;
+
+    /* Sidebar for future use */
+    --sidebar-background: 220 27% 10%;
+    --sidebar-foreground: 220 9% 85%;
+    --sidebar-primary: 142 76% 56%;
+    --sidebar-primary-foreground: 220 27% 8%;
+    --sidebar-accent: 220 27% 16%;
+    --sidebar-accent-foreground: 220 9% 85%;
+    --sidebar-border: 220 27% 20%;
+    --sidebar-ring: 142 76% 56%;
+  }
+
+  .dark {
+    /* Dark mode variables (same as root since we're dark by default) */
+    --background: 220 27% 8%;
+    --foreground: 220 9% 95%;
+    --card: 220 27% 12%;
+    --card-foreground: 220 9% 95%;
+    --popover: 220 27% 12%;
+    --popover-foreground: 220 9% 95%;
+    --primary: 142 76% 56%;
+    --primary-foreground: 220 27% 8%;
+    --secondary: 220 27% 16%;
+    --secondary-foreground: 220 9% 85%;
+    --muted: 220 27% 16%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 217 91% 65%;
+    --accent-foreground: 220 27% 8%;
+    --destructive: 0 76% 60%;
+    --destructive-foreground: 220 9% 95%;
+    --border: 220 27% 20%;
+    --input: 220 27% 16%;
+    --ring: 142 76% 56%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    background: var(--gradient-background);
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .glow-online {
+    box-shadow: var(--glow-online);
+  }
+  
+  .glow-offline {
+    box-shadow: var(--glow-offline);
+  }
+  
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+  
+  .bg-gradient-primary {
+    background: var(--gradient-primary);
+  }
+  
+  .bg-gradient-card {
+    background: var(--gradient-card);
+  }
+  
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+  
+  .animate-pulse-slow {
+    animation: var(--animation-pulse);
+  }
+}
