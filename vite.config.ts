@@ -9,16 +9,15 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   // Validate and set default for AdGuard URL
-  const adguardUrl = env.VITE_ADGUARD_MAIN_URL || 'http://127.0.0.1:5213';
+  const adguardUrl = env.VITE_ADGUARD_MAIN_URL || `http://${env.VITE_DEFAULT_IP}:5213`;
   
   // Validate that we have a proper URL
   let validAdguardUrl: string;
   try {
     const url = new URL(adguardUrl);
     validAdguardUrl = url.origin;
-    console.log(`[Vite] Using AdGuard proxy target: ${validAdguardUrl}`);
   } catch (error) {
-    validAdguardUrl = 'http://127.0.0.1:5213';
+    validAdguardUrl = `http://${env.VITE_DEFAULT_IP}:5213`;
     console.warn(`[Vite] Invalid VITE_ADGUARD_MAIN_URL: ${adguardUrl}, using default: ${validAdguardUrl}`);
   }
 
@@ -42,15 +41,10 @@ export default defineConfig(({ mode }) => {
               // Add Authorization header if available
               if (env.VITE_ADGUARD_MAIN_AUTH) {
                 proxyReq.setHeader('Authorization', `Basic ${env.VITE_ADGUARD_MAIN_AUTH}`);
-              } else {
-                console.warn('[Proxy] VITE_ADGUARD_MAIN_AUTH environment variable not found.');
               }
             });
-            proxy.on('proxyRes', (proxyRes, req, res) => {
-              console.log(`[Proxy] ${req.method} ${req.url} -> ${proxyRes.statusCode}`);
-            });
             proxy.on('error', (err, req, res) => {
-              console.error('[Proxy Error]', err.message);
+              console.error(`[Proxy Error] AdGuard connection failed: ${err.message}`);
               if (!res.headersSent) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Proxy error', message: err.message }));

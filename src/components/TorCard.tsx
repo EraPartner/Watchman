@@ -78,8 +78,15 @@ export const TorCard = ({
     : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
 
   const handleUrlClick = () => {
-    // For your specific Tor node, we'll link to the control port (though it's not a web interface)
-    const url = `http://${ip}:${stats.orPort || 9001}`;
+    const defaultPort = parseInt(import.meta.env.VITE_TOR_DEFAULT_PORT || '9001');
+    const url = `http://${ip}:${stats.orPort || defaultPort}`;
+    window.open(url, '_blank');
+  };
+
+  const handleMetricsClick = () => {
+    const metricsUrl = import.meta.env.VITE_TOR_METRICS_URL || 'https://metrics.torproject.org';
+    const nickname = stats.nickname || import.meta.env.VITE_TOR_RELAY_NICKNAME || 'torrelaytor';
+    const url = `${metricsUrl}/rs.html#search/${nickname}`;
     window.open(url, '_blank');
   };
 
@@ -124,7 +131,7 @@ export const TorCard = ({
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline transition-colors"
               title="View relay details on Tor Metrics"
             >
-              <span>Control: {ip}:{port || 56234}</span>
+              <span>Control: {ip}:{port}</span>
               <ExternalLink className="h-3 w-3" />
             </a>
             {stats.orPort && (
