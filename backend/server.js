@@ -106,9 +106,10 @@ app.get('/api/tor/relay/:nickname?', async (req, res) => {
     }
 
     const stats = await serviceManager.getServiceStats('tor');
+    console.log(`✅ Tor relay connection successful`);
     res.json(stats);
   } catch (error) {
-    console.error('❌ Error fetching Tor relay:', error.message);
+    console.error('❌ Tor relay connection failed:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch Tor relay data',
       message: error.message 
@@ -124,9 +125,10 @@ app.get('/api/tor/health', async (req, res) => {
     }
 
     const health = await serviceManager.getServiceHealth('tor');
+    console.log(`✅ Tor health check connection successful`);
     res.json(health);
   } catch (error) {
-    console.error('❌ Error checking Tor health:', error.message);
+    console.error('❌ Tor health check connection failed:', error.message);
     res.status(500).json({ 
       error: 'Failed to check Tor health',
       message: error.message 
