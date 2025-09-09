@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { AdGuardCard } from './AdGuardCard';
 import { TorCard } from './TorCard';
 import { ServerWithService, AdGuardServerStats, TorServerStats } from '../types/server';
-import { ServiceFactory } from '../services/ServiceFactory';
-import { AdGuardService } from '../services/adguard/AdGuardService';
-import { TorService } from '../services/tor/TorService';
+import { apiClient } from '../services/ApiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Activity, Shield, AlertTriangle, CheckCircle, RefreshCw, Globe } from 'lucide-react';
 import { Button } from './ui/button';
@@ -15,29 +13,21 @@ export const LiveServerDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchAdGuardData = async (): Promise<ServerWithService | null> => {
-    const adguardService = ServiceFactory.getService('adguard-main') as AdGuardService;
-    if (!adguardService) {
-      const error = new Error('AdGuard service not found in factory');
-      console.error('❌ AdGuard service not found in factory');
-      throw error;
-    }
-
+  const fetchAdGuardData = async (): Promise<ServerWithService> => {
     try {
-      const [health, stats] = await Promise.all([
-        adguardService.checkHealth(),
-        adguardService.getStats()
+      const [status, stats] = await Promise.all([
+        apiClient.getAdGuardStatus(),
+        apiClient.getAdGuardStats()
       ]);
-      console.log('✅ AdGuard Home API Response:', { health, stats });
 
       return {
         id: 'adguard-main',
         name: 'AdGuard Home',
         type: 'network',
-        ip: import.meta.env.VITE_DEFAULT_IP,
-        port: 5213,
-        status: health.status,
-        lastSeen: health.lastCheck,
+        ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
+        port: stats.http_port || 3000,
+        status: status.running ? 'online' : 'offline',
+        lastSeen: new Date(),
         serviceType: 'adguard',
         description: 'DNS filtering and ad blocking service',
         stats: {
@@ -46,39 +36,35 @@ export const LiveServerDashboard = () => {
           memory: 0,
           disk: 0,
           network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          ...stats,
+          totalQueries: stats.num_dns_queries,
+          blockedQueries: stats.num_blocked_filtering,
+          allowedQueries: stats.num_dns_queries - stats.num_blocked_filtering,
+          blockingRate: stats.num_dns_queries > 0 ? (stats.num_blocked_filtering / stats.num_dns_queries) * 100 : 0,
+          protectionEnabled: stats.protection_enabled,
+          version: stats.version,
+          topBlockedDomain: 'N/A',
+          topQueriedDomain: 'N/A',
+          avgProcessingTime: stats.avg_processing_time,
+          running: stats.running,
         } as AdGuardServerStats,
       };
     } catch (error) {
-      console.error('❌ Failed to fetch AdGuard Home data:', error);
-      // Re-throw the error instead of silently returning fallback data
       throw new Error(`Failed to fetch AdGuard data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const fetchTorData = async (): Promise<ServerWithService | null> => {
-    const torService = ServiceFactory.getService('tor-main') as TorService;
-    if (!torService) {
-      const error = new Error('Tor service not found in factory');
-      console.error('❌ Tor service not found in factory');
-      throw error;
-    }
-
+  const fetchTorData = async (): Promise<ServerWithService> => {
     try {
-      const [health, stats] = await Promise.all([
-        torService.checkHealth(),
-        torService.getStats()
-      ]);
-      console.log('✅ Tor Node API Response:', { health, stats });
+      const relay = await apiClient.getTorRelay();
 
       return {
         id: 'tor-main',
         name: 'Tor Relay',
         type: 'tor',
-        ip: import.meta.env.VITE_DEFAULT_IP,
-        port: parseInt(import.meta.env.VITE_TOR_DEFAULT_PORT),
-        status: health.status,
-        lastSeen: health.lastCheck,
+        ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
+        port: relay.or_addresses?.[0]?.split(':')[1] ? parseInt(relay.or_addresses[0].split(':')[1]) : 9001,
+        status: relay.running ? 'online' : 'offline',
+        lastSeen: new Date(),
         serviceType: 'tor',
         description: 'Tor relay node',
         stats: {
@@ -87,11 +73,29 @@ export const LiveServerDashboard = () => {
           memory: 0,
           disk: 0,
           network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          ...stats,
+          nickname: relay.nickname,
+          fingerprint: relay.fingerprint,
+          flags: relay.flags,
+          relayType: relay.flags?.includes('Exit') ? 'exit' : relay.flags?.includes('Guard') ? 'guard' : 'relay',
+          bandwidth: {
+            current: relay.observed_bandwidth || 0,
+            average: relay.observed_bandwidth || 0,
+            burst: relay.bandwidth_burst || 0
+          },
+          connections: { current: 0, total: 0 },
+          circuits: { active: 0, total: 0 },
+          country: relay.country_name || relay.country,
+          city: relay.city_name,
+          running: relay.running,
+          hibernating: relay.hibernating || false,
+          version: relay.version,
+          platform: relay.platform,
+          contact: relay.contact,
+          consensusWeight: relay.consensus_weight,
+          orPort: relay.or_addresses?.[0]?.split(':')[1] ? parseInt(relay.or_addresses[0].split(':')[1]) : undefined,
         } as TorServerStats,
       };
     } catch (error) {
-      console.error('❌ Failed to fetch Tor node data:', error);
       throw new Error(`Failed to fetch Tor data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -99,26 +103,25 @@ export const LiveServerDashboard = () => {
   const loadServerData = async () => {
     setIsRefreshing(true);
     try {
-      const [adguardData, torData] = await Promise.allSettled([
+      const [adguardResult, torResult] = await Promise.allSettled([
         fetchAdGuardData(),
         fetchTorData()
       ]);
 
       // Handle AdGuard data
-      if (adguardData.status === 'fulfilled') {
-        setAdguardServer(adguardData.value);
+      if (adguardResult.status === 'fulfilled') {
+        setAdguardServer(adguardResult.value);
       } else {
-        console.error('❌ Failed to load AdGuard data:', adguardData.reason);
         setAdguardServer({
           id: 'adguard-main',
           name: 'AdGuard Home',
           type: 'network',
-          ip: import.meta.env.VITE_DEFAULT_IP,
-          port: 5213,
+          ip: 'backend',
+          port: 3000,
           status: 'offline',
           lastSeen: new Date(),
           serviceType: 'adguard',
-          description: `DNS filtering service (Error: ${adguardData.reason instanceof Error ? adguardData.reason.message : 'Unknown error'})`,
+          description: `DNS filtering service (Error: ${adguardResult.reason instanceof Error ? adguardResult.reason.message : 'Unknown error'})`,
           stats: {
             uptime: '0s',
             cpu: 0,
@@ -140,34 +143,33 @@ export const LiveServerDashboard = () => {
       }
 
       // Handle Tor data
-      if (torData.status === 'fulfilled') {
-        setTorServer(torData.value);
+      if (torResult.status === 'fulfilled') {
+        setTorServer(torResult.value);
       } else {
-        console.error('❌ Failed to load Tor data:', torData.reason);
         setTorServer({
           id: 'tor-main',
           name: 'Tor Relay',
           type: 'tor',
-          ip: import.meta.env.VITE_DEFAULT_IP,
-          port: parseInt(import.meta.env.VITE_TOR_DEFAULT_PORT),
+          ip: 'backend',
+          port: 9001,
           status: 'offline',
           lastSeen: new Date(),
           serviceType: 'tor',
-          description: `Tor relay node (Error: ${torData.reason instanceof Error ? torData.reason.message : 'Unknown error'})`,
+          description: `Tor relay node (Error: ${torResult.reason instanceof Error ? torResult.reason.message : 'Unknown error'})`,
           stats: {
             uptime: '0s',
             cpu: 0,
             memory: 0,
             disk: 0,
             network: { incoming: '0 B/s', outgoing: '0 B/s' },
-            version: 'Unknown',
             nickname: 'Unknown',
             fingerprint: 'Unknown',
-            relayType: 'client',
-            bandwidth: { observed: 0, burst: 0, average: 0, current: 0 },
+            flags: [],
+            relayType: 'relay',
+            bandwidth: { current: 0, average: 0, burst: 0 },
             connections: { current: 0, total: 0 },
             circuits: { active: 0, total: 0 },
-            flags: [],
+            country: 'Unknown',
             running: false,
             hibernating: false,
           } as TorServerStats,
@@ -179,112 +181,21 @@ export const LiveServerDashboard = () => {
     }
   };
 
-  const loadAdGuardData = async () => {
-    try {
-      const adguardData = await fetchAdGuardData();
-      setAdguardServer(adguardData);
-    } catch (error) {
-      console.error('❌ Failed to load AdGuard data:', error);
-      setAdguardServer({
-        id: 'adguard-main',
-        name: 'AdGuard Home',
-        type: 'network',
-        ip: import.meta.env.VITE_DEFAULT_IP,
-        port: 5213,
-        status: 'offline',
-        lastSeen: new Date(),
-        serviceType: 'adguard',
-        description: `DNS filtering service (Error: ${error instanceof Error ? error.message : 'Unknown error'})`,
-        stats: {
-          uptime: '0s',
-          cpu: 0,
-          memory: 0,
-          disk: 0,
-          network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          totalQueries: 0,
-          blockedQueries: 0,
-          allowedQueries: 0,
-          blockingRate: 0,
-          protectionEnabled: false,
-          version: 'Unknown',
-          topBlockedDomain: 'N/A',
-          topQueriedDomain: 'N/A',
-          avgProcessingTime: 0,
-          running: false,
-        } as AdGuardServerStats,
-      });
-    }
-  };
-
-  const loadTorData = async () => {
-    try {
-      const torData = await fetchTorData();
-      setTorServer(torData);
-    } catch (error) {
-      console.error('❌ Failed to load Tor data:', error);
-      setTorServer({
-        id: 'tor-main',
-        name: 'Tor Relay',
-        type: 'tor',
-        ip: import.meta.env.VITE_DEFAULT_IP,
-        port: parseInt(import.meta.env.VITE_TOR_DEFAULT_PORT),
-        status: 'offline',
-        lastSeen: new Date(),
-        serviceType: 'tor',
-        description: `Tor relay node (Error: ${error instanceof Error ? error.message : 'Unknown error'})`,
-        stats: {
-          uptime: '0s',
-          cpu: 0,
-          memory: 0,
-          disk: 0,
-          network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          nickname: 'torrelaytor',
-          fingerprint: 'Unknown',
-          flags: [],
-          relayType: 'relay',
-          bandwidth: { current: 0, average: 0, burst: 0 },
-          connections: { current: 0, total: 0 },
-          circuits: { active: 0, total: 0 },
-          country: 'Unknown',
-          running: false,
-          hibernating: false,
-        } as TorServerStats,
-      });
-    }
-  };
-
   useEffect(() => {
-    // Initial load for both services
-    const loadInitialData = async () => {
-      setIsLoading(true);
-      try {
-        await Promise.all([
-          loadAdGuardData(),
-          loadTorData()
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    loadServerData();
 
-    loadInitialData();
-
-    // Set up separate intervals for each service
-    // AdGuard Home: update every 15 seconds (15000ms)
+    // Set up intervals for automatic updates
     const adguardInterval = setInterval(() => {
       console.log('🔄 AdGuard automatic update (15s interval)');
-      loadAdGuardData();
+      loadServerData();
     }, 15000);
     
-    // Tor: update every 5 minutes (300000ms)
     const torInterval = setInterval(() => {
       console.log('🔄 Tor automatic update (5min interval)');
-      loadTorData();
+      loadServerData();
     }, 300000);
 
-    // Cleanup intervals on unmount
     return () => {
-      console.log('🧹 Cleaning up update intervals');
       clearInterval(adguardInterval);
       clearInterval(torInterval);
     };
