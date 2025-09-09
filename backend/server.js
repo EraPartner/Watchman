@@ -9,12 +9,12 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 // Service Configuration (Backend Only)
 const ADGUARD_URL = process.env.ADGUARD_MAIN_URL;
 const ADGUARD_AUTH = process.env.ADGUARD_MAIN_AUTH;
-const TOR_ONIONOO_URL = process.env.TOR_RELAY_URL || 'https://onionoo.torproject.org';
+const TOR_ONIONOO_URL = process.env.TOR_RELAY_URL;
 const TOR_NICKNAME = process.env.TOR_RELAY_NICKNAME;
 
 // Middleware
@@ -54,13 +54,15 @@ app.get('/api/adguard/status', async (req, res) => {
     });
 
     if (!response.ok) {
+      console.log(`⚠️  AdGuard status request failed: HTTP ${response.status}`);
       throw new Error(`AdGuard API returned ${response.status}`);
     }
 
+    console.log(`✅ AdGuard status connection successful`);
     const data = await response.json();
     res.json(data);
   } catch (error) {
-    console.error('❌ Error fetching AdGuard status:', error);
+    console.error('❌ AdGuard status connection failed:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch AdGuard status',
       status: 'offline',
@@ -83,13 +85,15 @@ app.get('/api/adguard/stats', async (req, res) => {
     });
 
     if (!response.ok) {
+      console.log(`⚠️  AdGuard stats request failed: HTTP ${response.status}`);
       throw new Error(`AdGuard API returned ${response.status}`);
     }
 
+    console.log(`✅ AdGuard stats connection successful`);
     const data = await response.json();
     res.json(data);
   } catch (error) {
-    console.error('❌ Error fetching AdGuard stats:', error);
+    console.error('❌ AdGuard stats connection failed:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch AdGuard stats',
       message: error.message 
