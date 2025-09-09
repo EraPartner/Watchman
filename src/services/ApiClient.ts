@@ -1,47 +1,63 @@
 // Simple API client that only talks to our backend
 interface ServiceHealth {
   status: 'online' | 'offline' | 'warning' | 'not_configured';
-  responseTime?: string;
+  responseTime?: number;
   error?: string;
-  timestamp?: string;
+  lastCheck?: string;
 }
 
 interface AdGuardStats {
-  num_dns_queries: number;
-  num_blocked_filtering: number;
-  num_replaced_safebrowsing: number;
-  num_replaced_safesearch: number;
-  num_replaced_parental: number;
-  avg_processing_time: number;
-  protection_enabled: boolean;
-  running: boolean;
+  // Server information
   version: string;
-  dns_addresses: string[];
-  dns_port: number;
-  http_port: number;
-  https_port: number;
-  bootstrap_dns: string[];
-  upstream_dns: string[];
+  running: boolean;
+  protectionEnabled: boolean;
+  dnsPort: number;
+  httpPort: number;
+  language: string;
+  dhcpAvailable: boolean;
+  
+  // DNS Query statistics
+  totalQueries: number;
+  blockedQueries: number;
+  allowedQueries: number;
+  blockingRate: number;
+  
+  // Performance metrics
+  avgProcessingTime: number;
+  timeUnits: string;
+  
+  // Top lists
+  topBlockedDomain: string;
+  topQueriedDomain: string;
+  topClient: string;
+  
+  // Additional stats
+  safebrowsingBlocked: number;
+  safesearchBlocked: number;
+  parentalBlocked: number;
 }
 
 interface TorRelay {
   nickname: string;
   fingerprint: string;
-  or_addresses: string[];
   running: boolean;
+  hibernating: boolean;
   flags: string[];
+  country: string;
+  city: string;
   first_seen: string;
   last_seen: string;
-  bandwidth_burst?: number;
-  observed_bandwidth?: number;
-  consensus_weight?: number;
-  country?: string;
-  country_name?: string;
-  city_name?: string;
-  contact?: string;
-  platform?: string;
-  version?: string;
-  hibernating?: boolean;
+  consensus_weight: number;
+  platform: string;
+  contact: string;
+  orPort: number;
+  relayType: string;
+  version: string;
+  bandwidth: {
+    current: number;
+    average: number;
+    burst: number;
+  };
 }
 
 interface ServicesHealthResponse {
@@ -71,15 +87,16 @@ class ApiClient {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    this.baseUrl = import.meta.env.VITE_BACKEND_URL;
   }
 
-  private async request<T>(endpoint: string): Promise<T> {
+  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       headers: {
         'Content-Type': 'application/json',
       },
       credentials: 'include',
+      ...options,
     });
 
     if (!response.ok) {
@@ -91,22 +108,29 @@ class ApiClient {
   }
 
   // AdGuard endpoints
-  async getAdGuardStatus(): Promise<any> {
+  async getAdGuardStatus(): Promise<ServiceHealth> {
     return this.request('/api/adguard/status');
   }
 
   async getAdGuardStats(): Promise<AdGuardStats> {
-    return this.request<AdGuardStats>('/api/adguard/stats');
+    return this.request('/api/adguard/stats');
+  }
+
+  async setAdGuardProtection(enabled: boolean, duration?: number): Promise<{ success: boolean }> {
+    return this.request('/api/adguard/protection', {
+      method: 'POST',
+      body: JSON.stringify({ enabled, duration }),
+    });
   }
 
   // Tor endpoints
   async getTorRelay(nickname?: string): Promise<TorRelay> {
-    const endpoint = nickname ? `/api/tor/relay/${nickname}` : '/api/tor/relay/default';
+    const endpoint = nickname ? `/api/tor/relay/${nickname}` : '/api/tor/relay';
     return this.request(endpoint);
   }
 
-  async getTorBandwidth(fingerprint: string): Promise<any> {
-    return this.request(`/api/tor/bandwidth/${fingerprint}`);
+  async getTorHealth(): Promise<ServiceHealth> {
+    return this.request('/api/tor/health');
   }
 
   // Health check

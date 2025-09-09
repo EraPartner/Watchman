@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { AdGuardCard } from './AdGuardCard';
 import { TorCard } from './TorCard';
 import { ServerWithService, AdGuardServerStats, TorServerStats } from '../types/server';
-import { ServiceFactory } from '../services/ServiceFactory';
-import { AdGuardService } from '../services/adguard/AdGuardService';
-import { TorService } from '../services/tor/TorService';
+import { apiClient } from '../services/ApiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Activity, Shield, AlertTriangle, CheckCircle, RefreshCw, Globe } from 'lucide-react';
 import { Button } from './ui/button';
@@ -15,26 +13,11 @@ export const LiveServerDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Initialize services
-  const adguardService = ServiceFactory.getService('adguard-main') || 
-    ServiceFactory.createService('adguard-main', 'adguard', {
-      name: 'AdGuard Home',
-      baseUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001',
-      timeout: 10000
-    });
-
-  const torService = ServiceFactory.getService('tor-main') || 
-    ServiceFactory.createService('tor-main', 'tor', {
-      name: 'Tor Relay',
-      baseUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001',
-      timeout: 10000
-    });
-
   const fetchAdGuardData = async (): Promise<ServerWithService> => {
     try {
       const [health, stats] = await Promise.all([
-        (adguardService as AdGuardService).checkHealth(),
-        (adguardService as AdGuardService).getStats()
+        apiClient.getAdGuardStatus(),
+        apiClient.getAdGuardStats()
       ]);
 
       return {
@@ -42,7 +25,7 @@ export const LiveServerDashboard = () => {
         name: 'AdGuard Home',
         type: 'network',
         ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
-        port: (stats as any).httpPort || 3000,
+        port: stats.httpPort || 3000,
         status: health.status === 'online' ? 'online' : health.status === 'warning' ? 'warning' : 'offline',
         lastSeen: new Date(),
         serviceType: 'adguard',
@@ -53,16 +36,16 @@ export const LiveServerDashboard = () => {
           memory: 0,
           disk: 0,
           network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          totalQueries: (stats as any).totalQueries || 0,
-          blockedQueries: (stats as any).blockedQueries || 0,
-          allowedQueries: (stats as any).allowedQueries || 0,
-          blockingRate: (stats as any).blockingRate || 0,
-          protectionEnabled: (stats as any).protectionEnabled || false,
-          version: (stats as any).version || 'Unknown',
-          topBlockedDomain: (stats as any).topBlockedDomain || 'N/A',
-          topQueriedDomain: (stats as any).topQueriedDomain || 'N/A',
-          avgProcessingTime: (stats as any).avgProcessingTime || 0,
-          running: (stats as any).running || false,
+          totalQueries: stats.totalQueries || 0,
+          blockedQueries: stats.blockedQueries || 0,
+          allowedQueries: stats.allowedQueries || 0,
+          blockingRate: stats.blockingRate || 0,
+          protectionEnabled: stats.protectionEnabled || false,
+          version: stats.version || 'Unknown',
+          topBlockedDomain: stats.topBlockedDomain || 'N/A',
+          topQueriedDomain: stats.topQueriedDomain || 'N/A',
+          avgProcessingTime: stats.avgProcessingTime || 0,
+          running: stats.running || false,
         } as AdGuardServerStats,
       };
     } catch (error) {
@@ -73,12 +56,7 @@ export const LiveServerDashboard = () => {
 
   const fetchTorData = async (): Promise<ServerWithService> => {
     try {
-      const [health, stats] = await Promise.all([
-        (torService as TorService).checkHealth(),
-        (torService as TorService).getStats()
-      ]);
-
-      const torStats = stats as any;
+      const torStats = await apiClient.getTorRelay();
 
       return {
         id: 'tor-main',
@@ -86,7 +64,7 @@ export const LiveServerDashboard = () => {
         type: 'tor',
         ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
         port: torStats.orPort || 9001,
-        status: health.status === 'online' ? 'online' : health.status === 'warning' ? 'warning' : 'offline',
+        status: torStats.running ? 'online' : 'offline',
         lastSeen: new Date(),
         serviceType: 'tor',
         description: 'Tor relay node',

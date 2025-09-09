@@ -1,41 +1,11 @@
-import { BaseService, ServiceHealth, ServiceStats, ServiceConfig } from '../base/BaseService';
-
-export interface OnionooRelay {
-  nickname: string;
-  fingerprint: string;
-  or_addresses: string[];
-  running: boolean;
-  flags: string[];
-  first_seen: string;
-  last_seen: string;
-  bandwidth_burst?: number;
-  observed_bandwidth?: number;
-  consensus_weight?: number;
-  country?: string;
-  country_name?: string;
-  city_name?: string;
-  contact?: string;
-  platform?: string;
-  version?: string;
-  hibernating?: boolean;
-}
-
-export interface OnionooResponse {
-  relays: OnionooRelay[];
-}
-
-export class TorService extends BaseService {
-  private relayNickname: string = import.meta.env.VITE_TOR_RELAY_NICKNAME;
-  private onionooBaseUrl: string = import.meta.env.VITE_TOR_RELAY_URL;
-
-  constructor(config: ServiceConfig) {
-    super({
-      ...config,
-      timeout: config.timeout || 10000
-    });
+class TorService {
+  constructor(config) {
+    this.relayNickname = config.relayNickname;
+    this.onionooBaseUrl = config.onionooBaseUrl || 'https://onionoo.torproject.org';
+    this.timeout = config.timeout || 10000;
   }
 
-  async checkHealth(): Promise<ServiceHealth> {
+  async checkHealth() {
     const startTime = Date.now();
     
     try {
@@ -80,12 +50,12 @@ export class TorService extends BaseService {
         status: 'offline',
         responseTime: Date.now() - startTime,
         lastCheck: new Date(),
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error.message
       };
     }
   }
 
-  async getStats(): Promise<ServiceStats> {
+  async getStats() {
     try {
       const relayInfo = await this.searchRelayByNickname(this.relayNickname);
       
@@ -124,12 +94,12 @@ export class TorService extends BaseService {
       return {
         nickname: this.relayNickname,
         status: 'Error',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error.message
       };
     }
   }
 
-  private extractORPort(addresses: string[]): number {
+  extractORPort(addresses) {
     for (const address of addresses) {
       const match = address.match(/:(\d+)$/);
       if (match) {
@@ -139,23 +109,29 @@ export class TorService extends BaseService {
     return 9001;
   }
 
-  private determineRelayType(flags: string[]): string {
+  determineRelayType(flags) {
     if (flags.includes('Exit')) return 'exit';
     if (flags.includes('Guard')) return 'guard';
     if (flags.includes('Bridge')) return 'bridge';
     return 'relay';
   }
 
-  private async searchRelayByNickname(nickname: string): Promise<OnionooRelay | null> {
+  async searchRelayByNickname(nickname) {
     try {
       const url = `${this.onionooBaseUrl}/details?search=${encodeURIComponent(nickname)}`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Watchman-Dashboard/1.0',
+          'Accept': 'application/json'
+        },
+        signal: AbortSignal.timeout(this.timeout)
+      });
       
       if (!response.ok) {
         throw new Error(`Onionoo API request failed: ${response.status} ${response.statusText}`);
       }
 
-      const data: OnionooResponse = await response.json();
+      const data = await response.json();
       
       if (!data.relays || data.relays.length === 0) {
         return null;
@@ -171,8 +147,6 @@ export class TorService extends BaseService {
       throw error;
     }
   }
-
-  get nickname(): string {
-    return this.relayNickname;
-  }
 }
+
+export default TorService;
