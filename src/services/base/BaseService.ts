@@ -1,7 +1,7 @@
 export interface ServiceConfig {
   name: string;
   baseUrl: string;
-  authToken?: string; // Base64 encoded auth string
+  authToken?: string;
   timeout?: number;
 }
 
@@ -43,8 +43,6 @@ export abstract class BaseService {
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
     try {
-      console.log(`🔗 Making request to: ${url}`);
-
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
@@ -58,31 +56,21 @@ export abstract class BaseService {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        console.error(`❌ Request failed: ${errorMessage} for ${url}`);
-        throw new Error(errorMessage);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      console.log(`✅ Request successful: ${response.status} for ${url}`);
       return await response.json();
     } catch (error) {
       clearTimeout(timeoutId);
 
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          const timeoutError = new Error(
-            `Request timeout after ${this.config.timeout}ms for ${url}`
-          );
-          console.error(`⏰ ${timeoutError.message}`);
-          throw timeoutError;
+          throw new Error(`Request timeout after ${this.config.timeout}ms`);
         }
-        console.error(`❌ Request error for ${url}:`, error.message);
         throw error;
       }
 
-      const unknownError = new Error(`Unknown error occurred for ${url}`);
-      console.error(`❌ ${unknownError.message}`);
-      throw unknownError;
+      throw new Error('Unknown error occurred');
     }
   }
 
@@ -98,9 +86,5 @@ export abstract class BaseService {
 
   getConfig(): ServiceConfig {
     return { ...this.config };
-  }
-
-  getLastHealth(): ServiceHealth {
-    return { ...this.lastHealth };
   }
 }
