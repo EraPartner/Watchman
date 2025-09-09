@@ -186,12 +186,10 @@ export const LiveServerDashboard = () => {
 
     // Set up intervals for automatic updates
     const adguardInterval = setInterval(() => {
-      console.log('🔄 AdGuard automatic update (15s interval)');
       loadServerData();
     }, 15000);
     
     const torInterval = setInterval(() => {
-      console.log('🔄 Tor automatic update (5min interval)');
       loadServerData();
     }, 300000);
 

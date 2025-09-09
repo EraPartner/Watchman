@@ -4,6 +4,7 @@ import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Shield, Clock, AlertTriangle, ExternalLink } from 'lucide-react';
 import { AdGuardServerStats, ServerStatus } from '../types/server';
+import { useConfig } from '../hooks/use-config';
 
 interface AdGuardCardProps {
   name: string;
@@ -23,6 +24,7 @@ export const AdGuardCard = ({
   lastSeen 
 }: AdGuardCardProps) => {
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const { config } = useConfig();
 
   // Update current time every second for live timer
   useEffect(() => {
@@ -61,18 +63,32 @@ export const AdGuardCard = ({
     : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
 
   const handleUrlClick = () => {
-    // Open the backend URL since we no longer have direct access to service IPs
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-    window.open(`${backendUrl}/api/adguard/status`, '_blank');
+    // Get AdGuard web URL from backend configuration with fallback
+    const adguardWebUrl = config?.services.adguard.webUrl || 'http://127.0.0.1:5213';
+    window.open(adguardWebUrl, '_blank');
   };
+
+  // Extract URL for display (remove protocol for cleaner look)
+  const displayUrl = (config?.services.adguard.webUrl || 'http://127.0.0.1:5213')
+    .replace(/^https?:\/\//, '');
 
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Shield className="h-4 w-4" />
-          {name}
-        </CardTitle>
+        <div className="flex flex-col">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            {name}
+          </CardTitle>
+          <button
+            onClick={handleUrlClick}
+            className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
+            title="Open AdGuard web interface"
+          >
+            <span>{displayUrl}</span>
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <Badge 
             variant={getStatusVariant(status)} 
@@ -89,14 +105,7 @@ export const AdGuardCard = ({
       <CardContent className="space-y-4">
         {/* Connection Info */}
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <button
-            onClick={handleUrlClick}
-            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline transition-colors"
-            title="Open AdGuard web interface"
-          >
-            <span>{ip}:{port || 3000}</span>
-            <ExternalLink className="h-3 w-3" />
-          </button>
+          <span>Backend: {ip}:{port || 3000}</span>
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {lastSeenText}
