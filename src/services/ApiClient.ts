@@ -75,6 +75,9 @@ interface FrontendConfig {
     };
     tor: {
       nickname?: string;
+      ip?: string;
+      port?: number;
+      metricsUrl?: string;
     };
   };
   app: {

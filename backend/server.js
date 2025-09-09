@@ -159,7 +159,10 @@ app.get('/api/config/frontend', (req, res) => {
         webUrl: process.env.ADGUARD_MAIN_URL || 'http://127.0.0.1:5213'
       },
       tor: {
-        nickname: process.env.TOR_RELAY_NICKNAME
+        nickname: process.env.TOR_RELAY_NICKNAME,
+        ip: process.env.TOR_RELAY_IP || process.env.DEFAULT_IP || '127.0.0.1',
+        port: process.env.TOR_DEFAULT_PORT || 27801,
+        metricsUrl: process.env.TOR_METRICS_URL || 'https://metrics.torproject.org'
       }
     },
     app: {

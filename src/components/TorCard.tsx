@@ -79,7 +79,7 @@ export const TorCard = ({
 
   const handleUrlClick = () => {
     // Open the backend URL since we no longer have direct access to service IPs
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
     window.open(`${backendUrl}/api/tor/relay/${stats.nickname}`, '_blank');
   };
 
@@ -97,13 +97,25 @@ export const TorCard = ({
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Globe className="h-4 w-4" />
-          {name}
-          {stats.nickname && (
-            <span className="text-xs text-muted-foreground">({stats.nickname})</span>
-          )}
-        </CardTitle>
+        <div className="flex flex-col">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Globe className="h-4 w-4" />
+            {name}
+            {stats.nickname && (
+              <span className="text-xs text-muted-foreground">({stats.nickname})</span>
+            )}
+          </CardTitle>
+          <a 
+            href={`https://metrics.torproject.org/rs.html#search/${stats.nickname}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
+            title="View relay details on Tor Metrics"
+          >
+            <span>{ip}:{port}</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
         <div className="flex items-center gap-2">
           <Badge 
             variant={getStatusVariant(status)} 
@@ -124,18 +136,8 @@ export const TorCard = ({
         {/* Connection Info */}
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <a 
-              href={`https://metrics.torproject.org/rs.html#search/${stats.nickname}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline transition-colors"
-              title="View relay details on Tor Metrics"
-            >
-              <span>Control: {ip}:{port}</span>
-              <ExternalLink className="h-3 w-3" />
-            </a>
             {stats.orPort && (
-              <span className="text-xs">• OR: {stats.orPort}</span>
+              <span className="text-xs">OR Port: {stats.orPort}</span>
             )}
           </div>
           <span className="flex items-center gap-1">

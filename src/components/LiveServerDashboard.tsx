@@ -56,14 +56,19 @@ export const LiveServerDashboard = () => {
 
   const fetchTorData = async (): Promise<ServerWithService> => {
     try {
-      const torStats = await apiClient.getTorRelay();
+      const [torStats, frontendConfig] = await Promise.all([
+        apiClient.getTorRelay(),
+        apiClient.getFrontendConfig()
+      ]);
+
+      const torConfig = frontendConfig?.services?.tor || {};
 
       return {
         id: 'tor-main',
         name: 'Tor Relay',
         type: 'tor',
-        ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
-        port: torStats.orPort || 9001,
+        ip: torConfig.ip || 'backend',
+        port: torConfig.port || torStats.orPort || 9001,
         status: torStats.running ? 'online' : 'offline',
         lastSeen: new Date(),
         serviceType: 'tor',
