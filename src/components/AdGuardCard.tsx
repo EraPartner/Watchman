@@ -104,8 +104,7 @@ export const AdGuardCard = ({
       
       <CardContent className="space-y-4">
         {/* Connection Info */}
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>Backend: {ip}:{port || 3000}</span>
+        <div className="flex items-center justify-end text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {lastSeenText}

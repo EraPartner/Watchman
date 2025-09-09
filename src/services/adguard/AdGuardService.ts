@@ -39,11 +39,10 @@ export class AdGuardService extends BaseService {
     const startTime = Date.now();
     
     try {
-      const response = await fetch('/api/adguard/status', {
+      const response = await fetch(`${this.config.baseUrl}/api/adguard/status`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          ...this.getAuthHeaders(),
         },
       });
 
@@ -92,18 +91,16 @@ export class AdGuardService extends BaseService {
   async getStats(): Promise<ServiceStats> {
     try {
       const [statusResponse, statsResponse] = await Promise.all([
-        fetch('/api/adguard/status', {
+        fetch(`${this.config.baseUrl}/api/adguard/status`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            ...this.getAuthHeaders(),
           },
         }),
-        fetch('/api/adguard/stats', {
+        fetch(`${this.config.baseUrl}/api/adguard/stats`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            ...this.getAuthHeaders(),
           },
         })
       ]);
@@ -179,11 +176,10 @@ export class AdGuardService extends BaseService {
   // Get detailed server status (matches /status endpoint)
   async getServerStatus(): Promise<ServerStatus> {
     try {
-      const response = await fetch('/api/adguard/status', {
+      const response = await fetch(`${this.config.baseUrl}/api/adguard/status`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          ...this.getAuthHeaders(),
         },
       });
 
@@ -207,11 +203,10 @@ export class AdGuardService extends BaseService {
   // Get detailed statistics (matches /stats endpoint)
   async getDetailedStats(): Promise<Stats> {
     try {
-      const response = await fetch('/api/adguard/stats', {
+      const response = await fetch(`${this.config.baseUrl}/api/adguard/stats`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          ...this.getAuthHeaders(),
         },
       });
 
@@ -240,12 +235,11 @@ export class AdGuardService extends BaseService {
         body.duration = duration;
       }
 
-      const response = await fetch('/api/adguard/protection', {
+      const response = await fetch(`${this.config.baseUrl}/api/adguard/protection`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          ...this.getAuthHeaders(),
         },
         body: JSON.stringify(body),
       });

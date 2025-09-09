@@ -96,7 +96,7 @@ class ApiClient {
   }
 
   async getAdGuardStats(): Promise<AdGuardStats> {
-    return this.request('/api/adguard/stats');
+    return this.request<AdGuardStats>('/api/adguard/stats');
   }
 
   // Tor endpoints

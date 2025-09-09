@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { AdGuardCard } from './AdGuardCard';
 import { TorCard } from './TorCard';
 import { ServerWithService, AdGuardServerStats, TorServerStats } from '../types/server';
-import { apiClient } from '../services/ApiClient';
+import { ServiceFactory } from '../services/ServiceFactory';
+import { AdGuardService } from '../services/adguard/AdGuardService';
+import { TorService } from '../services/tor/TorService';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Activity, Shield, AlertTriangle, CheckCircle, RefreshCw, Globe } from 'lucide-react';
 import { Button } from './ui/button';
@@ -13,11 +15,26 @@ export const LiveServerDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Initialize services
+  const adguardService = ServiceFactory.getService('adguard-main') || 
+    ServiceFactory.createService('adguard-main', 'adguard', {
+      name: 'AdGuard Home',
+      baseUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001',
+      timeout: 10000
+    });
+
+  const torService = ServiceFactory.getService('tor-main') || 
+    ServiceFactory.createService('tor-main', 'tor', {
+      name: 'Tor Relay',
+      baseUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001',
+      timeout: 10000
+    });
+
   const fetchAdGuardData = async (): Promise<ServerWithService> => {
     try {
-      const [status, stats] = await Promise.all([
-        apiClient.getAdGuardStatus(),
-        apiClient.getAdGuardStats()
+      const [health, stats] = await Promise.all([
+        (adguardService as AdGuardService).checkHealth(),
+        (adguardService as AdGuardService).getStats()
       ]);
 
       return {
@@ -25,8 +42,8 @@ export const LiveServerDashboard = () => {
         name: 'AdGuard Home',
         type: 'network',
         ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
-        port: stats.http_port || 3000,
-        status: status.running ? 'online' : 'offline',
+        port: (stats as any).httpPort || 3000,
+        status: health.status === 'online' ? 'online' : health.status === 'warning' ? 'warning' : 'offline',
         lastSeen: new Date(),
         serviceType: 'adguard',
         description: 'DNS filtering and ad blocking service',
@@ -36,34 +53,40 @@ export const LiveServerDashboard = () => {
           memory: 0,
           disk: 0,
           network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          totalQueries: stats.num_dns_queries,
-          blockedQueries: stats.num_blocked_filtering,
-          allowedQueries: stats.num_dns_queries - stats.num_blocked_filtering,
-          blockingRate: stats.num_dns_queries > 0 ? (stats.num_blocked_filtering / stats.num_dns_queries) * 100 : 0,
-          protectionEnabled: stats.protection_enabled,
-          version: stats.version,
-          topBlockedDomain: 'N/A',
-          topQueriedDomain: 'N/A',
-          avgProcessingTime: stats.avg_processing_time,
-          running: stats.running,
+          totalQueries: (stats as any).totalQueries || 0,
+          blockedQueries: (stats as any).blockedQueries || 0,
+          allowedQueries: (stats as any).allowedQueries || 0,
+          blockingRate: (stats as any).blockingRate || 0,
+          protectionEnabled: (stats as any).protectionEnabled || false,
+          version: (stats as any).version || 'Unknown',
+          topBlockedDomain: (stats as any).topBlockedDomain || 'N/A',
+          topQueriedDomain: (stats as any).topQueriedDomain || 'N/A',
+          avgProcessingTime: (stats as any).avgProcessingTime || 0,
+          running: (stats as any).running || false,
         } as AdGuardServerStats,
       };
     } catch (error) {
+      console.error('❌ LiveServerDashboard - AdGuard fetch failed:', error);
       throw new Error(`Failed to fetch AdGuard data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   const fetchTorData = async (): Promise<ServerWithService> => {
     try {
-      const relay = await apiClient.getTorRelay();
+      const [health, stats] = await Promise.all([
+        (torService as TorService).checkHealth(),
+        (torService as TorService).getStats()
+      ]);
+
+      const torStats = stats as any;
 
       return {
         id: 'tor-main',
         name: 'Tor Relay',
         type: 'tor',
         ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
-        port: relay.or_addresses?.[0]?.split(':')[1] ? parseInt(relay.or_addresses[0].split(':')[1]) : 9001,
-        status: relay.running ? 'online' : 'offline',
+        port: torStats.orPort || 9001,
+        status: health.status === 'online' ? 'online' : health.status === 'warning' ? 'warning' : 'offline',
         lastSeen: new Date(),
         serviceType: 'tor',
         description: 'Tor relay node',
@@ -73,29 +96,26 @@ export const LiveServerDashboard = () => {
           memory: 0,
           disk: 0,
           network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          nickname: relay.nickname,
-          fingerprint: relay.fingerprint,
-          flags: relay.flags,
-          relayType: relay.flags?.includes('Exit') ? 'exit' : relay.flags?.includes('Guard') ? 'guard' : 'relay',
-          bandwidth: {
-            current: relay.observed_bandwidth || 0,
-            average: relay.observed_bandwidth || 0,
-            burst: relay.bandwidth_burst || 0
-          },
+          nickname: torStats.nickname || 'Unknown',
+          fingerprint: torStats.fingerprint || 'Unknown',
+          flags: torStats.flags || [],
+          relayType: torStats.relayType || 'relay',
+          bandwidth: torStats.bandwidth || { current: 0, average: 0, burst: 0 },
           connections: { current: 0, total: 0 },
           circuits: { active: 0, total: 0 },
-          country: relay.country_name || relay.country,
-          city: relay.city_name,
-          running: relay.running,
-          hibernating: relay.hibernating || false,
-          version: relay.version,
-          platform: relay.platform,
-          contact: relay.contact,
-          consensusWeight: relay.consensus_weight,
-          orPort: relay.or_addresses?.[0]?.split(':')[1] ? parseInt(relay.or_addresses[0].split(':')[1]) : undefined,
+          country: torStats.country || 'Unknown',
+          city: torStats.city,
+          running: torStats.running || false,
+          hibernating: torStats.hibernating || false,
+          version: torStats.version,
+          platform: torStats.platform,
+          contact: torStats.contact,
+          consensusWeight: torStats.consensus_weight,
+          orPort: torStats.orPort,
         } as TorServerStats,
       };
     } catch (error) {
+      console.error('❌ LiveServerDashboard - Tor fetch failed:', error);
       throw new Error(`Failed to fetch Tor data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
