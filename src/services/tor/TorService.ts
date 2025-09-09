@@ -25,14 +25,13 @@ export interface OnionooResponse {
 }
 
 export class TorService extends BaseService {
-  private relayNickname: string = 'torrelaytor';
-  private onionooBaseUrl: string = 'https://onionoo.torproject.org';
+  private relayNickname: string = import.meta.env.VITE_TOR_RELAY_NICKNAME;
+  private onionooBaseUrl: string = import.meta.env.VITE_TOR_RELAY_URL;
 
-  constructor() {
+  constructor(config: ServiceConfig) {
     super({
-      name: 'Tor Relay',
-      baseUrl: 'https://onionoo.torproject.org',
-      timeout: 10000
+      ...config,
+      timeout: config.timeout || 10000
     });
   }
 

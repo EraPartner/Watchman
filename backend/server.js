@@ -3,15 +3,26 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const FRONTEND_PORT = process.env.FRONTEND_PORT || 5173;
+const DEFAULT_IP = process.env.DEFAULT_IP || '127.0.0.1';
+const TOR_ONIONOO_URL = process.env.TOR_ONIONOO_URL || 'https://onionoo.torproject.org';
+const USER_AGENT = process.env.USER_AGENT || 'TorDashboard/1.0';
 
 // Middleware
 app.use(helmet());
 app.use(compression());
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: [
+    `http://localhost:${FRONTEND_PORT}`, 
+    `http://${DEFAULT_IP}:${FRONTEND_PORT}`
+  ],
   credentials: true
 }));
 app.use(morgan('combined'));
@@ -31,7 +42,7 @@ app.get('/api/tor/details', async (req, res) => {
   try {
     const { fingerprint, search } = req.query;
     
-    let url = 'https://onionoo.torproject.org/details';
+    let url = `${TOR_ONIONOO_URL}/details`;
     const params = new URLSearchParams();
     
     if (fingerprint) {
@@ -48,22 +59,21 @@ app.get('/api/tor/details', async (req, res) => {
     
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'TorDashboard/1.0',
+        'User-Agent': USER_AGENT,
         'Accept': 'application/json'
       }
     });
-    
+
     if (!response.ok) {
-      throw new Error(`Onionoo API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Onionoo API returned ${response.status}: ${response.statusText}`);
     }
-    
+
     const data = await response.json();
     res.json(data);
-    
   } catch (error) {
-    console.error('❌ Error proxying Onionoo details:', error);
+    console.error('❌ Error fetching Tor details:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch relay details',
+      error: 'Failed to fetch Tor details',
       message: error.message 
     });
   }
@@ -77,27 +87,27 @@ app.get('/api/tor/bandwidth', async (req, res) => {
       return res.status(400).json({ error: 'Missing fingerprint parameter' });
     }
     
-    const url = `https://onionoo.torproject.org/bandwidth?fingerprint=${fingerprint}`;
-    console.log(`📈 Proxying bandwidth request to Onionoo: ${url}`);
+    const url = `${TOR_ONIONOO_URL}/bandwidth?fingerprint=${fingerprint}`;
+    
+    console.log(`🌐 Proxying bandwidth request to Onionoo: ${url}`);
     
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'TorDashboard/1.0',
+        'User-Agent': USER_AGENT,
         'Accept': 'application/json'
       }
     });
-    
+
     if (!response.ok) {
-      throw new Error(`Onionoo API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Onionoo API returned ${response.status}: ${response.statusText}`);
     }
-    
+
     const data = await response.json();
     res.json(data);
-    
   } catch (error) {
-    console.error('❌ Error proxying Onionoo bandwidth:', error);
+    console.error('❌ Error fetching Tor bandwidth:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch bandwidth data',
+      error: 'Failed to fetch Tor bandwidth data',
       message: error.message 
     });
   }
@@ -105,26 +115,18 @@ app.get('/api/tor/bandwidth', async (req, res) => {
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
-    error: 'Not Found',
-    message: `Route ${req.originalUrl} not found`,
-    timestamp: new Date().toISOString()
-  });
+  res.status(404).json({ error: 'Endpoint not found' });
 });
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ 
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-    timestamp: new Date().toISOString()
-  });
+  console.error('❌ Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Watchman Backend running on port ${PORT}`);
+  console.log(`🚀 Watchman Backend Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 Tor Details API: http://localhost:${PORT}/api/tor/details`);
   console.log(`📈 Tor Bandwidth API: http://localhost:${PORT}/api/tor/bandwidth`);

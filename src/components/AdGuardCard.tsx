@@ -61,7 +61,8 @@ export const AdGuardCard = ({
     : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
 
   const handleUrlClick = () => {
-    const url = `http://${ip}:${port || 3000}`;
+    const defaultPort = parseInt(import.meta.env.VITE_ADGUARD_DEFAULT_PORT);
+    const url = `http://${ip}:${port || defaultPort}`;
     window.open(url, '_blank');
   };
 

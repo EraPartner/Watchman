@@ -8,15 +8,15 @@ export const initializeServices = () => {
     // Initialize AdGuard Home
     ServiceFactory.createService('adguard-main', 'adguard', {
       name: 'AdGuard Home',
-      baseUrl: import.meta.env.VITE_ADGUARD_MAIN_URL || 'http://127.0.0.1:5213',
-      authToken: import.meta.env.VITE_ADGUARD_MAIN_AUTH, // Base64 encoded auth string
+      baseUrl: import.meta.env.VITE_ADGUARD_MAIN_URL,
+      authToken: import.meta.env.VITE_ADGUARD_MAIN_AUTH,
       timeout: 5000,
     });
 
     // Initialize Tor Node
     ServiceFactory.createService('tor-main', 'tor', {
       name: 'Tor Relay',
-      baseUrl: import.meta.env.VITE_TOR_RELAY_URL || 'https://onionoo.torproject.org',
+      baseUrl: import.meta.env.VITE_TOR_RELAY_URL,
       timeout: 10000,
     });
 
