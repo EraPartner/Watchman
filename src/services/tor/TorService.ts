@@ -1,4 +1,4 @@
-import { BaseService, ServiceHealth, ServiceStats } from '../base/BaseService';
+import { BaseService, ServiceHealth, ServiceStats, ServiceConfig } from '../base/BaseService';
 
 export interface OnionooRelay {
   nickname: string;

@@ -13,7 +13,7 @@ export interface ServiceHealth {
 }
 
 export interface ServiceStats {
-  [key: string]: string | number | boolean;
+  [key: string]: string | number | boolean | string[] | Record<string, unknown>;
 }
 
 export abstract class BaseService {
