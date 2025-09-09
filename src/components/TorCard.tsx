@@ -78,15 +78,15 @@ export const TorCard = ({
     : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
 
   const handleUrlClick = () => {
-    const defaultPort = parseInt(import.meta.env.VITE_TOR_DEFAULT_PORT || '9001');
-    const url = `http://${ip}:${stats.orPort || defaultPort}`;
-    window.open(url, '_blank');
+    // Open the backend URL since we no longer have direct access to service IPs
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    window.open(`${backendUrl}/api/tor/relay/${stats.nickname}`, '_blank');
   };
 
   const handleMetricsClick = () => {
-    const metricsUrl = import.meta.env.VITE_TOR_METRICS_URL || 'https://metrics.torproject.org';
-    const nickname = stats.nickname || import.meta.env.VITE_TOR_RELAY_NICKNAME || 'torrelaytor';
-    const url = `${metricsUrl}/rs.html#search/${nickname}`;
+    // Use hardcoded Tor metrics URL since this is a public service
+    const nickname = stats.nickname;
+    const url = `https://metrics.torproject.org/rs.html#search/${nickname}`;
     window.open(url, '_blank');
   };
 
@@ -125,7 +125,7 @@ export const TorCard = ({
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <a 
-              href={`https://metrics.torproject.org/rs.html#search/${stats.nickname || 'torrelaytor'}`}
+              href={`https://metrics.torproject.org/rs.html#search/${stats.nickname}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline transition-colors"

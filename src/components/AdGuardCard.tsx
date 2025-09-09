@@ -61,9 +61,9 @@ export const AdGuardCard = ({
     : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
 
   const handleUrlClick = () => {
-    const defaultPort = parseInt(import.meta.env.VITE_ADGUARD_DEFAULT_PORT);
-    const url = `http://${ip}:${port || defaultPort}`;
-    window.open(url, '_blank');
+    // Open the backend URL since we no longer have direct access to service IPs
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    window.open(`${backendUrl}/api/adguard/status`, '_blank');
   };
 
   return (
