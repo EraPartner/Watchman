@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import ServiceManager from './services/ServiceManager.js';
 
 // Load environment variables
 dotenv.config();
@@ -11,11 +12,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
-// Service Configuration (Backend Only)
-const ADGUARD_URL = process.env.ADGUARD_MAIN_URL;
-const ADGUARD_AUTH = process.env.ADGUARD_MAIN_AUTH;
-const TOR_ONIONOO_URL = process.env.TOR_RELAY_URL;
-const TOR_NICKNAME = process.env.TOR_RELAY_NICKNAME;
+// Initialize service manager
+const serviceManager = new ServiceManager();
 
 // Middleware
 app.use(helmet());
@@ -39,28 +37,17 @@ app.get('/health', (req, res) => {
 // AdGuard API endpoints
 app.get('/api/adguard/status', async (req, res) => {
   try {
-    if (!ADGUARD_URL || !ADGUARD_AUTH) {
+    const adguardService = serviceManager.getService('adguard');
+    if (!adguardService) {
       return res.status(503).json({ 
         error: 'AdGuard service not configured',
         status: 'offline'
       });
     }
 
-    const response = await fetch(`${ADGUARD_URL}/control/status`, {
-      headers: {
-        'Authorization': `Basic ${ADGUARD_AUTH}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      console.log(`⚠️  AdGuard status request failed: HTTP ${response.status}`);
-      throw new Error(`AdGuard API returned ${response.status}`);
-    }
-
+    const health = await serviceManager.getServiceHealth('adguard');
     console.log(`✅ AdGuard status connection successful`);
-    const data = await response.json();
-    res.json(data);
+    res.json(health);
   } catch (error) {
     console.error('❌ AdGuard status connection failed:', error.message);
     res.status(500).json({ 
@@ -73,25 +60,14 @@ app.get('/api/adguard/status', async (req, res) => {
 
 app.get('/api/adguard/stats', async (req, res) => {
   try {
-    if (!ADGUARD_URL || !ADGUARD_AUTH) {
+    const adguardService = serviceManager.getService('adguard');
+    if (!adguardService) {
       return res.status(503).json({ error: 'AdGuard service not configured' });
     }
 
-    const response = await fetch(`${ADGUARD_URL}/control/stats`, {
-      headers: {
-        'Authorization': `Basic ${ADGUARD_AUTH}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      console.log(`⚠️  AdGuard stats request failed: HTTP ${response.status}`);
-      throw new Error(`AdGuard API returned ${response.status}`);
-    }
-
+    const stats = await serviceManager.getServiceStats('adguard');
     console.log(`✅ AdGuard stats connection successful`);
-    const data = await response.json();
-    res.json(data);
+    res.json(stats);
   } catch (error) {
     console.error('❌ AdGuard stats connection failed:', error.message);
     res.status(500).json({ 
@@ -101,46 +77,38 @@ app.get('/api/adguard/stats', async (req, res) => {
   }
 });
 
-// Tor API endpoints (enhanced)
-app.get('/api/tor/relay/:nickname', async (req, res) => {
+app.post('/api/adguard/protection', async (req, res) => {
   try {
-    const { nickname } = req.params;
-    const searchNickname = nickname || TOR_NICKNAME;
-    
-    if (!searchNickname) {
-      return res.status(400).json({ error: 'No nickname provided' });
+    const adguardService = serviceManager.getService('adguard');
+    if (!adguardService) {
+      return res.status(503).json({ error: 'AdGuard service not configured' });
     }
 
-    const url = `${TOR_ONIONOO_URL}/details?search=${encodeURIComponent(searchNickname)}`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Watchman-Dashboard/1.0',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Onionoo API returned ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    // Find exact match or return first result
-    const relay = data.relays?.find(r => 
-      r.nickname.toLowerCase() === searchNickname.toLowerCase()
-    ) || data.relays?.[0];
-
-    if (!relay) {
-      return res.status(404).json({ 
-        error: 'Relay not found',
-        nickname: searchNickname 
-      });
-    }
-
-    res.json(relay);
+    const { enabled, duration } = req.body;
+    await adguardService.setProtection(enabled, duration);
+    console.log(`✅ AdGuard protection ${enabled ? 'enabled' : 'disabled'}`);
+    res.json({ success: true });
   } catch (error) {
-    console.error('❌ Error fetching Tor relay:', error);
+    console.error('❌ AdGuard protection toggle failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to toggle AdGuard protection',
+      message: error.message 
+    });
+  }
+});
+
+// Tor API endpoints
+app.get('/api/tor/relay/:nickname?', async (req, res) => {
+  try {
+    const torService = serviceManager.getService('tor');
+    if (!torService) {
+      return res.status(503).json({ error: 'Tor service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('tor');
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Error fetching Tor relay:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch Tor relay data',
       message: error.message 
@@ -148,33 +116,19 @@ app.get('/api/tor/relay/:nickname', async (req, res) => {
   }
 });
 
-app.get('/api/tor/bandwidth/:fingerprint', async (req, res) => {
+app.get('/api/tor/health', async (req, res) => {
   try {
-    const { fingerprint } = req.params;
-    
-    if (!fingerprint) {
-      return res.status(400).json({ error: 'Missing fingerprint parameter' });
-    }
-    
-    const url = `${TOR_ONIONOO_URL}/bandwidth?fingerprint=${fingerprint}`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Watchman-Dashboard/1.0',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Onionoo API returned ${response.status}`);
+    const torService = serviceManager.getService('tor');
+    if (!torService) {
+      return res.status(503).json({ error: 'Tor service not configured' });
     }
 
-    const data = await response.json();
-    res.json(data);
+    const health = await serviceManager.getServiceHealth('tor');
+    res.json(health);
   } catch (error) {
-    console.error('❌ Error fetching Tor bandwidth:', error);
+    console.error('❌ Error checking Tor health:', error.message);
     res.status(500).json({ 
-      error: 'Failed to fetch Tor bandwidth data',
+      error: 'Failed to check Tor health',
       message: error.message 
     });
   }
@@ -182,44 +136,19 @@ app.get('/api/tor/bandwidth/:fingerprint', async (req, res) => {
 
 // Service health check endpoint
 app.get('/api/services/health', async (req, res) => {
-  const services = {};
-  
-  // Check AdGuard
   try {
-    if (ADGUARD_URL && ADGUARD_AUTH) {
-      const response = await fetch(`${ADGUARD_URL}/control/status`, {
-        headers: { 'Authorization': `Basic ${ADGUARD_AUTH}` },
-        timeout: 5000
-      });
-      services.adguard = {
-        status: response.ok ? 'online' : 'offline',
-        responseTime: response.ok ? 'fast' : 'timeout'
-      };
-    } else {
-      services.adguard = { status: 'not_configured' };
-    }
-  } catch (error) {
-    services.adguard = { status: 'offline', error: error.message };
-  }
-
-  // Check Tor
-  try {
-    const nickname = TOR_NICKNAME || 'test';
-    const response = await fetch(`${TOR_ONIONOO_URL}/details?search=${nickname}`, {
-      timeout: 5000
+    const healthResults = await serviceManager.checkAllServicesHealth();
+    res.json({
+      timestamp: new Date().toISOString(),
+      services: healthResults
     });
-    services.tor = {
-      status: response.ok ? 'online' : 'offline',
-      responseTime: response.ok ? 'fast' : 'timeout'
-    };
   } catch (error) {
-    services.tor = { status: 'offline', error: error.message };
+    console.error('❌ Error checking services health:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to check services health',
+      message: error.message 
+    });
   }
-
-  res.json({
-    timestamp: new Date().toISOString(),
-    services
-  });
 });
 
 // Frontend configuration endpoint
@@ -227,11 +156,10 @@ app.get('/api/config/frontend', (req, res) => {
   res.json({
     services: {
       adguard: {
-        webUrl: ADGUARD_URL || 'http://127.0.0.1:5213'
+        webUrl: process.env.ADGUARD_MAIN_URL || 'http://127.0.0.1:5213'
       },
       tor: {
-        // Could add Tor web interface URL here if needed
-        nickname: TOR_NICKNAME
+        nickname: process.env.TOR_RELAY_NICKNAME
       }
     },
     app: {
