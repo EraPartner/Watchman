@@ -13,7 +13,16 @@ const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
 // Initialize service manager
-const serviceManager = new ServiceManager();
+let serviceManager;
+
+async function initializeServer() {
+  console.log('🚀 Initializing Watchman Backend Server...');
+  
+  serviceManager = new ServiceManager();
+  await serviceManager.initializeServices();
+  
+  console.log('✅ Service initialization complete');
+}
 
 // Middleware
 app.use(helmet());
@@ -32,6 +41,24 @@ app.get('/health', (req, res) => {
     service: 'watchman-backend',
     version: '1.0.0'
   });
+});
+
+// Tor proxy health endpoint
+app.get('/api/tor/proxy/health', async (req, res) => {
+  try {
+    if (!serviceManager) {
+      return res.status(503).json({ error: 'Service manager not initialized' });
+    }
+    
+    const health = await serviceManager.getTorManagerHealth();
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Tor proxy health check failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to check Tor proxy health',
+      message: error.message 
+    });
+  }
 });
 
 // AdGuard API endpoints
@@ -185,13 +212,42 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Watchman Backend Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🛡️  AdGuard API: http://localhost:${PORT}/api/adguard/*`);
-  console.log(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
-  console.log(`🔍 Services Health: http://localhost:${PORT}/api/services/health`);
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Received SIGINT, shutting down gracefully...');
+  if (serviceManager) {
+    await serviceManager.shutdown();
+  }
+  process.exit(0);
 });
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 Received SIGTERM, shutting down gracefully...');
+  if (serviceManager) {
+    await serviceManager.shutdown();
+  }
+  process.exit(0);
+});
+
+// Start server
+async function startServer() {
+  try {
+    await initializeServer();
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 Watchman Backend Server running on port ${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`🛡️  AdGuard API: http://localhost:${PORT}/api/adguard/*`);
+      console.log(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
+      console.log(`🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`);
+      console.log(`🔍 Services Health: http://localhost:${PORT}/api/services/health`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 export default app;

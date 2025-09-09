@@ -1,8 +1,17 @@
+import { SocksProxyAgent } from 'socks-proxy-agent';
+
 class TorService {
   constructor(config) {
     this.relayNickname = config.relayNickname;
     this.onionooBaseUrl = config.onionooBaseUrl || 'https://onionoo.torproject.org';
     this.timeout = config.timeout || 10000;
+    this.useProxy = config.useProxy || false;
+    
+    // Only set up proxy if enabled
+    if (this.useProxy && config.torProxy) {
+      this.torProxy = config.torProxy;
+      this.proxyAgent = new SocksProxyAgent(`socks5://${this.torProxy.host}:${this.torProxy.port}`);
+    }
   }
 
   async checkHealth() {
@@ -119,13 +128,27 @@ class TorService {
   async searchRelayByNickname(nickname) {
     try {
       const url = `${this.onionooBaseUrl}/details?search=${encodeURIComponent(nickname)}`;
-      const response = await fetch(url, {
+      
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      
+      const fetchOptions = {
         headers: {
           'User-Agent': 'Watchman-Dashboard/1.0',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(this.timeout)
-      });
+        signal: controller.signal
+      };
+
+      // Only add proxy agent if Tor proxy is enabled
+      if (this.useProxy && this.proxyAgent) {
+        fetchOptions.agent = this.proxyAgent;
+      }
+      
+      const response = await fetch(url, fetchOptions);
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error(`Onionoo API request failed: ${response.status} ${response.statusText}`);
@@ -144,6 +167,9 @@ class TorService {
       return exactMatch || data.relays[0];
 
     } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${this.timeout}ms`);
+      }
       throw error;
     }
   }
