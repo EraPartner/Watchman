@@ -7,7 +7,8 @@ export type ServerType =
   | 'storage' 
   | 'iot' 
   | 'proxy' 
-  | 'wallet';
+  | 'wallet'
+  | 'tor';
 
 export interface ServerStats {
   uptime?: string;
@@ -31,4 +32,48 @@ export interface Server {
   lastSeen: Date;
   stats?: ServerStats;
   description?: string;
+}
+
+export interface AdGuardServerStats extends ServerStats {
+  totalQueries: number;
+  blockedQueries: number;
+  allowedQueries: number;
+  blockingRate: number;
+  protectionEnabled: boolean;
+  version: string;
+  topBlockedDomain: string;
+  topQueriedDomain: string;
+}
+
+export interface TorServerStats extends ServerStats {
+  version: string;
+  nickname?: string;
+  fingerprint: string;
+  relayType: 'relay' | 'exit' | 'bridge' | 'client';
+  bandwidth: {
+    observed: number;   // KB/s
+    burst: number;      // KB/s
+    average: number;    // KB/s
+    current: number;    // KB/s
+  };
+  connections: {
+    current: number;
+    total: number;
+  };
+  circuits: {
+    active: number;
+    total: number;
+  };
+  flags: string[];      // Like ['Fast', 'Guard', 'HSDir', 'Running', 'Stable', 'V2Dir', 'Valid']
+  consensusWeight?: number;
+  exitPolicy?: string;
+  hibernating?: boolean;
+  orPort?: number;
+  controlPort?: number;
+  running: boolean;
+}
+
+export interface ServerWithService extends Server {
+  serviceType?: 'adguard' | 'synology' | 'qbittorrent' | 'bitcoin' | 'tor';
+  serviceStats?: AdGuardServerStats | TorServerStats | ServerStats;
 }
