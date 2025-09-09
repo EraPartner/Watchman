@@ -1,4 +1,5 @@
 import { BaseService, ServiceHealth, ServiceStats } from '../base/BaseService';
+import { logger } from '../../lib/logger';
 
 // Based on AdGuard Home OpenAPI specification
 export interface ServerStatus {
@@ -38,7 +39,7 @@ export class AdGuardService extends BaseService {
     const startTime = Date.now();
     
     try {
-      console.log('🔍 Checking AdGuard Home health via proxy: /api/adguard/status');
+      logger.debug('Checking AdGuard Home health via proxy: /api/adguard/status');
       
       const response = await fetch('/api/adguard/status', {
         method: 'GET',
@@ -48,14 +49,14 @@ export class AdGuardService extends BaseService {
         },
       });
 
-      console.log('📡 Response status:', response.status, response.statusText);
+      logger.debug(`Response status: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const status = await response.json() as ServerStatus;
-      console.log('📊 ServerStatus Response:', JSON.stringify(status, null, 2));
+      logger.debug('ServerStatus Response:', status);
       
       const responseTime = Date.now() - startTime;
       
@@ -70,11 +71,11 @@ export class AdGuardService extends BaseService {
         health.error = 'Protection is disabled';
       }
 
-      console.log('✅ Health Check Result:', health);
+      logger.debug('Health Check Result:', health);
       this.lastHealth = health;
       return health;
     } catch (error) {
-      console.error('❌ AdGuard Health Check Failed:', {
+      logger.error('AdGuard Health Check Failed:', {
         url: '/api/adguard/status',
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
@@ -94,7 +95,7 @@ export class AdGuardService extends BaseService {
 
   async getStats(): Promise<ServiceStats> {
     try {
-      console.log('🔍 Fetching AdGuard stats via proxy endpoints');
+      logger.debug('Fetching AdGuard stats via proxy endpoints');
       
       const [statusResponse, statsResponse] = await Promise.all([
         fetch('/api/adguard/status', {
@@ -113,8 +114,8 @@ export class AdGuardService extends BaseService {
         })
       ]);
 
-      console.log('📡 Status Response:', statusResponse.status, statusResponse.statusText);
-      console.log('📡 Stats Response:', statsResponse.status, statsResponse.statusText);
+      logger.debug(`Status Response: ${statusResponse.status} ${statusResponse.statusText}`);
+      logger.debug(`Stats Response: ${statsResponse.status} ${statsResponse.statusText}`);
 
       if (!statusResponse.ok) {
         throw new Error(`Status endpoint HTTP ${statusResponse.status}: ${statusResponse.statusText}`);
@@ -126,8 +127,8 @@ export class AdGuardService extends BaseService {
       const status = await statusResponse.json() as ServerStatus;
       const stats = await statsResponse.json() as Stats;
 
-      console.log('📊 Raw ServerStatus:', JSON.stringify(status, null, 2));
-      console.log('📊 Raw Stats:', JSON.stringify(stats, null, 2));
+      logger.debug('Raw ServerStatus:', status);
+      logger.debug('Raw Stats:', stats);
 
       // Calculate blocking statistics according to AdGuard's logic
       const totalQueries = stats.num_dns_queries;
@@ -178,11 +179,11 @@ export class AdGuardService extends BaseService {
         parentalBlocked: stats.num_replaced_parental,
       };
 
-      console.log('🎯 Processed Stats for Dashboard:', JSON.stringify(processedStats, null, 2));
+      logger.debug('Processed Stats for Dashboard:', processedStats);
       
       return processedStats;
     } catch (error) {
-      console.error('❌ getStats() failed:', {
+      logger.error('getStats() failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -193,7 +194,7 @@ export class AdGuardService extends BaseService {
   // Get detailed server status (matches /status endpoint)
   async getServerStatus(): Promise<ServerStatus> {
     try {
-      console.log('🔍 Fetching AdGuard server status via proxy: /api/adguard/status');
+      logger.debug('Fetching AdGuard server status via proxy: /api/adguard/status');
       
       const response = await fetch('/api/adguard/status', {
         method: 'GET',
@@ -205,16 +206,16 @@ export class AdGuardService extends BaseService {
 
       if (!response.ok) {
         const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        console.error('❌ Failed to get server status:', errorMessage);
+        logger.error('Failed to get server status:', errorMessage);
         throw new Error(errorMessage);
       }
 
       const result = await response.json() as ServerStatus;
-      console.log('✅ Server status retrieved successfully');
+      logger.info('Server status retrieved successfully');
       return result;
     } catch (error) {
       const errorMessage = `Failed to get server status: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error('❌ getServerStatus() failed:', {
+      logger.error('getServerStatus() failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -225,7 +226,7 @@ export class AdGuardService extends BaseService {
   // Get detailed statistics (matches /stats endpoint)
   async getDetailedStats(): Promise<Stats> {
     try {
-      console.log('🔍 Fetching AdGuard detailed stats via proxy: /api/adguard/stats');
+      logger.debug('Fetching AdGuard detailed stats via proxy: /api/adguard/stats');
       
       const response = await fetch('/api/adguard/stats', {
         method: 'GET',
@@ -237,16 +238,16 @@ export class AdGuardService extends BaseService {
 
       if (!response.ok) {
         const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        console.error('❌ Failed to get detailed stats:', errorMessage);
+        logger.error('Failed to get detailed stats:', errorMessage);
         throw new Error(errorMessage);
       }
 
       const result = await response.json() as Stats;
-      console.log('✅ Detailed stats retrieved successfully');
+      logger.info('Detailed stats retrieved successfully');
       return result;
     } catch (error) {
       const errorMessage = `Failed to get detailed stats: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error('❌ getDetailedStats() failed:', {
+      logger.error('getDetailedStats() failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
@@ -257,7 +258,7 @@ export class AdGuardService extends BaseService {
   // Toggle protection (matches /protection endpoint)
   async setProtection(enabled: boolean, duration?: number): Promise<void> {
     try {
-      console.log(`🔧 Setting AdGuard protection ${enabled ? 'enabled' : 'disabled'}${duration ? ` for ${duration}ms` : ''}`);
+      logger.info(`Setting AdGuard protection ${enabled ? 'enabled' : 'disabled'}${duration ? ` for ${duration}ms` : ''}`);
       
       const body: { enabled: boolean; duration?: number } = { enabled };
       if (duration !== undefined) {
@@ -276,14 +277,14 @@ export class AdGuardService extends BaseService {
 
       if (!response.ok) {
         const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        console.error('❌ Failed to set protection:', errorMessage);
+        logger.error('Failed to set protection:', errorMessage);
         throw new Error(errorMessage);
       }
 
-      console.log(`✅ Protection ${enabled ? 'enabled' : 'disabled'} successfully`);
+      logger.info(`Protection ${enabled ? 'enabled' : 'disabled'} successfully`);
     } catch (error) {
       const errorMessage = `Failed to set protection: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error('❌ setProtection() failed:', {
+      logger.error('setProtection() failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });

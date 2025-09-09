@@ -1,8 +1,9 @@
 import { ServiceFactory } from '../services/ServiceFactory';
+import { logger } from '../lib/logger';
 
 export const initializeServices = () => {
   try {
-    console.log('🚀 Initializing services...');
+    logger.info('Initializing services...');
     
     // Initialize AdGuard Home
     ServiceFactory.createService('adguard-main', 'adguard', {
@@ -15,23 +16,23 @@ export const initializeServices = () => {
     // Initialize Tor Node
     ServiceFactory.createService('tor-main', 'tor', {
       name: 'Tor Relay',
-      baseUrl: 'http://192.168.0.143:56234',
+      baseUrl: import.meta.env.VITE_TOR_RELAY_URL || 'https://onionoo.torproject.org',
       timeout: 10000,
     });
 
-    console.log('✅ Services initialized successfully:', ServiceFactory.getAllServices().size);
+    const serviceCount = ServiceFactory.getAllServices().size;
+    logger.info(`Services initialized successfully: ${serviceCount}`);
     
     // Log which services have authentication configured
     const mainService = ServiceFactory.getService('adguard-main');
-    const torService = ServiceFactory.getService('tor-main');
     
-    console.log('🔐 Authentication status:', 
-      mainService?.getConfig().authToken ? 'AdGuard Home ✓' : 'AdGuard Home ✗',
-      'Tor Node ✓'
-    );
+    logger.debug('Authentication status:', {
+      adguard: mainService?.getConfig().authToken ? 'configured' : 'not configured',
+      tor: 'public API'
+    });
   } catch (error) {
     const errorMessage = `Failed to initialize services: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    console.error('❌ Service initialization failed:', {
+    logger.error('Service initialization failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined
     });
