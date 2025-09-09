@@ -52,6 +52,21 @@ interface ServicesHealthResponse {
   };
 }
 
+interface FrontendConfig {
+  services: {
+    adguard: {
+      webUrl: string;
+    };
+    tor: {
+      nickname?: string;
+    };
+  };
+  app: {
+    name: string;
+    version: string;
+  };
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -101,6 +116,11 @@ class ApiClient {
 
   async getBackendHealth(): Promise<{ status: string; timestamp: string; service: string; version: string }> {
     return this.request('/health');
+  }
+
+  // Frontend configuration
+  async getFrontendConfig(): Promise<FrontendConfig> {
+    return this.request('/api/config/frontend');
   }
 }
 

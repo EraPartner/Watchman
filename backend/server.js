@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import morgan from 'morgan';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -25,7 +24,6 @@ app.use(cors({
   origin: FRONTEND_URL,
   credentials: true
 }));
-app.use(morgan('combined'));
 app.use(express.json());
 
 // Health check endpoint
@@ -217,6 +215,25 @@ app.get('/api/services/health', async (req, res) => {
   res.json({
     timestamp: new Date().toISOString(),
     services
+  });
+});
+
+// Frontend configuration endpoint
+app.get('/api/config/frontend', (req, res) => {
+  res.json({
+    services: {
+      adguard: {
+        webUrl: ADGUARD_URL || 'http://127.0.0.1:5213'
+      },
+      tor: {
+        // Could add Tor web interface URL here if needed
+        nickname: TOR_NICKNAME
+      }
+    },
+    app: {
+      name: 'Watchman Dashboard',
+      version: '1.0.0'
+    }
   });
 });
 
