@@ -4,6 +4,7 @@ import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Globe, Clock, AlertTriangle, ExternalLink, Shield, Zap } from 'lucide-react';
 import { TorServerStats, ServerStatus } from '../types/server';
+import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
 
 interface TorCardProps {
   name: string;
@@ -44,13 +45,7 @@ export const TorCard = ({
   };
 
   const getRelayTypeColor = (relayType: string) => {
-    switch (relayType) {
-      case 'exit': return 'text-red-600';
-      case 'relay': return 'text-blue-600';
-      case 'bridge': return 'text-purple-600';
-      case 'client': return 'text-green-600';
-      default: return 'text-gray-600';
-    }
+    return RELAY_TYPE_COLORS[relayType as keyof typeof RELAY_TYPE_COLORS] || 'text-gray-600';
   };
 
   const formatBandwidth = (kbps: number) => {
@@ -71,28 +66,11 @@ export const TorCard = ({
   };
 
   const timeSinceLastSeen = Math.floor((currentTime - lastSeen.getTime()) / 1000);
-  const lastSeenText = timeSinceLastSeen < 60 
+  const lastSeenText = timeSinceLastSeen < APP_CONFIG.TIME_DISPLAY_THRESHOLDS.SECONDS 
     ? `${timeSinceLastSeen}s ago`
-    : timeSinceLastSeen < 3600
+    : timeSinceLastSeen < APP_CONFIG.TIME_DISPLAY_THRESHOLDS.MINUTES
     ? `${Math.floor(timeSinceLastSeen / 60)}m ago`
     : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
-
-  const handleUrlClick = () => {
-    // Open the backend URL since we no longer have direct access to service IPs
-    const backendUrl = import.meta.env.VITE_BACKEND_URL;
-    window.open(`${backendUrl}/api/tor/relay/${stats.nickname}`, '_blank');
-  };
-
-  const handleMetricsClick = () => {
-    // Use hardcoded Tor metrics URL since this is a public service
-    const nickname = stats.nickname;
-    const url = `https://metrics.torproject.org/rs.html#search/${nickname}`;
-    window.open(url, '_blank');
-  };
-
-  const importantFlags = stats.flags?.filter(flag => 
-    ['Guard', 'Exit', 'Fast', 'Stable', 'Running', 'Valid', 'Authority'].includes(flag)
-  ) || [];
 
   return (
     <Card className="w-full">
@@ -106,7 +84,7 @@ export const TorCard = ({
             )}
           </CardTitle>
           <a 
-            href={`https://metrics.torproject.org/rs.html#search/${stats.nickname}`}
+            href={`${APP_CONFIG.TOR_METRICS_BASE_URL}/${stats.nickname}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"

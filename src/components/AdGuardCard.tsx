@@ -10,8 +10,6 @@ interface AdGuardCardProps {
   name: string;
   status: ServerStatus;
   stats: AdGuardServerStats;
-  ip: string;
-  port?: number;
   lastSeen: Date;
 }
 
@@ -19,8 +17,6 @@ export const AdGuardCard = ({
   name, 
   status, 
   stats, 
-  ip, 
-  port, 
   lastSeen 
 }: AdGuardCardProps) => {
   const [currentTime, setCurrentTime] = useState(Date.now());

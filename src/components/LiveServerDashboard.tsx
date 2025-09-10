@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AdGuardCard } from './AdGuardCard';
 import { TorCard } from './TorCard';
 import { ServerWithService, AdGuardServerStats, TorServerStats } from '../types/server';
@@ -6,6 +6,7 @@ import { apiClient } from '../services/ApiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Activity, Shield, AlertTriangle, CheckCircle, RefreshCw, Globe } from 'lucide-react';
 import { Button } from './ui/button';
+import { APP_CONFIG } from '../lib/constants';
 
 export const LiveServerDashboard = () => {
   const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
@@ -13,7 +14,7 @@ export const LiveServerDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchAdGuardData = async (): Promise<ServerWithService> => {
+  const fetchAdGuardData = useCallback(async (): Promise<ServerWithService> => {
     try {
       const [health, stats] = await Promise.all([
         apiClient.getAdGuardStatus(),
@@ -52,9 +53,9 @@ export const LiveServerDashboard = () => {
       console.error('❌ LiveServerDashboard - AdGuard fetch failed:', error);
       throw new Error(`Failed to fetch AdGuard data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
+  }, []);
 
-  const fetchTorData = async (): Promise<ServerWithService> => {
+  const fetchTorData = useCallback(async (): Promise<ServerWithService> => {
     try {
       const [torStats, frontendConfig] = await Promise.all([
         apiClient.getTorRelay(),
@@ -101,9 +102,9 @@ export const LiveServerDashboard = () => {
       console.error('❌ LiveServerDashboard - Tor fetch failed:', error);
       throw new Error(`Failed to fetch Tor data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
+  }, []);
 
-  const loadServerData = async () => {
+  const loadServerData = useCallback(async () => {
     setIsRefreshing(true);
     try {
       const [adguardResult, torResult] = await Promise.allSettled([
@@ -169,12 +170,13 @@ export const LiveServerDashboard = () => {
             fingerprint: 'Unknown',
             flags: [],
             relayType: 'relay',
-            bandwidth: { current: 0, average: 0, burst: 0 },
+            bandwidth: { current: 0, average: 0, burst: 0, observed: 0 },
             connections: { current: 0, total: 0 },
             circuits: { active: 0, total: 0 },
             country: 'Unknown',
             running: false,
             hibernating: false,
+            version: 'Unknown',
           } as TorServerStats,
         });
       }
@@ -182,25 +184,25 @@ export const LiveServerDashboard = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [fetchAdGuardData, fetchTorData]);
 
   useEffect(() => {
     loadServerData();
 
-    // Set up intervals for automatic updates
+    // Set up intervals for automatic updates using constants
     const adguardInterval = setInterval(() => {
       loadServerData();
-    }, 15000);
+    }, APP_CONFIG.ADGUARD_REFRESH_INTERVAL);
     
     const torInterval = setInterval(() => {
       loadServerData();
-    }, 300000);
+    }, APP_CONFIG.TOR_REFRESH_INTERVAL);
 
     return () => {
       clearInterval(adguardInterval);
       clearInterval(torInterval);
     };
-  }, []);
+  }, [loadServerData]);
 
   const adguardStats = adguardServer?.stats as AdGuardServerStats | undefined;
   const torStats = torServer?.stats as TorServerStats | undefined;

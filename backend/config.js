@@ -1,0 +1,50 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
+// Environment variable validation
+const requiredEnvVars = [
+  'BITCOIN_ONION_HOST',
+  'BITCOIN_RPC_USER', 
+  'BITCOIN_RPC_AUTH_HASH',
+  'BITCOIN_RPC_SESSION_PASSWORD',
+  'ADGUARD_BASE_URL',
+  'ADGUARD_AUTH_TOKEN'
+];
+
+const validateEnvironment = () => {
+  const missing = requiredEnvVars.filter(envVar => !process.env[envVar]);
+  
+  if (missing.length > 0) {
+    console.error('❌ Missing required environment variables:');
+    missing.forEach(envVar => console.error(`  - ${envVar}`));
+    console.error('\n📝 Please check your .env file and ensure all required variables are set.');
+    process.exit(1);
+  }
+  
+  console.log('✅ All required environment variables are present');
+};
+
+const getConfig = () => ({
+  bitcoin: {
+    onionHost: process.env.BITCOIN_ONION_HOST,
+    rpcUser: process.env.BITCOIN_RPC_USER,
+    rpcAuthHash: process.env.BITCOIN_RPC_AUTH_HASH,
+    rpcPort: parseInt(process.env.BITCOIN_RPC_PORT) || 8332,
+    torProxy: process.env.BITCOIN_TOR_PROXY || 'socks5h://127.0.0.1:9050',
+    sessionPassword: process.env.BITCOIN_RPC_SESSION_PASSWORD,
+  },
+  adguard: {
+    baseUrl: process.env.ADGUARD_BASE_URL,
+    authToken: process.env.ADGUARD_AUTH_TOKEN,
+    timeout: parseInt(process.env.ADGUARD_TIMEOUT) || 10000,
+  },
+  server: {
+    port: parseInt(process.env.PORT) || 3001,
+    nodeEnv: process.env.NODE_ENV || 'development',
+  }
+});
+
+module.exports = {
+  validateEnvironment,
+  getConfig
+};
