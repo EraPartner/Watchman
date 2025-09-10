@@ -62,6 +62,10 @@ interface TorRelay {
   };
 }
 
+interface BitcoinStats {
+  // Add relevant fields for Bitcoin stats
+}
+
 interface ServicesHealthResponse {
   timestamp: string;
   services: {
@@ -135,6 +139,15 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ enabled, duration }),
     });
+  }
+
+  // Bitcoin endpoints
+  async getBitcoinStatus(): Promise<ServiceHealth> {
+    return this.request('/api/bitcoin/status');
+  }
+
+  async getBitcoinStats(): Promise<BitcoinStats> {
+    return this.request('/api/bitcoin/stats');
   }
 
   // Tor endpoints

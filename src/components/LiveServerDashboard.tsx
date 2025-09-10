@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Activity, Shield, AlertTriangle, CheckCircle, RefreshCw, Globe } from 'lucide-react';
 import { Button } from './ui/button';
 import { APP_CONFIG } from '../lib/constants';
+import { BitcoinCard } from './BitcoinCard';
 
 export const LiveServerDashboard = () => {
   const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
@@ -274,7 +275,7 @@ export const LiveServerDashboard = () => {
       </div>
 
       {/* Service Tiles */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {adguardServer && (
           <AdGuardCard
             name={adguardServer.name}
@@ -295,6 +296,7 @@ export const LiveServerDashboard = () => {
             lastSeen={torServer.lastSeen}
           />
         )}
+        <BitcoinCard />
       </div>
     </div>
   );

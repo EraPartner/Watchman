@@ -1,6 +1,7 @@
 import AdGuardService from './AdGuardService.js';
 import TorService from './TorService.js';
 import TorManager from './TorManager.js';
+import BitcoinService from './BitcoinService.js';
 
 class ServiceManager {
   constructor() {
@@ -21,6 +22,24 @@ class ServiceManager {
       console.log('✅ AdGuard service initialized');
     } else {
       console.log('⚠️  AdGuard service not configured (missing URL or AUTH)');
+    }
+
+    // Initialize Bitcoin service
+    if (process.env.BITCOIN_ONION_URL && process.env.BITCOIN_RPC_USER && process.env.BITCOIN_RPC_PASSWORD) {
+      const torProxy = `socks5h://${process.env.TOR_PROXY_HOST || '127.0.0.1'}:${process.env.TOR_PROXY_PORT || '9050'}`;
+      
+      const bitcoinService = new BitcoinService({
+        onionHost: process.env.BITCOIN_ONION_URL,
+        rpcUser: process.env.BITCOIN_RPC_USER,
+        rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
+        rpcPort: parseInt(process.env.BITCOIN_RPC_PORT || '8332'),
+        torProxy: torProxy
+      });
+      
+      this.services.set('bitcoin', bitcoinService);
+      console.log('✅ Bitcoin service initialized with Tor proxy');
+    } else {
+      console.log('⚠️  Bitcoin service not configured (missing ONION_URL, RPC_USER, or RPC_PASSWORD)');
     }
 
     // Initialize Tor Manager and Tor service
