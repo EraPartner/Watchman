@@ -78,20 +78,33 @@ class BitcoinService {
 
   async getStats() {
     try {
-      const [network, blockchain] = await Promise.all([
+      const [network, blockchain, mempool] = await Promise.all([
         this.rpcCall('getnetworkinfo'),
         this.rpcCall('getblockchaininfo'),
+        this.rpcCall('getmempoolinfo'),
       ]);
+      
       return {
         version: network.subversion,
         protocolVersion: network.protocolversion,
         blocks: blockchain.blocks,
         headers: blockchain.headers,
         connections: network.connections,
+        inbound: network.connections_in,
+        outbound: network.connections_out,
         difficulty: blockchain.difficulty,
         verificationProgress: blockchain.verificationprogress,
         initialBlockDownload: blockchain.initialblockdownload,
         chain: blockchain.chain,
+        networkHashPs: blockchain.networkhashps || 0,
+        mempool: {
+          size: mempool.size,
+          bytes: mempool.bytes,
+          usage: mempool.usage,
+          maxmempool: mempool.maxmempool,
+          mempoolminfee: mempool.mempoolminfee,
+        },
+        uptime: network.uptime || 0,
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Unknown error' };

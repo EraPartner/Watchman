@@ -1,149 +1,114 @@
-import AdGuardService from './AdGuardService.js';
-import TorService from './TorService.js';
-import TorManager from './TorManager.js';
-import BitcoinService from './BitcoinService.js';
+import { BitcoinService } from './BitcoinService.js';
+import { AdGuardService } from './AdGuardService.js';
+import { TorService } from './TorService.js';
+import { TorManager } from './TorManager.js';
 
-class ServiceManager {
+export default class ServiceManager {
   constructor() {
     this.services = new Map();
     this.torManager = null;
-    this.initializeServices();
+    this.initialized = false;
   }
 
   async initializeServices() {
-    // Initialize AdGuard service
-    if (process.env.ADGUARD_MAIN_URL && process.env.ADGUARD_MAIN_AUTH) {
+    console.log('🔧 Initializing services...');
+    
+    try {
+      // Initialize Tor Manager
+      this.torManager = new TorManager();
+      await this.torManager.initialize();
+      
+      // Initialize Bitcoin service
+      const bitcoinService = new BitcoinService({
+        rpcUrl: process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:8332',
+        rpcUser: process.env.BITCOIN_RPC_USER,
+        rpcPassword: process.env.BITCOIN_RPC_PASSWORD
+      });
+      this.services.set('bitcoin', bitcoinService);
+      
+      // Initialize AdGuard service
       const adguardService = new AdGuardService({
-        baseUrl: process.env.ADGUARD_MAIN_URL,
+        baseUrl: process.env.ADGUARD_MAIN_URL || process.env.ADGUARD_URL || 'http://localhost:3000',
         authToken: process.env.ADGUARD_MAIN_AUTH,
-        timeout: 10000
+        username: process.env.ADGUARD_USERNAME,
+        password: process.env.ADGUARD_PASSWORD,
+        timeout: parseInt(process.env.ADGUARD_TIMEOUT) || 5000
       });
       this.services.set('adguard', adguardService);
-      console.log('✅ AdGuard service initialized');
-    } else {
-      console.log('⚠️  AdGuard service not configured (missing URL or AUTH)');
-    }
-
-    // Initialize Bitcoin service
-    if (process.env.BITCOIN_ONION_URL && process.env.BITCOIN_RPC_USER && process.env.BITCOIN_RPC_PASSWORD) {
-      const torProxy = `socks5h://${process.env.TOR_PROXY_HOST || '127.0.0.1'}:${process.env.TOR_PROXY_PORT || '9050'}`;
       
-      const bitcoinService = new BitcoinService({
-        onionHost: process.env.BITCOIN_ONION_URL,
-        rpcUser: process.env.BITCOIN_RPC_USER,
-        rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
-        rpcPort: parseInt(process.env.BITCOIN_RPC_PORT || '8332'),
-        torProxy: torProxy
-      });
-      
-      this.services.set('bitcoin', bitcoinService);
-      console.log('✅ Bitcoin service initialized with Tor proxy');
-    } else {
-      console.log('⚠️  Bitcoin service not configured (missing ONION_URL, RPC_USER, or RPC_PASSWORD)');
-    }
-
-    // Initialize Tor Manager and Tor service
-    if (process.env.TOR_RELAY_NICKNAME) {
-      const useProxy = process.env.TOR_USE_PROXY === 'true';
-      
-      // Only start Tor manager if proxy is enabled
-      if (useProxy) {
-        this.torManager = new TorManager({
-          socksPort: parseInt(process.env.TOR_PROXY_PORT || '9050'),
-          dataDir: process.env.TOR_DATA_DIR || '.tor-data'
-        });
-
-        console.log('🔧 Starting Tor proxy...');
-        const torStarted = await this.torManager.startTor();
-        
-        if (!torStarted) {
-          console.log('❌ Failed to start Tor proxy - using clearnet instead');
-          useProxy = false;
-        }
-      }
-
-      // Initialize Tor service (with or without proxy)
+      // Initialize Tor service
       const torService = new TorService({
-        relayNickname: process.env.TOR_RELAY_NICKNAME,
-        onionooBaseUrl: process.env.TOR_RELAY_URL,
-        timeout: useProxy ? 15000 : 10000, // Longer timeout for proxy connections
-        useProxy: useProxy,
-        torProxy: useProxy ? {
+        relayNickname: process.env.TOR_RELAY_NICKNAME || 'default-relay',
+        onionooBaseUrl: process.env.TOR_ONIONOO_URL || 'https://onionoo.torproject.org',
+        timeout: parseInt(process.env.TOR_TIMEOUT) || 10000,
+        useProxy: process.env.TOR_USE_PROXY === 'true' || false,
+        torProxy: {
           host: process.env.TOR_PROXY_HOST || '127.0.0.1',
-          port: parseInt(process.env.TOR_PROXY_PORT || '9050'),
-          type: 5
-        } : null
+          port: parseInt(process.env.TOR_PROXY_PORT) || 9050
+        }
       });
-      
       this.services.set('tor', torService);
       
-      if (useProxy) {
-        console.log('✅ Tor service initialized with proxy routing');
-      } else {
-        console.log('✅ Tor service initialized using clearnet API');
-      }
-    } else {
-      console.log('⚠️  Tor service not configured (missing NICKNAME)');
+      this.initialized = true;
+      console.log('✅ All services initialized successfully');
+      
+    } catch (error) {
+      console.error('❌ Failed to initialize services:', error.message);
+      throw error;
     }
   }
 
-  getService(name) {
-    return this.services.get(name);
-  }
-
-  async checkAllServicesHealth() {
-    const results = {};
-    
-    for (const [name, service] of this.services) {
-      try {
-        results[name] = await service.checkHealth();
-      } catch (error) {
-        results[name] = {
-          status: 'offline',
-          error: error.message,
-          lastCheck: new Date()
-        };
-      }
-    }
-    
-    return results;
-  }
-
-  async getServiceStats(serviceName) {
-    const service = this.getService(serviceName);
-    if (!service) {
-      throw new Error(`Service ${serviceName} not found`);
-    }
-    
-    return await service.getStats();
+  getService(serviceName) {
+    return this.services.get(serviceName);
   }
 
   async getServiceHealth(serviceName) {
-    const service = this.getService(serviceName);
+    const service = this.services.get(serviceName);
     if (!service) {
-      throw new Error(`Service ${serviceName} not found`);
+      return {
+        status: 'offline',
+        error: `Service '${serviceName}' not found`,
+        timestamp: new Date().toISOString()
+      };
     }
-    
-    return await service.checkHealth();
+
+    try {
+      return await service.checkHealth();
+    } catch (error) {
+      return {
+        status: 'offline',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
   }
 
-  async shutdown() {
-    console.log('🛑 Shutting down services...');
-    
-    // Stop Tor manager if it exists
-    if (this.torManager) {
-      await this.torManager.stopTor();
+  async getServiceStats(serviceName) {
+    const service = this.services.get(serviceName);
+    if (!service) {
+      throw new Error(`Service '${serviceName}' not found`);
     }
-    
-    console.log('✅ All services shut down');
+
+    return await service.getStats();
   }
 
   async getTorManagerHealth() {
     if (!this.torManager) {
-      return { status: 'not_configured' };
+      return {
+        status: 'offline',
+        error: 'Tor manager not initialized',
+        timestamp: new Date().toISOString()
+      };
     }
-    return await this.torManager.checkHealth();
+
+    return await this.torManager.getHealth();
+  }
+
+  getAllServices() {
+    return Array.from(this.services.keys());
+  }
+
+  isInitialized() {
+    return this.initialized;
   }
 }
-
-export default ServiceManager;

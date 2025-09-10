@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import ServiceManager from './services/ServiceManager.js';
 
 // Load environment variables
-dotenv.config();
+dotenv.config({path:'.env.local'});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -125,6 +125,29 @@ app.post('/api/adguard/protection', async (req, res) => {
 });
 
 // Bitcoin API endpoints
+app.get('/api/bitcoin/health', async (req, res) => {
+  try {
+    const bitcoinService = serviceManager.getService('bitcoin');
+    if (!bitcoinService) {
+      return res.status(503).json({ 
+        error: 'Bitcoin service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await serviceManager.getServiceHealth('bitcoin');
+    console.log(`✅ Bitcoin health connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Bitcoin health connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch Bitcoin health',
+      status: 'offline',
+      message: error.message 
+    });
+  }
+});
+
 app.get('/api/bitcoin/status', async (req, res) => {
   try {
     const bitcoinService = serviceManager.getService('bitcoin');

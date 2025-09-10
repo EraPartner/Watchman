@@ -1,7 +1,18 @@
 class AdGuardService {
   constructor(config) {
     this.baseUrl = config.baseUrl;
-    this.authToken = config.authToken;
+    
+    // Handle both authToken and username/password authentication
+    if (config.authToken) {
+      this.authToken = config.authToken;
+    } else if (config.username && config.password) {
+      // Create Base64 encoded token from username:password
+      const credentials = `${config.username}:${config.password}`;
+      this.authToken = Buffer.from(credentials).toString('base64');
+    } else {
+      this.authToken = null;
+    }
+    
     this.timeout = config.timeout || 5000;
   }
 
@@ -9,12 +20,17 @@ class AdGuardService {
     const startTime = Date.now();
     
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (this.authToken) {
+        headers['Authorization'] = `Basic ${this.authToken}`;
+      }
+
       const response = await fetch(`${this.baseUrl}/control/status`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Basic ${this.authToken}`,
-          'Content-Type': 'application/json'
-        },
+        headers,
         signal: AbortSignal.timeout(this.timeout)
       });
 
@@ -49,21 +65,23 @@ class AdGuardService {
 
   async getStats() {
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (this.authToken) {
+        headers['Authorization'] = `Basic ${this.authToken}`;
+      }
+
       const [statusResponse, statsResponse] = await Promise.all([
         fetch(`${this.baseUrl}/control/status`, {
           method: 'GET',
-          headers: {
-            'Authorization': `Basic ${this.authToken}`,
-            'Content-Type': 'application/json'
-          },
+          headers,
           signal: AbortSignal.timeout(this.timeout)
         }),
         fetch(`${this.baseUrl}/control/stats`, {
           method: 'GET',
-          headers: {
-            'Authorization': `Basic ${this.authToken}`,
-            'Content-Type': 'application/json'
-          },
+          headers,
           signal: AbortSignal.timeout(this.timeout)
         })
       ]);
@@ -135,12 +153,17 @@ class AdGuardService {
         body.duration = duration;
       }
 
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (this.authToken) {
+        headers['Authorization'] = `Basic ${this.authToken}`;
+      }
+
       const response = await fetch(`${this.baseUrl}/control/protection`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${this.authToken}`,
-        },
+        headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeout)
       });
@@ -156,4 +179,4 @@ class AdGuardService {
   }
 }
 
-export default AdGuardService;
+export { AdGuardService };

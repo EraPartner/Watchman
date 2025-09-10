@@ -1,35 +1,36 @@
-# Tor state file last generated on 2025-09-10 09:02:56 local time
+# Tor state file last generated on 2025-09-10 09:59:06 local time
 # Other times below are in UTC
 # You *do not* need to edit this file.
 
-CircuitBuildTimeBin 145 3
-CircuitBuildTimeBin 155 2
-CircuitBuildTimeBin 165 2
-CircuitBuildTimeBin 175 5
-CircuitBuildTimeBin 185 6
+CircuitBuildTimeBin 145 6
+CircuitBuildTimeBin 155 4
+CircuitBuildTimeBin 165 4
+CircuitBuildTimeBin 175 7
+CircuitBuildTimeBin 185 7
 CircuitBuildTimeBin 195 4
-CircuitBuildTimeBin 205 1
-CircuitBuildTimeBin 215 12
-CircuitBuildTimeBin 225 8
+CircuitBuildTimeBin 205 2
+CircuitBuildTimeBin 215 14
+CircuitBuildTimeBin 225 11
 CircuitBuildTimeBin 235 7
-CircuitBuildTimeBin 245 14
-CircuitBuildTimeBin 255 10
-CircuitBuildTimeBin 265 6
+CircuitBuildTimeBin 245 15
+CircuitBuildTimeBin 255 11
+CircuitBuildTimeBin 265 7
 CircuitBuildTimeBin 275 11
 CircuitBuildTimeBin 285 6
 CircuitBuildTimeBin 295 4
 CircuitBuildTimeBin 305 7
 CircuitBuildTimeBin 315 3
 CircuitBuildTimeBin 325 7
-CircuitBuildTimeBin 335 6
+CircuitBuildTimeBin 335 7
 CircuitBuildTimeBin 345 5
 CircuitBuildTimeBin 355 3
 CircuitBuildTimeBin 365 3
+CircuitBuildTimeBin 385 1
 CircuitBuildTimeBin 395 4
 CircuitBuildTimeBin 405 1
-CircuitBuildTimeBin 415 3
+CircuitBuildTimeBin 415 5
 CircuitBuildTimeBin 425 1
-CircuitBuildTimeBin 435 1
+CircuitBuildTimeBin 435 3
 CircuitBuildTimeBin 445 5
 CircuitBuildTimeBin 455 1
 CircuitBuildTimeBin 465 2
@@ -40,6 +41,7 @@ CircuitBuildTimeBin 515 1
 CircuitBuildTimeBin 525 2
 CircuitBuildTimeBin 535 1
 CircuitBuildTimeBin 545 4
+CircuitBuildTimeBin 555 1
 CircuitBuildTimeBin 565 2
 CircuitBuildTimeBin 585 2
 CircuitBuildTimeBin 605 1
@@ -66,6 +68,7 @@ CircuitBuildTimeBin 1145 1
 CircuitBuildTimeBin 1225 1
 CircuitBuildTimeBin 1265 1
 CircuitBuildTimeBin 1305 1
+CircuitBuildTimeBin 1365 1
 CircuitBuildTimeBin 1605 1
 CircuitBuildTimeBin 1755 1
 CircuitBuildTimeBin 1795 1
@@ -148,8 +151,8 @@ CircuitBuildTimeBin 10045 1
 CircuitBuildTimeBin 10765 1
 CircuitBuildAbandonedCount 21
 Dormant 0
-Guard in=default rsa_id=2BC4971C37AB442F63A4A96C38E6A9302C44BB00 nickname=viennaOnTheRun sampled_on=2025-08-30T09:59:30 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-07T03:48:11 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=83.000000 pb_circ_successes=80.000000 pb_successful_circuits_closed=78.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
-Guard in=default rsa_id=B8319DBC39493CD1929EE6764BEEB5CC94977AEB nickname=prsv sampled_on=2025-09-02T14:55:46 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-09T13:11:26 confirmed_idx=1 pb_use_attempts=3.000000 pb_use_successes=3.000000 pb_circ_attempts=93.000000 pb_circ_successes=93.000000 pb_successful_circuits_closed=91.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
+Guard in=default rsa_id=2BC4971C37AB442F63A4A96C38E6A9302C44BB00 nickname=viennaOnTheRun sampled_on=2025-08-30T09:59:30 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-07T03:48:11 confirmed_idx=0 pb_use_attempts=2.000000 pb_use_successes=2.000000 pb_circ_attempts=89.000000 pb_circ_successes=86.000000 pb_successful_circuits_closed=84.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
+Guard in=default rsa_id=B8319DBC39493CD1929EE6764BEEB5CC94977AEB nickname=prsv sampled_on=2025-09-02T14:55:46 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-09T13:11:26 confirmed_idx=1 pb_use_attempts=5.000000 pb_use_successes=5.000000 pb_circ_attempts=107.000000 pb_circ_successes=107.000000 pb_successful_circuits_closed=105.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
 Guard in=default rsa_id=0B7BC0BF2C1186C1C6C23742141373B173DA0DA6 nickname=aurora sampled_on=2025-09-04T14:37:05 sampled_idx=2 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-08T01:22:15 confirmed_idx=2 pb_circ_attempts=10.000000 pb_circ_successes=10.000000 pb_successful_circuits_closed=5.000000 pb_collapsed_circuits=5.000000
 Guard in=default rsa_id=A208C66E3BAF32B70920EB6AF8081F7CFA5DB1D1 nickname=Beanbag sampled_on=2025-08-31T21:45:19 sampled_idx=3 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-08T21:45:22 confirmed_idx=4
 Guard in=default rsa_id=1FB9CCBE02CF10978EAB16943973AC5C548FA243 nickname=PeachUnknown sampled_on=2025-09-03T08:41:21 sampled_idx=4 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-05T11:28:24 confirmed_idx=5
@@ -171,7 +174,7 @@ Guard in=default rsa_id=652CC2F03EEDFF84E5F61EF8CD19D3D97DB5E7EF nickname=Follow
 Guard in=default rsa_id=C721A7FE08638E61293D55BD717C1B330958417E nickname=ElectricThing sampled_on=2025-08-31T07:05:54 sampled_idx=20 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=E8D225CE136B71E2EDFF9D2136DABA58FAD54AB7 nickname=prsv sampled_on=2025-09-02T13:42:34 sampled_idx=21 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=38B0226F4318EEB45D4D6777E18A17B50615F3A5 nickname=bender sampled_on=2025-09-04T20:15:03 sampled_idx=22 sampled_by=0.4.8.17 listed=1
-LastWritten 2025-09-10 07:02:56
-MinutesSinceUserActivity 21
+LastWritten 2025-09-10 07:59:06
+MinutesSinceUserActivity 10
 TorVersion Tor 0.4.8.17
-TotalBuildTimes 311
+TotalBuildTimes 338

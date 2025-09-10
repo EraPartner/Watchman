@@ -175,4 +175,4 @@ class TorService {
   }
 }
 
-export default TorService;
+export { TorService };
