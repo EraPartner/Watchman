@@ -5,7 +5,6 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
@@ -18,6 +17,31 @@ export default defineConfig(({ mode }) => {
     server: {
       port: parseInt(env.VITE_FRONTEND_PORT) || 5173,
       host: true,
+      strictPort: true,
     },
+    build: {
+      // Remove console logs in production
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: mode === 'production',
+          drop_debugger: true,
+        },
+      },
+      // Improve chunk splitting for better caching
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom'],
+            router: ['react-router-dom'],
+            ui: ['lucide-react', '@radix-ui/react-progress', '@radix-ui/react-toast'],
+          },
+        },
+      },
+      // Source maps only in development
+      sourcemap: mode !== 'production',
+    },
+    // Prevent accidental exposure of env vars
+    envPrefix: 'VITE_',
   }
 })

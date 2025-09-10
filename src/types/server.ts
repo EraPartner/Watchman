@@ -43,18 +43,20 @@ export interface AdGuardServerStats extends ServerStats {
   version: string;
   topBlockedDomain: string;
   topQueriedDomain: string;
+  avgProcessingTime: number;
+  running: boolean;
 }
 
 export interface TorServerStats extends ServerStats {
-  version: string;
+  version?: string;
   nickname?: string;
   fingerprint: string;
   relayType: 'relay' | 'exit' | 'bridge' | 'client';
   bandwidth: {
-    observed: number;   // KB/s
-    burst: number;      // KB/s
-    average: number;    // KB/s
     current: number;    // KB/s
+    average: number;    // KB/s
+    burst: number;      // KB/s
+    observed?: number;  // KB/s - Optional to match API response
   };
   connections: {
     current: number;
@@ -71,6 +73,10 @@ export interface TorServerStats extends ServerStats {
   orPort?: number;
   controlPort?: number;
   running: boolean;
+  country?: string;
+  city?: string;
+  platform?: string;
+  contact?: string;
 }
 
 export interface ServerWithService extends Server {

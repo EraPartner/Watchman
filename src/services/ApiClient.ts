@@ -1,3 +1,5 @@
+import { env } from '../lib/env';
+
 // Simple API client that only talks to our backend
 interface ServiceHealth {
   status: 'online' | 'offline' | 'warning' | 'not_configured';
@@ -90,24 +92,33 @@ class ApiClient {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_BACKEND_URL;
+    this.baseUrl = env.getRequired('VITE_BACKEND_URL');
   }
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      ...options,
-    });
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        ...options,
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `API request failed: ${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error(`Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`);
+      }
+      throw error;
     }
-
-    return response.json();
   }
 
   // AdGuard endpoints
