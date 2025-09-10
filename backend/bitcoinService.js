@@ -1,43 +1,15 @@
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const fetch = require('node-fetch');
-const crypto = require('crypto');
 
 class BitcoinService {
-  constructor({ onionHost, rpcUser, rpcAuthHash, rpcPort = 8332, torProxy = 'socks5h://127.0.0.1:9050' }) {
+  constructor({ onionHost, rpcUser, rpcPassword, rpcPort = 8332, torProxy = 'socks5h://127.0.0.1:9050' }) {
     this.onionHost = onionHost;
     this.rpcUser = rpcUser;
-    this.rpcAuthHash = rpcAuthHash; // The hash part from rpcauth
+    this.rpcPassword = rpcPassword; // Direct password instead of hash
     this.rpcPort = rpcPort;
     this.torProxy = torProxy;
     this.baseUrl = `http://${onionHost}:${rpcPort}`;
     this.timeout = 20000;
-  }
-
-  // Parse and validate rpcauth hash for authentication
-  validateRpcAuth(password) {
-    if (!this.rpcAuthHash) {
-      throw new Error('rpcauth hash not provided');
-    }
-
-    // Split the hash into salt and hash parts
-    const [salt, expectedHash] = this.rpcAuthHash.split('$');
-    if (!salt || !expectedHash) {
-      throw new Error('Invalid rpcauth hash format');
-    }
-
-    // Generate HMAC-SHA256 hash
-    const hmac = crypto.createHmac('sha256', Buffer.from(salt, 'hex'));
-    hmac.update(password);
-    const computedHash = hmac.digest('hex');
-
-    return computedHash === expectedHash;
-  }
-
-  // Generate a one-time password for this session
-  generateSessionPassword() {
-    // For security, you still need to provide the original password
-    // This could be loaded from a more secure source or prompted
-    return process.env.BITCOIN_RPC_SESSION_PASSWORD;
   }
 
   async checkHealth() {
@@ -112,18 +84,11 @@ class BitcoinService {
   }
 
   async rpcCall(method, params = []) {
-    const sessionPassword = this.generateSessionPassword();
-    
-    if (!sessionPassword) {
-      throw new Error('Session password required for rpcauth validation');
+    if (!this.rpcUser || !this.rpcPassword) {
+      throw new Error('Bitcoin RPC credentials not configured');
     }
 
-    // Validate the session password against the hash
-    if (!this.validateRpcAuth(sessionPassword)) {
-      throw new Error('Invalid credentials');
-    }
-
-    const auth = Buffer.from(`${this.rpcUser}:${sessionPassword}`).toString('base64');
+    const auth = Buffer.from(`${this.rpcUser}:${this.rpcPassword}`).toString('base64');
     const agent = new SocksProxyAgent(this.torProxy);
     
     const response = await fetch(this.baseUrl, {

@@ -14,15 +14,24 @@ export default class ServiceManager {
     console.log('🔧 Initializing services...');
     
     try {
-      // Initialize Tor Manager
+      // Initialize Tor Manager and start Tor
       this.torManager = new TorManager();
       await this.torManager.initialize();
       
-      // Initialize Bitcoin service
+      // Start Tor if it's not already running
+      console.log('🚀 Starting Tor proxy...');
+      await this.torManager.startTor();
+      
+      // Initialize Bitcoin service with proper onion URL configuration
       const bitcoinService = new BitcoinService({
-        rpcUrl: process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:8332',
+        rpcUrl: `http://${process.env.BITCOIN_ONION_URL}:${process.env.BITCOIN_RPC_PORT}` || 'http://127.0.0.1:8332',
         rpcUser: process.env.BITCOIN_RPC_USER,
-        rpcPassword: process.env.BITCOIN_RPC_PASSWORD
+        rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
+        useProxy: process.env.TOR_USE_PROXY === 'true',
+        torProxy: {
+          host: process.env.TOR_PROXY_HOST || '127.0.0.1',
+          port: parseInt(process.env.TOR_PROXY_PORT) || 9050
+        }
       });
       this.services.set('bitcoin', bitcoinService);
       
