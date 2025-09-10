@@ -124,6 +124,49 @@ app.post('/api/adguard/protection', async (req, res) => {
   }
 });
 
+// Bitcoin API endpoints
+app.get('/api/bitcoin/status', async (req, res) => {
+  try {
+    const bitcoinService = serviceManager.getService('bitcoin');
+    if (!bitcoinService) {
+      return res.status(503).json({ 
+        error: 'Bitcoin service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await serviceManager.getServiceHealth('bitcoin');
+    console.log(`✅ Bitcoin status connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Bitcoin status connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch Bitcoin status',
+      status: 'offline',
+      message: error.message 
+    });
+  }
+});
+
+app.get('/api/bitcoin/stats', async (req, res) => {
+  try {
+    const bitcoinService = serviceManager.getService('bitcoin');
+    if (!bitcoinService) {
+      return res.status(503).json({ error: 'Bitcoin service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('bitcoin');
+    console.log(`✅ Bitcoin stats connection successful`);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Bitcoin stats connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch Bitcoin stats',
+      message: error.message 
+    });
+  }
+});
+
 // Tor API endpoints
 app.get('/api/tor/relay/:nickname?', async (req, res) => {
   try {
@@ -192,6 +235,11 @@ app.get('/api/config/frontend', (req, res) => {
         ip: process.env.TOR_RELAY_IP || process.env.DEFAULT_IP || '127.0.0.1',
         port: process.env.TOR_DEFAULT_PORT || 27801,
         metricsUrl: process.env.TOR_METRICS_URL || 'https://metrics.torproject.org'
+      },
+      bitcoin: {
+        onionUrl: process.env.BITCOIN_ONION_URL,
+        rpcPort: process.env.BITCOIN_RPC_PORT || 8332,
+        configured: !!(process.env.BITCOIN_ONION_URL && process.env.BITCOIN_RPC_USER && process.env.BITCOIN_RPC_AUTH)
       }
     },
     app: {
@@ -238,6 +286,7 @@ async function startServer() {
       console.log(`🚀 Watchman Backend Server running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🛡️  AdGuard API: http://localhost:${PORT}/api/adguard/*`);
+      console.log(`₿  Bitcoin API: http://localhost:${PORT}/api/bitcoin/*`);
       console.log(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
       console.log(`🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`);
       console.log(`🔍 Services Health: http://localhost:${PORT}/api/services/health`);
