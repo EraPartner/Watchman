@@ -1,4 +1,4 @@
-# Tor state file last generated on 2025-09-10 11:09:28 local time
+# Tor state file last generated on 2025-09-10 11:11:54 local time
 # Other times below are in UTC
 # You *do not* need to edit this file.
 
@@ -13,10 +13,10 @@ CircuitBuildTimeBin 205 3
 CircuitBuildTimeBin 215 14
 CircuitBuildTimeBin 225 12
 CircuitBuildTimeBin 235 11
-CircuitBuildTimeBin 245 17
+CircuitBuildTimeBin 245 18
 CircuitBuildTimeBin 255 12
 CircuitBuildTimeBin 265 8
-CircuitBuildTimeBin 275 13
+CircuitBuildTimeBin 275 14
 CircuitBuildTimeBin 285 7
 CircuitBuildTimeBin 295 5
 CircuitBuildTimeBin 305 8
@@ -26,7 +26,7 @@ CircuitBuildTimeBin 335 8
 CircuitBuildTimeBin 345 7
 CircuitBuildTimeBin 355 5
 CircuitBuildTimeBin 365 6
-CircuitBuildTimeBin 375 2
+CircuitBuildTimeBin 375 3
 CircuitBuildTimeBin 385 1
 CircuitBuildTimeBin 395 4
 CircuitBuildTimeBin 405 1
@@ -160,8 +160,8 @@ CircuitBuildTimeBin 10045 1
 CircuitBuildTimeBin 10765 1
 CircuitBuildAbandonedCount 21
 Dormant 0
-Guard in=default rsa_id=2BC4971C37AB442F63A4A96C38E6A9302C44BB00 nickname=viennaOnTheRun sampled_on=2025-08-30T09:59:30 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-07T03:48:11 confirmed_idx=0 pb_use_attempts=2.000000 pb_use_successes=2.000000 pb_circ_attempts=100.000000 pb_circ_successes=97.000000 pb_successful_circuits_closed=95.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
-Guard in=default rsa_id=B8319DBC39493CD1929EE6764BEEB5CC94977AEB nickname=prsv sampled_on=2025-09-02T14:55:46 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-09T13:11:26 confirmed_idx=1 pb_use_attempts=5.000000 pb_use_successes=5.000000 pb_circ_attempts=122.000000 pb_circ_successes=122.000000 pb_successful_circuits_closed=120.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
+Guard in=default rsa_id=2BC4971C37AB442F63A4A96C38E6A9302C44BB00 nickname=viennaOnTheRun sampled_on=2025-08-30T09:59:30 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-07T03:48:11 confirmed_idx=0 pb_use_attempts=3.000000 pb_use_successes=3.000000 pb_circ_attempts=102.000000 pb_circ_successes=99.000000 pb_successful_circuits_closed=97.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
+Guard in=default rsa_id=B8319DBC39493CD1929EE6764BEEB5CC94977AEB nickname=prsv sampled_on=2025-09-02T14:55:46 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-09T13:11:26 confirmed_idx=1 pb_use_attempts=6.000000 pb_use_successes=6.000000 pb_circ_attempts=123.000000 pb_circ_successes=123.000000 pb_successful_circuits_closed=121.000000 pb_collapsed_circuits=2.000000 pb_timeouts=1.000000
 Guard in=default rsa_id=0B7BC0BF2C1186C1C6C23742141373B173DA0DA6 nickname=aurora sampled_on=2025-09-04T14:37:05 sampled_idx=2 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-08T01:22:15 confirmed_idx=2 pb_circ_attempts=10.000000 pb_circ_successes=10.000000 pb_successful_circuits_closed=5.000000 pb_collapsed_circuits=5.000000
 Guard in=default rsa_id=A208C66E3BAF32B70920EB6AF8081F7CFA5DB1D1 nickname=Beanbag sampled_on=2025-08-31T21:45:19 sampled_idx=3 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-08T21:45:22 confirmed_idx=4
 Guard in=default rsa_id=1FB9CCBE02CF10978EAB16943973AC5C548FA243 nickname=PeachUnknown sampled_on=2025-09-03T08:41:21 sampled_idx=4 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-05T11:28:24 confirmed_idx=5
@@ -183,7 +183,6 @@ Guard in=default rsa_id=652CC2F03EEDFF84E5F61EF8CD19D3D97DB5E7EF nickname=Follow
 Guard in=default rsa_id=C721A7FE08638E61293D55BD717C1B330958417E nickname=ElectricThing sampled_on=2025-08-31T07:05:54 sampled_idx=20 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=E8D225CE136B71E2EDFF9D2136DABA58FAD54AB7 nickname=prsv sampled_on=2025-09-02T13:42:34 sampled_idx=21 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=38B0226F4318EEB45D4D6777E18A17B50615F3A5 nickname=bender sampled_on=2025-09-04T20:15:03 sampled_idx=22 sampled_by=0.4.8.17 listed=1
-LastWritten 2025-09-10 09:09:28
-MinutesSinceUserActivity 34
+LastWritten 2025-09-10 09:11:54
 TorVersion Tor 0.4.8.17
-TotalBuildTimes 388
+TotalBuildTimes 391
