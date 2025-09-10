@@ -84,7 +84,14 @@ export class BitcoinService {
     }
 
     try {
-      const curlCommand = `curl -s --user ${this.config.rpcUser}:${this.config.rpcPassword} --data-binary '{"jsonrpc":"1.0","id":"watchman","method":"${method}","params":${JSON.stringify(params)}}' -H 'content-type: text/plain;' ${this.config.rpcUrl}`;
+      let curlCommand = `curl -s --user ${this.config.rpcUser}:${this.config.rpcPassword}`;
+      
+      // Add Tor proxy configuration if needed
+      if (this.config.useProxy) {
+        curlCommand += ` --socks5-hostname ${this.config.torProxy.host}:${this.config.torProxy.port}`;
+      }
+      
+      curlCommand += ` --data-binary '{"jsonrpc":"1.0","id":"watchman","method":"${method}","params":${JSON.stringify(params)}}' -H 'content-type: text/plain;' ${this.config.rpcUrl}`;
       
       const result = execSync(curlCommand, { 
         timeout: this.config.timeout,
@@ -103,6 +110,10 @@ export class BitcoinService {
         throw new Error('Bitcoin node not reachable');
       } else if (error.message.includes('401')) {
         throw new Error('Bitcoin RPC authentication failed');
+      } else if (error.message.includes('Connection refused')) {
+        throw new Error('Bitcoin node connection refused - check if Bitcoin Core is running');
+      } else if (error.message.includes('timeout')) {
+        throw new Error('Bitcoin RPC request timed out');
       } else {
         throw new Error(`Bitcoin RPC call failed: ${error.message}`);
       }
