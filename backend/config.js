@@ -17,7 +17,7 @@ const validateEnvironment = () => {
   if (missing.length > 0) {
     console.error('❌ Missing required environment variables:');
     missing.forEach(envVar => console.error(`  - ${envVar}`));
-    console.error('\n📝 Please check your .env file and ensure all required variables are set.');
+    console.error('\n📝 Please check your .env.local.local file and ensure all required variables are set.');
     process.exit(1);
   }
   

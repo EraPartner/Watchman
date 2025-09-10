@@ -1,38 +1,29 @@
+import React from 'react';
 import { Badge } from './ui/badge';
-import { ServerStatus } from '../types/server';
 
 interface ServerStatusBadgeProps {
-  status: ServerStatus;
-  className?: string;
+  status: 'online' | 'offline' | 'warning' | 'loading';
 }
 
-export const ServerStatusBadge = ({ status, className }: ServerStatusBadgeProps) => {
-  const getStatusVariant = (status: ServerStatus) => {
+export const ServerStatusBadge: React.FC<ServerStatusBadgeProps> = ({ status }) => {
+  const getStatusColor = () => {
     switch (status) {
-      case 'online': return 'default';
-      case 'warning': return 'secondary';
-      case 'offline': return 'destructive';
-      case 'maintenance': return 'outline';
-      default: return 'secondary';
-    }
-  };
-
-  const getStatusText = (status: ServerStatus) => {
-    switch (status) {
-      case 'online': return 'Online';
-      case 'warning': return 'Warning';
-      case 'offline': return 'Offline';
-      case 'maintenance': return 'Maintenance';
-      default: return 'Unknown';
+      case 'online':
+        return 'bg-green-500 text-white';
+      case 'offline':
+        return 'bg-red-500 text-white';
+      case 'warning':
+        return 'bg-yellow-500 text-black';
+      case 'loading':
+        return 'bg-gray-500 text-white';
+      default:
+        return 'bg-gray-500 text-white';
     }
   };
 
   return (
-    <Badge 
-      variant={getStatusVariant(status)} 
-      className={`capitalize ${className}`}
-    >
-      {getStatusText(status)}
+    <Badge className={`${getStatusColor()} px-2 py-1 text-xs`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
     </Badge>
   );
 };

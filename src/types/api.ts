@@ -1,8 +1,6 @@
 // API Response Types
 export interface ServiceHealth {
-  status: 'online' | 'offline' | 'warning';
-  responseTime?: number;
-  lastCheck: string;
+  status: 'online' | 'offline' | 'warning' | 'loading';
   error?: string;
 }
 
@@ -12,10 +10,21 @@ export interface BitcoinStats {
   blocks: number;
   headers: number;
   connections: number;
+  inbound: number;
+  outbound: number;
   difficulty: number;
   verificationProgress: number;
   initialBlockDownload: boolean;
   chain: string;
+  networkHashPs: number;
+  mempool: {
+    size: number;
+    bytes: number;
+    usage: number;
+    maxmempool: number;
+    mempoolminfee: number;
+  };
+  uptime: number;
 }
 
 export interface AdGuardStats {
@@ -46,11 +55,4 @@ export interface TorRelayStats {
 // API Error Response
 export interface ApiError {
   error: string;
-  message?: string;
-  timestamp?: string;
 }
-
-// Union types for API responses
-export type BitcoinApiResponse = BitcoinStats | ApiError;
-export type AdGuardApiResponse = AdGuardStats | ApiError;
-export type TorApiResponse = TorRelayStats | ApiError;

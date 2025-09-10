@@ -1,154 +1,111 @@
-import { SocksProxyAgent } from 'socks-proxy-agent';
-import fetch from 'node-fetch';
+import { execSync } from 'child_process';
 
-class BitcoinService {
-  constructor({ onionHost, rpcUser, rpcPassword, rpcPort = 8332, torProxy = 'socks5h://127.0.0.1:9050' }) {
-    this.onionHost = onionHost;
-    this.rpcUser = rpcUser;
-    this.rpcPassword = rpcPassword;
-    this.rpcPort = rpcPort;
-    this.torProxy = torProxy;
-    this.baseUrl = `http://${onionHost}:${rpcPort}`;
-    this.timeout = 30000; // 30 seconds for Tor connections
+export class BitcoinService {
+  constructor(config = {}) {
+    this.config = {
+      rpcUrl: config.rpcUrl || 'http://127.0.0.1:8332',
+      rpcUser: config.rpcUser || process.env.BITCOIN_RPC_USER,
+      rpcPassword: config.rpcPassword || process.env.BITCOIN_RPC_PASSWORD,
+      timeout: config.timeout || 10000,
+      ...config
+    };
   }
 
   async checkHealth() {
-    const startTime = Date.now();
     try {
-      const info = await this.rpcCall('getblockchaininfo');
-      const responseTime = Date.now() - startTime;
+      // Try to get basic blockchain info to check if Bitcoin node is responsive
+      const result = await this.executeRpcCommand('getblockchaininfo');
       
-      if (!info) {
+      if (result && result.chain) {
         return {
-          status: 'offline',
-          responseTime,
-          lastCheck: new Date(),
-          error: 'No response from node',
+          status: 'online',
+          timestamp: new Date().toISOString()
         };
-      }
-      
-      if (info.initialblockdownload) {
+      } else {
         return {
           status: 'warning',
-          responseTime,
-          lastCheck: new Date(),
-          error: 'Initial block download in progress',
-          progress: info.verificationprogress,
+          error: 'Bitcoin node responding but data incomplete',
+          timestamp: new Date().toISOString()
         };
       }
-      
-      return {
-        status: 'online',
-        responseTime,
-        lastCheck: new Date(),
-        blocks: info.blocks,
-        headers: info.headers,
-        chain: info.chain,
-        verificationProgress: info.verificationprogress,
-      };
     } catch (error) {
       return {
         status: 'offline',
-        responseTime: Date.now() - startTime,
-        lastCheck: new Date(),
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error.message,
+        timestamp: new Date().toISOString()
       };
     }
   }
 
   async getStats() {
     try {
-      const [network, blockchain, mempool] = await Promise.all([
-        this.rpcCall('getnetworkinfo'),
-        this.rpcCall('getblockchaininfo'),
-        this.rpcCall('getmempoolinfo')
-      ]);
+      // Get blockchain info
+      const blockchainInfo = await this.executeRpcCommand('getblockchaininfo');
       
+      // Get network info for connections and version
+      const networkInfo = await this.executeRpcCommand('getnetworkinfo');
+      
+      // Get mempool info
+      const mempoolInfo = await this.executeRpcCommand('getmempoolinfo');
+      
+      // Get uptime
+      const uptime = await this.executeRpcCommand('uptime');
+
       return {
-        version: network.subversion,
-        protocolVersion: network.protocolversion,
-        blocks: blockchain.blocks,
-        headers: blockchain.headers,
-        connections: network.connections,
-        inbound: network.connections_in || 0,
-        outbound: network.connections_out || 0,
-        difficulty: blockchain.difficulty,
-        verificationProgress: blockchain.verificationprogress,
-        initialBlockDownload: blockchain.initialblockdownload,
-        chain: blockchain.chain,
-        networkHashPs: blockchain.mediantime ? await this.getNetworkHashrate() : null,
+        version: networkInfo.subversion || networkInfo.version || 'Unknown',
+        protocolVersion: networkInfo.protocolversion || 0,
+        blocks: blockchainInfo.blocks || 0,
+        headers: blockchainInfo.headers || 0,
+        connections: networkInfo.connections || 0,
+        inbound: networkInfo.connections_in || 0,
+        outbound: networkInfo.connections_out || 0,
+        difficulty: blockchainInfo.difficulty || 0,
+        verificationProgress: blockchainInfo.verificationprogress || 0,
+        initialBlockDownload: blockchainInfo.initialblockdownload || false,
+        chain: blockchainInfo.chain || 'unknown',
+        networkHashPs: blockchainInfo.networkhashps || 0,
         mempool: {
-          size: mempool.size,
-          bytes: mempool.bytes,
-          usage: mempool.usage,
-          maxmempool: mempool.maxmempool,
-          mempoolminfee: mempool.mempoolminfee,
+          size: mempoolInfo.size || 0,
+          bytes: mempoolInfo.bytes || 0,
+          usage: mempoolInfo.usage || 0,
+          maxmempool: mempoolInfo.maxmempool || 0,
+          mempoolminfee: mempoolInfo.mempoolminfee || 0,
         },
-        uptime: network.timeoffset || 0,
+        uptime: uptime || 0
       };
     } catch (error) {
-      return { error: error instanceof Error ? error.message : 'Unknown error' };
+      throw new Error(`Failed to get Bitcoin stats: ${error.message}`);
     }
   }
 
-  async getNetworkHashrate() {
-    try {
-      // Get network hashrate over the last 120 blocks (approximately 20 hours)
-      return await this.rpcCall('getnetworkhashps', [120]);
-    } catch (error) {
-      console.warn('Failed to get network hashrate:', error.message);
-      return null;
-    }
-  }
-
-  async rpcCall(method, params = []) {
-    if (!this.rpcUser || !this.rpcPassword) {
-      throw new Error('Bitcoin RPC authentication not configured. Please provide BITCOIN_RPC_USER and BITCOIN_RPC_PASSWORD in environment.');
+  async executeRpcCommand(method, params = []) {
+    if (!this.config.rpcUser || !this.config.rpcPassword) {
+      throw new Error('Bitcoin RPC credentials not configured');
     }
 
-    const auth = Buffer.from(`${this.rpcUser}:${this.rpcPassword}`).toString('base64');
-    const agent = new SocksProxyAgent(this.torProxy);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-    
     try {
-      const response = await fetch(this.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${auth}`,
-        },
-        body: JSON.stringify({
-          jsonrpc: '1.0',
-          id: Date.now(),
-          method,
-          params,
-        }),
-        agent,
-        signal: controller.signal,
+      const curlCommand = `curl -s --user ${this.config.rpcUser}:${this.config.rpcPassword} --data-binary '{"jsonrpc":"1.0","id":"watchman","method":"${method}","params":${JSON.stringify(params)}}' -H 'content-type: text/plain;' ${this.config.rpcUrl}`;
+      
+      const result = execSync(curlCommand, { 
+        timeout: this.config.timeout,
+        encoding: 'utf8'
       });
       
-      clearTimeout(timeoutId);
+      const parsed = JSON.parse(result);
       
-      if (!response.ok) {
-        throw new Error(`RPC request failed: ${response.status} ${response.statusText}`);
+      if (parsed.error) {
+        throw new Error(`Bitcoin RPC error: ${parsed.error.message}`);
       }
       
-      const data = await response.json();
-      if (data.error) {
-        throw new Error(`Bitcoin RPC error: ${data.error.message}`);
-      }
-      
-      return data.result;
+      return parsed.result;
     } catch (error) {
-      clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        throw new Error(`Bitcoin RPC timeout after ${this.timeout}ms`);
+      if (error.message.includes('ECONNREFUSED')) {
+        throw new Error('Bitcoin node not reachable');
+      } else if (error.message.includes('401')) {
+        throw new Error('Bitcoin RPC authentication failed');
+      } else {
+        throw new Error(`Bitcoin RPC call failed: ${error.message}`);
       }
-      throw error;
     }
   }
 }
-
-export default BitcoinService;

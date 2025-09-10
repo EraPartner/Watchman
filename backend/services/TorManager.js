@@ -16,6 +16,33 @@ class TorManager {
     this.startupTimeout = config.startupTimeout || 30000; // 30 seconds
   }
 
+  async initialize() {
+    console.log('🔧 Initializing Tor Manager...');
+    
+    try {
+      // Check if Tor is installed
+      const installed = await this.isInstalled();
+      if (!installed) {
+        console.log('⚠️  Tor is not installed, but manager is ready');
+        return true;
+      }
+
+      // Check if Tor is already running
+      const running = await this.isRunning();
+      if (running) {
+        console.log('✅ Tor is already running on port', this.socksPort);
+      } else {
+        console.log('ℹ️  Tor is installed but not running');
+      }
+
+      console.log('✅ Tor Manager initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to initialize Tor Manager:', error.message);
+      return false;
+    }
+  }
+
   async isInstalled() {
     try {
       await execAsync('which tor');
@@ -196,4 +223,4 @@ Log notice stdout
   }
 }
 
-export default TorManager;
+export { TorManager };
