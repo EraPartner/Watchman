@@ -164,4 +164,10 @@ export default class ServiceManager {
     this.initialized = false;
     console.log('✅ Service cleanup complete');
   }
+
+  async shutdown() {
+    console.log('🛑 Shutting down ServiceManager...');
+    await this.cleanup();
+    console.log('✅ ServiceManager shutdown complete');
+  }
 }
