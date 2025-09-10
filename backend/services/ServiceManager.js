@@ -110,7 +110,7 @@ export default class ServiceManager {
       };
     }
 
-    return await this.torManager.getHealth();
+    return await this.torManager.checkHealth();
   }
 
   getAllServices() {
@@ -119,5 +119,49 @@ export default class ServiceManager {
 
   isInitialized() {
     return this.initialized;
+  }
+
+  async checkAllServicesHealth() {
+    const healthResults = {};
+    
+    // Check all registered services
+    for (const serviceName of this.services.keys()) {
+      try {
+        healthResults[serviceName] = await this.getServiceHealth(serviceName);
+      } catch (error) {
+        healthResults[serviceName] = {
+          status: 'offline',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
+
+    // Also check Tor manager if available
+    if (this.torManager) {
+      try {
+        healthResults['tor-proxy'] = await this.getTorManagerHealth();
+      } catch (error) {
+        healthResults['tor-proxy'] = {
+          status: 'offline',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
+
+    return healthResults;
+  }
+
+  async cleanup() {
+    console.log('🧹 Cleaning up services...');
+    
+    if (this.torManager) {
+      await this.torManager.cleanup();
+    }
+    
+    this.services.clear();
+    this.initialized = false;
+    console.log('✅ Service cleanup complete');
   }
 }
