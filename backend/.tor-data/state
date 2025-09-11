@@ -1,28 +1,57 @@
-# Tor state file last generated on 2025-09-11 11:48:48 local time
+# Tor state file last generated on 2025-09-11 12:00:21 local time
 # Other times below are in UTC
 # You *do not* need to edit this file.
 
-CircuitBuildTimeBin 355 1
-CircuitBuildTimeBin 365 1
+CircuitBuildTimeBin 185 1
+CircuitBuildTimeBin 195 2
+CircuitBuildTimeBin 215 2
+CircuitBuildTimeBin 225 5
+CircuitBuildTimeBin 235 2
+CircuitBuildTimeBin 245 1
+CircuitBuildTimeBin 255 1
+CircuitBuildTimeBin 265 2
+CircuitBuildTimeBin 275 2
+CircuitBuildTimeBin 285 2
+CircuitBuildTimeBin 295 3
+CircuitBuildTimeBin 305 2
+CircuitBuildTimeBin 325 1
+CircuitBuildTimeBin 335 1
+CircuitBuildTimeBin 345 1
+CircuitBuildTimeBin 355 4
+CircuitBuildTimeBin 365 3
 CircuitBuildTimeBin 435 1
+CircuitBuildTimeBin 455 1
 CircuitBuildTimeBin 465 1
 CircuitBuildTimeBin 475 1
+CircuitBuildTimeBin 485 5
+CircuitBuildTimeBin 495 3
+CircuitBuildTimeBin 505 2
+CircuitBuildTimeBin 515 4
+CircuitBuildTimeBin 525 2
+CircuitBuildTimeBin 535 1
+CircuitBuildTimeBin 565 1
 CircuitBuildTimeBin 575 1
-CircuitBuildTimeBin 605 1
+CircuitBuildTimeBin 585 2
+CircuitBuildTimeBin 595 1
+CircuitBuildTimeBin 605 4
 CircuitBuildTimeBin 615 1
 CircuitBuildTimeBin 625 2
 CircuitBuildTimeBin 645 1
-CircuitBuildTimeBin 655 1
+CircuitBuildTimeBin 655 2
 CircuitBuildTimeBin 665 1
-CircuitBuildTimeBin 705 1
+CircuitBuildTimeBin 675 1
+CircuitBuildTimeBin 705 2
 CircuitBuildTimeBin 735 2
+CircuitBuildTimeBin 765 1
 CircuitBuildTimeBin 785 1
 CircuitBuildTimeBin 795 2
 CircuitBuildTimeBin 865 1
+CircuitBuildTimeBin 935 1
 CircuitBuildTimeBin 975 1
+CircuitBuildTimeBin 6085 1
 Dormant 0
-Guard in=default rsa_id=F8D54054AFD80BCCD19FD9F777B53F8C60B9822B nickname=DaCrypticRelay sampled_on=2025-09-02T02:29:45 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-06T16:45:14 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=10.000000 pb_circ_successes=10.000000 pb_successful_circuits_closed=10.000000
-Guard in=default rsa_id=54476788A1AA7C348F20390DFC52ACA1352F4C57 nickname=luna sampled_on=2025-09-02T18:23:54 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-02T06:23:43 confirmed_idx=1 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=5.000000 pb_circ_successes=5.000000 pb_successful_circuits_closed=5.000000
+Guard in=default rsa_id=F8D54054AFD80BCCD19FD9F777B53F8C60B9822B nickname=DaCrypticRelay sampled_on=2025-09-02T02:29:45 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-06T16:45:14 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=28.000000 pb_circ_successes=28.000000 pb_successful_circuits_closed=28.000000
+Guard in=default rsa_id=54476788A1AA7C348F20390DFC52ACA1352F4C57 nickname=luna sampled_on=2025-09-02T18:23:54 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-02T06:23:43 confirmed_idx=1 pb_use_attempts=2.000000 pb_use_successes=2.000000 pb_circ_attempts=33.000000 pb_circ_successes=32.000000 pb_successful_circuits_closed=32.000000 pb_timeouts=1.000000
 Guard in=default rsa_id=2C6D0929C0D00B3461670AF874B5418164A7D1F2 nickname=tor102 sampled_on=2025-09-09T19:51:24 sampled_idx=2 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=2DF03D7B158DAE2EAF76078775451F1769506451 nickname=ForPrivacyNET sampled_on=2025-09-10T21:54:48 sampled_idx=3 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=3F092986E9B87D3FDA09B71FA3A602378285C77A nickname=NYCBUG1 sampled_on=2025-09-07T11:53:40 sampled_idx=4 sampled_by=0.4.8.17 listed=1
@@ -41,6 +70,6 @@ Guard in=default rsa_id=2B46B4075D73792A4A6585FA98ED35A58A09602B nickname=CityTr
 Guard in=default rsa_id=772D509772071D3082BAAF1C781C8F917013F3CB nickname=torrx sampled_on=2025-09-02T10:50:56 sampled_idx=17 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=88C58633C9537A2E0F93A5EC09BDF40FC3247715 nickname=Determination sampled_on=2025-09-10T08:17:43 sampled_idx=18 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=20F9308643422B92336B2992FF9EC905EAEA91B9 nickname=Lismore sampled_on=2025-09-07T05:30:14 sampled_idx=19 sampled_by=0.4.8.17 listed=1
-LastWritten 2025-09-11 09:48:48
+LastWritten 2025-09-11 10:00:21
 TorVersion Tor 0.4.8.17
-TotalBuildTimes 21
+TotalBuildTimes 85
