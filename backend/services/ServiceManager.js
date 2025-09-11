@@ -2,6 +2,7 @@ import { BitcoinService } from './BitcoinService.js';
 import { AdGuardService } from './AdGuardService.js';
 import { TorService } from './TorService.js';
 import { TorManager } from './TorManager.js';
+import { QBittorrentService } from './QBittorrentService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -58,6 +59,14 @@ export default class ServiceManager {
         }
       });
       this.services.set('tor', torService);
+      
+      // Initialize qBittorrent service
+      const qbittorrentService = new QBittorrentService({
+        baseUrl: process.env.QBITTORRENT_URL || 'http://192.168.0.143:8069',
+        timeout: parseInt(process.env.QBITTORRENT_TIMEOUT) || 10000
+        // Note: username and password are now handled internally via environment variables
+      });
+      this.services.set('qbittorrent', qbittorrentService);
       
       this.initialized = true;
       console.log('✅ All services initialized successfully');

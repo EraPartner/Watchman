@@ -41,6 +41,32 @@ export interface AdGuardStats {
   blockingPercentage: string;
 }
 
+export interface QBittorrentStats {
+  version: string;
+  uptime: number;
+  torrents: {
+    total: number;
+    downloading: number;
+    seeding: number;
+    paused: number;
+    completed: number;
+  };
+  transfer: {
+    dlSpeed: number;
+    upSpeed: number;
+    dlData: number;
+    upData: number;
+    dlSession: number;
+    upSession: number;
+  };
+  connection: {
+    status: string;
+    port: number;
+    dhtNodes: number;
+  };
+  freeSpaceOnDisk: number;
+}
+
 export interface TorRelayStats {
   nickname?: string;
   fingerprint: string;
