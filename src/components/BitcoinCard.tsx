@@ -4,6 +4,23 @@ import { ServerStatusBadge } from './ServerStatusBadge';
 import { BitcoinStats } from '../types/api';
 import { apiClient } from '../services/ApiClient';
 
+// Bitcoin logo SVG component
+const BitcoinIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24ZM10.5 7.5V9H11.5C12.3284 9 13 9.67157 13 10.5C13 11.3284 12.3284 12 11.5 12H10.5V13.5H11.5C12.8807 13.5 14 12.3807 14 11C14 9.61929 12.8807 8.5 11.5 8.5H10.5V7.5ZM9 7.5V8.5H8.5C7.67157 8.5 7 9.17157 7 10C7 10.8284 7.67157 11.5 8.5 11.5H9V13.5H8.5C7.67157 13.5 7 14.1716 7 15C7 15.8284 7.67157 16.5 8.5 16.5H9V17.5H10.5V16.5H11.5C12.8807 16.5 14 15.3807 14 14C14 12.6193 12.8807 11.5 11.5 11.5H10.5V10.5H11.5C12.3284 10.5 13 11.1716 13 12C13 12.8284 12.3284 13.5 11.5 13.5H10.5V15H11.5C12.3284 15 13 14.3284 13 13.5C13 12.6716 12.3284 12 11.5 12H10.5Z"
+      fill="#F7931A"
+    />
+  </svg>
+);
+
 export const BitcoinCard: React.FC = () => {
   const [status, setStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [stats, setStats] = useState<BitcoinStats | null>(null);
@@ -98,7 +115,10 @@ export const BitcoinCard: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">Bitcoin Core</CardTitle>
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <BitcoinIcon className="h-4 w-4 text-[#F7931A]" />
+          Bitcoin Core
+        </CardTitle>
         <ServerStatusBadge status={status} />
       </CardHeader>
       {stats && (
