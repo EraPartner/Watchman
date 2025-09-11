@@ -3,6 +3,7 @@ import { AdGuardService } from './AdGuardService.js';
 import { TorService } from './TorService.js';
 import { TorManager } from './TorManager.js';
 import { QBittorrentService } from './QBittorrentService.js';
+import SynologyService from './SynologyService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -67,6 +68,10 @@ export default class ServiceManager {
         // Note: username and password are now handled internally via environment variables
       });
       this.services.set('qbittorrent', qbittorrentService);
+      
+      // Initialize Synology service
+      const synologyService = new SynologyService();
+      this.services.set('synology', synologyService);
       
       this.initialized = true;
       console.log('✅ All services initialized successfully');

@@ -9,6 +9,7 @@ import { Button } from './ui/button';
 import { APP_CONFIG } from '../lib/constants';
 import { BitcoinCard } from './BitcoinCard';
 import { QBittorrentCard } from './QBittorrentCard';
+import SynologyCard from './SynologyCard';
 
 export const LiveServerDashboard = () => {
   const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
@@ -362,6 +363,7 @@ export const LiveServerDashboard = () => {
         )}
         <BitcoinCard />
         <QBittorrentCard />
+        <SynologyCard />
       </div>
     </div>
   );

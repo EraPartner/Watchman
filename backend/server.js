@@ -323,6 +323,49 @@ app.get('/api/services/health', healthLimiter, healthCacheMiddleware, async (req
   }
 });
 
+// Synology NAS API endpoints
+app.get('/api/synology/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
+  try {
+    const synologyService = serviceManager.getService('synology');
+    if (!synologyService) {
+      return res.status(503).json({ 
+        error: 'Synology service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await serviceManager.getServiceHealth('synology');
+    console.log(`✅ Synology status connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Synology status connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch Synology status',
+      status: 'offline',
+      message: error.message 
+    });
+  }
+});
+
+app.get('/api/synology/stats', statsCacheMiddleware, async (req, res) => {
+  try {
+    const synologyService = serviceManager.getService('synology');
+    if (!synologyService) {
+      return res.status(503).json({ error: 'Synology service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('synology');
+    console.log(`✅ Synology stats connection successful`);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Synology stats connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch Synology stats',
+      message: error.message 
+    });
+  }
+});
+
 // Frontend configuration endpoint
 app.get('/api/config/frontend', (req, res) => {
   res.json({
@@ -389,6 +432,7 @@ async function startServer() {
       console.log(`₿  Bitcoin API: http://localhost:${PORT}/api/bitcoin/*`);
       console.log(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
       console.log(`🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`);
+      console.log(`🖥️  Synology API: http://localhost:${PORT}/api/synology/*`);
       console.log(`🔍 Services Health: http://localhost:${PORT}/api/services/health`);
     });
   } catch (error) {
