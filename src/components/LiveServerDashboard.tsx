@@ -14,6 +14,7 @@ export const LiveServerDashboard = () => {
   const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
   const [torServer, setTorServer] = useState<ServerWithService | null>(null);
   const [bitcoinStatus, setBitcoinStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
+  const [qbittorrentStatus, setQbittorrentStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
@@ -119,6 +120,17 @@ export const LiveServerDashboard = () => {
     }
   }, []);
 
+  // Fetch qBittorrent status
+  const fetchQBittorrentStatus = useCallback(async () => {
+    try {
+      const health = await apiClient.getQBittorrentStatus();
+      setQbittorrentStatus(health.status as 'online' | 'offline' | 'warning' | 'loading');
+    } catch (error) {
+      console.error('❌ LiveServerDashboard - qBittorrent fetch failed:', error);
+      setQbittorrentStatus('offline');
+    }
+  }, []);
+
   const loadServerData = useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -198,13 +210,15 @@ export const LiveServerDashboard = () => {
 
       // Fetch Bitcoin status
       await fetchBitcoinStatus();
+      // Fetch qBittorrent status
+      await fetchQBittorrentStatus();
       
       setLastUpdateTime(new Date());
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [fetchAdGuardData, fetchTorData, fetchBitcoinStatus]);
+  }, [fetchAdGuardData, fetchTorData, fetchBitcoinStatus, fetchQBittorrentStatus]);
 
   useEffect(() => {
     loadServerData();
@@ -225,7 +239,7 @@ export const LiveServerDashboard = () => {
   }, [loadServerData]);
 
   // Calculate service counts
-  const allServices = [adguardServer, torServer, { status: bitcoinStatus }];
+  const allServices = [adguardServer, torServer, { status: bitcoinStatus }, { status: qbittorrentStatus }];
   const onlineCount = allServices.filter(service => service?.status === 'online').length;
   const offlineCount = allServices.filter(service => service?.status === 'offline').length;
   const warningCount = allServices.filter(service => service?.status === 'warning').length;
