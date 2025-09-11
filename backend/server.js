@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import ServiceManager from './services/ServiceManager.js';
+import { healthCacheMiddleware, statsCacheMiddleware, clearCache } from './middleware/cache.js';
+import { generalLimiter, controlLimiter, healthLimiter } from './middleware/rateLimiting.js';
 
 // Load environment variables
 dotenv.config({path:'.env.local'});
@@ -25,16 +27,28 @@ async function initializeServer() {
 }
 
 // Middleware
-app.use(helmet());
-app.use(compression());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+}));
+app.use(compression({ level: 6, threshold: 1024 }));
 app.use(cors({
   origin: FRONTEND_URL,
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Apply rate limiting
+app.use('/api/', generalLimiter);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', healthLimiter, (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
@@ -43,8 +57,15 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Cache management endpoint
+app.post('/api/cache/clear', controlLimiter, (req, res) => {
+  const { type } = req.body;
+  clearCache(type);
+  res.json({ success: true, message: `Cache cleared: ${type || 'all'}` });
+});
+
 // Tor proxy health endpoint
-app.get('/api/tor/proxy/health', async (req, res) => {
+app.get('/api/tor/proxy/health', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     if (!serviceManager) {
       return res.status(503).json({ error: 'Service manager not initialized' });
@@ -62,7 +83,7 @@ app.get('/api/tor/proxy/health', async (req, res) => {
 });
 
 // AdGuard API endpoints
-app.get('/api/adguard/status', async (req, res) => {
+app.get('/api/adguard/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     const adguardService = serviceManager.getService('adguard');
     if (!adguardService) {
@@ -85,7 +106,7 @@ app.get('/api/adguard/status', async (req, res) => {
   }
 });
 
-app.get('/api/adguard/stats', async (req, res) => {
+app.get('/api/adguard/stats', statsCacheMiddleware, async (req, res) => {
   try {
     const adguardService = serviceManager.getService('adguard');
     if (!adguardService) {
@@ -104,7 +125,7 @@ app.get('/api/adguard/stats', async (req, res) => {
   }
 });
 
-app.post('/api/adguard/protection', async (req, res) => {
+app.post('/api/adguard/protection', controlLimiter, async (req, res) => {
   try {
     const adguardService = serviceManager.getService('adguard');
     if (!adguardService) {
@@ -114,6 +135,11 @@ app.post('/api/adguard/protection', async (req, res) => {
     const { enabled, duration } = req.body;
     await adguardService.setProtection(enabled, duration);
     console.log(`✅ AdGuard protection ${enabled ? 'enabled' : 'disabled'}`);
+    
+    // Clear cache after control actions
+    clearCache('health');
+    clearCache('stats');
+    
     res.json({ success: true });
   } catch (error) {
     console.error('❌ AdGuard protection toggle failed:', error.message);
@@ -125,7 +151,7 @@ app.post('/api/adguard/protection', async (req, res) => {
 });
 
 // Bitcoin API endpoints
-app.get('/api/bitcoin/health', async (req, res) => {
+app.get('/api/bitcoin/health', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     const bitcoinService = serviceManager.getService('bitcoin');
     if (!bitcoinService) {
@@ -148,7 +174,7 @@ app.get('/api/bitcoin/health', async (req, res) => {
   }
 });
 
-app.get('/api/bitcoin/status', async (req, res) => {
+app.get('/api/bitcoin/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     const bitcoinService = serviceManager.getService('bitcoin');
     if (!bitcoinService) {
@@ -171,7 +197,7 @@ app.get('/api/bitcoin/status', async (req, res) => {
   }
 });
 
-app.get('/api/bitcoin/stats', async (req, res) => {
+app.get('/api/bitcoin/stats', statsCacheMiddleware, async (req, res) => {
   try {
     const bitcoinService = serviceManager.getService('bitcoin');
     if (!bitcoinService) {
@@ -191,7 +217,7 @@ app.get('/api/bitcoin/stats', async (req, res) => {
 });
 
 // qBittorrent API endpoints
-app.get('/api/qbittorrent/status', async (req, res) => {
+app.get('/api/qbittorrent/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     const qbittorrentService = serviceManager.getService('qbittorrent');
     if (!qbittorrentService) {
@@ -214,7 +240,7 @@ app.get('/api/qbittorrent/status', async (req, res) => {
   }
 });
 
-app.get('/api/qbittorrent/stats', async (req, res) => {
+app.get('/api/qbittorrent/stats', statsCacheMiddleware, async (req, res) => {
   try {
     const qbittorrentService = serviceManager.getService('qbittorrent');
     if (!qbittorrentService) {
@@ -234,7 +260,7 @@ app.get('/api/qbittorrent/stats', async (req, res) => {
 });
 
 // Tor API endpoints
-app.get('/api/tor/relay/:nickname?', async (req, res) => {
+app.get('/api/tor/relay/:nickname?', statsCacheMiddleware, async (req, res) => {
   try {
     const torService = serviceManager.getService('tor');
     if (!torService) {
@@ -253,7 +279,7 @@ app.get('/api/tor/relay/:nickname?', async (req, res) => {
   }
 });
 
-app.get('/api/tor/health', async (req, res) => {
+app.get('/api/tor/health', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     const torService = serviceManager.getService('tor');
     if (!torService) {
@@ -273,7 +299,7 @@ app.get('/api/tor/health', async (req, res) => {
 });
 
 // Service health check endpoint
-app.get('/api/services/health', async (req, res) => {
+app.get('/api/services/health', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     const healthResults = await serviceManager.checkAllServicesHealth();
     res.json({
