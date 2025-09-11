@@ -57,7 +57,7 @@ export default defineConfig(({ mode }) => {
           },
           // Optimize chunk naming for better caching
           chunkFileNames: (chunkInfo) => {
-            return `assets/[name]-[hash].js`;
+            return `assets/js/[name]-[hash].js`;
           },
           assetFileNames: (assetInfo) => {
             const info = assetInfo.name.split('.');
@@ -65,7 +65,7 @@ export default defineConfig(({ mode }) => {
             if (/\.(css)$/.test(assetInfo.name)) {
               return `assets/css/[name]-[hash].${ext}`;
             }
-            if (/\.(png|jpe?g|svg|gif|tiff|bmp|ico)$/i.test(assetInfo.name)) {
+            if (/\.(png|jpe?g|svg|gif|tiff|bmp|ico|webp)$/i.test(assetInfo.name)) {
               return `assets/images/[name]-[hash].${ext}`;
             }
             return `assets/[name]-[hash].${ext}`;
@@ -78,6 +78,8 @@ export default defineConfig(({ mode }) => {
       target: 'esnext',
       // Increase chunk size warning limit
       chunkSizeWarningLimit: 1000,
+      // Enable CSS code splitting
+      cssCodeSplit: true,
     },
     // Prevent accidental exposure of env vars
     envPrefix: 'VITE_',
@@ -99,5 +101,12 @@ export default defineConfig(({ mode }) => {
       target: 'esnext',
       drop: mode === 'production' ? ['console', 'debugger'] : [],
     },
+    // Performance optimizations
+    worker: {
+      format: 'es'
+    },
+    css: {
+      devSourcemap: mode === 'development'
+    }
   }
 })

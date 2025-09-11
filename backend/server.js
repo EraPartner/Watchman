@@ -3,7 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
 import ServiceManager from './services/ServiceManager.js';
+import WebSocketManager from './services/WebSocketManager.js';
+import performanceMonitor from './middleware/performanceMonitor.js';
 import { healthCacheMiddleware, statsCacheMiddleware, clearCache } from './middleware/cache.js';
 import { generalLimiter, controlLimiter, healthLimiter } from './middleware/rateLimiting.js';
 
@@ -11,10 +14,11 @@ import { generalLimiter, controlLimiter, healthLimiter } from './middleware/rate
 dotenv.config({path:'.env.local'});
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
-// Initialize service manager
+// Initialize service manager and WebSocket
 let serviceManager;
 
 async function initializeServer() {
@@ -23,10 +27,14 @@ async function initializeServer() {
   serviceManager = new ServiceManager();
   await serviceManager.initializeServices();
   
+  // Initialize WebSocket server
+  WebSocketManager.initialize(server);
+  
   console.log('✅ Service initialization complete');
 }
 
 // Middleware
+app.use(performanceMonitor.trackRequest());
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -39,7 +47,7 @@ app.use(helmet({
 }));
 app.use(compression({ level: 6, threshold: 1024 }));
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: FRONTEND_URL || '*',
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -374,7 +382,7 @@ async function startServer() {
   try {
     await initializeServer();
     
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🚀 Watchman Backend Server running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🛡️  AdGuard API: http://localhost:${PORT}/api/adguard/*`);
