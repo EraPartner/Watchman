@@ -45,6 +45,11 @@ export interface AdGuardServerStats extends ServerStats {
   topQueriedDomain: string;
   avgProcessingTime: number;
   running: boolean;
+  timeUnits?: string;
+  topClient?: string;
+  safebrowsingBlocked?: number;
+  safesearchBlocked?: number;
+  parentalBlocked?: number;
 }
 
 export interface TorServerStats extends ServerStats {

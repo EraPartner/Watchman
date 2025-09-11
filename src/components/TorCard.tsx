@@ -102,10 +102,14 @@ export const TorCard = ({
             {status}
           </Badge>
           {stats.hibernating && (
-            <AlertTriangle className="h-4 w-4 text-yellow-500" title="Relay is hibernating" />
+            <div title="Relay is hibernating">
+              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            </div>
           )}
           {!stats.flags?.includes('Running') && (
-            <AlertTriangle className="h-4 w-4 text-red-500" title="Relay not running" />
+            <div title="Relay not running">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+            </div>
           )}
         </div>
       </CardHeader>
