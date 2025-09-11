@@ -27,6 +27,7 @@ export default class ServiceManager {
         rpcUrl: `http://${process.env.BITCOIN_ONION_URL}:${process.env.BITCOIN_RPC_PORT}` || 'http://127.0.0.1:8332',
         rpcUser: process.env.BITCOIN_RPC_USER,
         rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
+        timeout: parseInt(process.env.BITCOIN_TIMEOUT) || 50000, // 50 seconds for Bitcoin RPC
         useProxy: process.env.TOR_USE_PROXY === 'true',
         torProxy: {
           host: process.env.TOR_PROXY_HOST || '127.0.0.1',
