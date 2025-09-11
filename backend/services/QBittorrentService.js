@@ -13,8 +13,6 @@ export class QBittorrentService {
 
   async authenticate() {
     try {
-      console.log(`🔐 Attempting qBittorrent authentication to ${this.baseUrl} with username: ${this.username}`);
-      
       const loginUrl = `${this.baseUrl}/api/v2/auth/login`;
       const formData = new URLSearchParams();
       formData.append('username', this.username);
@@ -34,24 +32,14 @@ export class QBittorrentService {
 
       clearTimeout(timeoutId);
 
-      console.log(`🔐 qBittorrent auth response status: ${response.status}`);
-      console.log(`🔐 qBittorrent auth response headers:`, Object.fromEntries(response.headers.entries()));
-
       if (response.ok) {
         const responseText = await response.text();
-        console.log(`🔐 qBittorrent auth response body: "${responseText}"`);
         
         const setCookieHeader = response.headers.get('set-cookie');
         if (setCookieHeader) {
           this.cookie = setCookieHeader.split(';')[0];
-          console.log(`✅ qBittorrent authentication successful, cookie: ${this.cookie}`);
           return true;
-        } else {
-          console.log(`❌ qBittorrent authentication failed: No set-cookie header found`);
         }
-      } else {
-        const errorText = await response.text();
-        console.log(`❌ qBittorrent authentication failed with status ${response.status}: ${errorText}`);
       }
       return false;
     } catch (error) {
@@ -133,8 +121,6 @@ export class QBittorrentService {
     const contentType = response.headers.get('content-type');
     const text = await response.text();
     
-    console.log(`🔍 qBittorrent response for ${response.url}: "${text.substring(0, 200)}..." (content-type: ${contentType})`);
-    
     // Handle empty responses
     if (!text || text.trim() === '') {
       return null;
@@ -145,7 +131,6 @@ export class QBittorrentService {
       try {
         return JSON.parse(text);
       } catch (error) {
-        console.warn('Failed to parse JSON response:', text.substring(0, 100));
         return text;
       }
     }
@@ -159,7 +144,7 @@ export class QBittorrentService {
     }
   }
 
-  async getStatus() {
+  async checkHealth() {
     const startTime = Date.now();
     
     try {
@@ -185,6 +170,11 @@ export class QBittorrentService {
         lastCheck: new Date().toISOString()
       };
     }
+  }
+
+  async getStatus() {
+    // Delegate to checkHealth for consistency with other services
+    return this.checkHealth();
   }
 
   async getStats() {

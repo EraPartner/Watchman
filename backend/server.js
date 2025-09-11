@@ -201,7 +201,7 @@ app.get('/api/qbittorrent/status', async (req, res) => {
       });
     }
 
-    const health = await qbittorrentService.getStatus();
+    const health = await serviceManager.getServiceHealth('qbittorrent');
     console.log(`✅ qBittorrent status connection successful`);
     res.json(health);
   } catch (error) {
@@ -221,7 +221,7 @@ app.get('/api/qbittorrent/stats', async (req, res) => {
       return res.status(503).json({ error: 'qBittorrent service not configured' });
     }
 
-    const stats = await qbittorrentService.getStats();
+    const stats = await serviceManager.getServiceStats('qbittorrent');
     console.log(`✅ qBittorrent stats connection successful`);
     res.json(stats);
   } catch (error) {
