@@ -2,9 +2,32 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
-import { Globe, Clock, AlertTriangle, ExternalLink, Shield, Zap } from 'lucide-react';
+import { Clock, AlertTriangle, ExternalLink, Shield, Zap } from 'lucide-react';
 import { TorServerStats, ServerStatus } from '../types/server';
 import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
+
+// Tor Project logo SVG component
+const TorIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.5c5.238 0 9.5 4.262 9.5 9.5s-4.262 9.5-9.5 9.5S2.5 17.238 2.5 12 6.762 2.5 12 2.5z"
+      fill="#7D4698"
+    />
+    <path
+      d="M12 4.5c-4.136 0-7.5 3.364-7.5 7.5s3.364 7.5 7.5 7.5 7.5-3.364 7.5-7.5-3.364-7.5-7.5-7.5zm0 2c3.033 0 5.5 2.467 5.5 5.5s-2.467 5.5-5.5 5.5-5.5-2.467-5.5-5.5 2.467-5.5 5.5-5.5z"
+      fill="#7D4698"
+    />
+    <path
+      d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 1.5c1.381 0 2.5 1.119 2.5 2.5s-1.119 2.5-2.5 2.5-2.5-1.119-2.5-2.5 1.119-2.5 2.5-2.5z"
+      fill="#7D4698"
+    />
+  </svg>
+);
 
 interface TorCardProps {
   name: string;
@@ -77,7 +100,7 @@ export const TorCard = ({
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex flex-col">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Globe className="h-4 w-4" />
+            <TorIcon className="h-4 w-4 text-[#7D4698]" />
             {name}
             {stats.nickname && (
               <span className="text-xs text-muted-foreground">({stats.nickname})</span>

@@ -6,6 +6,25 @@ import { Shield, Clock, AlertTriangle, ExternalLink, Activity, Globe, Zap } from
 import { AdGuardServerStats, ServerStatus } from '../types/server';
 import { useConfig } from '../hooks/use-config';
 
+// AdGuard Home logo SVG component
+const AdGuardIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M12 0L2 5v6.09c0 7.05 4.84 13.64 10 15.41 5.16-1.77 10-8.36 10-15.41V5L12 0zm0 22c-4.07-1.42-8-6.78-8-12.91V6.09L12 2.5l8 3.59v2.91c0 6.13-3.93 11.49-8 12.91z"
+      fill="#67C93F"
+    />
+    <path
+      d="M12 4L5 7v4.09c0 5.64 3.87 10.91 7 12.41 3.13-1.5 7-6.77 7-12.41V7L12 4z"
+      fill="#67C93F"
+    />
+  </svg>
+);
+
 interface AdGuardCardProps {
   name: string;
   status: ServerStatus;
@@ -85,7 +104,7 @@ export const AdGuardCard = ({
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex flex-col">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Shield className="h-4 w-4" />
+            <AdGuardIcon className="h-4 w-4" />
             {name}
           </CardTitle>
           <button
