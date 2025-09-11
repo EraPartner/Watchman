@@ -190,6 +190,49 @@ app.get('/api/bitcoin/stats', async (req, res) => {
   }
 });
 
+// qBittorrent API endpoints
+app.get('/api/qbittorrent/status', async (req, res) => {
+  try {
+    const qbittorrentService = serviceManager.getService('qbittorrent');
+    if (!qbittorrentService) {
+      return res.status(503).json({ 
+        error: 'qBittorrent service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await qbittorrentService.getStatus();
+    console.log(`✅ qBittorrent status connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ qBittorrent status connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch qBittorrent status',
+      status: 'offline',
+      message: error.message 
+    });
+  }
+});
+
+app.get('/api/qbittorrent/stats', async (req, res) => {
+  try {
+    const qbittorrentService = serviceManager.getService('qbittorrent');
+    if (!qbittorrentService) {
+      return res.status(503).json({ error: 'qBittorrent service not configured' });
+    }
+
+    const stats = await qbittorrentService.getStats();
+    console.log(`✅ qBittorrent stats connection successful`);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ qBittorrent stats connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch qBittorrent stats',
+      message: error.message 
+    });
+  }
+});
+
 // Tor API endpoints
 app.get('/api/tor/relay/:nickname?', async (req, res) => {
   try {

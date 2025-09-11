@@ -1,0 +1,250 @@
+import fetch from 'node-fetch';
+
+export class QBittorrentService {
+  constructor(config = {}) {
+    this.baseUrl = config.baseUrl || process.env.QBITTORRENT_URL || 'http://192.168.0.143:8069';
+    this.username = config.username || process.env.QBITTORRENT_USERNAME || 'admin';
+    this.password = config.password || process.env.QBITTORRENT_PASSWORD || '';
+    this.timeout = config.timeout || parseInt(process.env.QBITTORRENT_TIMEOUT) || 10000;
+    this.cookie = null;
+    this.lastCheck = null;
+    this.checkInterval = 30000; // 30 seconds
+  }
+
+  async authenticate() {
+    try {
+      console.log(`🔐 Attempting qBittorrent authentication to ${this.baseUrl} with username: ${this.username}`);
+      
+      const loginUrl = `${this.baseUrl}/api/v2/auth/login`;
+      const formData = new URLSearchParams();
+      formData.append('username', this.username);
+      formData.append('password', this.password);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      const response = await fetch(loginUrl, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log(`🔐 qBittorrent auth response status: ${response.status}`);
+      console.log(`🔐 qBittorrent auth response headers:`, Object.fromEntries(response.headers.entries()));
+
+      if (response.ok) {
+        const responseText = await response.text();
+        console.log(`🔐 qBittorrent auth response body: "${responseText}"`);
+        
+        const setCookieHeader = response.headers.get('set-cookie');
+        if (setCookieHeader) {
+          this.cookie = setCookieHeader.split(';')[0];
+          console.log(`✅ qBittorrent authentication successful, cookie: ${this.cookie}`);
+          return true;
+        } else {
+          console.log(`❌ qBittorrent authentication failed: No set-cookie header found`);
+        }
+      } else {
+        const errorText = await response.text();
+        console.log(`❌ qBittorrent authentication failed with status ${response.status}: ${errorText}`);
+      }
+      return false;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.error('❌ qBittorrent authentication timed out');
+      } else {
+        console.error('❌ qBittorrent authentication failed:', error.message);
+      }
+      return false;
+    }
+  }
+
+  async makeRequest(endpoint) {
+    if (!this.cookie) {
+      const authenticated = await this.authenticate();
+      if (!authenticated) {
+        throw new Error('Authentication failed');
+      }
+    }
+
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Cookie': this.cookie,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.status === 403) {
+        // Re-authenticate and retry
+        console.log('🔄 qBittorrent session expired, re-authenticating...');
+        this.cookie = null;
+        const authenticated = await this.authenticate();
+        if (!authenticated) {
+          throw new Error('Re-authentication failed');
+        }
+        
+        const retryController = new AbortController();
+        const retryTimeoutId = setTimeout(() => retryController.abort(), this.timeout);
+        
+        const retryResponse = await fetch(url, {
+          headers: {
+            'Cookie': this.cookie,
+          },
+          signal: retryController.signal,
+        });
+        
+        clearTimeout(retryTimeoutId);
+        
+        if (!retryResponse.ok) {
+          throw new Error(`Request failed after retry: ${retryResponse.status}`);
+        }
+        
+        return this.parseResponse(retryResponse);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
+      return this.parseResponse(response);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out');
+      }
+      throw error;
+    }
+  }
+
+  async parseResponse(response) {
+    const contentType = response.headers.get('content-type');
+    const text = await response.text();
+    
+    console.log(`🔍 qBittorrent response for ${response.url}: "${text.substring(0, 200)}..." (content-type: ${contentType})`);
+    
+    // Handle empty responses
+    if (!text || text.trim() === '') {
+      return null;
+    }
+    
+    // Try to parse as JSON first
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        console.warn('Failed to parse JSON response:', text.substring(0, 100));
+        return text;
+      }
+    }
+    
+    // For non-JSON responses, try to parse anyway (qBittorrent sometimes returns JSON without proper content-type)
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      // If it's not JSON, return the raw text (like version strings)
+      return text.replace(/^"|"$/g, ''); // Remove surrounding quotes from plain text responses
+    }
+  }
+
+  async getStatus() {
+    const startTime = Date.now();
+    
+    try {
+      // Try to get version info as a health check
+      await this.makeRequest('/api/v2/app/version');
+      
+      const responseTime = Date.now() - startTime;
+      
+      return {
+        status: 'online',
+        responseTime,
+        lastCheck: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('qBittorrent health check failed:', error.message);
+      
+      const responseTime = Date.now() - startTime;
+      
+      return {
+        status: 'offline',
+        responseTime,
+        error: error.message,
+        lastCheck: new Date().toISOString()
+      };
+    }
+  }
+
+  async getStats() {
+    try {
+      const [
+        version,
+        preferences,
+        mainData,
+        transferInfo
+      ] = await Promise.all([
+        this.makeRequest('/api/v2/app/version'),
+        this.makeRequest('/api/v2/app/preferences'),
+        this.makeRequest('/api/v2/sync/maindata'),
+        this.makeRequest('/api/v2/transfer/info')
+      ]);
+
+      const serverState = mainData.server_state || {};
+      
+      return {
+        version: version,
+        uptime: serverState.uptime || 0,
+        torrents: {
+          total: Object.keys(mainData.torrents || {}).length,
+          downloading: Object.values(mainData.torrents || {}).filter(t => t.state === 'downloading').length,
+          seeding: Object.values(mainData.torrents || {}).filter(t => t.state === 'uploading').length,
+          paused: Object.values(mainData.torrents || {}).filter(t => t.state === 'pausedDL' || t.state === 'pausedUP').length,
+          completed: Object.values(mainData.torrents || {}).filter(t => t.state === 'uploading' || t.state === 'stalledUP').length
+        },
+        transfer: {
+          dlSpeed: transferInfo.dl_info_speed || 0,
+          upSpeed: transferInfo.up_info_speed || 0,
+          dlData: transferInfo.dl_info_data || 0,
+          upData: transferInfo.up_info_data || 0,
+          dlSession: transferInfo.dl_info_data || 0,
+          upSession: transferInfo.up_info_data || 0
+        },
+        connection: {
+          status: serverState.connection_status || 'disconnected',
+          port: preferences.listen_port || 0,
+          dhtNodes: serverState.dht_nodes || 0
+        },
+        freeSpaceOnDisk: serverState.free_space_on_disk || 0
+      };
+    } catch (error) {
+      console.error('Failed to fetch qBittorrent stats:', error.message);
+      throw error;
+    }
+  }
+
+  // Helper method to format bytes
+  static formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // Helper method to format speed
+  static formatSpeed(bytesPerSecond) {
+    return QBittorrentService.formatBytes(bytesPerSecond) + '/s';
+  }
+}

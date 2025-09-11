@@ -63,7 +63,36 @@ interface TorRelay {
 }
 
 interface BitcoinStats {
-  // Add relevant fields for Bitcoin stats
+  // Bitcoin stats fields - will be populated when BitcoinCard is updated
+  version?: string;
+  blocks?: number;
+  uptime?: number;
+}
+
+interface QBittorrentStats {
+  version: string;
+  uptime: number;
+  torrents: {
+    total: number;
+    downloading: number;
+    seeding: number;
+    paused: number;
+    completed: number;
+  };
+  transfer: {
+    dlSpeed: number;
+    upSpeed: number;
+    dlData: number;
+    upData: number;
+    dlSession: number;
+    upSession: number;
+  };
+  connection: {
+    status: string;
+    port: number;
+    dhtNodes: number;
+  };
+  freeSpaceOnDisk: number;
 }
 
 interface ServicesHealthResponse {
@@ -148,6 +177,15 @@ class ApiClient {
 
   async getBitcoinStats(): Promise<BitcoinStats> {
     return this.request('/api/bitcoin/stats');
+  }
+
+  // qBittorrent endpoints
+  async getQBittorrentStatus(): Promise<ServiceHealth> {
+    return this.request('/api/qbittorrent/status');
+  }
+
+  async getQBittorrentStats(): Promise<QBittorrentStats> {
+    return this.request('/api/qbittorrent/stats');
   }
 
   // Tor endpoints
