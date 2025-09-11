@@ -1,0 +1,46 @@
+# Tor state file last generated on 2025-09-11 11:48:48 local time
+# Other times below are in UTC
+# You *do not* need to edit this file.
+
+CircuitBuildTimeBin 355 1
+CircuitBuildTimeBin 365 1
+CircuitBuildTimeBin 435 1
+CircuitBuildTimeBin 465 1
+CircuitBuildTimeBin 475 1
+CircuitBuildTimeBin 575 1
+CircuitBuildTimeBin 605 1
+CircuitBuildTimeBin 615 1
+CircuitBuildTimeBin 625 2
+CircuitBuildTimeBin 645 1
+CircuitBuildTimeBin 655 1
+CircuitBuildTimeBin 665 1
+CircuitBuildTimeBin 705 1
+CircuitBuildTimeBin 735 2
+CircuitBuildTimeBin 785 1
+CircuitBuildTimeBin 795 2
+CircuitBuildTimeBin 865 1
+CircuitBuildTimeBin 975 1
+Dormant 0
+Guard in=default rsa_id=F8D54054AFD80BCCD19FD9F777B53F8C60B9822B nickname=DaCrypticRelay sampled_on=2025-09-02T02:29:45 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-06T16:45:14 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=10.000000 pb_circ_successes=10.000000 pb_successful_circuits_closed=10.000000
+Guard in=default rsa_id=54476788A1AA7C348F20390DFC52ACA1352F4C57 nickname=luna sampled_on=2025-09-02T18:23:54 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-02T06:23:43 confirmed_idx=1 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=5.000000 pb_circ_successes=5.000000 pb_successful_circuits_closed=5.000000
+Guard in=default rsa_id=2C6D0929C0D00B3461670AF874B5418164A7D1F2 nickname=tor102 sampled_on=2025-09-09T19:51:24 sampled_idx=2 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=2DF03D7B158DAE2EAF76078775451F1769506451 nickname=ForPrivacyNET sampled_on=2025-09-10T21:54:48 sampled_idx=3 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=3F092986E9B87D3FDA09B71FA3A602378285C77A nickname=NYCBUG1 sampled_on=2025-09-07T11:53:40 sampled_idx=4 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=9ACD21680CCBE65A5D5A638D85A8388A85D6EE05 nickname=YoYuD1N02NoExit sampled_on=2025-09-10T17:31:16 sampled_idx=5 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=1EFBACCD28A07FD6AD7AA6F1293177D71397E918 nickname=cb1820 sampled_on=2025-09-06T02:40:46 sampled_idx=6 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=7B78F4D80FDF06B2CAF510377577BBB04CB11695 nickname=gangnam sampled_on=2025-09-03T23:04:48 sampled_idx=7 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=502A6528D3F1993FC3DC31A41A213749C80D626A nickname=prsv sampled_on=2025-09-06T06:15:33 sampled_idx=8 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=7C8B90FA15947119DC9B813B67CB0E63B49D262D nickname=PirkkaOPNsense sampled_on=2025-09-07T14:02:43 sampled_idx=9 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=BBC3B6B45721FB3666194E78F8B7FCFD4078C1B8 nickname=homeboysandman sampled_on=2025-09-08T04:06:42 sampled_idx=10 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=8C694E170C33A11C91565D9BC1A2F2648E9167C2 nickname=southside sampled_on=2025-09-08T06:56:22 sampled_idx=11 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=66DCBBB971CA555F86BB2B1D17C00C1828368736 nickname=whipitz sampled_on=2025-08-31T08:17:09 sampled_idx=12 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=5C124A27FFD658CB76165718DABFFD4093F5C827 nickname=Teuntje sampled_on=2025-09-05T21:49:36 sampled_idx=13 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=9C1E47FF205F349D69D569AE7ED15366A5554A46 nickname=Piratenpartei04 sampled_on=2025-08-31T17:54:55 sampled_idx=14 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=A4F11D693FAB6E949B2B7C18153C3F7989896007 nickname=torrocks sampled_on=2025-09-06T21:32:50 sampled_idx=15 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=2B46B4075D73792A4A6585FA98ED35A58A09602B nickname=CityTrustBonn sampled_on=2025-09-06T16:59:54 sampled_idx=16 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=772D509772071D3082BAAF1C781C8F917013F3CB nickname=torrx sampled_on=2025-09-02T10:50:56 sampled_idx=17 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=88C58633C9537A2E0F93A5EC09BDF40FC3247715 nickname=Determination sampled_on=2025-09-10T08:17:43 sampled_idx=18 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=20F9308643422B92336B2992FF9EC905EAEA91B9 nickname=Lismore sampled_on=2025-09-07T05:30:14 sampled_idx=19 sampled_by=0.4.8.17 listed=1
+LastWritten 2025-09-11 09:48:48
+TorVersion Tor 0.4.8.17
+TotalBuildTimes 21

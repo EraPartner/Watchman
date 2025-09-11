@@ -6,7 +6,7 @@ export class BitcoinService {
       rpcUrl: config.rpcUrl || 'http://127.0.0.1:8332',
       rpcUser: config.rpcUser || process.env.BITCOIN_RPC_USER,
       rpcPassword: config.rpcPassword || process.env.BITCOIN_RPC_PASSWORD,
-      timeout: config.timeout || 10000,
+      timeout: config.timeout || 50000, // 50 seconds for Bitcoin RPC calls over Tor
       ...config
     };
   }
@@ -83,8 +83,16 @@ export class BitcoinService {
       throw new Error('Bitcoin RPC credentials not configured');
     }
 
+    // If using proxy, first check if it's available
+    if (this.config.useProxy) {
+      const proxyAvailable = await this.checkProxyConnection();
+      if (!proxyAvailable) {
+        throw new Error(`Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`);
+      }
+    }
+
     try {
-      let curlCommand = `curl -s --user ${this.config.rpcUser}:${this.config.rpcPassword}`;
+      let curlCommand = `curl -s --connect-timeout 15 --max-time 45 --user ${this.config.rpcUser}:${this.config.rpcPassword}`;
       
       // Add Tor proxy configuration if needed
       if (this.config.useProxy) {
@@ -95,7 +103,8 @@ export class BitcoinService {
       
       const result = execSync(curlCommand, { 
         timeout: this.config.timeout,
-        encoding: 'utf8'
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe']
       });
       
       const parsed = JSON.parse(result);
@@ -106,17 +115,38 @@ export class BitcoinService {
       
       return parsed.result;
     } catch (error) {
-      if (error.message.includes('ECONNREFUSED')) {
-        throw new Error('Bitcoin node not reachable');
-      } else if (error.message.includes('401')) {
-        throw new Error('Bitcoin RPC authentication failed');
+      // Handle specific timeout errors
+      if (error.code === 'ETIMEDOUT' || error.message.includes('ETIMEDOUT')) {
+        throw new Error('Bitcoin RPC request timed out - node may be slow or unreachable');
+      } else if (error.message.includes('ECONNREFUSED')) {
+        throw new Error('Bitcoin node not reachable - check if Bitcoin Core is running');
+      } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        throw new Error('Bitcoin RPC authentication failed - check credentials');
       } else if (error.message.includes('Connection refused')) {
-        throw new Error('Bitcoin node connection refused - check if Bitcoin Core is running');
-      } else if (error.message.includes('timeout')) {
-        throw new Error('Bitcoin RPC request timed out');
+        throw new Error('Bitcoin node connection refused - check if Bitcoin Core is running and RPC is enabled');
+      } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+        throw new Error('Bitcoin RPC request timed out - consider increasing timeout or checking network');
+      } else if (error.message.includes('Could not resolve host')) {
+        throw new Error('Cannot resolve Bitcoin node hostname - check network or Tor proxy');
+      } else if (error.message.includes('Failed to connect')) {
+        throw new Error('Failed to connect to Bitcoin node - check if node is running and accessible');
+      } else if (error.message.includes('SOCKS') || error.message.includes('proxy')) {
+        throw new Error('SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port');
       } else {
         throw new Error(`Bitcoin RPC call failed: ${error.message}`);
       }
+    }
+  }
+
+  async checkProxyConnection() {
+    try {
+      const result = execSync(`nc -z ${this.config.torProxy.host} ${this.config.torProxy.port}`, {
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      return true;
+    } catch {
+      return false;
     }
   }
 }
