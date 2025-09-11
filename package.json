@@ -11,13 +11,16 @@
     "start": "npm run dev:both",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:analyze": "npm run build && npx vite-bundle-analyzer dist",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
     "backend:install": "cd backend && npm install",
     "backend:start": "cd backend && npm start",
     "setup": "npm install && npm run backend:install",
-    "clean": "rm -rf node_modules package-lock.json && npm install"
+    "clean": "rm -rf node_modules package-lock.json && npm install",
+    "optimize:images": "npx @squoosh/cli --webp auto src/**/*.{jpg,jpeg,png}",
+    "preload-critical": "node scripts/generate-preload.js"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.7",
