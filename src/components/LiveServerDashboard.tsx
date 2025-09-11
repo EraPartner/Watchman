@@ -4,7 +4,7 @@ import { TorCard } from './TorCard';
 import { ServerWithService, AdGuardServerStats, TorServerStats } from '../types/server';
 import { apiClient } from '../services/ApiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Activity, Shield, AlertTriangle, CheckCircle, RefreshCw, Globe } from 'lucide-react';
+import { Activity, Shield, CheckCircle, RefreshCw, Server } from 'lucide-react';
 import { Button } from './ui/button';
 import { APP_CONFIG } from '../lib/constants';
 import { BitcoinCard } from './BitcoinCard';
@@ -12,8 +12,10 @@ import { BitcoinCard } from './BitcoinCard';
 export const LiveServerDashboard = () => {
   const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
   const [torServer, setTorServer] = useState<ServerWithService | null>(null);
+  const [bitcoinStatus, setBitcoinStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
 
   const fetchAdGuardData = useCallback(async (): Promise<ServerWithService> => {
     try {
@@ -105,6 +107,17 @@ export const LiveServerDashboard = () => {
     }
   }, []);
 
+  // Fetch Bitcoin status
+  const fetchBitcoinStatus = useCallback(async () => {
+    try {
+      const health = await apiClient.getBitcoinStatus();
+      setBitcoinStatus(health.status as 'online' | 'offline' | 'warning' | 'loading');
+    } catch (error) {
+      console.error('❌ LiveServerDashboard - Bitcoin fetch failed:', error);
+      setBitcoinStatus('offline');
+    }
+  }, []);
+
   const loadServerData = useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -181,11 +194,16 @@ export const LiveServerDashboard = () => {
           } as TorServerStats,
         });
       }
+
+      // Fetch Bitcoin status
+      await fetchBitcoinStatus();
+      
+      setLastUpdateTime(new Date());
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [fetchAdGuardData, fetchTorData]);
+  }, [fetchAdGuardData, fetchTorData, fetchBitcoinStatus]);
 
   useEffect(() => {
     loadServerData();
@@ -205,10 +223,23 @@ export const LiveServerDashboard = () => {
     };
   }, [loadServerData]);
 
+  // Calculate service counts
+  const allServices = [adguardServer, torServer, { status: bitcoinStatus }];
+  const onlineCount = allServices.filter(service => service?.status === 'online').length;
+  const offlineCount = allServices.filter(service => service?.status === 'offline').length;
+  const warningCount = allServices.filter(service => service?.status === 'warning').length;
+  const totalServices = allServices.length;
+
   const adguardStats = adguardServer?.stats as AdGuardServerStats | undefined;
   const torStats = torServer?.stats as TorServerStats | undefined;
   const totalQueries = adguardStats?.totalQueries ?? 0;
   const totalBlocked = adguardStats?.blockedQueries ?? 0;
+  
+  // Get top blocked domain for interesting info
+  const topBlockedDomain = adguardStats?.topBlockedDomain !== 'N/A' ? adguardStats?.topBlockedDomain : 'None';
+  
+  // Calculate time since last update for system info
+  const timeSinceUpdate = Math.floor((Date.now() - lastUpdateTime.getTime()) / 1000);
 
   if (isLoading) {
     return (
@@ -232,44 +263,64 @@ export const LiveServerDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">AdGuard Status</CardTitle>
-            {adguardServer?.status === 'online' ? <CheckCircle className="h-4 w-4 text-green-500" /> : <AlertTriangle className="h-4 w-4 text-yellow-500" />}
+            <CardTitle className="text-sm font-medium">Services Online</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold capitalize ${adguardServer?.status === 'online' ? 'text-green-600' : 'text-yellow-600'}`}>
-              {adguardServer?.status || 'Unknown'}
+            <div className="text-2xl font-bold text-green-600">
+              {onlineCount}/{totalServices}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {offlineCount > 0 && `${offlineCount} offline`}
+              {warningCount > 0 && `${offlineCount > 0 ? ', ' : ''}${warningCount} warning`}
+            </p>
           </CardContent>
         </Card>
+        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tor Status</CardTitle>
-            {torServer?.status === 'online' ? <Globe className="h-4 w-4 text-green-500" /> : <AlertTriangle className="h-4 w-4 text-yellow-500" />}
+            <CardTitle className="text-sm font-medium">System Health</CardTitle>
+            <Server className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold capitalize ${torServer?.status === 'online' ? 'text-green-600' : 'text-yellow-600'}`}>
-              {torServer?.status || 'Unknown'}
+            <div className="text-2xl font-bold text-blue-600">
+              {onlineCount === totalServices ? 'Excellent' : 
+               onlineCount >= totalServices * 0.7 ? 'Good' : 
+               onlineCount > 0 ? 'Degraded' : 'Critical'}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Updated {timeSinceUpdate}s ago
+            </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Queries (24h)</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Top Blocked Domain</CardTitle>
+            <Shield className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{(totalQueries / 1000).toFixed(1)}K</div>
+            <div className="text-lg font-bold text-red-600 truncate">
+              {topBlockedDomain || 'None'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalBlocked.toLocaleString()} blocked today
+            </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Block Rate</CardTitle>
-            <Shield className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-medium">Network Activity</CardTitle>
+            <Activity className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {totalQueries > 0 ? ((totalBlocked / totalQueries) * 100).toFixed(1) : 0}%
+            <div className="text-2xl font-bold text-purple-600">
+              {totalQueries > 0 ? `${(totalQueries / 1000).toFixed(1)}K` : '0'}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {totalQueries > 0 ? `${((totalBlocked / totalQueries) * 100).toFixed(1)}% blocked` : 'No queries'}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -281,8 +332,6 @@ export const LiveServerDashboard = () => {
             name={adguardServer.name}
             status={adguardServer.status}
             stats={adguardStats!}
-            ip={adguardServer.ip}
-            port={adguardServer.port}
             lastSeen={adguardServer.lastSeen}
           />
         )}
@@ -291,8 +340,6 @@ export const LiveServerDashboard = () => {
             name={torServer.name}
             status={torServer.status}
             stats={torStats!}
-            ip={torServer.ip}
-            port={torServer.port}
             lastSeen={torServer.lastSeen}
           />
         )}

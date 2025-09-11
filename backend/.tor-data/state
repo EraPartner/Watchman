@@ -1,81 +1,64 @@
-# Tor state file last generated on 2025-09-11 12:06:03 local time
+# Tor state file last generated on 2025-09-11 12:26:51 local time
 # Other times below are in UTC
 # You *do not* need to edit this file.
 
-CircuitBuildTimeBin 185 1
-CircuitBuildTimeBin 195 2
-CircuitBuildTimeBin 205 4
+CircuitBuildTimeBin 135 2
+CircuitBuildTimeBin 155 3
+CircuitBuildTimeBin 165 2
+CircuitBuildTimeBin 175 3
+CircuitBuildTimeBin 185 2
+CircuitBuildTimeBin 195 3
+CircuitBuildTimeBin 205 6
 CircuitBuildTimeBin 215 5
-CircuitBuildTimeBin 225 7
 CircuitBuildTimeBin 235 2
-CircuitBuildTimeBin 245 3
-CircuitBuildTimeBin 255 2
-CircuitBuildTimeBin 265 2
-CircuitBuildTimeBin 275 4
-CircuitBuildTimeBin 285 2
-CircuitBuildTimeBin 295 3
-CircuitBuildTimeBin 305 4
+CircuitBuildTimeBin 245 2
+CircuitBuildTimeBin 255 3
+CircuitBuildTimeBin 265 3
+CircuitBuildTimeBin 275 3
+CircuitBuildTimeBin 285 1
+CircuitBuildTimeBin 295 2
+CircuitBuildTimeBin 305 2
 CircuitBuildTimeBin 325 1
-CircuitBuildTimeBin 335 2
-CircuitBuildTimeBin 345 1
-CircuitBuildTimeBin 355 4
-CircuitBuildTimeBin 365 4
-CircuitBuildTimeBin 385 1
+CircuitBuildTimeBin 335 1
+CircuitBuildTimeBin 355 6
+CircuitBuildTimeBin 365 2
+CircuitBuildTimeBin 375 4
+CircuitBuildTimeBin 385 2
+CircuitBuildTimeBin 395 2
+CircuitBuildTimeBin 405 1
 CircuitBuildTimeBin 435 1
-CircuitBuildTimeBin 455 2
-CircuitBuildTimeBin 465 1
-CircuitBuildTimeBin 475 2
-CircuitBuildTimeBin 485 6
-CircuitBuildTimeBin 495 5
-CircuitBuildTimeBin 505 2
-CircuitBuildTimeBin 515 5
-CircuitBuildTimeBin 525 4
-CircuitBuildTimeBin 535 2
 CircuitBuildTimeBin 545 2
-CircuitBuildTimeBin 565 4
-CircuitBuildTimeBin 575 1
-CircuitBuildTimeBin 585 2
-CircuitBuildTimeBin 595 4
-CircuitBuildTimeBin 605 7
-CircuitBuildTimeBin 615 1
-CircuitBuildTimeBin 625 3
-CircuitBuildTimeBin 645 2
-CircuitBuildTimeBin 655 3
-CircuitBuildTimeBin 665 2
-CircuitBuildTimeBin 675 2
-CircuitBuildTimeBin 705 2
-CircuitBuildTimeBin 725 1
-CircuitBuildTimeBin 735 3
-CircuitBuildTimeBin 765 1
-CircuitBuildTimeBin 785 1
-CircuitBuildTimeBin 795 2
-CircuitBuildTimeBin 815 1
-CircuitBuildTimeBin 855 2
-CircuitBuildTimeBin 865 1
-CircuitBuildTimeBin 935 1
-CircuitBuildTimeBin 975 1
-CircuitBuildTimeBin 6085 1
+CircuitBuildTimeBin 565 2
+CircuitBuildTimeBin 585 1
+CircuitBuildTimeBin 595 1
+CircuitBuildTimeBin 605 3
+CircuitBuildTimeBin 695 1
+CircuitBuildTimeBin 735 1
+CircuitBuildTimeBin 775 1
+CircuitBuildTimeBin 1315 1
+CircuitBuildTimeBin 1605 1
+CircuitBuildTimeBin 6475 1
 Dormant 0
-Guard in=default rsa_id=F8D54054AFD80BCCD19FD9F777B53F8C60B9822B nickname=DaCrypticRelay sampled_on=2025-09-02T02:29:45 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-06T16:45:14 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=46.000000 pb_circ_successes=45.000000 pb_successful_circuits_closed=45.000000
-Guard in=default rsa_id=54476788A1AA7C348F20390DFC52ACA1352F4C57 nickname=luna sampled_on=2025-09-02T18:23:54 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-02T06:23:43 confirmed_idx=1 pb_use_attempts=2.000000 pb_use_successes=2.000000 pb_circ_attempts=48.000000 pb_circ_successes=47.000000 pb_successful_circuits_closed=47.000000 pb_timeouts=1.000000
-Guard in=default rsa_id=2C6D0929C0D00B3461670AF874B5418164A7D1F2 nickname=tor102 sampled_on=2025-09-09T19:51:24 sampled_idx=2 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=2DF03D7B158DAE2EAF76078775451F1769506451 nickname=ForPrivacyNET sampled_on=2025-09-10T21:54:48 sampled_idx=3 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=3F092986E9B87D3FDA09B71FA3A602378285C77A nickname=NYCBUG1 sampled_on=2025-09-07T11:53:40 sampled_idx=4 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=9ACD21680CCBE65A5D5A638D85A8388A85D6EE05 nickname=YoYuD1N02NoExit sampled_on=2025-09-10T17:31:16 sampled_idx=5 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=1EFBACCD28A07FD6AD7AA6F1293177D71397E918 nickname=cb1820 sampled_on=2025-09-06T02:40:46 sampled_idx=6 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=7B78F4D80FDF06B2CAF510377577BBB04CB11695 nickname=gangnam sampled_on=2025-09-03T23:04:48 sampled_idx=7 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=502A6528D3F1993FC3DC31A41A213749C80D626A nickname=prsv sampled_on=2025-09-06T06:15:33 sampled_idx=8 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=7C8B90FA15947119DC9B813B67CB0E63B49D262D nickname=PirkkaOPNsense sampled_on=2025-09-07T14:02:43 sampled_idx=9 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=BBC3B6B45721FB3666194E78F8B7FCFD4078C1B8 nickname=homeboysandman sampled_on=2025-09-08T04:06:42 sampled_idx=10 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=8C694E170C33A11C91565D9BC1A2F2648E9167C2 nickname=southside sampled_on=2025-09-08T06:56:22 sampled_idx=11 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=66DCBBB971CA555F86BB2B1D17C00C1828368736 nickname=whipitz sampled_on=2025-08-31T08:17:09 sampled_idx=12 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=5C124A27FFD658CB76165718DABFFD4093F5C827 nickname=Teuntje sampled_on=2025-09-05T21:49:36 sampled_idx=13 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=9C1E47FF205F349D69D569AE7ED15366A5554A46 nickname=Piratenpartei04 sampled_on=2025-08-31T17:54:55 sampled_idx=14 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=A4F11D693FAB6E949B2B7C18153C3F7989896007 nickname=torrocks sampled_on=2025-09-06T21:32:50 sampled_idx=15 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=2B46B4075D73792A4A6585FA98ED35A58A09602B nickname=CityTrustBonn sampled_on=2025-09-06T16:59:54 sampled_idx=16 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=772D509772071D3082BAAF1C781C8F917013F3CB nickname=torrx sampled_on=2025-09-02T10:50:56 sampled_idx=17 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=88C58633C9537A2E0F93A5EC09BDF40FC3247715 nickname=Determination sampled_on=2025-09-10T08:17:43 sampled_idx=18 sampled_by=0.4.8.17 listed=1
-Guard in=default rsa_id=20F9308643422B92336B2992FF9EC905EAEA91B9 nickname=Lismore sampled_on=2025-09-07T05:30:14 sampled_idx=19 sampled_by=0.4.8.17 listed=1
-LastWritten 2025-09-11 10:06:03
+Guard in=default rsa_id=BF8021D2EC8A8DC724D35D9590F9FEF251F006D9 nickname=Quetzalcoatl sampled_on=2025-09-07T15:56:52 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-08T10:21:14 confirmed_idx=1 pb_use_attempts=2.000000 pb_use_successes=2.000000 pb_circ_attempts=28.000000 pb_circ_successes=28.000000 pb_successful_circuits_closed=28.000000
+Guard in=default rsa_id=DF47C5938C23DE8F54DBF3DCE18DAE170AE40EF7 nickname=0x12345 sampled_on=2025-09-09T15:08:21 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-01T14:25:34 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=26.000000 pb_circ_successes=26.000000 pb_successful_circuits_closed=26.000000
+Guard in=default rsa_id=CE604A41376A744A22E2A0AF649D33F549D522C6 nickname=freewayphilly sampled_on=2025-09-01T14:19:55 sampled_idx=2 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=EA670AB58CD5E1D5DCAB571D100EA1D36D72CA28 nickname=billgates sampled_on=2025-09-05T12:42:24 sampled_idx=3 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=91BAB54C6923454F4E5EDC59313C45002B238665 nickname=CryptoHouse sampled_on=2025-09-09T15:44:24 sampled_idx=4 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=438F3EA4C9FB0DB63F5377A3271AB5435FAD7E04 nickname=dolemite sampled_on=2025-08-31T00:46:37 sampled_idx=5 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=57B5A1DD96B06F8813A6F269F75A2057DB7E71D0 nickname=GoodServer sampled_on=2025-09-01T15:31:55 sampled_idx=6 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=F5612A75455800DCD427C8FD919EF5CCE1D51952 nickname=Sol sampled_on=2025-09-01T01:32:14 sampled_idx=7 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=D32EB9EBAF8DBE5CF8CE4BD155DE1449DEB4CC71 nickname=prsv sampled_on=2025-09-02T05:13:45 sampled_idx=8 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=E51C7BFF774F588DA9FCCDB3B2011C8FC5A5EA90 nickname=johnny sampled_on=2025-09-08T05:06:15 sampled_idx=9 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=68ADC18507A8FECF79BAACB96E7BC0B55C875458 nickname=lisdex sampled_on=2025-09-10T16:37:15 sampled_idx=10 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=71016548832DD26E1BA0D3216D75F3A77679062A nickname=CSanders sampled_on=2025-09-01T09:38:43 sampled_idx=11 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=5DFAABAD31B3FF8A4E05EAA40C76EA11198C40ED nickname=prsv sampled_on=2025-09-08T08:38:45 sampled_idx=12 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=6CDF522F7A110C5D6D4272783CD5DC766C770DB0 nickname=ichon sampled_on=2025-08-31T10:28:47 sampled_idx=13 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=53508DECD9A503C50CA5A41D500367C98C1391F7 nickname=feinler sampled_on=2025-09-08T21:44:32 sampled_idx=14 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=6130C9751D4B09E9E7AEBE96A1ED81E940BAD345 nickname=cvbnet3 sampled_on=2025-09-06T00:56:57 sampled_idx=15 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=87558F54FCCEE5BD8EF6978438287EEA6915411A nickname=GanduVisionary2 sampled_on=2025-09-10T06:53:13 sampled_idx=16 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=45BCBE2EE9C96B129975A42C4E284F4B4C2D1707 nickname=Perseverance sampled_on=2025-09-06T09:04:43 sampled_idx=17 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=6E167365DA9B8FACFD789A33C7B55EB9F6DF78E9 nickname=moneyman sampled_on=2025-09-09T06:32:55 sampled_idx=18 sampled_by=0.4.8.17 listed=1
+Guard in=default rsa_id=EE631F9749C53DC2B5E727B07EF39962A1BE3C54 nickname=archandnixbtw sampled_on=2025-09-03T20:19:16 sampled_idx=19 sampled_by=0.4.8.17 listed=1
+LastWritten 2025-09-11 10:26:51
 TorVersion Tor 0.4.8.17
-TotalBuildTimes 134
+TotalBuildTimes 79
