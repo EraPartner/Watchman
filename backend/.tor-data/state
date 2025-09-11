@@ -1,15 +1,16 @@
-# Tor state file last generated on 2025-09-11 12:26:51 local time
+# Tor state file last generated on 2025-09-11 12:28:23 local time
 # Other times below are in UTC
 # You *do not* need to edit this file.
 
 CircuitBuildTimeBin 135 2
 CircuitBuildTimeBin 155 3
 CircuitBuildTimeBin 165 2
-CircuitBuildTimeBin 175 3
+CircuitBuildTimeBin 175 4
 CircuitBuildTimeBin 185 2
 CircuitBuildTimeBin 195 3
 CircuitBuildTimeBin 205 6
-CircuitBuildTimeBin 215 5
+CircuitBuildTimeBin 215 6
+CircuitBuildTimeBin 225 1
 CircuitBuildTimeBin 235 2
 CircuitBuildTimeBin 245 2
 CircuitBuildTimeBin 255 3
@@ -28,7 +29,7 @@ CircuitBuildTimeBin 395 2
 CircuitBuildTimeBin 405 1
 CircuitBuildTimeBin 435 1
 CircuitBuildTimeBin 545 2
-CircuitBuildTimeBin 565 2
+CircuitBuildTimeBin 565 3
 CircuitBuildTimeBin 585 1
 CircuitBuildTimeBin 595 1
 CircuitBuildTimeBin 605 3
@@ -39,8 +40,8 @@ CircuitBuildTimeBin 1315 1
 CircuitBuildTimeBin 1605 1
 CircuitBuildTimeBin 6475 1
 Dormant 0
-Guard in=default rsa_id=BF8021D2EC8A8DC724D35D9590F9FEF251F006D9 nickname=Quetzalcoatl sampled_on=2025-09-07T15:56:52 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-08T10:21:14 confirmed_idx=1 pb_use_attempts=2.000000 pb_use_successes=2.000000 pb_circ_attempts=28.000000 pb_circ_successes=28.000000 pb_successful_circuits_closed=28.000000
-Guard in=default rsa_id=DF47C5938C23DE8F54DBF3DCE18DAE170AE40EF7 nickname=0x12345 sampled_on=2025-09-09T15:08:21 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-01T14:25:34 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=26.000000 pb_circ_successes=26.000000 pb_successful_circuits_closed=26.000000
+Guard in=default rsa_id=BF8021D2EC8A8DC724D35D9590F9FEF251F006D9 nickname=Quetzalcoatl sampled_on=2025-09-07T15:56:52 sampled_idx=0 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-08T10:21:14 confirmed_idx=1 pb_use_attempts=2.000000 pb_use_successes=2.000000 pb_circ_attempts=32.000000 pb_circ_successes=31.000000 pb_successful_circuits_closed=31.000000 pb_timeouts=1.000000
+Guard in=default rsa_id=DF47C5938C23DE8F54DBF3DCE18DAE170AE40EF7 nickname=0x12345 sampled_on=2025-09-09T15:08:21 sampled_idx=1 sampled_by=0.4.8.17 listed=1 confirmed_on=2025-09-01T14:25:34 confirmed_idx=0 pb_use_attempts=1.000000 pb_use_successes=1.000000 pb_circ_attempts=27.000000 pb_circ_successes=27.000000 pb_successful_circuits_closed=27.000000
 Guard in=default rsa_id=CE604A41376A744A22E2A0AF649D33F549D522C6 nickname=freewayphilly sampled_on=2025-09-01T14:19:55 sampled_idx=2 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=EA670AB58CD5E1D5DCAB571D100EA1D36D72CA28 nickname=billgates sampled_on=2025-09-05T12:42:24 sampled_idx=3 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=91BAB54C6923454F4E5EDC59313C45002B238665 nickname=CryptoHouse sampled_on=2025-09-09T15:44:24 sampled_idx=4 sampled_by=0.4.8.17 listed=1
@@ -59,6 +60,6 @@ Guard in=default rsa_id=87558F54FCCEE5BD8EF6978438287EEA6915411A nickname=GanduV
 Guard in=default rsa_id=45BCBE2EE9C96B129975A42C4E284F4B4C2D1707 nickname=Perseverance sampled_on=2025-09-06T09:04:43 sampled_idx=17 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=6E167365DA9B8FACFD789A33C7B55EB9F6DF78E9 nickname=moneyman sampled_on=2025-09-09T06:32:55 sampled_idx=18 sampled_by=0.4.8.17 listed=1
 Guard in=default rsa_id=EE631F9749C53DC2B5E727B07EF39962A1BE3C54 nickname=archandnixbtw sampled_on=2025-09-03T20:19:16 sampled_idx=19 sampled_by=0.4.8.17 listed=1
-LastWritten 2025-09-11 10:26:51
+LastWritten 2025-09-11 10:28:23
 TorVersion Tor 0.4.8.17
-TotalBuildTimes 79
+TotalBuildTimes 83

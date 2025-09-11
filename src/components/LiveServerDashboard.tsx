@@ -340,6 +340,8 @@ export const LiveServerDashboard = () => {
             name={torServer.name}
             status={torServer.status}
             stats={torStats!}
+            ip={torServer.ip}
+            port={torServer.port}
             lastSeen={torServer.lastSeen}
           />
         )}
