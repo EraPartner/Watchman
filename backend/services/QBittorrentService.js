@@ -5,10 +5,11 @@ export class QBittorrentService {
     this.baseUrl = config.baseUrl || process.env.QBITTORRENT_URL || 'http://192.168.0.143:8069';
     this.username = config.username || process.env.QBITTORRENT_USERNAME || 'admin';
     this.password = config.password || process.env.QBITTORRENT_PASSWORD || '';
-    this.timeout = config.timeout || parseInt(process.env.QBITTORRENT_TIMEOUT) || 10000;
+    this.timeout = config.timeout || parseInt(process.env.QBITTORRENT_TIMEOUT) || 3000; // Reduced default timeout for LAN
     this.cookie = null;
     this.lastCheck = null;
     this.checkInterval = 30000; // 30 seconds
+    this.cookieExpiry = null; // Track cookie expiration
   }
 
   async authenticate() {
@@ -38,6 +39,7 @@ export class QBittorrentService {
         const setCookieHeader = response.headers.get('set-cookie');
         if (setCookieHeader) {
           this.cookie = setCookieHeader.split(';')[0];
+          this.cookieExpiry = Date.now() + 3600 * 1000; // Set cookie expiry to 1 hour from now
           return true;
         }
       }
@@ -53,7 +55,7 @@ export class QBittorrentService {
   }
 
   async makeRequest(endpoint) {
-    if (!this.cookie) {
+    if (!this.cookie || Date.now() > this.cookieExpiry) {
       const authenticated = await this.authenticate();
       if (!authenticated) {
         throw new Error('Authentication failed');
