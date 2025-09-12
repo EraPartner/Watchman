@@ -87,16 +87,22 @@ async function handleApiRequest(request) {
     // Fallback to cache
     const cachedResponse = await cache.match(request);
     if (cachedResponse) {
-      // Add offline indicator to cached responses
-      const response = cachedResponse.clone();
-      const data = await response.json();
-      data._offline = true;
-      data._cacheTime = new Date().toISOString();
-      
-      return new Response(JSON.stringify(data), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      try {
+        // Try to parse as JSON and add offline indicators
+        const response = cachedResponse.clone();
+        const data = await response.json();
+        data._offline = true;
+        data._cacheTime = new Date().toISOString();
+        
+        return new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (jsonError) {
+        // If cached response isn't JSON, return it as-is
+        console.log('⚠️ Cached response is not JSON, returning as-is:', request.url);
+        return cachedResponse;
+      }
     }
     
     // Return offline response

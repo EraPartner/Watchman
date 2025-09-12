@@ -355,13 +355,25 @@ app.get('/api/synology/stats', statsCacheMiddleware, async (req, res) => {
     }
 
     const stats = await serviceManager.getServiceStats('synology');
+    
+    // Ensure we always return valid JSON
+    if (stats === null || stats === undefined) {
+      return res.status(500).json({ 
+        error: 'Synology stats returned null or undefined',
+        status: 'error',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     console.log(`✅ Synology stats connection successful`);
     res.json(stats);
   } catch (error) {
     console.error('❌ Synology stats connection failed:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch Synology stats',
-      message: error.message 
+      message: error.message,
+      status: 'error',
+      timestamp: new Date().toISOString()
     });
   }
 });
