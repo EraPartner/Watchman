@@ -1,11 +1,13 @@
-import snmp from 'net-snmp';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 class SynologyService {
   constructor() {
-    this.session = null;
     this.isConnected = false;
     this.lastData = null;
-    this.initializeSession();
+    this.checkSystemSnmp();
     
     // Synology SNMP OIDs
     this.oids = {
@@ -40,7 +42,7 @@ class SynologyService {
     };
   }
 
-  initializeSession() {
+  async checkSystemSnmp() {
     try {
       // Check if required environment variables are present
       if (!process.env.SYNOLOGY_HOST) {
@@ -53,46 +55,74 @@ class SynologyService {
         return;
       }
 
-      // Match the exact configuration that works with snmpwalk
-      const options = {
-        port: parseInt(process.env.SYNOLOGY_SNMP_PORT) || 161,
-        retries: 3,
-        timeout: 5000,
-        version: snmp.Version3,
-        username: process.env.SYNOLOGY_SNMP_USERNAME,
-        authProtocol: snmp.AuthProtocols.sha,  // Force SHA (not conditional)
-        authKey: process.env.SYNOLOGY_SNMP_AUTH_KEY,
-        privProtocol: snmp.PrivProtocols.aes,  // Force AES (not conditional) 
-        privKey: process.env.SYNOLOGY_SNMP_PRIV_KEY,
-        // Add security level explicitly (equivalent to -l authPriv)
-        level: snmp.SecurityLevel.authPriv
-      };
-
-      console.log(`Initializing SNMP session to ${process.env.SYNOLOGY_HOST}:${options.port} with user ${options.username}`);
-      console.log(`Using SHA auth and AES privacy (authPriv level)`);
+      // Test system snmpget command availability with timeout
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Command timeout')), 3000)
+      );
       
-      this.session = snmp.createV3Session(process.env.SYNOLOGY_HOST, options);
+      await Promise.race([
+        execAsync('which snmpget'),
+        timeoutPromise
+      ]);
       
-      this.session.on('error', (error) => {
-        console.error('SNMP session error:', error.message);
-        this.isConnected = false;
-      });
-
-      this.session.on('close', () => {
-        console.log('SNMP session closed');
-        this.isConnected = false;
-      });
-
-      console.log('SNMP session initialized for Synology NAS');
+      console.log(`✅ System SNMP tools available for Synology NAS (${process.env.SYNOLOGY_HOST})`);
+      console.log(`Using SNMPv3 with user: ${process.env.SYNOLOGY_SNMP_USERNAME}`);
+      
+      this.isConnected = true;
     } catch (error) {
-      console.error('Failed to initialize SNMP session:', error.message);
+      console.error('❌ System SNMP tools not available:', error.message);
+      console.error('Please install net-snmp tools: brew install net-snmp (macOS) or apt-get install snmp (Linux)');
       this.isConnected = false;
-      this.session = null;
+    }
+  }
+
+  // System SNMP command execution
+  async getSystemSnmp(oids) {
+    if (!Array.isArray(oids)) {
+      oids = [oids];
+    }
+
+    const snmpCmd = [
+      'snmpget',
+      '-v3',
+      `-u ${process.env.SYNOLOGY_SNMP_USERNAME}`,
+      `-A ${process.env.SYNOLOGY_SNMP_AUTH_KEY}`,
+      '-a SHA',
+      `-X ${process.env.SYNOLOGY_SNMP_PRIV_KEY}`,
+      '-l authPriv',
+      '-x AES',
+      '-Oqv', // Quiet output, values only
+      process.env.SYNOLOGY_HOST,
+      ...oids
+    ].join(' ');
+
+    try {
+      const { stdout, stderr } = await execAsync(snmpCmd);
+      if (stderr && !stderr.includes('Warning:')) { // Ignore harmless warnings
+        console.warn('SNMP warning:', stderr);
+      }
+      
+      // Parse the output - each line is a value
+      const values = stdout.trim().split('\n').filter(line => line.trim());
+      return values.map((value, index) => ({
+        oid: oids[index],
+        value: value.replace(/^"(.*)"$/, '$1').trim() // Remove quotes if present
+      }));
+    } catch (error) {
+      throw new Error(`System SNMP command failed: ${error.message}`);
     }
   }
 
   async checkHealth() {
     try {
+      if (!this.isConnected) {
+        return {
+          status: 'offline',
+          error: 'System SNMP tools not available',
+          timestamp: new Date().toISOString()
+        };
+      }
+
       const data = await this.getSystemInfo();
       return {
         status: 'online',
@@ -119,168 +149,105 @@ class SynologyService {
   }
 
   async getSystemInfo() {
-    return new Promise((resolve, reject) => {
-      if (!this.session) {
-        reject(new Error('SNMP session not initialized'));
-        return;
-      }
+    const oids = [
+      this.oids.systemName,
+      this.oids.systemUptime,
+      this.oids.systemModel,
+      this.oids.systemVersion,
+      this.oids.systemStatus
+    ];
 
-      const oids = [
-        this.oids.systemName,
-        this.oids.systemUptime,
-        this.oids.systemModel,
-        this.oids.systemVersion,
-        this.oids.systemStatus
-      ];
-
-      this.session.get(oids, (error, varbinds) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        const systemInfo = {
-          name: varbinds[0]?.value?.toString() || 'Unknown',
-          uptime: parseInt(varbinds[1]?.value || 0) / 100, // Convert to seconds
-          model: varbinds[2]?.value?.toString() || 'Unknown',
-          version: varbinds[3]?.value?.toString() || 'Unknown',
-          status: parseInt(varbinds[4]?.value || 0) === 1 ? 'Normal' : 'Warning'
-        };
-
-        resolve(systemInfo);
-      });
-    });
+    const results = await this.getSystemSnmp(oids);
+    
+    return {
+      name: results[0]?.value || 'Unknown',
+      uptime: parseInt(results[1]?.value || 0) / 100, // Convert to seconds
+      model: results[2]?.value || 'Unknown',
+      version: results[3]?.value || 'Unknown',
+      status: parseInt(results[4]?.value || 0) === 1 ? 'Normal' : 'Warning'
+    };
   }
 
   async getCPUInfo() {
-    return new Promise((resolve, reject) => {
-      if (!this.session) {
-        reject(new Error('SNMP session not initialized'));
-        return;
-      }
+    const oids = [
+      this.oids.cpuUsage,
+      this.oids.cpuTemp
+    ];
 
-      const oids = [
-        this.oids.cpuUsage,
-        this.oids.cpuTemp
-      ];
-
-      this.session.get(oids, (error, varbinds) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        const cpuInfo = {
-          usage: parseInt(varbinds[0]?.value || 0),
-          temperature: parseInt(varbinds[1]?.value || 0)
-        };
-
-        resolve(cpuInfo);
-      });
-    });
+    const results = await this.getSystemSnmp(oids);
+    
+    return {
+      usage: parseInt(results[0]?.value || 0),
+      temperature: parseInt(results[1]?.value || 0)
+    };
   }
 
   async getMemoryInfo() {
-    return new Promise((resolve, reject) => {
-      if (!this.session) {
-        reject(new Error('SNMP session not initialized'));
-        return;
-      }
+    const oids = [
+      this.oids.memoryTotal,
+      this.oids.memoryAvailable,
+      this.oids.memoryUsage
+    ];
 
-      const oids = [
-        this.oids.memoryTotal,
-        this.oids.memoryAvailable,
-        this.oids.memoryUsage
-      ];
+    const results = await this.getSystemSnmp(oids);
+    const totalMB = parseInt(results[0]?.value || 0);
+    const availableMB = parseInt(results[1]?.value || 0);
+    const usagePercent = parseInt(results[2]?.value || 0);
 
-      this.session.get(oids, (error, varbinds) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        const totalMB = parseInt(varbinds[0]?.value || 0);
-        const availableMB = parseInt(varbinds[1]?.value || 0);
-        const usagePercent = parseInt(varbinds[2]?.value || 0);
-
-        const memoryInfo = {
-          total: totalMB * 1024 * 1024, // Convert to bytes
-          available: availableMB * 1024 * 1024, // Convert to bytes
-          used: (totalMB - availableMB) * 1024 * 1024,
-          usage: usagePercent
-        };
-
-        resolve(memoryInfo);
-      });
-    });
+    return {
+      total: totalMB * 1024 * 1024, // Convert to bytes
+      available: availableMB * 1024 * 1024, // Convert to bytes
+      used: (totalMB - availableMB) * 1024 * 1024,
+      usage: usagePercent
+    };
   }
 
   async getDiskInfo() {
-    return new Promise((resolve, reject) => {
-      if (!this.session) {
-        reject(new Error('SNMP session not initialized'));
-        return;
-      }
+    const oids = [
+      this.oids.diskTotal,
+      this.oids.diskUsed,
+      this.oids.diskUsage
+    ];
 
-      const oids = [
-        this.oids.diskTotal,
-        this.oids.diskUsed,
-        this.oids.diskUsage
-      ];
+    const results = await this.getSystemSnmp(oids);
+    const totalKB = parseInt(results[0]?.value || 0);
+    const usedKB = parseInt(results[1]?.value || 0);
+    const usagePercent = parseInt(results[2]?.value || 0);
 
-      this.session.get(oids, (error, varbinds) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        const totalKB = parseInt(varbinds[0]?.value || 0);
-        const usedKB = parseInt(varbinds[1]?.value || 0);
-        const usagePercent = parseInt(varbinds[2]?.value || 0);
-
-        const diskInfo = {
-          total: totalKB * 1024, // Convert to bytes
-          used: usedKB * 1024, // Convert to bytes
-          free: (totalKB - usedKB) * 1024,
-          usage: usagePercent
-        };
-
-        resolve(diskInfo);
-      });
-    });
+    return {
+      total: totalKB * 1024, // Convert to bytes
+      used: usedKB * 1024, // Convert to bytes
+      free: (totalKB - usedKB) * 1024,
+      usage: usagePercent
+    };
   }
 
   async getNetworkInfo() {
-    return new Promise((resolve, reject) => {
-      if (!this.session) {
-        reject(new Error('SNMP session not initialized'));
-        return;
-      }
+    const oids = [
+      this.oids.networkRx,
+      this.oids.networkTx
+    ];
 
-      const oids = [
-        this.oids.networkRx,
-        this.oids.networkTx
-      ];
-
-      this.session.get(oids, (error, varbinds) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        const networkInfo = {
-          bytesReceived: parseInt(varbinds[0]?.value || 0),
-          bytesTransmitted: parseInt(varbinds[1]?.value || 0)
-        };
-
-        resolve(networkInfo);
-      });
-    });
+    const results = await this.getSystemSnmp(oids);
+    
+    return {
+      bytesReceived: parseInt(results[0]?.value || 0),
+      bytesTransmitted: parseInt(results[1]?.value || 0)
+    };
   }
 
   async getAllData() {
     try {
-      const [systemInfo, cpuInfo, memoryInfo, diskInfo, networkInfo] = await Promise.all([
+      if (!this.isConnected) {
+        return {
+          status: 'error',
+          error: 'System SNMP tools not available',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      // Collect data with individual error handling to prevent one failure from breaking everything
+      const results = await Promise.allSettled([
         this.getSystemInfo(),
         this.getCPUInfo(),
         this.getMemoryInfo(),
@@ -288,23 +255,47 @@ class SynologyService {
         this.getNetworkInfo()
       ]);
 
+      // Extract successful results and handle failures gracefully
+      const [systemResult, cpuResult, memoryResult, diskResult, networkResult] = results;
+
       const data = {
         status: 'online',
         timestamp: new Date().toISOString(),
-        system: systemInfo,
-        cpu: cpuInfo,
-        memory: memoryInfo,
-        disk: diskInfo,
-        network: networkInfo,
-        lastUpdated: new Date().toISOString()
+        system: systemResult.status === 'fulfilled' ? systemResult.value : { 
+          name: 'Unknown', uptime: 0, model: 'Unknown', version: 'Unknown', status: 'Unknown' 
+        },
+        cpu: cpuResult.status === 'fulfilled' ? cpuResult.value : { 
+          usage: 0, temperature: 0 
+        },
+        memory: memoryResult.status === 'fulfilled' ? memoryResult.value : { 
+          total: 0, available: 0, used: 0, usage: 0 
+        },
+        disk: diskResult.status === 'fulfilled' ? diskResult.value : { 
+          total: 0, used: 0, free: 0, usage: 0 
+        },
+        network: networkResult.status === 'fulfilled' ? networkResult.value : { 
+          bytesReceived: 0, bytesTransmitted: 0 
+        },
+        lastUpdated: new Date().toISOString(),
+        // Add information about any failures
+        errors: results
+          .map((result, index) => ({ index, result }))
+          .filter(({ result }) => result.status === 'rejected')
+          .map(({ index, result }) => ({
+            component: ['system', 'cpu', 'memory', 'disk', 'network'][index],
+            error: result.reason.message
+          }))
       };
 
+      // Log any partial failures
+      if (data.errors.length > 0) {
+        console.warn('Synology partial data collection failures:', data.errors);
+      }
+
       this.lastData = data;
-      this.isConnected = true;
       return data;
     } catch (error) {
       console.error('Failed to get Synology data:', error);
-      this.isConnected = false;
       return {
         status: 'error',
         error: error.message,
@@ -337,11 +328,8 @@ class SynologyService {
   }
 
   disconnect() {
-    if (this.session) {
-      this.session.close();
-      this.session = null;
-      this.isConnected = false;
-    }
+    // No session to disconnect from with system commands
+    console.log('Synology SNMP service disconnected');
   }
 }
 

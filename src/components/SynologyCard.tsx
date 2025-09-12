@@ -78,17 +78,55 @@ const SynologyCard = () => {
         fetch('/api/synology/status')
       ]);
 
+      // Check if responses are ok and contain JSON
       if (!statsResponse.ok || !healthResponse.ok) {
-        throw new Error('Failed to fetch Synology data');
+        const statsError = !statsResponse.ok ? `Stats API returned ${statsResponse.status}` : '';
+        const healthError = !healthResponse.ok ? `Status API returned ${healthResponse.status}` : '';
+        throw new Error(`API Error: ${statsError} ${healthError}`.trim());
       }
 
-      const [statsData, healthData] = await Promise.all([
-        statsResponse.json(),
-        healthResponse.json()
-      ]);
+      // Safely parse JSON with error handling for each response
+      let statsData = null;
+      let healthData = null;
 
-      setData(statsData);
-      setHealth(healthData);
+      try {
+        const statsText = await statsResponse.text();
+        if (statsText.trim()) {
+          statsData = JSON.parse(statsText);
+        } else {
+          console.warn('Empty stats response received');
+        }
+      } catch (parseError) {
+        console.error('Failed to parse stats JSON:', parseError);
+        // Set a fallback object for stats
+        statsData = {
+          status: 'error',
+          error: 'Failed to parse stats data',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      try {
+        const healthText = await healthResponse.text();
+        if (healthText.trim()) {
+          healthData = JSON.parse(healthText);
+        } else {
+          console.warn('Empty health response received');
+        }
+      } catch (parseError) {
+        console.error('Failed to parse health JSON:', parseError);
+        // Set a fallback object for health
+        healthData = {
+          status: 'offline',
+          error: 'Failed to parse health data',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      // Only set data if we got valid responses
+      if (statsData) setData(statsData);
+      if (healthData) setHealth(healthData);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       console.error('Error fetching Synology data:', err);

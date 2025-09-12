@@ -35,9 +35,8 @@ const options = {
   authProtocol: snmp.AuthProtocols.sha,  // Force SHA (matches -a SHA)
   authKey: process.env.SYNOLOGY_SNMP_AUTH_KEY,  // Matches -A 7ydUPqwBAqawvRcuFBJc
   privProtocol: snmp.PrivProtocols.aes,  // Force AES (matches -x AES)
-  privKey: process.env.SYNOLOGY_SNMP_PRIV_KEY,  // Matches -X sZL95e4U2tqwcowCqYOt
-  // Add security level explicitly (matches -l authPriv)
-  level: snmp.SecurityLevel.authPriv
+  privKey: process.env.SYNOLOGY_SNMP_PRIV_KEY  // Matches -X sZL95e4U2tqwcowCqYOt
+  // Remove the level parameter as it might not be supported properly
 };
 
 console.log('Connection options:');
