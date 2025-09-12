@@ -33,6 +33,19 @@ export default defineConfig(({ mode }) => {
       hmr: {
         port: parseInt(env.VITE_HMR_PORT) || 24678,
       },
+      // Proxy API calls to backend server
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/ws': {
+          target: 'http://localhost:3001',
+          ws: true,
+          changeOrigin: true,
+        }
+      }
     },
     build: {
       // Remove console logs in production

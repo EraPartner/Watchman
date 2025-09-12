@@ -1,7 +1,8 @@
 // Service Worker for offline caching and background sync
-const CACHE_NAME = 'watchman-v1';
-const STATIC_CACHE = 'watchman-static-v1';
-const API_CACHE = 'watchman-api-v1';
+const SW_VERSION = '2025-09-12-1';
+const CACHE_NAME = `watchman-${SW_VERSION}`;
+const STATIC_CACHE = `watchman-static-${SW_VERSION}`;
+const API_CACHE = `watchman-api-${SW_VERSION}`;
 
 // Files to cache for offline use
 const STATIC_FILES = [
@@ -57,6 +58,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // In dev, always go network-first with no caching to avoid stale modules
+  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
+    event.respondWith(fetch(request).catch(() => new Response('Dev offline', { status: 503 })));
+    return;
+  }
+
+  // Avoid caching Vite module/asset requests (prevents stale TS/JS like SynologyCard)
+  if (url.pathname.startsWith('/@') || url.pathname.includes('SynologyCard') || url.pathname.endsWith('.tsx') || url.pathname.endsWith('.ts')) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   // Handle API requests
   if (url.pathname.startsWith('/api/')) {
