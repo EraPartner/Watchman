@@ -81,47 +81,33 @@ const SynologyCard: React.FC = () => {
       // Handle stats response
       if (statsResponse?.ok) {
         const statsText = await statsResponse.text();
-        console.log('Synology stats raw response:', statsText);
         
         if (statsText.trim()) {
           try {
             const statsData = JSON.parse(statsText);
-            console.log('Synology stats parsed data:', statsData);
             setStats(statsData);
           } catch (parseError) {
             console.error('Failed to parse stats JSON:', parseError);
-            console.error('Raw stats response that failed to parse:', statsText);
           }
-        } else {
-          console.error('Empty response from stats endpoint');
         }
       } else if (statsResponse) {
         console.error('Stats response not OK:', statsResponse.status, statsResponse.statusText);
-      } else {
-        console.error('Stats request failed completely (network error)');
       }
 
       // Handle status response
       if (statusResponse?.ok) {
         const statusText = await statusResponse.text();
-        console.log('Synology status raw response:', statusText);
         
         if (statusText.trim()) {
           try {
             const statusData = JSON.parse(statusText);
-            console.log('Synology status parsed data:', statusData);
             setStatus(statusData);
           } catch (parseError) {
             console.error('Failed to parse status JSON:', parseError);
-            console.error('Raw status response that failed to parse:', statusText);
           }
-        } else {
-          console.error('Empty response from status endpoint');
         }
       } else if (statusResponse) {
         console.error('Status response not OK:', statusResponse.status, statusResponse.statusText);
-      } else {
-        console.error('Status request failed completely (network error)');
       }
 
       setLastUpdate(new Date());
@@ -226,7 +212,7 @@ const SynologyCard: React.FC = () => {
       <CardContent className="space-y-4">
         {/* System Information - Updated to use direct system object */}
         {(stats?.system || status?.data) && (
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm">
             <div className="space-y-1">
               <div className="flex items-center gap-1 text-muted-foreground text-xs">
                 <Server className="h-3 w-3" />
@@ -234,16 +220,6 @@ const SynologyCard: React.FC = () => {
               </div>
               <div className="font-medium">
                 {stats?.system?.model || status?.data?.model || 'Unknown'}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                <Clock className="h-3 w-3" />
-                Uptime
-              </div>
-              <div className="font-medium">
-                {stats?.system?.uptime ? formatUptime(stats.system.uptime) : 
-                 status?.data?.uptime || 'Unknown'}
               </div>
             </div>
           </div>

@@ -16,6 +16,7 @@ export const LiveServerDashboard = () => {
   const [torServer, setTorServer] = useState<ServerWithService | null>(null);
   const [bitcoinStatus, setBitcoinStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [qbittorrentStatus, setQbittorrentStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
+  const [synologyStatus, setSynologyStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
@@ -132,6 +133,17 @@ export const LiveServerDashboard = () => {
     }
   }, []);
 
+  // Fetch Synology status
+  const fetchSynologyStatus = useCallback(async () => {
+    try {
+      const health = await apiClient.getSynologyStatus();
+      setSynologyStatus(health.status as 'online' | 'offline' | 'warning' | 'loading');
+    } catch (error) {
+      console.error('❌ LiveServerDashboard - Synology fetch failed:', error);
+      setSynologyStatus('offline');
+    }
+  }, []);
+
   const loadServerData = useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -213,13 +225,15 @@ export const LiveServerDashboard = () => {
       await fetchBitcoinStatus();
       // Fetch qBittorrent status
       await fetchQBittorrentStatus();
+      // Fetch Synology status
+      await fetchSynologyStatus();
       
       setLastUpdateTime(new Date());
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [fetchAdGuardData, fetchTorData, fetchBitcoinStatus, fetchQBittorrentStatus]);
+  }, [fetchAdGuardData, fetchTorData, fetchBitcoinStatus, fetchQBittorrentStatus, fetchSynologyStatus]);
 
   useEffect(() => {
     loadServerData();
@@ -239,8 +253,14 @@ export const LiveServerDashboard = () => {
     };
   }, [loadServerData]);
 
-  // Calculate service counts
-  const allServices = [adguardServer, torServer, { status: bitcoinStatus }, { status: qbittorrentStatus }];
+  // Calculate service counts - Updated to include all 5 services
+  const allServices = [
+    adguardServer, 
+    torServer, 
+    { status: bitcoinStatus }, 
+    { status: qbittorrentStatus }, 
+    { status: synologyStatus }
+  ];
   const onlineCount = allServices.filter(service => service?.status === 'online').length;
   const offlineCount = allServices.filter(service => service?.status === 'offline').length;
   const warningCount = allServices.filter(service => service?.status === 'warning').length;

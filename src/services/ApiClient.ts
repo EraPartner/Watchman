@@ -198,6 +198,15 @@ class ApiClient {
     return this.request('/api/tor/health');
   }
 
+  // Synology endpoints
+  async getSynologyStatus(): Promise<ServiceHealth> {
+    return this.request('/api/synology/status');
+  }
+
+  async getSynologyStats(): Promise<any> {
+    return this.request('/api/synology/stats');
+  }
+
   // Health check
   async getServicesHealth(): Promise<ServicesHealthResponse> {
     return this.request('/api/services/health');
