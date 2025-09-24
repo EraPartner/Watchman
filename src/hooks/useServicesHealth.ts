@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../services/ApiClient';
+import { apiClient, FrontendConfig } from '../services/ApiClient';
 import { APP_CONFIG } from '../lib/constants';
 
 export const useServicesHealth = () => {
@@ -13,7 +13,7 @@ export const useServicesHealth = () => {
 };
 
 export const useFrontendConfig = () => {
-  return useQuery({
+  return useQuery<FrontendConfig>({
     queryKey: ['frontend-config'],
     queryFn: () => apiClient.getFrontendConfig(),
     staleTime: 60000,

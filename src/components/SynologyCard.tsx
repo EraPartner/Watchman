@@ -1,15 +1,7 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
-import { ExternalLink } from 'lucide-react';
-import {
-  Cpu,
-  Thermometer,
-  Server,
-  Network,
-  AlertCircle,
-  RefreshCw
-} from 'lucide-react';
+import { ExternalLink, Cpu, Thermometer, Server, Network, AlertCircle, RefreshCw } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../services/ApiClient';
@@ -39,25 +31,18 @@ interface SynologyStats {
   error?: string;
 }
 
-interface SynologyStatus {
-  status: 'online' | 'offline' | 'error';
-  timestamp: string;
-  data?: {
-    name?: string;
-    model?: string;
-    version?: string;
-    uptime?: string;
-    systemStatus?: string;
-  };
-  error?: string;
-}
-
-const formatBytes = (bytes: number): string => {
-  if (!bytes) return '0 B';
+const formatBytes = (bytes?: number | null): string => {
+  if (!Number.isFinite(bytes) || (bytes ?? 0) === 0) return '0 B';
+  const b = Math.max(0, bytes || 0);
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  const i = Math.min(Math.floor(Math.log(b) / Math.log(k)), sizes.length - 1);
+  return `${(b / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+};
+
+const clampPercentage = (v?: number) => {
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, v));
 };
 
 const SynologyCard: React.FC = () => {
@@ -77,29 +62,36 @@ const SynologyCard: React.FC = () => {
 
   const frontendConfigQuery = useFrontendConfig();
 
-  const status = statusQuery.data as SynologyStatus | undefined;
+  const status = statusQuery.data as any;
   const stats = statsQuery.data as SynologyStats | undefined;
-  const cfg = frontendConfigQuery.data?.services?.synology ?? null;
-  const loading = statusQuery.isLoading && statsQuery.isLoading;
-  const isOnline = status?.status === 'online' || stats?.status === 'online';
-  const hasError = status?.status === 'error' || stats?.status === 'error';
-  const lastUpdate = new Date(status?.timestamp || stats?.timestamp || Date.now());
+  const cfg = (frontendConfigQuery.data as any)?.services?.synology ?? null;
 
-  // Compute host + href from frontend config (if available)
-  const synHost = cfg?.host || null;
-  const synPort = cfg?.webPort ? String(cfg.webPort) : null;
-  const synHostOnly = synHost ? synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim() : null;
-  const synDisplay = synHostOnly ? (synPort ? `${synHostOnly}:${synPort}` : synHostOnly) : null;
-  let synologyHref: string | null = null;
-  if (synHost) {
-    try {
-      const hostOnly = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim();
-      synologyHref = `https://${hostOnly}${synPort ? `:${synPort}` : ''}`;
-    } catch (err) {
-      const candidate = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '') + (synPort ? `:${synPort}` : '');
-      synologyHref = `https://${candidate}`;
-    }
-  }
+  // Show loading if either query is loading (previously used && which required both)
+  const loading = statusQuery.isLoading || statsQuery.isLoading;
+  const isOnline = (status?.status === 'online') || (stats?.status === 'online');
+  // ServiceHealth uses 'warning'/'not_configured' while stats may use 'error'
+  const hasError = (status?.status === 'warning' || status?.status === 'not_configured') || (stats?.status === 'error');
+
+  // prefer stats.timestamp for detailed timestamp; fallback to status.lastCheck or now
+  const lastUpdate = useMemo(() => new Date(stats?.timestamp || status?.lastCheck || Date.now()), [stats?.timestamp, status?.lastCheck]);
+
+  // Compute host + href from frontend config (if available) and memoize to avoid recomputing each render
+  const { synDisplay, synologyHref } = useMemo(() => {
+    const synHost = cfg?.host ?? null;
+    const synPort = cfg?.webPort ? String(cfg.webPort) : null;
+    if (!synHost) return { synDisplay: null as string | null, synologyHref: null as string | null };
+
+    const hostOnly = synHost.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
+    const display = hostOnly ? (synPort ? `${hostOnly}:${synPort}` : hostOnly) : (synHost || null);
+    const href = hostOnly ? `https://${hostOnly}${synPort ? `:${synPort}` : ''}` : null;
+    return { synDisplay: display, synologyHref: href };
+  }, [cfg?.host, cfg?.webPort]);
+
+  const onRetry = useCallback(() => {
+    statusQuery.refetch();
+    statsQuery.refetch();
+    frontendConfigQuery.refetch();
+  }, [statusQuery, statsQuery, frontendConfigQuery]);
 
   return (
     <Card className="w-full self-start h-auto">
@@ -112,14 +104,14 @@ const SynologyCard: React.FC = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {(stats?.system || status?.data) ? (
+        {stats?.system ? (
           <div className="grid grid-cols-1 gap-4 text-sm">
             <div className="space-y-1">
               <div className="flex items-center gap-1 text-muted-foreground text-xs">
                 <Server className="h-3 w-3" />
                 Model
               </div>
-              <div className="font-medium">{stats?.system?.model || status?.data?.model || 'Unknown'}</div>
+              <div className="font-medium">{stats?.system?.model || 'Unknown'}</div>
             </div>
 
             <div className="space-y-1">
@@ -160,9 +152,9 @@ const SynologyCard: React.FC = () => {
                     <Cpu className="h-3 w-3" />
                     CPU Usage
                   </div>
-                  <span className="font-medium">{stats.cpu.usage}%</span>
+                  <span className="font-medium">{clampPercentage(stats.cpu.usage)}%</span>
                 </div>
-                <Progress value={stats.cpu.usage} className="h-2" />
+                <Progress value={clampPercentage(stats.cpu.usage)} className="h-2" />
 
                 {stats.cpu.temperature && stats.cpu.temperature > 0 && (
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -212,7 +204,7 @@ const SynologyCard: React.FC = () => {
               <div className="text-xs text-red-500 max-w-full break-words">{stats?.error || status?.error}</div>
             )}
             <div className="mt-3 text-xs">
-              <button onClick={() => { statusQuery.refetch(); statsQuery.refetch(); frontendConfigQuery.refetch(); }} className="text-blue-500 hover:text-blue-700 underline" disabled={loading}>
+              <button onClick={onRetry} className="text-blue-500 hover:text-blue-700 underline" disabled={loading}>
                 Retry Connection
               </button>
             </div>

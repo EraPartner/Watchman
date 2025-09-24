@@ -2,7 +2,7 @@ import { env } from '../lib/env';
 import { APP_CONFIG } from '../lib/constants';
 
 // Simple API client that only talks to our backend
-interface ServiceHealth {
+export interface ServiceHealth {
   status: 'online' | 'offline' | 'warning' | 'not_configured';
   responseTime?: number;
   error?: string;
@@ -120,7 +120,7 @@ interface ServicesHealthResponse {
   };
 }
 
-interface FrontendConfig {
+export interface FrontendConfig {
   services: {
     adguard: {
       webUrl: string;
@@ -135,6 +135,15 @@ interface FrontendConfig {
       host?: string | null;
       ports?: string | null;
       configured?: boolean;
+    };
+    // optional entries used by UI components
+    qbittorrent?: {
+      host?: string | null;
+      webPort?: number | null;
+    };
+    synology?: {
+      host?: string | null;
+      webPort?: number | null;
     };
   };
   app: {
