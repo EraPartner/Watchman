@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
-import { Shield, Clock, AlertTriangle, ExternalLink, Activity, Globe, Zap } from 'lucide-react';
+import { Shield, AlertTriangle, ExternalLink, Activity, Globe, Zap } from 'lucide-react';
 import { AdGuardServerStats, ServerStatus } from '../types/server';
 import { useConfig } from '../hooks/use-config';
 import { ServerStatusBadge } from './ServerStatusBadge';
@@ -30,36 +28,14 @@ interface AdGuardCardProps {
   name: string;
   status: ServerStatus;
   stats: AdGuardServerStats;
-  lastSeen: Date;
 }
 
 export const AdGuardCard = ({ 
   name, 
   status, 
-  stats, 
-  lastSeen 
+  stats
 }: AdGuardCardProps) => {
-  const [currentTime, setCurrentTime] = useState(Date.now());
   const { config } = useConfig();
-
-  // Update current time every second for live timer
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const getStatusVariant = (status: ServerStatus) => {
-    switch (status) {
-      case 'online': return 'default';
-      case 'warning': return 'secondary';
-      case 'offline': return 'destructive';
-      case 'maintenance': return 'outline';
-      default: return 'secondary';
-    }
-  };
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) {
@@ -79,13 +55,6 @@ export const AdGuardCard = ({
     if (time === 0) return 'N/A';
     return `${time.toFixed(1)}${units === 'milliseconds' ? 'ms' : units.charAt(0)}`;
   };
-
-  const timeSinceLastSeen = Math.floor((currentTime - lastSeen.getTime()) / 1000);
-  const lastSeenText = timeSinceLastSeen < 60 
-    ? `${timeSinceLastSeen}s ago`
-    : timeSinceLastSeen < 3600
-    ? `${Math.floor(timeSinceLastSeen / 60)}m ago`
-    : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
 
   const handleUrlClick = () => {
     const adguardWebUrl = config?.services.adguard.webUrl || 'http://127.0.0.1:5213';
@@ -127,17 +96,10 @@ export const AdGuardCard = ({
       
       <CardContent className="space-y-3">
         {/* Status and Version Info */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <div className="space-y-1">
             <div className="text-xs text-gray-500">Version</div>
             <div className="font-mono font-semibold text-sm">{stats.version}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-xs text-gray-500">Last Seen</div>
-            <div className="font-mono font-semibold text-sm flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {lastSeenText}
-            </div>
           </div>
         </div>
 

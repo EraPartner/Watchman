@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AdGuardCard } from './AdGuardCard';
 import { TorCard } from './TorCard';
-import { ServerWithService, AdGuardServerStats, TorServerStats } from '../types/server';
+import { AdGuardServerStats, TorServerStats } from '../types/server';
 import { apiClient } from '../services/ApiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Activity, Shield, CheckCircle, RefreshCw, Server } from 'lucide-react';
@@ -13,297 +14,168 @@ import SynologyCard from './SynologyCard';
 import RoonCard from './RoonCard';
 
 export const LiveServerDashboard = () => {
-  const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
-  const [torServer, setTorServer] = useState<ServerWithService | null>(null);
-  const [roonStatus, setRoonStatus] = useState<'online' | 'offline' | 'error' | 'loading'>('loading');
-  const [bitcoinStatus, setBitcoinStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
-  const [qbittorrentStatus, setQbittorrentStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
-  const [synologyStatus, setSynologyStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
-  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
 
-  const fetchAdGuardData = useCallback(async (): Promise<ServerWithService> => {
-    try {
-      const [health, stats] = await Promise.all([
-        apiClient.getAdGuardStatus(),
-        apiClient.getAdGuardStats()
-      ]);
+  // AdGuard combined status + stats
+  const adguardQuery = useQuery({
+    queryKey: ['adguard','full'],
+    queryFn: async () => {
+      const [health, stats] = await Promise.all([apiClient.getAdGuardStatus(), apiClient.getAdGuardStats()]);
+      return { health, stats };
+    },
+    refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
+    retry: 1,
+  });
 
-      return {
-        id: 'adguard-main',
-        name: 'AdGuard Home',
-        type: 'network',
-        ip: import.meta.env.VITE_BACKEND_URL?.replace(/https?:\/\//, '').split(':')[0] || 'backend',
-        port: stats.httpPort || 3000,
-        status: health.status === 'online' ? 'online' : health.status === 'warning' ? 'warning' : 'offline',
-        lastSeen: new Date(),
-        serviceType: 'adguard',
-        description: 'DNS filtering and ad blocking service',
-        stats: {
-          uptime: 'N/A',
-          cpu: 0,
-          memory: 0,
-          disk: 0,
-          network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          totalQueries: stats.totalQueries || 0,
-          blockedQueries: stats.blockedQueries || 0,
-          allowedQueries: stats.allowedQueries || 0,
-          blockingRate: stats.blockingRate || 0,
-          protectionEnabled: stats.protectionEnabled || false,
-          version: stats.version || 'Unknown',
-          topBlockedDomain: stats.topBlockedDomain || 'N/A',
-          topQueriedDomain: stats.topQueriedDomain || 'N/A',
-          avgProcessingTime: stats.avgProcessingTime || 0,
-          running: stats.running || false,
-        } as AdGuardServerStats,
-      };
-    } catch (error) {
-      console.error('❌ LiveServerDashboard - AdGuard fetch failed:', error);
-      throw new Error(`Failed to fetch AdGuard data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  const torQuery = useQuery({
+    queryKey: ['tor','relay'],
+    queryFn: async () => {
+      const [torStats, frontendConfig] = await Promise.all([apiClient.getTorRelay(), apiClient.getFrontendConfig()]);
+      return { torStats, frontendConfig };
+    },
+    refetchInterval: APP_CONFIG.TOR_REFRESH_INTERVAL,
+    retry: 1,
+  });
+
+  const bitcoinQuery = useQuery({
+    queryKey: ['bitcoin','status'],
+    queryFn: () => apiClient.getBitcoinStatus(),
+    refetchInterval: 30000,
+    retry: 1,
+  });
+
+  const qbittorrentQuery = useQuery({
+    queryKey: ['qbittorrent','status'],
+    queryFn: () => apiClient.getQBittorrentStatus(),
+    refetchInterval: 30000,
+    retry: 1,
+  });
+
+  const synologyQuery = useQuery({
+    queryKey: ['synology','status'],
+    queryFn: () => apiClient.getSynologyStatus(),
+    refetchInterval: 60000,
+    retry: 1,
+  });
+
+  const roonQuery = useQuery({
+    queryKey: ['roon','status'],
+    queryFn: () => apiClient.getRoonStatus(),
+    refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
+    retry: 1,
+  });
+
+  const lastUpdateTime = new Date();
+
+  // derive adguard/tor/other statuses from queries
+  const adguardData = adguardQuery.data;
+  const torData = torQuery.data;
+  const bitcoinHealth = bitcoinQuery.data;
+  const qbittorrentHealth = qbittorrentQuery.data;
+  const synologyHealth = synologyQuery.data;
+  const roonHealth = roonQuery.data;
+
+  const totalServices = 6;
+
+  // helper to map API service status strings to ServerStatus used by cards
+  const mapServiceStatus = (s?: string) => {
+    switch (s) {
+      case 'online':
+        return 'online' as const;
+      case 'warning':
+        return 'warning' as const;
+      case 'not_configured':
+        return 'offline' as const;
+      case 'offline':
+        return 'offline' as const;
+      default:
+        return 'offline' as const;
     }
-  }, []);
+  };
 
-  const fetchTorData = useCallback(async (): Promise<ServerWithService> => {
-    try {
-      const [torStats, frontendConfig] = await Promise.all([
-        apiClient.getTorRelay(),
-        apiClient.getFrontendConfig()
-      ]);
+  const normalizedStatuses = [
+    adguardData?.health?.status || 'loading',
+    torData?.torStats?.running ? 'online' : (torData ? 'offline' : 'loading'),
+    (bitcoinHealth?.status) || 'loading',
+    (qbittorrentHealth?.status) || 'loading',
+    (synologyHealth?.status) || 'loading',
+    (roonHealth?.status === 'error' ? 'warning' : roonHealth?.status) || 'loading'
+  ] as Array<'online'|'offline'|'warning'|'loading'>;
 
-      const torConfig = frontendConfig?.services?.tor || {};
+  const onlineCount = normalizedStatuses.filter(s => s === 'online').length;
+  const offlineCount = normalizedStatuses.filter(s => s === 'offline').length;
+  const warningCount = normalizedStatuses.filter(s => s === 'warning').length;
 
-      return {
-        id: 'tor-main',
-        name: 'Tor Relay',
-        type: 'tor',
-        ip: torConfig.ip || 'backend',
-        port: torConfig.port || torStats.orPort || 9001,
-        status: torStats.running ? 'online' : 'offline',
-        lastSeen: new Date(),
-        serviceType: 'tor',
-        description: 'Tor relay node',
-        stats: {
-          uptime: 'N/A',
-          cpu: 0,
-          memory: 0,
-          disk: 0,
-          network: { incoming: '0 B/s', outgoing: '0 B/s' },
-          nickname: torStats.nickname || 'Unknown',
-          fingerprint: torStats.fingerprint || 'Unknown',
-          flags: torStats.flags || [],
-          relayType: torStats.relayType || 'relay',
-          bandwidth: torStats.bandwidth || { current: 0, average: 0, burst: 0 },
-          connections: { current: 0, total: 0 },
-          circuits: { active: 0, total: 0 },
-          country: torStats.country || 'Unknown',
-          city: torStats.city,
-          running: torStats.running || false,
-          hibernating: torStats.hibernating || false,
-          version: torStats.version,
-          platform: torStats.platform,
-          contact: torStats.contact,
-          consensusWeight: torStats.consensus_weight,
-          orPort: torStats.orPort,
-        } as TorServerStats,
-      };
-    } catch (error) {
-      console.error('❌ LiveServerDashboard - Tor fetch failed:', error);
-      throw new Error(`Failed to fetch Tor data: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }, []);
-
-  // Fetch Roon status
-  const fetchRoonStatus = useCallback(async () => {
-    try {
-      const health = await apiClient.getRoonStatus();
-      // map RoonStatus.status ('online' | 'offline' | 'error') to our local union
-      setRoonStatus((health.status as 'online' | 'offline' | 'error') || 'offline');
-    } catch (error) {
-      console.error('❌ LiveServerDashboard - Roon fetch failed:', error);
-      setRoonStatus('offline');
-    }
-  }, []);
-
-  // Fetch Bitcoin status
-  const fetchBitcoinStatus = useCallback(async () => {
-    try {
-      const health = await apiClient.getBitcoinStatus();
-      setBitcoinStatus(health.status as 'online' | 'offline' | 'warning' | 'loading');
-    } catch (error) {
-      console.error('❌ LiveServerDashboard - Bitcoin fetch failed:', error);
-      setBitcoinStatus('offline');
-    }
-  }, []);
-
-  // Fetch qBittorrent status
-  const fetchQBittorrentStatus = useCallback(async () => {
-    try {
-      const health = await apiClient.getQBittorrentStatus();
-      setQbittorrentStatus(health.status as 'online' | 'offline' | 'warning' | 'loading');
-    } catch (error) {
-      console.error('❌ LiveServerDashboard - qBittorrent fetch failed:', error);
-      setQbittorrentStatus('offline');
-    }
-  }, []);
-
-  // Fetch Synology status
-  const fetchSynologyStatus = useCallback(async () => {
-    try {
-      const health = await apiClient.getSynologyStatus();
-      setSynologyStatus(health.status as 'online' | 'offline' | 'warning' | 'loading');
-    } catch (error) {
-      console.error('❌ LiveServerDashboard - Synology fetch failed:', error);
-      setSynologyStatus('offline');
-    }
-  }, []);
-
-  const loadServerData = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      const [adguardResult, torResult] = await Promise.allSettled([
-        fetchAdGuardData(),
-        fetchTorData()
-      ]);
-
-      // Handle AdGuard data
-      if (adguardResult.status === 'fulfilled') {
-        setAdguardServer(adguardResult.value);
-      } else {
-        setAdguardServer({
-          id: 'adguard-main',
-          name: 'AdGuard Home',
-          type: 'network',
-          ip: 'backend',
-          port: 3000,
-          status: 'offline',
-          lastSeen: new Date(),
-          serviceType: 'adguard',
-          description: `DNS filtering service (Error: ${adguardResult.reason instanceof Error ? adguardResult.reason.message : 'Unknown error'})`,
-          stats: {
-            uptime: '0s',
-            cpu: 0,
-            memory: 0,
-            disk: 0,
-            network: { incoming: '0 B/s', outgoing: '0 B/s' },
-            totalQueries: 0,
-            blockedQueries: 0,
-            allowedQueries: 0,
-            blockingRate: 0,
-            protectionEnabled: false,
-            version: 'Unknown',
-            topBlockedDomain: 'N/A',
-            topQueriedDomain: 'N/A',
-            avgProcessingTime: 0,
-            running: false,
-          } as AdGuardServerStats,
-        });
-      }
-
-      // Handle Tor data
-      if (torResult.status === 'fulfilled') {
-        setTorServer(torResult.value);
-      } else {
-        setTorServer({
-          id: 'tor-main',
-          name: 'Tor Relay',
-          type: 'tor',
-          ip: 'backend',
-          port: 9001,
-          status: 'offline',
-          lastSeen: new Date(),
-          serviceType: 'tor',
-          description: `Tor relay node (Error: ${torResult.reason instanceof Error ? torResult.reason.message : 'Unknown error'})`,
-          stats: {
-            uptime: '0s',
-            cpu: 0,
-            memory: 0,
-            disk: 0,
-            network: { incoming: '0 B/s', outgoing: '0 B/s' },
-            nickname: 'Unknown',
-            fingerprint: 'Unknown',
-            flags: [],
-            relayType: 'relay',
-            bandwidth: { current: 0, average: 0, burst: 0, observed: 0 },
-            connections: { current: 0, total: 0 },
-            circuits: { active: 0, total: 0 },
-            country: 'Unknown',
-            running: false,
-            hibernating: false,
-            version: 'Unknown',
-          } as TorServerStats,
-        });
-      }
-
-      // Fetch Bitcoin status
-      await fetchBitcoinStatus();
-      // Fetch qBittorrent status
-      await fetchQBittorrentStatus();
-      // Fetch Synology status
-      await fetchSynologyStatus();
-      // Fetch Roon status
-      await fetchRoonStatus();
-      
-      setLastUpdateTime(new Date());
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [fetchAdGuardData, fetchTorData, fetchBitcoinStatus, fetchQBittorrentStatus, fetchSynologyStatus]);
-
-  useEffect(() => {
-    loadServerData();
-
-    // Set up intervals for automatic updates using constants
-    const adguardInterval = setInterval(() => {
-      loadServerData();
-    }, APP_CONFIG.ADGUARD_REFRESH_INTERVAL);
-    
-    const torInterval = setInterval(() => {
-      loadServerData();
-    }, APP_CONFIG.TOR_REFRESH_INTERVAL);
-    // Roon interval (fallback to ADGUARD interval if not specified)
-    const roonInterval = setInterval(() => {
-      loadServerData();
-    }, APP_CONFIG.ROON_REFRESH_INTERVAL || APP_CONFIG.ADGUARD_REFRESH_INTERVAL);
-
-    return () => {
-      clearInterval(adguardInterval);
-      clearInterval(torInterval);
-      clearInterval(roonInterval);
-    };
-  }, [loadServerData]);
-
-  // Calculate service counts - Updated to include all 5 services
-  const allServices = [
-    adguardServer, 
-    torServer, 
-    { status: bitcoinStatus }, 
-    { status: qbittorrentStatus }, 
-    { status: synologyStatus }
-  ];
-  // Include Roon in the aggregated services so top bar shows 6 services
-  // Map Roon's status to the ServerStatus-like values used elsewhere.
-  // Roon may return 'error' which isn't part of ServerStatus; map it to 'warning'.
-  const roonForCounts = roonStatus === 'error' ? 'warning' : (roonStatus as 'online' | 'offline' | 'warning' | 'loading');
-  allServices.push({ status: roonForCounts });
-  const onlineCount = allServices.filter(service => service?.status === 'online').length;
-  const offlineCount = allServices.filter(service => service?.status === 'offline').length;
-  const warningCount = allServices.filter(service => service?.status === 'warning').length;
-  const totalServices = allServices.length;
-
-  const adguardStats = adguardServer?.stats as AdGuardServerStats | undefined;
-  const torStats = torServer?.stats as TorServerStats | undefined;
+  const adguardStats = adguardData?.stats as any as AdGuardServerStats | undefined;
   const totalQueries = adguardStats?.totalQueries ?? 0;
   const totalBlocked = adguardStats?.blockedQueries ?? 0;
-  
-  // Get top blocked domain for interesting info
-  const topBlockedDomain = adguardStats?.topBlockedDomain !== 'N/A' ? adguardStats?.topBlockedDomain : 'None';
-  
-  // Calculate time since last update for system info
+
+  // Build card-ready AdGuard stats (map API shape to component shape)
+  const adguardCardStats: AdGuardServerStats | undefined = adguardData?.stats ? {
+    totalQueries: adguardData.stats.totalQueries ?? 0,
+    blockedQueries: adguardData.stats.blockedQueries ?? 0,
+    allowedQueries: adguardData.stats.allowedQueries ?? 0,
+    blockingRate: adguardData.stats.blockingRate ?? 0,
+    protectionEnabled: adguardData.stats.protectionEnabled ?? false,
+    version: adguardData.stats.version ?? 'Unknown',
+    topBlockedDomain: adguardData.stats.topBlockedDomain ?? 'N/A',
+    topQueriedDomain: adguardData.stats.topQueriedDomain ?? 'N/A',
+    avgProcessingTime: adguardData.stats.avgProcessingTime ?? 0,
+    running: adguardData.stats.running ?? false,
+    timeUnits: adguardData.stats.timeUnits,
+    topClient: adguardData.stats.topClient ?? 'N/A',
+    safebrowsingBlocked: adguardData.stats.safebrowsingBlocked ?? 0,
+    safesearchBlocked: adguardData.stats.safesearchBlocked ?? 0,
+    parentalBlocked: adguardData.stats.parentalBlocked ?? 0,
+  } : undefined;
+
+  // Build card-ready Tor stats (map API shape to component shape)
+  const torRaw = torData?.torStats as any | undefined;
+  const frontendCfg = torData?.frontendConfig as any | undefined;
+  const torCardStats: TorServerStats | undefined = torRaw ? {
+    version: torRaw.version ?? 'Unknown',
+    nickname: torRaw.nickname ?? undefined,
+    fingerprint: torRaw.fingerprint ?? 'Unknown',
+    relayType: (torRaw.relayType || 'relay') as TorServerStats['relayType'],
+    bandwidth: {
+      current: (torRaw.bandwidth && torRaw.bandwidth.current) ?? 0,
+      average: (torRaw.bandwidth && torRaw.bandwidth.average) ?? 0,
+      burst: (torRaw.bandwidth && torRaw.bandwidth.burst) ?? 0,
+      observed: (torRaw.bandwidth && torRaw.bandwidth.observed) ?? undefined,
+    },
+    connections: { current: (torRaw.connections && torRaw.connections.current) ?? 0, total: (torRaw.connections && torRaw.connections.total) ?? 0 },
+    circuits: { active: (torRaw.circuits && torRaw.circuits.active) ?? 0, total: (torRaw.circuits && torRaw.circuits.total) ?? 0 },
+    flags: torRaw.flags ?? [],
+    consensusWeight: torRaw.consensus_weight ?? undefined,
+    exitPolicy: torRaw.exit_policy ?? undefined,
+    hibernating: torRaw.hibernating ?? false,
+    orPort: torRaw.orPort ?? torRaw.or_port ?? undefined,
+    controlPort: torRaw.controlPort ?? undefined,
+    running: !!torRaw.running,
+    country: torRaw.country ?? undefined,
+    city: torRaw.city ?? undefined,
+    platform: torRaw.platform ?? undefined,
+    contact: torRaw.contact ?? undefined,
+  } : undefined;
+
   const timeSinceUpdate = Math.floor((Date.now() - lastUpdateTime.getTime()) / 1000);
 
-  if (isLoading) {
+  // Refresh helper - refetch all queries
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      adguardQuery.refetch(),
+      torQuery.refetch(),
+      bitcoinQuery.refetch(),
+      qbittorrentQuery.refetch(),
+      synologyQuery.refetch(),
+      roonQuery.refetch(),
+    ]);
+    setIsRefreshing(false);
+  };
+
+  // loading indicator when initial queries are loading
+  if (adguardQuery.isLoading && torQuery.isLoading && bitcoinQuery.isLoading && qbittorrentQuery.isLoading && synologyQuery.isLoading && roonQuery.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -311,11 +183,15 @@ export const LiveServerDashboard = () => {
     );
   }
 
+  // Precompute Tor IP and Port values for rendering
+  const torIp = (frontendCfg && frontendCfg.services && frontendCfg.services.tor && frontendCfg.services.tor.ip) || undefined;
+  const torPortValue = (frontendCfg && frontendCfg.services && frontendCfg.services.tor && frontendCfg.services.tor.port) || torCardStats.orPort;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold tracking-tight">Live Dashboard</h2>
-        <Button onClick={loadServerData} disabled={isRefreshing} variant="outline" size="sm">
+        <Button onClick={handleRefresh} disabled={isRefreshing} variant="outline" size="sm">
           <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
           {isRefreshing ? 'Refreshing...' : 'Refresh'}
         </Button>
@@ -363,7 +239,7 @@ export const LiveServerDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-lg font-bold text-red-600 truncate">
-              {topBlockedDomain || 'None'}
+              {adguardStats?.topBlockedDomain !== 'N/A' ? adguardStats?.topBlockedDomain : 'None'}
             </div>
             <p className="text-xs text-muted-foreground">
               {totalBlocked.toLocaleString()} blocked today
@@ -389,22 +265,20 @@ export const LiveServerDashboard = () => {
 
       {/* Service Tiles */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {adguardServer && (
+        {adguardData && adguardCardStats && (
           <AdGuardCard
-            name={adguardServer.name}
-            status={adguardServer.status}
-            stats={adguardStats!}
-            lastSeen={adguardServer.lastSeen}
+            name={'AdGuard Home'}
+            status={mapServiceStatus(adguardData.health.status)}
+            stats={adguardCardStats}
           />
         )}
-        {torServer && (
+        {torData && torCardStats && (
           <TorCard
-            name={torServer.name}
-            status={torServer.status}
-            stats={torStats!}
-            ip={torServer.ip}
-            port={torServer.port}
-            lastSeen={torServer.lastSeen}
+            name={torCardStats.nickname || 'Tor Relay'}
+            status={torCardStats.running ? 'online' : 'offline'}
+            stats={torCardStats}
+            ip={torIp}
+            port={torPortValue}
           />
         )}
         <BitcoinCard />

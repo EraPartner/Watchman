@@ -1,5 +1,0 @@
-# Tor configuration for Watchman
-SocksPort 9050
-ControlPort 9051
-DataDirectory /Users/computer/Documents/Personal/Scripts/Projects/Watchman/backend/.tor-data
-Log notice stdout
