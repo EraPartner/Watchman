@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { QBittorrentStats } from '../types/api';
 import { apiClient } from '../services/ApiClient';
+import { ExternalLink } from 'lucide-react';
 
 // qBittorrent logo SVG component
 const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -30,6 +31,7 @@ const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
 export const QBittorrentCard: React.FC = () => {
   const [status, setStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [stats, setStats] = useState<QBittorrentStats | null>(null);
+  const [frontendConfig, setFrontendConfig] = useState<any | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -66,6 +68,19 @@ export const QBittorrentCard: React.FC = () => {
       mounted = false;
       clearInterval(interval);
     };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const cfg = await apiClient.getFrontendConfig();
+        if (mounted) setFrontendConfig(cfg.services?.qbittorrent || null);
+      } catch (err) {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   // Helper function to format bytes
@@ -126,8 +141,30 @@ export const QBittorrentCard: React.FC = () => {
               <div className="font-mono font-semibold text-sm">{stats.version}</div>
             </div>
             <div className="space-y-1">
-              <div className="text-xs text-gray-500">Uptime</div>
-              <div className="font-mono font-semibold text-sm">{formatUptime(stats.uptime)}</div>
+              <div className="text-xs text-gray-500">Host</div>
+              <div className="font-mono font-semibold text-sm">
+                {(() => {
+                  const cfgHost = frontendConfig?.host || null;
+                  const cfgPort = frontendConfig?.webPort ? String(frontendConfig.webPort) : null;
+                  const connPort = stats.connection.port ? String(stats.connection.port) : null;
+                  const hostOnly = cfgHost ? cfgHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim() : null;
+                  const display = hostOnly ? (cfgPort ? `${hostOnly}:${cfgPort}` : (connPort ? `${hostOnly}:${connPort}` : hostOnly)) : (connPort ? `localhost:${connPort}` : 'Unknown');
+                  const href = (() => {
+                    if (!hostOnly) return null;
+                    const portToUse = cfgPort || connPort;
+                    return `http://${hostOnly}${portToUse ? `:${portToUse}` : ''}`;
+                  })();
+
+                  return href ? (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">
+                      <span className="truncate">{display}</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    display
+                  );
+                })()}
+              </div>
             </div>
             <div className="space-y-1">
               <div className="text-xs text-gray-500">Total Torrents</div>

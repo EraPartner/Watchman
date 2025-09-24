@@ -443,7 +443,37 @@ app.get('/api/config/frontend', (req, res) => {
         host: process.env.ROON_HOST || null,
         ports: process.env.ROON_PORTS || process.env.ROON_DEFAULT_PORT || null,
         configured: !!process.env.ROON_HOST
-      }
+      },
+      qbittorrent: (() => {
+        // Try to parse host/port from QBITTORRENT_URL if present
+        const url = process.env.QBITTORRENT_URL || '';
+        let host = null;
+        let port = process.env.QBITTORRENT_PORT || process.env.QBITTORRENT_WEB_PORT || null;
+        try {
+          if (url && url.trim()) {
+            const parsed = new URL(url);
+            host = parsed.hostname || null;
+            if (parsed.port) port = parsed.port;
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+
+        // Fallback to individual host env var if provided
+        host = host || process.env.QBITTORRENT_HOST || null;
+        port = port || null;
+
+        return {
+          host,
+          webPort: port,
+          configured: !!(host)
+        };
+      })(),
+       synology: {
+         host: process.env.SYNOLOGY_HOST || null,
+         webPort: process.env.SYNOLOGY_WEB_PORT || process.env.SYNOLOGY_HTTP_PORT || process.env.SYNOLOGY_PORT || 5000,
+         configured: !!process.env.SYNOLOGY_HOST
+       }
     },
     app: {
       name: 'Watchman Dashboard',

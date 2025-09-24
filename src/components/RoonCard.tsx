@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Progress } from './ui/progress';
-import { Server, Wifi, AlertCircle, CheckCircle, RefreshCw, Network } from 'lucide-react';
+import { Server, Wifi, AlertCircle, CheckCircle, RefreshCw, Network, ExternalLink } from 'lucide-react';
+
+// Top-level helper: formats ICMP ping boolean into a user-friendly string
+const formatPingDisplay = (ping?: boolean | null) => {
+  if (ping === true) return 'ICMP: Responding';
+  if (ping === false) return 'ICMP: No response';
+  return 'ICMP: N/A';
+};
 
 interface RoonPortCheck {
   port: number;
@@ -113,25 +119,27 @@ const RoonCard: React.FC = () => {
     );
   };
 
-  const formatPingDisplay = (ping: boolean | null | undefined) => {
-    // If ping succeeded
-    if (ping === true) return 'ICMP: Responding';
-
-    // If ping explicitly failed
-    if (ping === false) return 'ICMP: No response';
-
-    // If ping boolean is not provided but we have ping output, we likely attempted
-    // an ICMP check but it didn't produce a success — surface as No response
-    const pingOut = getPingOutput();
-    if (pingOut && pingOut.trim && pingOut.trim().length > 0) return 'ICMP: No response';
-
-    // Otherwise, ping was not attempted / not available
-    return 'ICMP: N/A';
-  };
-
-  const getPingOutput = () => {
-    return stats?.data?.pingOutput || status?.data?.pingOutput || null;
-  };
+  // Compute host display and clickable href (if host configured)
+  const hostValue = status?.data?.host || stats?.data?.host || null;
+  // The port used for normal HTTP access (user requested default 80 rather than probe port)
+  const DEFAULT_HTTP_PORT = 80;
+  let hostHref: string | null = null;
+  if (hostValue) {
+    try {
+      let base = hostValue;
+      if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
+      const u = new URL(base);
+      // If the host string already included a port, respect it. Otherwise use default HTTP port 80.
+      if (!u.port) {
+        u.port = String(DEFAULT_HTTP_PORT);
+      }
+      hostHref = u.toString();
+    } catch (err) {
+      // Fallback: best-effort concatenation with default port
+      const candidate = hostValue + `:${DEFAULT_HTTP_PORT}`;
+      hostHref = /^https?:\/\//i.test(candidate) ? candidate : `http://${candidate}`;
+    }
+  }
 
   if (loading && !status && !stats) {
     return (
@@ -168,7 +176,22 @@ const RoonCard: React.FC = () => {
               <Server className="h-3 w-3" />
               Host
             </div>
-            <div className="font-medium">{status?.data?.host || stats?.data?.host || 'Unknown'}</div>
+            <div className="font-medium">
+              {hostHref ? (
+                <a
+                  href={hostHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
+                  title={`Open ${hostValue} in new tab`}
+                >
+                  <span className="truncate">{hostValue}</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                'Unknown'
+              )}
+            </div>
           </div>
         </div>
 
@@ -182,9 +205,6 @@ const RoonCard: React.FC = () => {
               </div>
               <div className="text-right">
                 <div className="font-medium">{formatPingDisplay(stats?.data?.ping ?? status?.data?.ping)}</div>
-                {getPingOutput() && (
-                  <div className="text-xs text-muted-foreground break-words mt-1">{getPingOutput()}</div>
-                )}
               </div>
             </div>
 
