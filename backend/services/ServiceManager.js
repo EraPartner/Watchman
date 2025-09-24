@@ -4,6 +4,7 @@ import { TorService } from './TorService.js';
 import { TorManager } from './TorManager.js';
 import { QBittorrentService } from './QBittorrentService.js';
 import SynologyService from './SynologyService.js';
+import RoonService from './RoonService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -72,6 +73,16 @@ export default class ServiceManager {
       // Initialize Synology service
       const synologyService = new SynologyService();
       this.services.set('synology', synologyService);
+
+      // Initialize Roon service (optional - requires ROON_HOST)
+      const roonService = new RoonService({
+        host: process.env.ROON_HOST,
+        ports: process.env.ROON_PORTS || process.env.ROON_DEFAULT_PORT,
+        timeout: parseInt(process.env.ROON_TIMEOUT) || 3000,
+        pingCount: parseInt(process.env.ROON_PING_COUNT) || 2,
+        usePing: process.env.ROON_USE_PING === 'false' ? false : true
+      });
+      this.services.set('roon', roonService);
       
       this.initialized = true;
       console.log('✅ All services initialized successfully');

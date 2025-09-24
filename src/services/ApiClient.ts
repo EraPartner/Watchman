@@ -62,6 +62,22 @@ interface TorRelay {
   };
 }
 
+interface RoonPortCheck {
+  port: number;
+  open: boolean;
+}
+
+interface RoonStatus {
+  status: 'online' | 'offline' | 'error';
+  timestamp: string;
+  data?: {
+    host?: string;
+    ping?: boolean | null;
+    ports?: RoonPortCheck[];
+  };
+  error?: string;
+}
+
 interface BitcoinStats {
   // Bitcoin stats fields - will be populated when BitcoinCard is updated
   version?: string;
@@ -113,6 +129,11 @@ interface FrontendConfig {
       ip?: string;
       port?: number;
       metricsUrl?: string;
+    };
+    roon?: {
+      host?: string | null;
+      ports?: string | null;
+      configured?: boolean;
     };
   };
   app: {
@@ -205,6 +226,15 @@ class ApiClient {
 
   async getSynologyStats(): Promise<any> {
     return this.request('/api/synology/stats');
+  }
+
+  // Roon endpoints
+  async getRoonStatus(): Promise<RoonStatus> {
+    return this.request('/api/roon/status');
+  }
+
+  async getRoonStats(): Promise<RoonStatus> {
+    return this.request('/api/roon/stats');
   }
 
   // Health check

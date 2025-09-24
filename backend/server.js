@@ -267,6 +267,49 @@ app.get('/api/qbittorrent/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// Roon (ROCK) API endpoints - missing previously which caused frontend fetches to 404
+app.get('/api/roon/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
+  try {
+    const roonService = serviceManager.getService('roon');
+    if (!roonService) {
+      return res.status(503).json({ 
+        error: 'Roon service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await serviceManager.getServiceHealth('roon');
+    console.log(`✅ Roon status connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Roon status connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch Roon status',
+      status: 'offline',
+      message: error.message 
+    });
+  }
+});
+
+app.get('/api/roon/stats', statsCacheMiddleware, async (req, res) => {
+  try {
+    const roonService = serviceManager.getService('roon');
+    if (!roonService) {
+      return res.status(503).json({ error: 'Roon service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('roon');
+    console.log(`✅ Roon stats connection successful`);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Roon stats connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch Roon stats',
+      message: error.message 
+    });
+  }
+});
+
 // Tor API endpoints
 app.get('/api/tor/relay/:nickname?', statsCacheMiddleware, async (req, res) => {
   try {
@@ -395,6 +438,11 @@ app.get('/api/config/frontend', (req, res) => {
         onionUrl: process.env.BITCOIN_ONION_URL,
         rpcPort: process.env.BITCOIN_RPC_PORT || 8332,
         configured: !!(process.env.BITCOIN_ONION_URL && process.env.BITCOIN_RPC_USER && process.env.BITCOIN_RPC_AUTH)
+      },
+      roon: {
+        host: process.env.ROON_HOST || null,
+        ports: process.env.ROON_PORTS || process.env.ROON_DEFAULT_PORT || null,
+        configured: !!process.env.ROON_HOST
       }
     },
     app: {
