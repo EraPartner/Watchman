@@ -1,107 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Server } from 'lucide-react';
-import { AlertCircle, RefreshCw, Network, ExternalLink } from 'lucide-react';
+import { Server, AlertCircle, RefreshCw, Network, ExternalLink } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../services/ApiClient';
+import { APP_CONFIG } from '../lib/constants';
 
-// Top-level helper: formats ICMP ping boolean into a user-friendly string
 const formatPingDisplay = (ping?: boolean | null) => {
   if (ping === true) return 'ICMP: Responding';
   if (ping === false) return 'ICMP: No response';
   return 'ICMP: N/A';
 };
 
-interface RoonPortCheck {
-  port: number;
-  open: boolean;
-}
-
-interface RoonStatus {
-  status: 'online' | 'offline' | 'error';
-  timestamp: string;
-  data?: {
-    host?: string;
-    ping?: boolean | null;
-    ports?: RoonPortCheck[];
-  };
-  error?: string;
-}
-
 const RoonCard: React.FC = () => {
-  const [status, setStatus] = useState<RoonStatus | null>(null);
-  const [stats, setStats] = useState<RoonStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const statusQuery = useQuery({
+    queryKey: ['roon', 'status'],
+    queryFn: () => apiClient.getRoonStatus(),
+    refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
+    retry: 1,
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [statusRes, statsRes] = await Promise.all([
-        fetch('/api/roon/status').catch(() => null),
-        fetch('/api/roon/stats').catch(() => null)
-      ]);
+  const statsQuery = useQuery({
+    queryKey: ['roon', 'stats'],
+    queryFn: () => apiClient.getRoonStats(),
+    refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
+    retry: 1,
+  });
 
-      if (statusRes?.ok) {
-        const text = await statusRes.text();
-        if (text.trim()) {
-          try {
-            setStatus(JSON.parse(text));
-          } catch (err) {
-            console.error('Failed to parse roon status JSON', err);
-          }
-        }
-      } else if (statusRes) {
-        console.error('Roon status response not OK', statusRes.status, statusRes.statusText);
-      }
-
-      if (statsRes?.ok) {
-        const text = await statsRes.text();
-        if (text.trim()) {
-          try {
-            setStats(JSON.parse(text));
-          } catch (err) {
-            console.error('Failed to parse roon stats JSON', err);
-          }
-        }
-      } else if (statsRes) {
-        console.error('Roon stats response not OK', statsRes.status, statsRes.statusText);
-      }
-
-      setLastUpdate(new Date());
-    } catch (error) {
-      console.error('Failed to fetch Roon data', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const loading = statusQuery.isLoading && statsQuery.isLoading;
+  const status = statusQuery.data;
+  const stats = statsQuery.data;
 
   const isOnline = status?.status === 'online' || stats?.status === 'online';
   const hasError = status?.status === 'error' || stats?.status === 'error';
 
-  // Compute host display and clickable href (if host configured)
   const hostValue = status?.data?.host || stats?.data?.host || null;
-  // The port used for normal HTTP access (user requested default 80 rather than probe port)
   const DEFAULT_HTTP_PORT = 80;
   let hostHref: string | null = null;
   if (hostValue) {
     try {
-      let base = hostValue;
+      let base = hostValue as string;
       if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
       const u = new URL(base);
-      // If the host string already included a port, respect it. Otherwise use default HTTP port 80.
-      if (!u.port) {
-        u.port = String(DEFAULT_HTTP_PORT);
-      }
+      if (!u.port) u.port = String(DEFAULT_HTTP_PORT);
       hostHref = u.toString();
     } catch (err) {
-      // Fallback: best-effort concatenation with default port
-      const candidate = hostValue + `:${DEFAULT_HTTP_PORT}`;
+      const candidate = `${hostValue}:${DEFAULT_HTTP_PORT}`;
       hostHref = /^https?:\/\//i.test(candidate) ? candidate : `http://${candidate}`;
     }
   }
@@ -181,7 +125,7 @@ const RoonCard: React.FC = () => {
                   Ports
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {(stats?.data?.ports || status?.data?.ports).map((p) => (
+                  {(stats?.data?.ports || status?.data?.ports).map((p: any) => (
                     <div key={p.port} className={`rounded-md p-2 ${p.open ? 'bg-green-50' : 'bg-muted'}`}>
                       <div className="text-xs text-muted-foreground">Port (Roon ARC)</div>
                       <div className="text-sm font-medium">{p.port} — {p.open ? 'open' : 'closed'}</div>
@@ -200,14 +144,11 @@ const RoonCard: React.FC = () => {
             {(status?.error || stats?.error) && (
               <div className="text-xs text-red-500 max-w-full break-words">{status?.error || stats?.error}</div>
             )}
-            <button onClick={fetchData} className="mt-3 text-xs text-blue-500 hover:text-blue-700 underline" disabled={loading}>
-              Retry Connection
-            </button>
           </div>
         )}
 
         <div className="text-xs text-muted-foreground text-center pt-3 border-t">
-          Last updated: {lastUpdate.toLocaleTimeString()}
+          Last updated: {new Date(status?.timestamp || stats?.timestamp || Date.now()).toLocaleTimeString()}
         </div>
       </CardContent>
     </Card>

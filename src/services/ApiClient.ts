@@ -1,4 +1,5 @@
 import { env } from '../lib/env';
+import { APP_CONFIG } from '../lib/constants';
 
 // Simple API client that only talks to our backend
 interface ServiceHealth {
@@ -152,14 +153,20 @@ class ApiClient {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), APP_CONFIG.API_TIMEOUT || 10000);
+
     try {
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
+        signal: controller.signal,
         ...options,
       });
+
+      clearTimeout(timeout);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -167,7 +174,11 @@ class ApiClient {
       }
 
       return response.json();
-    } catch (error) {
+    } catch (error: any) {
+      clearTimeout(timeout);
+      if (error && error.name === 'AbortError') {
+        throw new Error(`Network error: request to ${endpoint} timed out after ${APP_CONFIG.API_TIMEOUT}ms`);
+      }
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new Error(`Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`);
       }

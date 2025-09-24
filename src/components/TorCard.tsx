@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
-import { Clock, AlertTriangle, ExternalLink, Shield, Zap } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Shield, Zap } from 'lucide-react';
 import { TorServerStats, ServerStatus } from '../types/server';
 import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
 import { ServerStatusBadge } from './ServerStatusBadge';
@@ -36,7 +35,6 @@ interface TorCardProps {
   stats: TorServerStats;
   ip: string;
   port?: number;
-  lastSeen: Date;
 }
 
 export const TorCard = ({ 
@@ -44,30 +42,8 @@ export const TorCard = ({
   status, 
   stats, 
   ip, 
-  port, 
-  lastSeen 
+  port
 }: TorCardProps) => {
-  const [currentTime, setCurrentTime] = useState(Date.now());
-
-  // Update current time every second for live timer
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const getStatusVariant = (status: ServerStatus) => {
-    switch (status) {
-      case 'online': return 'default';
-      case 'warning': return 'secondary';
-      case 'offline': return 'destructive';
-      case 'maintenance': return 'outline';
-      default: return 'secondary';
-    }
-  };
-
   const getRelayTypeColor = (relayType: string) => {
     return RELAY_TYPE_COLORS[relayType as keyof typeof RELAY_TYPE_COLORS] || 'text-gray-600';
   };
@@ -88,13 +64,6 @@ export const TorCard = ({
     }
     return num.toString();
   };
-
-  const timeSinceLastSeen = Math.floor((currentTime - lastSeen.getTime()) / 1000);
-  const lastSeenText = timeSinceLastSeen < APP_CONFIG.TIME_DISPLAY_THRESHOLDS.SECONDS 
-    ? `${timeSinceLastSeen}s ago`
-    : timeSinceLastSeen < APP_CONFIG.TIME_DISPLAY_THRESHOLDS.MINUTES
-    ? `${Math.floor(timeSinceLastSeen / 60)}m ago`
-    : `${Math.floor(timeSinceLastSeen / 3600)}h ago`;
 
   return (
     <Card className="w-full">
@@ -141,10 +110,6 @@ export const TorCard = ({
               <span className="text-xs">OR Port: {stats.orPort}</span>
             )}
           </div>
-          <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {lastSeenText}
-          </span>
         </div>
 
         {/* Relay Type & Basic Info */}

@@ -29,7 +29,8 @@ export interface Server {
   ip: string;
   port?: number;
   status: ServerStatus;
-  lastSeen: Date;
+  // lastSeen can be absent depending on the service response; make optional
+  lastSeen?: Date;
   stats?: ServerStats;
   description?: string;
 }
