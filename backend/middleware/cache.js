@@ -26,12 +26,20 @@ const longTermCache = new NodeCache({
  */
 export const cacheMiddleware = (cache, keyGenerator = (req) => req.url) => {
   return (req, res, next) => {
-    const key = keyGenerator(req);
-    const cached = cache.get(key);
-    
-    if (cached) {
-      console.log(`🎯 Cache hit for ${key}`);
-      return res.json(cached);
+    let key;
+    try {
+      key = keyGenerator(req);
+      const cached = cache.get(key);
+
+      if (cached !== undefined && cached !== null) {
+        // Explicitly send cached response with 200 status
+        console.debug(`🎯 Cache hit for ${key}`);
+        res.status(200).json(cached);
+        return;
+      }
+    } catch (err) {
+      // If cache lookup fails for any reason, don't block the request
+      console.warn('⚠️ Cache middleware error (continuing):', err && err.message ? err.message : err);
     }
     
     // Store original res.json
@@ -39,9 +47,18 @@ export const cacheMiddleware = (cache, keyGenerator = (req) => req.url) => {
     
     // Override res.json to cache successful responses
     res.json = function(data) {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        cache.set(key, data);
-        console.log(`💾 Cached response for ${key}`);
+      try {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            cache.set(key, data);
+            console.debug(`💾 Cached response for ${key}`);
+          } catch (e) {
+            // ignore cache set errors
+            console.warn('⚠️ Failed to set cache for', key, e && e.message ? e.message : e);
+          }
+        }
+      } catch (e) {
+        // ignore
       }
       return originalJson(data);
     };
@@ -72,7 +89,7 @@ export const clearCache = (type = 'all') => {
       statsCache.flushAll();
       longTermCache.flushAll();
   }
-  console.log(`🗑️ Cleared ${type} cache`);
+  console.info(`🗑️ Cleared ${type} cache`);
 };
 
 export const getCacheStats = () => ({

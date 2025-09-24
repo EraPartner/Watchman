@@ -69,3 +69,19 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 ## License
 
 [MIT](LICENSE)
+
+## Useful NPM scripts
+
+- npm run dev — start frontend dev server (Vite)
+- npm run dev:backend — start backend with nodemon (from /backend)
+- npm run dev:both — run frontend and backend concurrently
+- npm run build — build the frontend
+- npm run format — format the repo with Prettier
+- npm run format:check — check formatting
+- npm run lint — run ESLint
+- npm run check:types — run TypeScript type-check (noEmit)
+- npm run ci — run lint, format check, and types (suitable for CI)
+
+## Backend environment
+
+The backend loads environment variables from `backend/.env.local` (server uses dotenv). A sample file is provided at `backend/.env.example`. Copy it to `.env.local` and update values for your environment. Keep secrets out of version control.

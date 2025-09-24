@@ -20,7 +20,13 @@
     "setup": "npm install && npm run backend:install",
     "clean": "rm -rf node_modules package-lock.json && npm install",
     "optimize:images": "npx @squoosh/cli --webp auto src/**/*.{jpg,jpeg,png}",
-    "preload-critical": "node scripts/generate-preload.js"
+    "preload-critical": "node scripts/generate-preload.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:types": "tsc -p tsconfig.json --noEmit",
+    "ci": "npm run lint && npm run format:check && npm run check:types",
+    "test": "vitest",
+    "test:watch": "vitest --watch"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.7",
@@ -55,7 +61,10 @@
     "globals": "^15.15.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "terser": "^5.44.0",
     "typescript": "^5.7.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "prettier": "^2.8.8",
+    "vitest": "^1.0.0"
   }
 }

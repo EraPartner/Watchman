@@ -40,8 +40,13 @@ export const useWebSocket = (url?: string) => {
   const [isConnected, setIsConnected] = useState(globalConnectionState.isConnected);
   const [reconnectAttempts, setReconnectAttempts] = useState(globalConnectionState.reconnectAttempts);
   const queryClient = useQueryClient();
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const websocketUrl = url || 'ws://localhost:3001/ws';
+
+  // Debounced/batched invalidation state
+  const pendingInvalidationsRef = useRef<Set<string>>(new Set());
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const INVALIDATION_DEBOUNCE_MS = 150;
 
   // Subscribe to global state changes
   useEffect(() => {
@@ -56,24 +61,66 @@ export const useWebSocket = (url?: string) => {
     };
   }, []);
 
+  const flushInvalidations = useCallback(() => {
+    const keys = Array.from(pendingInvalidationsRef.current.values());
+    if (keys.length === 0) return;
+
+    // Clear pending set before invalidating so new messages can be collected concurrently
+    pendingInvalidationsRef.current.clear();
+    if (invalidateTimerRef.current) {
+      clearTimeout(invalidateTimerRef.current);
+      invalidateTimerRef.current = null;
+    }
+
+    // Invalidate each key once
+    keys.forEach((key) => {
+      try {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      } catch (e) {
+        console.warn('⚠️ Failed to invalidate query', key, e && (e as Error).message);
+      }
+    });
+
+    // Also invalidate 'metrics' if it's part of the keys set but ensure it's handled as its own query key
+    if (keys.includes('metrics')) {
+      try {
+        queryClient.invalidateQueries({ queryKey: ['metrics'] });
+      } catch (e) {
+        console.warn('⚠️ Failed to invalidate metrics query', e && (e as Error).message);
+      }
+    }
+
+    console.debug('📡 Flushed invalidations for keys:', keys);
+  }, [queryClient]);
+
+  const scheduleInvalidationForKey = useCallback((key: string) => {
+    pendingInvalidationsRef.current.add(key);
+
+    if (invalidateTimerRef.current) return;
+
+    invalidateTimerRef.current = setTimeout(() => {
+      flushInvalidations();
+    }, INVALIDATION_DEBOUNCE_MS);
+  }, [flushInvalidations]);
+
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const message: WebSocketMessage = JSON.parse(event.data);
-      
+
       switch (message.type) {
         case 'connection':
           console.log('📡 WebSocket connected:', message.message);
           toast.success('WebSocket connected');
           break;
-          
+
         case 'service_update':
           console.log('📡 Service update:', message.service, message.data);
-          // Invalidate relevant queries to refresh data
+          // Batch/debounce invalidations to reduce rapid churn
           if (message.service) {
-            queryClient.invalidateQueries({ queryKey: [message.service] });
+            scheduleInvalidationForKey(message.service);
           }
           break;
-          
+
         case 'alert':
           console.log('📡 Alert:', message.message);
           if (message.level === 'error') {
@@ -84,19 +131,20 @@ export const useWebSocket = (url?: string) => {
             toast.info(message.message || 'Service info');
           }
           break;
-          
+
         case 'metrics':
           console.log('📡 Metrics update:', message.data);
-          queryClient.invalidateQueries({ queryKey: ['metrics'] });
+          // Treat metrics as a specific query key
+          scheduleInvalidationForKey('metrics');
           break;
-          
+
         default:
           console.log('📡 Unknown message type:', message);
       }
     } catch (error) {
       console.error('📡 Error parsing WebSocket message:', error);
     }
-  }, [queryClient]);
+  }, [scheduleInvalidationForKey]);
 
   const scheduleReconnect = useCallback(() => {
     if (globalConnectionState.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -139,7 +187,7 @@ export const useWebSocket = (url?: string) => {
 
     try {
       console.log('📡 Creating WebSocket connection:', websocketUrl);
-      
+
       globalWebSocket = new WebSocket(websocketUrl);
 
       globalWebSocket.onopen = () => {
@@ -171,7 +219,7 @@ export const useWebSocket = (url?: string) => {
         console.error('📡 WebSocket error:', error);
         globalConnectionState.isConnecting = false;
         notifyStateChange();
-        
+
         if (globalWebSocket?.readyState === WebSocket.CONNECTING) {
           // Connection failed during setup
           globalConnectionState.reconnectAttempts++;
@@ -199,10 +247,11 @@ export const useWebSocket = (url?: string) => {
 
   const disconnect = useCallback(() => {
     console.log('📡 Manually disconnecting WebSocket');
-    
+
     // Clear reconnect timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
 
     // Close connection
@@ -240,8 +289,17 @@ export const useWebSocket = (url?: string) => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      // flush any pending invalidations on unmount
+      if (invalidateTimerRef.current) {
+        clearTimeout(invalidateTimerRef.current);
+        invalidateTimerRef.current = null;
+      }
+      // Immediately flush any remaining invalidations
+      if (pendingInvalidationsRef.current.size > 0) {
+        flushInvalidations();
+      }
     };
-  }, [connect]);
+  }, [connect, flushInvalidations]);
 
   return {
     isConnected,
