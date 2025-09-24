@@ -15,6 +15,7 @@ import RoonCard from './RoonCard';
 export const LiveServerDashboard = () => {
   const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
   const [torServer, setTorServer] = useState<ServerWithService | null>(null);
+  const [roonStatus, setRoonStatus] = useState<'online' | 'offline' | 'error' | 'loading'>('loading');
   const [bitcoinStatus, setBitcoinStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [qbittorrentStatus, setQbittorrentStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
   const [synologyStatus, setSynologyStatus] = useState<'online' | 'offline' | 'warning' | 'loading'>('loading');
@@ -109,6 +110,18 @@ export const LiveServerDashboard = () => {
     } catch (error) {
       console.error('❌ LiveServerDashboard - Tor fetch failed:', error);
       throw new Error(`Failed to fetch Tor data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, []);
+
+  // Fetch Roon status
+  const fetchRoonStatus = useCallback(async () => {
+    try {
+      const health = await apiClient.getRoonStatus();
+      // map RoonStatus.status ('online' | 'offline' | 'error') to our local union
+      setRoonStatus((health.status as 'online' | 'offline' | 'error') || 'offline');
+    } catch (error) {
+      console.error('❌ LiveServerDashboard - Roon fetch failed:', error);
+      setRoonStatus('offline');
     }
   }, []);
 
@@ -228,6 +241,8 @@ export const LiveServerDashboard = () => {
       await fetchQBittorrentStatus();
       // Fetch Synology status
       await fetchSynologyStatus();
+      // Fetch Roon status
+      await fetchRoonStatus();
       
       setLastUpdateTime(new Date());
     } finally {
@@ -247,10 +262,15 @@ export const LiveServerDashboard = () => {
     const torInterval = setInterval(() => {
       loadServerData();
     }, APP_CONFIG.TOR_REFRESH_INTERVAL);
+    // Roon interval (fallback to ADGUARD interval if not specified)
+    const roonInterval = setInterval(() => {
+      loadServerData();
+    }, APP_CONFIG.ROON_REFRESH_INTERVAL || APP_CONFIG.ADGUARD_REFRESH_INTERVAL);
 
     return () => {
       clearInterval(adguardInterval);
       clearInterval(torInterval);
+      clearInterval(roonInterval);
     };
   }, [loadServerData]);
 
@@ -262,6 +282,11 @@ export const LiveServerDashboard = () => {
     { status: qbittorrentStatus }, 
     { status: synologyStatus }
   ];
+  // Include Roon in the aggregated services so top bar shows 6 services
+  // Map Roon's status to the ServerStatus-like values used elsewhere.
+  // Roon may return 'error' which isn't part of ServerStatus; map it to 'warning'.
+  const roonForCounts = roonStatus === 'error' ? 'warning' : (roonStatus as 'online' | 'offline' | 'warning' | 'loading');
+  allServices.push({ status: roonForCounts });
   const onlineCount = allServices.filter(service => service?.status === 'online').length;
   const offlineCount = allServices.filter(service => service?.status === 'offline').length;
   const warningCount = allServices.filter(service => service?.status === 'warning').length;

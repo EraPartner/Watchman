@@ -5,6 +5,7 @@ import { Progress } from './ui/progress';
 import { Clock, AlertTriangle, ExternalLink, Shield, Zap } from 'lucide-react';
 import { TorServerStats, ServerStatus } from '../types/server';
 import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
+import { ServerStatusBadge } from './ServerStatusBadge';
 
 // Tor Project logo SVG component
 const TorIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -118,12 +119,7 @@ export const TorCard = ({
           </a>
         </div>
         <div className="flex items-center gap-2">
-          <Badge 
-            variant={getStatusVariant(status)} 
-            className={`capitalize ${status === 'online' ? 'bg-green-600 text-white hover:bg-green-700' : ''}`}
-          >
-            {status}
-          </Badge>
+          <ServerStatusBadge status={status} />
           {stats.hibernating && (
             <div title="Relay is hibernating">
               <AlertTriangle className="h-4 w-4 text-yellow-500" />

@@ -3,6 +3,7 @@ export const APP_CONFIG = {
   // Polling intervals (in milliseconds)
   ADGUARD_REFRESH_INTERVAL: 15000, // 15 seconds
   TOR_REFRESH_INTERVAL: 300000,    // 5 minutes
+  ROON_REFRESH_INTERVAL: 30000,    // 30 seconds
   
   // API timeouts
   API_TIMEOUT: 10000, // 10 seconds

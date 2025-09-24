@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Wifi
 } from 'lucide-react';
+import { ServerStatusBadge } from './ServerStatusBadge';
 
 // Updated interfaces to match your backend's actual data structure
 interface SynologyStats {
@@ -138,62 +139,26 @@ const SynologyCard: React.FC = () => {
   const isOnline = stats?.status === 'online' || status?.status === 'online';
   const hasError = stats?.status === 'error' || status?.status === 'error';
 
-  const getStatusBadge = () => {
-    if (loading) {
-      return (
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <RefreshCw className="h-3 w-3 animate-spin" />
-          Loading
-        </Badge>
-      );
-    }
-
-    if (isOnline) {
-      return (
-        <Badge variant="default" className="flex items-center gap-1 bg-green-500">
-          <CheckCircle className="h-3 w-3" />
-          Online
-        </Badge>
-      );
-    }
-
-    if (hasError) {
-      return (
-        <Badge variant="destructive" className="flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" />
-          Error
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <Wifi className="h-3 w-3" />
-        Offline
-      </Badge>
-    );
-  };
-
   // Compute clickable host href using frontendConfig or fallbacks
   const synHost = frontendConfig?.host || null;
   const synPort = frontendConfig?.webPort ? String(frontendConfig.webPort) : null;
-  let synologyHref: string | null = null;
-  // Compute a host-only display value (strip scheme/path) and include port for display
+  // Normalize host-only display and compute a display string with optional port
   const synHostOnly = synHost ? synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim() : null;
   const synDisplay = synHostOnly ? (synPort ? `${synHostOnly}:${synPort}` : synHostOnly) : null;
+  let synologyHref: string | null = null;
   if (synHost) {
     try {
-      // Normalize host: strip any existing scheme and any trailing path
+      // Prefer https and include configured port when present
       const hostOnly = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim();
-      // Force HTTPS and include the configured web port if provided
       synologyHref = `https://${hostOnly}${synPort ? `:${synPort}` : ''}`;
     } catch (err) {
-      // Fallback: best-effort concatenation with https
+      // Fallback: best-effort concatenation
       const candidate = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '') + (synPort ? `:${synPort}` : '');
       synologyHref = `https://${candidate}`;
     }
   }
 
+  // Replace usages of getStatusBadge() in the header and loading branch with ServerStatusBadge
   if (loading && !stats && !status) {
     return (
       <Card className="w-full self-start h-auto">
@@ -202,7 +167,7 @@ const SynologyCard: React.FC = () => {
             <Server className="h-4 w-4" />
             Synology NAS
           </CardTitle>
-          {getStatusBadge()}
+          <ServerStatusBadge status={loading ? 'loading' : isOnline ? 'online' : hasError ? 'error' : 'offline'} />
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -220,7 +185,7 @@ const SynologyCard: React.FC = () => {
           <Server className="h-4 w-4" />
           Synology NAS
         </CardTitle>
-        {getStatusBadge()}
+        <ServerStatusBadge status={loading ? 'loading' : isOnline ? 'online' : hasError ? 'error' : 'offline'} />
       </CardHeader>
       <CardContent className="space-y-4">
         {/* System Information - Updated to use direct system object */}

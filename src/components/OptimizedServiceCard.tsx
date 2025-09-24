@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth, useServiceStats, useClearCache } from '@/hooks/useServiceHealth';
 import { Activity, RefreshCw, Trash2 } from 'lucide-react';
+import { ServerStatusBadge } from './ServerStatusBadge';
 
 interface OptimizedServiceCardProps {
   serviceName: string;
@@ -33,16 +34,7 @@ export const OptimizedServiceCard = memo(({
   const clearCacheMutation = useClearCache();
 
   const handleClearCache = () => {
-    clearCacheMutation.mutate('all');
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'offline': return 'bg-red-500';
-      case 'warning': return 'bg-yellow-500';
-      default: return 'bg-gray-500';
-    }
+    clearCacheMutation.mutate();
   };
 
   const isLoading = healthLoading || (enableStats && statsLoading);
@@ -54,7 +46,7 @@ export const OptimizedServiceCard = memo(({
         <CardTitle className="text-lg font-semibold">{displayName}</CardTitle>
         <div className="flex items-center gap-2">
           {/* Status indicator */}
-          <div className={`w-3 h-3 rounded-full ${getStatusColor(health?.status || 'offline')}`} />
+          <ServerStatusBadge status={(health?.status as any) || (healthLoading ? 'loading' : 'offline')} />
           
           {/* Performance indicator */}
           {health?.responseTime && (
@@ -105,9 +97,7 @@ export const OptimizedServiceCard = memo(({
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
               <span className="text-sm font-medium">Status:</span>
-              <Badge variant={health.status === 'online' ? 'default' : 'destructive'}>
-                {health.status}
-              </Badge>
+              <ServerStatusBadge status={(health?.status as any) || 'offline'} />
             </div>
             
             {/* Stats if available */}

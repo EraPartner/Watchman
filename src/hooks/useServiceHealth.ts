@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { env } from '../lib/env';
 
-const API_BASE_URL = env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = env.get('VITE_BACKEND_URL') || 'http://localhost:3001';
 
 // Service health hook with React Query
 export const useServiceHealth = (serviceName: string, options = {}) => {
@@ -90,14 +90,14 @@ export const useAdGuardProtectionToggle = () => {
 export const useClearCache = () => {
   const queryClient = useQueryClient();
   
-  return useMutation({
-    mutationFn: async (type = 'all') => {
+  return useMutation<any, Error, void>({
+    mutationFn: async () => {
       const response = await fetch(`${API_BASE_URL}/api/cache/clear`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type: 'all' }),
       });
       
       if (!response.ok) {
