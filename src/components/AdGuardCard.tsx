@@ -5,6 +5,7 @@ import { Progress } from './ui/progress';
 import { Shield, Clock, AlertTriangle, ExternalLink, Activity, Globe, Zap } from 'lucide-react';
 import { AdGuardServerStats, ServerStatus } from '../types/server';
 import { useConfig } from '../hooks/use-config';
+import { ServerStatusBadge } from './ServerStatusBadge';
 
 // AdGuard Home logo SVG component
 const AdGuardIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -117,16 +118,11 @@ export const AdGuardCard = ({
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <Badge 
-            variant={getStatusVariant(status)} 
-            className={`capitalize ${status === 'online' ? 'bg-green-600 text-white hover:bg-green-700' : ''}`}
-          >
-            {status}
-          </Badge>
-          {!stats.protectionEnabled && (
-            <AlertTriangle className="h-4 w-4 text-yellow-500" />
-          )}
-        </div>
+          <ServerStatusBadge status={status} />
+           {!stats.protectionEnabled && (
+             <AlertTriangle className="h-4 w-4 text-yellow-500" />
+           )}
+         </div>
       </CardHeader>
       
       <CardContent className="space-y-3">

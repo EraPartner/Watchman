@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { Server, Wifi, AlertCircle, CheckCircle, RefreshCw, Network, ExternalLink } from 'lucide-react';
+import { Server } from 'lucide-react';
+import { AlertCircle, RefreshCw, Network, ExternalLink } from 'lucide-react';
+import { ServerStatusBadge } from './ServerStatusBadge';
 
 // Top-level helper: formats ICMP ping boolean into a user-friendly string
 const formatPingDisplay = (ping?: boolean | null) => {
@@ -83,42 +84,6 @@ const RoonCard: React.FC = () => {
   const isOnline = status?.status === 'online' || stats?.status === 'online';
   const hasError = status?.status === 'error' || stats?.status === 'error';
 
-  const getStatusBadge = () => {
-    if (loading) {
-      return (
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <RefreshCw className="h-3 w-3 animate-spin" />
-          Loading
-        </Badge>
-      );
-    }
-
-    if (isOnline) {
-      return (
-        <Badge variant="default" className="flex items-center gap-1 bg-green-500">
-          <CheckCircle className="h-3 w-3" />
-          Online
-        </Badge>
-      );
-    }
-
-    if (hasError) {
-      return (
-        <Badge variant="destructive" className="flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" />
-          Error
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <Wifi className="h-3 w-3" />
-        Offline
-      </Badge>
-    );
-  };
-
   // Compute host display and clickable href (if host configured)
   const hostValue = status?.data?.host || stats?.data?.host || null;
   // The port used for normal HTTP access (user requested default 80 rather than probe port)
@@ -149,7 +114,7 @@ const RoonCard: React.FC = () => {
             <Server className="h-4 w-4" />
             Roon (ROCK)
           </CardTitle>
-          {getStatusBadge()}
+          <ServerStatusBadge status={loading ? 'loading' : isOnline ? 'online' : hasError ? 'error' : 'offline'} />
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -167,7 +132,7 @@ const RoonCard: React.FC = () => {
           <Server className="h-4 w-4" />
           Roon (ROCK)
         </CardTitle>
-        {getStatusBadge()}
+        <ServerStatusBadge status={loading ? 'loading' : isOnline ? 'online' : hasError ? 'error' : 'offline'} />
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-4 text-sm">
@@ -218,7 +183,7 @@ const RoonCard: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                   {(stats?.data?.ports || status?.data?.ports).map((p) => (
                     <div key={p.port} className={`rounded-md p-2 ${p.open ? 'bg-green-50' : 'bg-muted'}`}>
-                      <div className="text-xs text-muted-foreground">Port</div>
+                      <div className="text-xs text-muted-foreground">Port (Roon ARC)</div>
                       <div className="text-sm font-medium">{p.port} — {p.open ? 'open' : 'closed'}</div>
                     </div>
                   ))}

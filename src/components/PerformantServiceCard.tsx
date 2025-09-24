@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth, useServiceStats } from '@/hooks/useServiceHealth';
 import { Activity, RefreshCw, ExternalLink, Zap, AlertTriangle } from 'lucide-react';
+import { ServerStatusBadge } from './ServerStatusBadge';
 
 interface PerformantServiceCardProps {
   serviceName: string;
@@ -96,12 +97,7 @@ export const PerformantServiceCard = memo<PerformantServiceCardProps>(({
             <CardTitle className="text-lg font-semibold">{displayName}</CardTitle>
           </div>
           {statusMetrics && (
-            <Badge 
-              className={`${statusMetrics.statusColor} px-2 py-1 text-xs font-medium`}
-              variant="secondary"
-            >
-              {health?.status}
-            </Badge>
+            <ServerStatusBadge status={(health?.status as any) || (health ? 'offline' : 'loading')} />
           )}
         </div>
         
