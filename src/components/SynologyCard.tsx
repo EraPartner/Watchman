@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { ExternalLink } from 'lucide-react';
 import { 
@@ -9,9 +8,7 @@ import {
   Server,
   Network,
   AlertCircle,
-  CheckCircle,
-  RefreshCw,
-  Wifi
+  RefreshCw
 } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
 
@@ -139,20 +136,17 @@ const SynologyCard: React.FC = () => {
   const isOnline = stats?.status === 'online' || status?.status === 'online';
   const hasError = stats?.status === 'error' || status?.status === 'error';
 
-  // Compute clickable host href using frontendConfig or fallbacks
+  // Compute clickable host href using frontendConfig or fallbacks (defined early so JSX can use them)
   const synHost = frontendConfig?.host || null;
   const synPort = frontendConfig?.webPort ? String(frontendConfig.webPort) : null;
-  // Normalize host-only display and compute a display string with optional port
   const synHostOnly = synHost ? synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim() : null;
   const synDisplay = synHostOnly ? (synPort ? `${synHostOnly}:${synPort}` : synHostOnly) : null;
   let synologyHref: string | null = null;
   if (synHost) {
     try {
-      // Prefer https and include configured port when present
       const hostOnly = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim();
       synologyHref = `https://${hostOnly}${synPort ? `:${synPort}` : ''}`;
     } catch (err) {
-      // Fallback: best-effort concatenation
       const candidate = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '') + (synPort ? `:${synPort}` : '');
       synologyHref = `https://${candidate}`;
     }
