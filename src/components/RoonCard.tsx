@@ -114,8 +114,18 @@ const RoonCard: React.FC = () => {
   };
 
   const formatPingDisplay = (ping: boolean | null | undefined) => {
+    // If ping succeeded
     if (ping === true) return 'ICMP: Responding';
+
+    // If ping explicitly failed
     if (ping === false) return 'ICMP: No response';
+
+    // If ping boolean is not provided but we have ping output, we likely attempted
+    // an ICMP check but it didn't produce a success — surface as No response
+    const pingOut = getPingOutput();
+    if (pingOut && pingOut.trim && pingOut.trim().length > 0) return 'ICMP: No response';
+
+    // Otherwise, ping was not attempted / not available
     return 'ICMP: N/A';
   };
 
