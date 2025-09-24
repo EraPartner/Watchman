@@ -3,12 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { 
-  HardDrive, 
   Cpu, 
   Thermometer, 
-  Clock, 
   Server,
-  MemoryStick,
   Network,
   AlertCircle,
   CheckCircle,
@@ -30,18 +27,6 @@ interface SynologyStats {
   cpu?: {
     usage: number;
     temperature: number;
-  };
-  memory?: {
-    total: number;
-    available: number;
-    used: number;
-    usage: number;
-  };
-  disk?: {
-    total: number;
-    used: number;
-    free: number;
-    usage: number;
   };
   network?: {
     bytesReceived: number;
@@ -132,16 +117,6 @@ const SynologyCard: React.FC = () => {
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   };
 
-  const formatUptime = (seconds: number): string => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${mins}m`;
-    return `${mins}m`;
-  };
-
   const isOnline = stats?.status === 'online' || status?.status === 'online';
   const hasError = stats?.status === 'error' || status?.status === 'error';
 
@@ -183,7 +158,7 @@ const SynologyCard: React.FC = () => {
 
   if (loading && !stats && !status) {
     return (
-      <Card className="w-full">
+      <Card className="w-full self-start h-auto">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Server className="h-4 w-4" />
@@ -201,7 +176,7 @@ const SynologyCard: React.FC = () => {
   }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full self-start h-auto">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Server className="h-4 w-4" />
@@ -250,44 +225,6 @@ const SynologyCard: React.FC = () => {
                     <span>{stats.cpu.temperature}°C</span>
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Memory Usage */}
-            {stats.memory && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <MemoryStick className="h-3 w-3" />
-                    Memory
-                  </div>
-                  <span className="font-medium">
-                    {formatBytes(stats.memory.used || 0)} / {formatBytes(stats.memory.total || 0)}
-                  </span>
-                </div>
-                <Progress value={stats.memory.usage || 0} className="h-2" />
-                <div className="text-xs text-muted-foreground text-right">
-                  {(stats.memory.usage || 0).toFixed(1)}% used
-                </div>
-              </div>
-            )}
-
-            {/* Storage Usage */}
-            {stats.disk && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <HardDrive className="h-3 w-3" />
-                    Storage
-                  </div>
-                  <span className="font-medium">
-                    {formatBytes(stats.disk.used || 0)} / {formatBytes(stats.disk.total || 0)}
-                  </span>
-                </div>
-                <Progress value={stats.disk.usage || 0} className="h-2" />
-                <div className="text-xs text-muted-foreground text-right">
-                  {(stats.disk.usage || 0).toFixed(1)}% used
-                </div>
               </div>
             )}
 
