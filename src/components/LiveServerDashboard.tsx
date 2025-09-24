@@ -184,8 +184,8 @@ export const LiveServerDashboard = () => {
   }
 
   // Precompute Tor IP and Port values for rendering
-  const torIp = (frontendCfg && frontendCfg.services && frontendCfg.services.tor && frontendCfg.services.tor.ip) || undefined;
-  const torPortValue = (frontendCfg && frontendCfg.services && frontendCfg.services.tor && frontendCfg.services.tor.port) || torCardStats.orPort;
+  const torIp: string | undefined = frontendCfg?.services?.tor?.ip ?? undefined;
+  const torPortValue: number | undefined = frontendCfg?.services?.tor?.port ?? torCardStats?.orPort ?? undefined;
 
   return (
     <div className="space-y-6">
