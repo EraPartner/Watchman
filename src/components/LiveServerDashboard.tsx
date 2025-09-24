@@ -10,6 +10,7 @@ import { APP_CONFIG } from '../lib/constants';
 import { BitcoinCard } from './BitcoinCard';
 import { QBittorrentCard } from './QBittorrentCard';
 import SynologyCard from './SynologyCard';
+import RoonCard from './RoonCard';
 
 export const LiveServerDashboard = () => {
   const [adguardServer, setAdguardServer] = useState<ServerWithService | null>(null);
@@ -383,7 +384,12 @@ export const LiveServerDashboard = () => {
         )}
         <BitcoinCard />
         <QBittorrentCard />
-        <SynologyCard />
+        {/* Make Synology + Roon a single grid column that stacks vertically and spans two rows on large screens
+           This ensures the combined visual height of these two cards matches the height of the other tiles. */}
+        <div className="lg:row-span-2 flex flex-col gap-6">
+          <SynologyCard />
+          <RoonCard />
+        </div>
       </div>
     </div>
   );
