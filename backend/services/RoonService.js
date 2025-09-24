@@ -8,10 +8,12 @@ class RoonService {
   constructor(options = {}) {
     this.host = options.host || process.env.ROON_HOST || null;
     // Accept comma-separated ports via env or options
-    const portsEnv = options.ports || process.env.ROON_PORTS || '';
-    this.ports = Array.isArray(portsEnv)
-      ? portsEnv.map(p => parseInt(p, 10)).filter(Boolean)
-      : portsEnv.split(',').map(p => parseInt(p, 10)).filter(Boolean);
+    const portsEnv = options.ports ?? process.env.ROON_PORTS ?? '';
+    // Normalize ports source to either an array or a comma-separated string
+    const portsSource = Array.isArray(portsEnv) ? portsEnv : (typeof portsEnv === 'number' ? String(portsEnv) : String(portsEnv || ''));
+    this.ports = Array.isArray(portsSource)
+      ? portsSource.map(p => parseInt(p, 10)).filter(Boolean)
+      : String(portsSource).split(',').map(p => parseInt(p, 10)).filter(Boolean);
 
     // Default to an empty array (no ports to check) unless provided
     if (!this.ports || this.ports.length === 0) {
@@ -20,7 +22,10 @@ class RoonService {
 
     this.timeout = parseInt(options.timeout || process.env.ROON_TIMEOUT || '3000', 10);
     this.pingCount = parseInt(options.pingCount || process.env.ROON_PING_COUNT || '2', 10);
-    this.usePing = (options.usePing || process.env.ROON_USE_PING || 'true') === 'true';
+    // Ensure boolean/string/environment values for usePing are parsed correctly
+    this.usePing = (typeof options.usePing === 'boolean')
+      ? options.usePing
+      : String(options.usePing ?? process.env.ROON_USE_PING ?? 'true') === 'true';
 
     this.lastData = null;
   }
@@ -34,7 +39,8 @@ class RoonService {
       if (!whichOut || !whichOut.trim()) {
         const msg = 'ping binary not found in PATH';
         console.error(`RoonService.pingHost: ${msg}`);
-        return { success: false, stdout: '', stderr: msg };
+        // don't return here — we'll still attempt the commands, but note absence
+        // in the combinedStderr below if nothing else is available
       }
     } catch (e) {
       // If the check fails, log and continue to attempt ping; we'll capture any error below
@@ -76,6 +82,11 @@ class RoonService {
     }
 
     // If none of the attempts succeeded, return failure with combined outputs for debugging
+    // Provide a small diagnostic message if combined outputs are empty
+    if (!combinedStdout && !combinedStderr) {
+      combinedStderr = 'No ping output captured; ping may be unavailable or blocked';
+    }
+
     console.error(`RoonService.pingHost: all ping attempts failed for ${this.host}`);
     return { success: false, stdout: combinedStdout, stderr: combinedStderr || 'Ping attempts failed' };
   }
@@ -123,11 +134,28 @@ class RoonService {
       // Normalize ping result to a boolean and keep raw output for debugging
       let pingResult = null;
       let pingOutput = null;
-      if (pingResultRaw && typeof pingResultRaw === 'object') {
-        pingResult = Boolean(pingResultRaw.success);
-        pingOutput = pingResultRaw.stdout || pingResultRaw.stderr || null;
-      } else if (typeof pingResultRaw === 'boolean') {
-        pingResult = pingResultRaw;
+
+      if (this.usePing) {
+        if (pingResultRaw && typeof pingResultRaw === 'object') {
+          pingResult = Boolean(pingResultRaw.success);
+          // prefer stdout, but fall back to stderr -- if both empty provide diagnostic
+          pingOutput = (pingResultRaw.stdout && pingResultRaw.stdout.trim())
+            ? pingResultRaw.stdout.trim()
+            : (pingResultRaw.stderr && pingResultRaw.stderr.trim())
+              ? pingResultRaw.stderr.trim()
+              : 'No ping output';
+        } else if (typeof pingResultRaw === 'boolean') {
+          pingResult = pingResultRaw;
+          pingOutput = null;
+        } else {
+          // ping was intended but we didn't get a usable result — treat as failure
+          pingResult = false;
+          pingOutput = 'Ping check unavailable';
+        }
+      } else {
+        // Ping disabled explicitly
+        pingResult = null;
+        pingOutput = null;
       }
 
       // Check ports in parallel
