@@ -7,11 +7,17 @@ export class WebSocketManager extends EventEmitter {
     this.wss = null;
     this.clients = new Set();
     this.isEnabled = process.env.ENABLE_WEBSOCKETS !== 'false';
+    this._heartbeatInterval = null;
   }
 
   initialize(server) {
     if (!this.isEnabled) {
       console.log('📡 WebSocket disabled via environment variable');
+      return;
+    }
+
+    if (this.wss) {
+      console.warn('📡 WebSocket server already initialized; skipping re-initialization');
       return;
     }
 
@@ -25,17 +31,24 @@ export class WebSocketManager extends EventEmitter {
       console.log(`📡 WebSocket client connected from ${req.socket.remoteAddress}`);
       this.clients.add(ws);
 
+      // Mark client as alive for heartbeat
+      ws.isAlive = true;
+
       // Send initial connection message
-      ws.send(JSON.stringify({
-        type: 'connection',
-        message: 'Connected to Watchman WebSocket server',
-        timestamp: new Date().toISOString()
-      }));
+      try {
+        ws.send(JSON.stringify({
+          type: 'connection',
+          message: 'Connected to Watchman WebSocket server',
+          timestamp: new Date().toISOString()
+        }));
+      } catch (err) {
+        console.warn('📡 Failed to send welcome message to client', err && err.message ? err.message : err);
+      }
 
       // Handle client disconnect
       ws.on('close', () => {
-        console.log('📡 WebSocket client disconnected');
         this.clients.delete(ws);
+        console.log('📡 WebSocket client disconnected');
       });
 
       // Handle client errors
@@ -51,20 +64,25 @@ export class WebSocketManager extends EventEmitter {
     });
 
     // Heartbeat to detect broken connections
-    const interval = setInterval(() => {
+    this._heartbeatInterval = setInterval(() => {
+      if (!this.wss) return;
       this.wss.clients.forEach((ws) => {
         if (ws.isAlive === false) {
           console.log('📡 Terminating dead WebSocket connection');
-          return ws.terminate();
+          try { ws.terminate(); } catch (e) { /* ignore */ }
+          return;
         }
-        
+
         ws.isAlive = false;
-        ws.ping();
+        try { ws.ping(); } catch (e) { /* ignore */ }
       });
     }, 30000); // 30 seconds
 
     this.wss.on('close', () => {
-      clearInterval(interval);
+      if (this._heartbeatInterval) {
+        clearInterval(this._heartbeatInterval);
+        this._heartbeatInterval = null;
+      }
     });
 
     console.log('📡 WebSocket server initialized on /ws');
@@ -95,7 +113,7 @@ export class WebSocketManager extends EventEmitter {
     });
 
     if (sentCount > 0) {
-      console.log(`📡 Broadcasted ${serviceName} update to ${sentCount} clients`);
+      console.debug(`📡 Broadcasted ${serviceName} update to ${sentCount} clients`);
     }
   }
 
@@ -122,7 +140,7 @@ export class WebSocketManager extends EventEmitter {
       }
     });
 
-    console.log(`📡 Broadcasted ${level} alert: ${message}`);
+    console.debug(`📡 Broadcasted ${level} alert: ${message}`);
   }
 
   // Get connection statistics
@@ -139,11 +157,36 @@ export class WebSocketManager extends EventEmitter {
   }
 
   shutdown() {
-    if (this.wss) {
-      console.log('📡 Shutting down WebSocket server...');
-      this.wss.close();
-      this.clients.clear();
+    if (!this.wss) return;
+
+    console.info('📡 Shutting down WebSocket server...');
+
+    // Stop heartbeat
+    if (this._heartbeatInterval) {
+      clearInterval(this._heartbeatInterval);
+      this._heartbeatInterval = null;
     }
+
+    // Terminate all clients
+    try {
+      this.wss.clients.forEach((ws) => {
+        try { ws.terminate(); } catch (e) { /* ignore */ }
+      });
+    } catch (e) {
+      // ignore
+    }
+
+    // Close the server
+    try {
+      this.wss.close(() => {
+        console.info('📡 WebSocket server closed');
+      });
+    } catch (e) {
+      console.warn('📡 Error closing WebSocket server', e && e.message ? e.message : e);
+    }
+
+    this.clients.clear();
+    this.wss = null;
   }
 }
 

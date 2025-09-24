@@ -154,45 +154,76 @@ export interface FrontendConfig {
 
 class ApiClient {
   private baseUrl: string;
+  // Map to deduplicate concurrent identical requests
+  private inFlightRequests: Map<string, Promise<any>> = new Map();
 
   constructor() {
     this.baseUrl = env.getRequired('VITE_BACKEND_URL');
   }
 
+  private makeRequestKey(url: string, options?: RequestInit) {
+    const method = (options && options.method) ? String(options.method).toUpperCase() : 'GET';
+    let bodyKey = '';
+    try {
+      if (options && options.body != null) {
+        bodyKey = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+      }
+    } catch (e) {
+      bodyKey = String(options && (options as any).body);
+    }
+    return `${method} ${url} ${bodyKey}`;
+  }
+
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), APP_CONFIG.API_TIMEOUT || 10000);
 
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        signal: controller.signal,
-        ...options,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `API request failed: ${response.status} ${response.statusText}`);
-      }
-
-      return response.json();
-    } catch (error: any) {
-      clearTimeout(timeout);
-      if (error && error.name === 'AbortError') {
-        throw new Error(`Network error: request to ${endpoint} timed out after ${APP_CONFIG.API_TIMEOUT}ms`);
-      }
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        throw new Error(`Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`);
-      }
-      throw error;
+    const key = this.makeRequestKey(url, options);
+    if (this.inFlightRequests.has(key)) {
+      // Reuse in-flight promise
+      return this.inFlightRequests.get(key) as Promise<T>;
     }
+
+    const controller = new AbortController();
+    const timeoutMs = APP_CONFIG.API_TIMEOUT || 10000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Merge headers safely
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, (options && options.headers) || {});
+
+    const fetchOptions: RequestInit = Object.assign({}, options, {
+      headers,
+      credentials: 'include',
+      signal: controller.signal
+    });
+
+    const promise = (async () => {
+      try {
+        const response = await fetch(url, fetchOptions);
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData && (errorData.error || JSON.stringify(errorData)) || `API request failed: ${response.status} ${response.statusText}`);
+        }
+
+        return response.json();
+      } catch (error: any) {
+        clearTimeout(timeout);
+        if (error && error.name === 'AbortError') {
+          throw new Error(`Network error: request to ${endpoint} timed out after ${timeoutMs}ms`);
+        }
+        if (error instanceof TypeError && error.message && error.message.includes('fetch')) {
+          throw new Error(`Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`);
+        }
+        throw error;
+      } finally {
+        // Ensure we remove the in-flight record regardless of outcome
+        this.inFlightRequests.delete(key);
+      }
+    })();
+
+    this.inFlightRequests.set(key, promise);
+    return promise;
   }
 
   // AdGuard endpoints

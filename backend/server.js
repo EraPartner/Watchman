@@ -20,6 +20,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL;
 
 // Initialize service manager and WebSocket
 let serviceManager;
+let httpServerInstance = null;
 
 async function initializeServer() {
   console.log('🚀 Initializing Watchman Backend Server...');
@@ -493,21 +494,68 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n🛑 Received SIGINT, shutting down gracefully...');
-  if (serviceManager) {
-    await serviceManager.shutdown();
+// Graceful shutdown helper
+async function gracefulShutdown(signal) {
+  console.info(`\n🛑 Received ${signal || 'shutdown'}, shutting down gracefully...`);
+
+  // Stop accepting new connections
+  try {
+    if (httpServerInstance) {
+      console.info('🛑 Closing HTTP server to new connections...');
+      await new Promise((resolve, reject) => {
+        httpServerInstance.close((err) => (err ? reject(err) : resolve()));
+        // Force resolve after 10s to avoid hanging
+        setTimeout(resolve, 10000);
+      });
+    }
+  } catch (err) {
+    console.warn('⚠️ Error closing HTTP server:', err && err.message ? err.message : err);
   }
+
+  // Shutdown websockets
+  try {
+    WebSocketManager.shutdown();
+  } catch (err) {
+    console.warn('⚠️ Error shutting down WebSocket manager:', err && err.message ? err.message : err);
+  }
+
+  // Shutdown services
+  try {
+    if (serviceManager && typeof serviceManager.shutdown === 'function') {
+      await serviceManager.shutdown();
+    }
+  } catch (err) {
+    console.warn('⚠️ Error shutting down service manager:', err && err.message ? err.message : err);
+  }
+
+  // Shutdown performance monitor
+  try {
+    if (performanceMonitor && typeof performanceMonitor.shutdown === 'function') {
+      performanceMonitor.shutdown();
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  console.info('🛑 Shutdown complete, exiting.');
   process.exit(0);
+}
+
+// Handle signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Unhandled exceptions/rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Attempt graceful shutdown
+  gracefulShutdown('unhandledRejection');
 });
 
-process.on('SIGTERM', async () => {
-  console.log('\n🛑 Received SIGTERM, shutting down gracefully...');
-  if (serviceManager) {
-    await serviceManager.shutdown();
-  }
-  process.exit(0);
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  // Attempt graceful shutdown
+  gracefulShutdown('uncaughtException');
 });
 
 // Start server
@@ -515,15 +563,15 @@ async function startServer() {
   try {
     await initializeServer();
     
-    server.listen(PORT, () => {
-      console.log(`🚀 Watchman Backend Server running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
-      console.log(`🛡️  AdGuard API: http://localhost:${PORT}/api/adguard/*`);
-      console.log(`₿  Bitcoin API: http://localhost:${PORT}/api/bitcoin/*`);
-      console.log(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
-      console.log(`🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`);
-      console.log(`🖥️  Synology API: http://localhost:${PORT}/api/synology/*`);
-      console.log(`🔍 Services Health: http://localhost:${PORT}/api/services/health`);
+    httpServerInstance = server.listen(PORT, () => {
+      console.info(`🚀 Watchman Backend Server running on port ${PORT}`);
+      console.info(`📊 Health check: http://localhost:${PORT}/health`);
+      console.info(`🛡️  AdGuard API: http://localhost:${PORT}/api/adguard/*`);
+      console.info(`₿  Bitcoin API: http://localhost:${PORT}/api/bitcoin/*`);
+      console.info(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
+      console.info(`🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`);
+      console.info(`🖥️  Synology API: http://localhost:${PORT}/api/synology/*`);
+      console.info(`🔍 Services Health: http://localhost:${PORT}/api/services/health`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
