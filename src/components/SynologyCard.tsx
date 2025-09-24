@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
+import { ExternalLink } from 'lucide-react';
 import { 
   Cpu, 
   Thermometer, 
@@ -53,8 +54,25 @@ interface SynologyStatus {
 const SynologyCard: React.FC = () => {
   const [stats, setStats] = useState<SynologyStats | null>(null);
   const [status, setStatus] = useState<SynologyStatus | null>(null);
+  const [frontendConfig, setFrontendConfig] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  // Fetch frontend config for Synology host/webPort (runs once)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/config/frontend');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        if (mounted) setFrontendConfig(cfg.services?.synology || null);
+      } catch (err) {
+        console.warn('Failed to fetch frontend config:', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -156,6 +174,26 @@ const SynologyCard: React.FC = () => {
     );
   };
 
+  // Compute clickable host href using frontendConfig or fallbacks
+  const synHost = frontendConfig?.host || null;
+  const synPort = frontendConfig?.webPort ? String(frontendConfig.webPort) : null;
+  let synologyHref: string | null = null;
+  // Compute a host-only display value (strip scheme/path) and include port for display
+  const synHostOnly = synHost ? synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim() : null;
+  const synDisplay = synHostOnly ? (synPort ? `${synHostOnly}:${synPort}` : synHostOnly) : null;
+  if (synHost) {
+    try {
+      // Normalize host: strip any existing scheme and any trailing path
+      const hostOnly = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim();
+      // Force HTTPS and include the configured web port if provided
+      synologyHref = `https://${hostOnly}${synPort ? `:${synPort}` : ''}`;
+    } catch (err) {
+      // Fallback: best-effort concatenation with https
+      const candidate = synHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '') + (synPort ? `:${synPort}` : '');
+      synologyHref = `https://${candidate}`;
+    }
+  }
+
   if (loading && !stats && !status) {
     return (
       <Card className="w-full self-start h-auto">
@@ -197,6 +235,29 @@ const SynologyCard: React.FC = () => {
                 {stats?.system?.model || status?.data?.model || 'Unknown'}
               </div>
             </div>
+            {/* Host / Web UI link */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <Server className="h-3 w-3" />
+                Host
+              </div>
+              <div className="font-medium">
+                {synologyHref ? (
+                  <a
+                    href={synologyHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
+                    title={`Open ${synDisplay || frontendConfig?.host} in new tab`}
+                  >
+                    <span className="truncate">{synDisplay || frontendConfig?.host}</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  (synDisplay || frontendConfig?.host || 'Unknown')
+                )}
+               </div>
+             </div>
           </div>
         )}
 
