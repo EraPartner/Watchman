@@ -28,6 +28,18 @@ export const controlLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Auth rate limit (protect login endpoint)
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Max 10 login attempts per window per IP
+  message: {
+    error: 'Too many login attempts, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Very permissive rate limit for health/status endpoints
 export const healthLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute

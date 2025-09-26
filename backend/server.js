@@ -8,7 +8,9 @@ import ServiceManager from './services/ServiceManager.js';
 import WebSocketManager from './services/WebSocketManager.js';
 import performanceMonitor from './middleware/performanceMonitor.js';
 import { healthCacheMiddleware, statsCacheMiddleware, clearCache } from './middleware/cache.js';
-import { generalLimiter, controlLimiter, healthLimiter } from './middleware/rateLimiting.js';
+import { generalLimiter, controlLimiter, healthLimiter, authLimiter } from './middleware/rateLimiting.js';
+import cookieParser from 'cookie-parser';
+import { authenticateCredentials, signToken, requireAuth, verifyToken } from './middleware/auth.js';
 
 // Load environment variables
 dotenv.config({path:'.env.local'});
@@ -42,7 +44,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:"] ,
     },
   },
 }));
@@ -52,9 +54,62 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
+app.use(cookieParser());
 
 // Apply rate limiting
 app.use('/api/', generalLimiter);
+
+// Authentication endpoints
+app.post('/api/auth/login', authLimiter, async (req, res) => {
+  try {
+    const { username, password, remember } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Missing username or password' });
+    }
+
+    const ok = await authenticateCredentials(username, password);
+    if (!ok) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = signToken({ username });
+
+    const cookieOpts = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      // If remember is truthy, keep cookie for 30 days, otherwise session cookie
+      maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : undefined
+    };
+
+    res.cookie('token', token, cookieOpts);
+    // Also return a safe minimal user object
+    res.json({ success: true, user: { username } });
+  } catch (error) {
+    console.error('❌ Login error:', error && error.message ? error.message : error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  let token = null;
+  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7);
+  }
+  if (!token && req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+  if (!token) return res.status(200).json({ authenticated: false });
+  const decoded = verifyToken(token);
+  if (!decoded) return res.status(200).json({ authenticated: false });
+  return res.json({ authenticated: true, user: { username: decoded.username } });
+});
 
 // Health check endpoint
 app.get('/health', healthLimiter, (req, res) => {
@@ -67,7 +122,7 @@ app.get('/health', healthLimiter, (req, res) => {
 });
 
 // Cache management endpoint
-app.post('/api/cache/clear', controlLimiter, (req, res) => {
+app.post('/api/cache/clear', controlLimiter, requireAuth, (req, res) => {
   const { type } = req.body;
   clearCache(type);
   res.json({ success: true, message: `Cache cleared: ${type || 'all'}` });
@@ -134,7 +189,7 @@ app.get('/api/adguard/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/adguard/protection', controlLimiter, async (req, res) => {
+app.post('/api/adguard/protection', controlLimiter, requireAuth, async (req, res) => {
   try {
     const adguardService = serviceManager.getService('adguard');
     if (!adguardService) {
