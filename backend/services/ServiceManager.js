@@ -25,12 +25,22 @@ export default class ServiceManager {
       console.log('🚀 Starting Tor proxy...');
       await this.torManager.startTor();
       
+      // Build rpcUrl safely: prefer BITCOIN_ONION_URL + BITCOIN_RPC_PORT when both are present,
+      // else fallback to BITCOIN_RPC_URL env var, else default to localhost.
+      const rpcUrlFromOnion = process.env.BITCOIN_ONION_URL && process.env.BITCOIN_RPC_PORT
+        ? `http://${process.env.BITCOIN_ONION_URL}:${process.env.BITCOIN_RPC_PORT}`
+        : null;
+      const rpcUrl = rpcUrlFromOnion || process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:8332';
+
       // Initialize Bitcoin service with proper onion URL configuration
       const bitcoinService = new BitcoinService({
-        rpcUrl: `http://${process.env.BITCOIN_ONION_URL}:${process.env.BITCOIN_RPC_PORT}` || 'http://127.0.0.1:8332',
+        rpcUrl,
         rpcUser: process.env.BITCOIN_RPC_USER,
         rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
-        timeout: parseInt(process.env.BITCOIN_TIMEOUT) || 50000, // 50 seconds for Bitcoin RPC
+        timeout: parseInt(process.env.BITCOIN_TIMEOUT) || 120000, // 120 seconds for Bitcoin RPC
+        // allow overriding curl timeouts via env vars (seconds)
+        connectTimeout: process.env.BITCOIN_CONNECT_TIMEOUT ? parseInt(process.env.BITCOIN_CONNECT_TIMEOUT) : undefined,
+        maxTime: process.env.BITCOIN_MAX_TIME ? parseInt(process.env.BITCOIN_MAX_TIME) : undefined,
         useProxy: process.env.TOR_USE_PROXY === 'true',
         torProxy: {
           host: process.env.TOR_PROXY_HOST || '127.0.0.1',
