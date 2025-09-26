@@ -1,5 +1,6 @@
 import { WebSocketServer } from 'ws';
 import EventEmitter from 'events';
+import { verifyToken } from '../middleware/auth.js';
 
 export class WebSocketManager extends EventEmitter {
   constructor() {
@@ -28,21 +29,54 @@ export class WebSocketManager extends EventEmitter {
     });
 
     this.wss.on('connection', (ws, req) => {
-      console.log(`📡 WebSocket client connected from ${req.socket.remoteAddress}`);
-      this.clients.add(ws);
-
-      // Mark client as alive for heartbeat
-      ws.isAlive = true;
-
-      // Send initial connection message
       try {
-        ws.send(JSON.stringify({
-          type: 'connection',
-          message: 'Connected to Watchman WebSocket server',
-          timestamp: new Date().toISOString()
-        }));
+        // Verify JWT token from cookie header or Authorization header
+        const authHeader = req.headers['authorization'] || '';
+        let token = null;
+        if (authHeader && String(authHeader).startsWith('Bearer ')) {
+          token = String(authHeader).slice(7);
+        }
+
+        // Parse cookies if not provided via Authorization
+        if (!token && req.headers && req.headers.cookie) {
+          const cookieHeader = req.headers.cookie;
+          const cookies = Object.fromEntries(cookieHeader.split(';').map(c => {
+            const [k, ...v] = c.split('=');
+            return [k.trim(), decodeURIComponent(v.join('='))];
+          }));
+          if (cookies.token) token = cookies.token;
+        }
+
+        const decoded = token ? verifyToken(token) : null;
+        if (!decoded) {
+          console.warn('📡 WebSocket connection rejected: missing or invalid token from', req.socket.remoteAddress);
+          try { ws.close(1008, 'Unauthorized'); } catch (e) { /* ignore */ }
+          return;
+        }
+
+        ws._username = decoded.username || 'unknown';
+
+        console.log(`📡 WebSocket client connected from ${req.socket.remoteAddress} as ${ws._username}`);
+        this.clients.add(ws);
+
+        // Mark client as alive for heartbeat
+        ws.isAlive = true;
+
+        // Send initial connection message
+        try {
+          ws.send(JSON.stringify({
+            type: 'connection',
+            message: 'Connected to Watchman WebSocket server',
+            timestamp: new Date().toISOString()
+          }));
+        } catch (err) {
+          console.warn('📡 Failed to send welcome message to client', err && err.message ? err.message : err);
+        }
+
       } catch (err) {
-        console.warn('📡 Failed to send welcome message to client', err && err.message ? err.message : err);
+        console.error('📡 Error during WebSocket connection handshake:', err && err.message ? err.message : err);
+        try { ws.close(1011, 'Internal error'); } catch (e) { /* ignore */ }
+        return;
       }
 
       // Handle client disconnect
