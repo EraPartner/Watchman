@@ -6,10 +6,12 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Suspense, lazy } from "react";
+import AuthGuard from "./components/AuthGuard";
 
 // Lazy load pages for better code splitting
 const IndexPage = lazy(() => import("./pages/Index"));
 const NotFoundPage = lazy(() => import("./pages/NotFound"));
+const LoginPage = lazy(() => import("./pages/Login"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,7 +54,8 @@ function App() {
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={<IndexPage />} />
+                <Route path="/" element={<AuthGuard><IndexPage /></AuthGuard>} />
+                <Route path="/login" element={<LoginPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </Suspense>
