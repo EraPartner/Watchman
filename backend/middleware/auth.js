@@ -16,9 +16,9 @@ if (!JWT_SECRET) {
   console.warn('⚠️ JWT_SECRET not set in environment. Auth will not function correctly.');
 }
 
-// Issue a signed JWT
+// Issue a signed JWT (short-lived access token)
 export function signToken(payload, opts = {}) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: opts.expiresIn || '8h' });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: opts.expiresIn || '15m' });
 }
 
 // Verify a token and return decoded payload or null

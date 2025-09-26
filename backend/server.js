@@ -11,6 +11,10 @@ import { healthCacheMiddleware, statsCacheMiddleware, clearCache } from './middl
 import { generalLimiter, controlLimiter, healthLimiter, authLimiter } from './middleware/rateLimiting.js';
 import cookieParser from 'cookie-parser';
 import { authenticateCredentials, signToken, requireAuth, verifyToken } from './middleware/auth.js';
+import { issueCsrfToken, verifyCsrf } from './middleware/csrf.js';
+import FailedLoginStore from './services/FailedLoginStore.js';
+import RefreshTokenStore from './services/RefreshTokenStore.js';
+import { requireFields, requireBoolean, requireString } from './middleware/validation.js';
 
 // Load environment variables
 dotenv.config({path:'.env.local'});
@@ -19,6 +23,20 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL;
+
+// Enforce FRONTEND_URL in production to avoid open CORS
+if (process.env.NODE_ENV === 'production' && (!FRONTEND_URL || FRONTEND_URL === '*')) {
+  console.error('❌ FRONTEND_URL must be set to your frontend origin in production to avoid open CORS.');
+  process.exit(1);
+}
+
+// Cookie defaults
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/',
+};
 
 // Initialize service manager and WebSocket
 let serviceManager;
@@ -74,15 +92,16 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     const token = signToken({ username });
 
-    const cookieOpts = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      // If remember is truthy, keep cookie for 30 days, otherwise session cookie
-      maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : undefined
-    };
+    const cookieOpts = Object.assign({}, COOKIE_OPTIONS, {
+      // If remember is truthy, keep cookie for 30 days, otherwise short-lived session
+      maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000
+    });
 
     res.cookie('token', token, cookieOpts);
+
+    // Issue a double-submit CSRF token cookie (accessible to JS)
+    issueCsrfToken(res);
+
     // Also return a safe minimal user object
     res.json({ success: true, user: { username } });
   } catch (error) {
@@ -92,7 +111,9 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+  res.clearCookie('token', Object.assign({}, COOKIE_OPTIONS));
+  // Clear csrf cookie too
+  res.clearCookie(process.env.CSRF_COOKIE_NAME || 'csrfToken', { path: '/' });
   res.json({ success: true });
 });
 
@@ -108,6 +129,9 @@ app.get('/api/auth/me', (req, res) => {
   if (!token) return res.status(200).json({ authenticated: false });
   const decoded = verifyToken(token);
   if (!decoded) return res.status(200).json({ authenticated: false });
+
+  // Refresh CSRF token on authenticated status so client can continue to send it
+  issueCsrfToken(res);
   return res.json({ authenticated: true, user: { username: decoded.username } });
 });
 
@@ -121,32 +145,52 @@ app.get('/health', healthLimiter, (req, res) => {
   });
 });
 
-// Cache management endpoint
-app.post('/api/cache/clear', controlLimiter, requireAuth, (req, res) => {
-  const { type } = req.body;
+// Cache management endpoint - requires auth + CSRF verification
+app.post('/api/cache/clear', controlLimiter, requireAuth, verifyCsrf, (req, res) => {
+  const { type } = req.body || {};
+
+  // If provided, type must be a non-empty string
+  if (type !== undefined && (typeof type !== 'string' || type.trim().length === 0)) {
+    return res.status(400).json({ error: 'Invalid cache type' });
+  }
+
   clearCache(type);
   res.json({ success: true, message: `Cache cleared: ${type || 'all'}` });
 });
 
-// Tor proxy health endpoint
-app.get('/api/tor/proxy/health', healthLimiter, healthCacheMiddleware, async (req, res) => {
+// AdGuard protection endpoint - require boolean 'enabled' and optional numeric 'duration'
+app.post('/api/adguard/protection', controlLimiter, requireAuth, verifyCsrf, requireBoolean('enabled'), async (req, res) => {
   try {
-    if (!serviceManager) {
-      return res.status(503).json({ error: 'Service manager not initialized' });
+    const adguardService = serviceManager.getService('adguard');
+    if (!adguardService) {
+      return res.status(503).json({ error: 'AdGuard service not configured' });
     }
-    
-    const health = await serviceManager.getTorManagerHealth();
-    res.json(health);
+
+    const { enabled, duration } = req.body;
+
+    // optional duration validation
+    if (duration !== undefined && typeof duration !== 'number') {
+      return res.status(400).json({ error: 'Duration must be a number (seconds)' });
+    }
+
+    await adguardService.setProtection(enabled, duration);
+    console.log(`✅ AdGuard protection ${enabled ? 'enabled' : 'disabled'}`);
+
+    // Clear cache after control actions
+    clearCache('health');
+    clearCache('stats');
+
+    res.json({ success: true });
   } catch (error) {
-    console.error('❌ Tor proxy health check failed:', error.message);
+    console.error('❌ AdGuard protection toggle failed:', error.message);
     res.status(500).json({ 
-      error: 'Failed to check Tor proxy health',
+      error: 'Failed to toggle AdGuard protection',
       message: error.message 
     });
   }
 });
 
-// AdGuard API endpoints
+// AdGuard API endpoints - status and stats (re-added)
 app.get('/api/adguard/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
     const adguardService = serviceManager.getService('adguard');
@@ -184,31 +228,6 @@ app.get('/api/adguard/stats', statsCacheMiddleware, async (req, res) => {
     console.error('❌ AdGuard stats connection failed:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch AdGuard stats',
-      message: error.message 
-    });
-  }
-});
-
-app.post('/api/adguard/protection', controlLimiter, requireAuth, async (req, res) => {
-  try {
-    const adguardService = serviceManager.getService('adguard');
-    if (!adguardService) {
-      return res.status(503).json({ error: 'AdGuard service not configured' });
-    }
-
-    const { enabled, duration } = req.body;
-    await adguardService.setProtection(enabled, duration);
-    console.log(`✅ AdGuard protection ${enabled ? 'enabled' : 'disabled'}`);
-    
-    // Clear cache after control actions
-    clearCache('health');
-    clearCache('stats');
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('❌ AdGuard protection toggle failed:', error.message);
-    res.status(500).json({ 
-      error: 'Failed to toggle AdGuard protection',
       message: error.message 
     });
   }
