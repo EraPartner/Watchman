@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth, useServiceStats, useClearCache } from '@/hooks/useServiceHealth';
-import { Activity, RefreshCw, Trash2 } from 'lucide-react';
+import { Activity, RefreshCw, Trash2, Server, BarChart2, Clock } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
 
 interface OptimizedServiceCardProps {
@@ -96,18 +96,18 @@ export const OptimizedServiceCard = memo(({
             {/* Health Status */}
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
-              <span className="text-sm font-medium">Status:</span>
+              <span className="text-sm font-medium flex items-center gap-1"><Server className="h-3 w-3" /> Status:</span>
               <ServerStatusBadge status={(health?.status as any) || 'offline'} />
             </div>
             
             {/* Stats if available */}
             {stats && enableStats && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium">Statistics:</h4>
+                <h4 className="text-sm font-medium flex items-center gap-1"><BarChart2 className="h-3 w-3" /> Statistics:</h4>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {Object.entries(stats).slice(0, 4).map(([key, value]) => (
                     <div key={key} className="flex justify-between">
-                      <span className="text-muted-foreground">{key}:</span>
+                      <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {key}:</span>
                       <span className="font-mono">{String(value)}</span>
                     </div>
                   ))}

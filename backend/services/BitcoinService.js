@@ -87,6 +87,8 @@ export class BitcoinService {
         verificationProgress: blockchainInfo.verificationprogress || 0,
         initialBlockDownload: blockchainInfo.initialblockdownload || false,
         chain: blockchainInfo.chain || 'unknown',
+        // size_on_disk is provided by Bitcoin Core and represents the on-disk chain size in bytes
+        blockchainSize: blockchainInfo.size_on_disk || 0,
         networkHashPs: blockchainInfo.networkhashps || 0,
         mempool: {
           size: mempoolInfo.size || 0,

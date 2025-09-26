@@ -16,6 +16,8 @@ export interface BitcoinStats {
   verificationProgress: number;
   initialBlockDownload: boolean;
   chain: string;
+  // On-disk size of the blockchain (bytes) as reported by Bitcoin Core's size_on_disk
+  blockchainSize: number;
   networkHashPs: number;
   mempool: {
     size: number;
