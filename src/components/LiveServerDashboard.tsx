@@ -264,28 +264,41 @@ export const LiveServerDashboard = () => {
       </div>
 
       {/* Service Tiles */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {adguardData && adguardCardStats && (
-          <AdGuardCard
-            name={'AdGuard Home'}
-            status={mapServiceStatus(adguardData.health.status)}
-            stats={adguardCardStats}
-          />
-        )}
-        {torData && torCardStats && (
-          <TorCard
-            name={torCardStats.nickname || 'Tor Relay'}
-            status={torCardStats.running ? 'online' : 'offline'}
-            stats={torCardStats}
-            ip={torIp}
-            port={torPortValue}
-          />
-        )}
-        <BitcoinCard />
-        <QBittorrentCard />
-        {/* Make Synology + Roon a single grid column that stacks vertically and spans two rows on large screens
-           This ensures the combined visual height of these two cards matches the height of the other tiles. */}
-        <div className="lg:row-span-2 flex flex-col gap-6">
+      {/* Software Section: core software services */}
+      <div>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Software</h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-3">
+          {adguardData && adguardCardStats && (
+            <AdGuardCard
+              name={'AdGuard Home'}
+              status={mapServiceStatus(adguardData.health.status)}
+              stats={adguardCardStats}
+            />
+          )}
+
+          {torData && torCardStats && (
+            <TorCard
+              name={torCardStats.nickname || 'Tor Relay'}
+              status={torCardStats.running ? 'online' : 'offline'}
+              stats={torCardStats}
+              ip={torIp}
+              port={torPortValue}
+            />
+          )}
+
+          <BitcoinCard />
+          <QBittorrentCard />
+        </div>
+      </div>
+
+      {/* Hardware Section: physical devices and appliances */}
+      <div>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Hardware</h3>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-3">
           <SynologyCard />
           <RoonCard />
         </div>
