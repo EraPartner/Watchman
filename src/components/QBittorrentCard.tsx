@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { QBittorrentStats } from '../types/api';
 import { apiClient } from '../services/ApiClient';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Server, HardDrive, Download, Upload, Layers, Database, Link as LinkIcon } from 'lucide-react';
 
 // qBittorrent logo SVG component
 const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -137,13 +137,19 @@ export const QBittorrentCard: React.FC = () => {
           {/* Main info grid */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <div className="text-xs text-gray-500">Version</div>
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <Server className="h-3 w-3" />
+                Version
+              </div>
               <div className="font-mono font-semibold text-sm">{stats.version}</div>
             </div>
             <div className="space-y-1">
-              <div className="text-xs text-gray-500">Host</div>
-              <div className="font-mono font-semibold text-sm">
-                {(() => {
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <LinkIcon className="h-3 w-3" />
+                Host
+              </div>
+               <div className="font-mono font-semibold text-sm">
+                 {(() => {
                   const cfgHost = frontendConfig?.host || null;
                   const cfgPort = frontendConfig?.webPort ? String(frontendConfig.webPort) : null;
                   const connPort = stats.connection.port ? String(stats.connection.port) : null;
@@ -167,33 +173,39 @@ export const QBittorrentCard: React.FC = () => {
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xs text-gray-500">Total Torrents</div>
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <Layers className="h-3 w-3" />
+                Total Torrents
+              </div>
               <div className="font-mono font-semibold text-sm">{stats.torrents.total}</div>
             </div>
             <div className="space-y-1">
-              <div className="text-xs text-gray-500">Free Space</div>
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <HardDrive className="h-3 w-3" />
+                Free Space
+              </div>
               <div className="font-mono font-semibold text-sm">{formatBytes(stats.freeSpaceOnDisk)}</div>
             </div>
           </div>
 
           {/* Torrent status grid */}
           <div className="border-t pt-3">
-            <div className="text-xs text-gray-500 mb-2">Torrent Status</div>
+            <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1"><Layers className="h-3 w-3" /> Torrent Status</div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Downloading</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Download className="h-3 w-3" />Downloading</div>
                 <div className="font-mono font-semibold text-sm text-blue-600">{stats.torrents.downloading}</div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Seeding</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Upload className="h-3 w-3" />Seeding</div>
                 <div className="font-mono font-semibold text-sm text-green-600">{stats.torrents.seeding}</div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Paused</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Database className="h-3 w-3" />Paused</div>
                 <div className="font-mono font-semibold text-sm text-yellow-600">{stats.torrents.paused}</div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Completed</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Layers className="h-3 w-3" />Completed</div>
                 <div className="font-mono font-semibold text-sm text-emerald-600">{stats.torrents.completed}</div>
               </div>
             </div>
@@ -201,16 +213,16 @@ export const QBittorrentCard: React.FC = () => {
 
           {/* Transfer speeds */}
           <div className="border-t pt-3">
-            <div className="text-xs text-gray-500 mb-2">Transfer Rates</div>
+            <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1"><Download className="h-3 w-3" /> Transfer Rates</div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Download</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Download className="h-3 w-3" />Download</div>
                 <div className="font-mono font-semibold text-sm text-blue-600">
                   {formatSpeed(stats.transfer.dlSpeed)}
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Upload</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Upload className="h-3 w-3" />Upload</div>
                 <div className="font-mono font-semibold text-sm text-green-600">
                   {formatSpeed(stats.transfer.upSpeed)}
                 </div>
@@ -220,16 +232,16 @@ export const QBittorrentCard: React.FC = () => {
 
           {/* Session totals */}
           <div className="border-t pt-3">
-            <div className="text-xs text-gray-500 mb-2">Session Totals</div>
+            <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1"><HardDrive className="h-3 w-3" /> Session Totals</div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Downloaded</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Download className="h-3 w-3" />Downloaded</div>
                 <div className="font-mono font-semibold text-sm">
                   {formatBytes(stats.transfer.dlSession)}
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Uploaded</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Upload className="h-3 w-3" />Uploaded</div>
                 <div className="font-mono font-semibold text-sm">
                   {formatBytes(stats.transfer.upSession)}
                 </div>
@@ -239,28 +251,31 @@ export const QBittorrentCard: React.FC = () => {
 
           {/* Connection info */}
           <div className="border-t pt-3">
-            <div className="text-xs text-gray-500 mb-2">Connection</div>
+            <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1"><Server className="h-3 w-3" /> Connection</div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Status</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"><Server className="h-3 w-3" /> Status</div>
                 <div className={`font-mono font-semibold text-sm capitalize ${getConnectionStatusColor(stats.connection.status)}`}>
                   {stats.connection.status}
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-gray-500">Port</div>
+                <div className="flex items-center gap-1 text-muted-foreground text-xs"> <LinkIcon className="h-3 w-3" /> Port</div>
                 <div className="font-mono font-semibold text-sm">{stats.connection.port}</div>
               </div>
               {stats.connection.dhtNodes > 0 && (
                 <div className="space-y-1 col-span-2">
-                  <div className="text-xs text-gray-500">DHT Nodes</div>
+                  <div className="flex items-center gap-1 text-muted-foreground text-xs"> <Layers className="h-3 w-3" /> DHT Nodes</div>
                   <div className="font-mono font-semibold text-sm">{stats.connection.dhtNodes.toLocaleString()}</div>
                 </div>
               )}
             </div>
           </div>
+
         </CardContent>
       )}
     </Card>
   );
 };
+
+export default QBittorrentCard;

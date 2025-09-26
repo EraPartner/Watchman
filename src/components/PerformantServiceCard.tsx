@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth, useServiceStats } from '@/hooks/useServiceHealth';
-import { Activity, RefreshCw, ExternalLink, Zap, AlertTriangle } from 'lucide-react';
+import { Activity, RefreshCw, ExternalLink, Zap, AlertTriangle, Server, BarChart2, Clock } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
 
 interface PerformantServiceCardProps {
@@ -159,15 +159,15 @@ export const PerformantServiceCard = memo<PerformantServiceCardProps>(({
             {/* Quick Status Overview */}
             <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
               <Activity className="h-4 w-4" />
-              <span className="text-sm font-medium">Status:</span>
+              <span className="text-sm font-medium flex items-center gap-1"><Server className="h-3 w-3" /> Status:</span>
               <span className="text-sm">{health?.status || 'Unknown'}</span>
-              {health?.lastCheck && (
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {new Date(health.lastCheck).toLocaleTimeString()}
-                </span>
-              )}
-            </div>
-            
+               {health?.lastCheck && (
+                 <span className="text-xs text-muted-foreground ml-auto">
+                   {new Date(health.lastCheck).toLocaleTimeString()}
+                 </span>
+               )}
+             </div>
+             
             {/* Stats Grid */}
             {formattedStats && formattedStats.length > 0 && (
               <div className="grid grid-cols-2 gap-3">
@@ -178,21 +178,21 @@ export const PerformantServiceCard = memo<PerformantServiceCardProps>(({
                       isImportant ? 'bg-primary/5 border-primary/20' : 'bg-muted/30'
                     }`}
                   >
-                    <div className="text-xs text-muted-foreground truncate" title={key}>
-                      {key}
+                    <div className="text-xs text-muted-foreground truncate flex items-center gap-1" title={key}>
+                      <Clock className="h-3 w-3" />{key}
                     </div>
                     <div className={`text-sm font-mono ${isImportant ? 'font-semibold' : ''}`}>
                       {value}
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-});
+               </div>
+             )}
+           </div>
+         )}
+       </CardContent>
+     </Card>
+   );
+ });
 
-PerformantServiceCard.displayName = 'PerformantServiceCard';
+ PerformantServiceCard.displayName = 'PerformantServiceCard';

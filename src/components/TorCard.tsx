@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
-import { AlertTriangle, ExternalLink, Shield, Zap } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Shield, Zap, Hash, BarChart2, Link as LinkIcon, Database } from 'lucide-react';
 import { TorServerStats, ServerStatus } from '../types/server';
 import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
 import { ServerStatusBadge } from './ServerStatusBadge';
@@ -107,7 +107,7 @@ export const TorCard = ({
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             {stats.orPort && (
-              <span className="text-xs">OR Port: {stats.orPort}</span>
+              <span className="text-xs flex items-center gap-1"><Database className="h-3 w-3" />OR Port: {stats.orPort}</span>
             )}
           </div>
         </div>
@@ -175,18 +175,18 @@ export const TorCard = ({
         {/* Additional Info */}
         <div className="space-y-1 text-xs">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Fingerprint:</span>
+            <span className="flex items-center gap-1 text-muted-foreground"><Hash className="h-3 w-3" />Fingerprint:</span>
             <span className="font-mono text-xs">{stats.fingerprint?.slice(0, 16)}...</span>
           </div>
           {stats.consensusWeight && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Consensus Weight:</span>
+              <span className="flex items-center gap-1 text-muted-foreground"><BarChart2 className="h-3 w-3" />Consensus Weight:</span>
               <span>{formatNumber(stats.consensusWeight)}</span>
             </div>
           )}
           {stats.exitPolicy && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Exit Policy:</span>
+              <span className="flex items-center gap-1 text-muted-foreground"><LinkIcon className="h-3 w-3" />Exit Policy:</span>
               <span className="text-xs truncate max-w-24" title={stats.exitPolicy}>
                 {stats.exitPolicy.length > 20 ? stats.exitPolicy.slice(0, 20) + '...' : stats.exitPolicy}
               </span>

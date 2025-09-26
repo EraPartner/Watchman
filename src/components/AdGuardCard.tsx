@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
-import { Shield, AlertTriangle, ExternalLink, Activity, Globe, Zap } from 'lucide-react';
+import { Shield, AlertTriangle, ExternalLink, Activity, Globe, Zap, Server, BarChart2 } from 'lucide-react';
 import { AdGuardServerStats, ServerStatus } from '../types/server';
 import { useConfig } from '../hooks/use-config';
 import { ServerStatusBadge } from './ServerStatusBadge';
@@ -98,7 +98,10 @@ export const AdGuardCard = ({
         {/* Status and Version Info */}
         <div className="grid grid-cols-1 gap-3">
           <div className="space-y-1">
-            <div className="text-xs text-gray-500">Version</div>
+            <div className="flex items-center gap-1 text-muted-foreground text-xs">
+              <Server className="h-3 w-3" />
+              Version
+            </div>
             <div className="font-mono font-semibold text-sm">{stats.version}</div>
           </div>
         </div>
@@ -129,8 +132,8 @@ export const AdGuardCard = ({
 
           {/* Blocking rate progress */}
           <div className="space-y-1">
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>Blocking Rate</span>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><BarChart2 className="h-3 w-3" /> Blocking Rate</span>
               <span>{formatPercentage(stats.blockingRate)}</span>
             </div>
             <Progress 
@@ -187,7 +190,10 @@ export const AdGuardCard = ({
 
         {/* Top Domains */}
         <div className="space-y-1">
-          <div className="text-xs text-gray-500">Top Domains</div>
+          <div className="flex items-center gap-1 text-muted-foreground text-xs">
+            <Globe className="h-3 w-3" />
+            Top Domains
+          </div>
           <div className="space-y-1 text-xs">
             <div className="flex justify-between">
               <span className="text-gray-500">Most Blocked:</span>
@@ -203,7 +209,7 @@ export const AdGuardCard = ({
             </div>
             {stats.topClient && stats.topClient !== 'N/A' && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Top Client:</span>
+                <span className="text-gray-500"><ExternalLink className="h-3 w-3 inline-block mr-1"/>Top Client:</span>
                 <span className="font-mono text-gray-700 truncate ml-2 max-w-[120px]" title={stats.topClient}>
                   {stats.topClient}
                 </span>

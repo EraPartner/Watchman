@@ -84,6 +84,8 @@ interface BitcoinStats {
   version?: string;
   blocks?: number;
   uptime?: number;
+  // Optional on-disk size of the blockchain (bytes)
+  blockchainSize?: number;
 }
 
 interface QBittorrentStats {
