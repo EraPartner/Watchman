@@ -1,21 +1,45 @@
 import { execSync } from 'child_process';
+import fetch from 'node-fetch';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+import { Buffer } from 'buffer';
 
 export class BitcoinService {
   constructor(config = {}) {
+    // Determine timeout values (ms) and corresponding curl timeouts (s)
+    const timeoutMs = config.timeout || 120000; // default to 120 seconds
+    const connectTimeoutSec = config.connectTimeout || Math.max(15, Math.ceil(timeoutMs / 1000));
+    const maxTimeSec = config.maxTime || Math.max(connectTimeoutSec, Math.ceil(timeoutMs / 1000));
+
     this.config = {
       rpcUrl: config.rpcUrl || 'http://127.0.0.1:8332',
       rpcUser: config.rpcUser || process.env.BITCOIN_RPC_USER,
       rpcPassword: config.rpcPassword || process.env.BITCOIN_RPC_PASSWORD,
-      timeout: config.timeout || 50000, // 50 seconds for Bitcoin RPC calls over Tor
+      timeout: timeoutMs, // total timeout in ms
+      connectTimeout: connectTimeoutSec,
+      maxTime: maxTimeSec,
       ...config
     };
+
+    // If configured to use a SOCKS proxy, create and cache the agent here
+    if (this.config.useProxy && this.config.torProxy) {
+      const { host, port } = this.config.torProxy;
+      // Use socks5h to ensure remote DNS resolution of .onion hosts
+      const proxyUrl = `socks5h://${host}:${port}`;
+      try {
+        this.proxyAgent = new SocksProxyAgent(proxyUrl);
+      } catch (err) {
+        // Fail gracefully; proxyAgent will be undefined and code will handle it later
+        this.proxyAgent = undefined;
+        console.warn('⚠️  Failed to create SocksProxyAgent:', err.message);
+      }
+    }
   }
 
   async checkHealth() {
     try {
       // Try to get basic blockchain info to check if Bitcoin node is responsive
       const result = await this.executeRpcCommand('getblockchaininfo');
-      
+
       if (result && result.chain) {
         return {
           status: 'online',
@@ -41,13 +65,13 @@ export class BitcoinService {
     try {
       // Get blockchain info
       const blockchainInfo = await this.executeRpcCommand('getblockchaininfo');
-      
+
       // Get network info for connections and version
       const networkInfo = await this.executeRpcCommand('getnetworkinfo');
-      
+
       // Get mempool info
       const mempoolInfo = await this.executeRpcCommand('getmempoolinfo');
-      
+
       // Get uptime
       const uptime = await this.executeRpcCommand('uptime');
 
@@ -91,49 +115,71 @@ export class BitcoinService {
       }
     }
 
+    const body = JSON.stringify({ jsonrpc: '1.0', id: 'watchman', method, params });
+    // Use proper JSON content type
+    const headers = { 'content-type': 'application/json' };
+
+    // Add basic auth header if credentials are provided
+    if (this.config.rpcUser && this.config.rpcPassword) {
+      const token = Buffer.from(`${this.config.rpcUser}:${this.config.rpcPassword}`).toString('base64');
+      headers['authorization'] = `Basic ${token}`;
+    }
+
+    // Prepare fetch options
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), this.config.timeout);
+
+    const fetchOptions = {
+      method: 'POST',
+      headers,
+      body,
+      signal: controller.signal,
+      // keep other options extensible
+    };
+
+    // If using SOCKS proxy (Tor), attach the agent in a shape node-fetch expects
+    if (this.config.useProxy && this.config.torProxy && this.proxyAgent) {
+      // node-fetch expects an Agent-like object or a function that returns one.
+      // Passing a protocol mapping caused: "options.agent must be one of Agent-like Object... Received an instance of Object".
+      // Provide the agent instance directly to avoid that error.
+      fetchOptions.agent = this.proxyAgent;
+    }
+
     try {
-      let curlCommand = `curl -s --connect-timeout 15 --max-time 45 --user ${this.config.rpcUser}:${this.config.rpcPassword}`;
-      
-      // Add Tor proxy configuration if needed
-      if (this.config.useProxy) {
-        curlCommand += ` --socks5-hostname ${this.config.torProxy.host}:${this.config.torProxy.port}`;
+      const response = await fetch(this.config.rpcUrl, fetchOptions);
+      clearTimeout(timeoutHandle);
+
+      if (!response.ok) {
+        const status = response.status;
+        const text = await response.text().catch(() => '');
+        if (status === 401 || text.includes('Unauthorized')) {
+          throw new Error('Bitcoin RPC authentication failed - check credentials');
+        }
+        throw new Error(`Bitcoin RPC returned HTTP ${status} ${text}`);
       }
-      
-      curlCommand += ` --data-binary '{"jsonrpc":"1.0","id":"watchman","method":"${method}","params":${JSON.stringify(params)}}' -H 'content-type: text/plain;' ${this.config.rpcUrl}`;
-      
-      const result = execSync(curlCommand, { 
-        timeout: this.config.timeout,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-      
-      const parsed = JSON.parse(result);
-      
+
+      const parsed = await response.json();
+
       if (parsed.error) {
         throw new Error(`Bitcoin RPC error: ${parsed.error.message}`);
       }
-      
+
       return parsed.result;
     } catch (error) {
-      // Handle specific timeout errors
-      if (error.code === 'ETIMEDOUT' || error.message.includes('ETIMEDOUT')) {
+      // Normalize common network errors
+      const msg = (error && error.message) || String(error);
+      if (msg.includes('The user aborted a request') || msg === 'The operation was aborted.' || msg.includes('aborted')) {
         throw new Error('Bitcoin RPC request timed out - node may be slow or unreachable');
-      } else if (error.message.includes('ECONNREFUSED')) {
+      } else if (msg.includes('ECONNREFUSED')) {
         throw new Error('Bitcoin node not reachable - check if Bitcoin Core is running');
-      } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+      } else if (msg.includes('401') || msg.includes('Unauthorized')) {
         throw new Error('Bitcoin RPC authentication failed - check credentials');
-      } else if (error.message.includes('Connection refused')) {
-        throw new Error('Bitcoin node connection refused - check if Bitcoin Core is running and RPC is enabled');
-      } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-        throw new Error('Bitcoin RPC request timed out - consider increasing timeout or checking network');
-      } else if (error.message.includes('Could not resolve host')) {
+      } else if (msg.includes('ENOTFOUND') || msg.includes('Could not resolve host')) {
         throw new Error('Cannot resolve Bitcoin node hostname - check network or Tor proxy');
-      } else if (error.message.includes('Failed to connect')) {
-        throw new Error('Failed to connect to Bitcoin node - check if node is running and accessible');
-      } else if (error.message.includes('SOCKS') || error.message.includes('proxy')) {
+      } else if (msg.includes('SOCKS') || msg.includes('proxy') || msg.includes('Proxy')) {
         throw new Error('SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port');
       } else {
-        throw new Error(`Bitcoin RPC call failed: ${error.message}`);
+        throw new Error(`Bitcoin RPC call failed: ${msg}`);
       }
     }
   }
