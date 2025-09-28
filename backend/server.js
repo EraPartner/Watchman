@@ -640,11 +640,11 @@ async function startServer() {
     httpServerInstance = server.listen(PORT, () => {
       console.info(`🚀 Watchman Backend Server running on port ${PORT}`);
       console.info(`📊 Health check: http://localhost:${PORT}/health`);
-      console.info(`🛡️  AdGuard API: http://localhost:${PORT}/api/adguard/*`);
-      console.info(`₿  Bitcoin API: http://localhost:${PORT}/api/bitcoin/*`);
+      console.info(`🛡️ AdGuard API: http://localhost:${PORT}/api/adguard/*`);
+      console.info(`₿ Bitcoin API: http://localhost:${PORT}/api/bitcoin/*`);
       console.info(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
       console.info(`🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`);
-      console.info(`🖥️  Synology API: http://localhost:${PORT}/api/synology/*`);
+      console.info(`🖥️ Synology API: http://localhost:${PORT}/api/synology/*`);
       console.info(`🔍 Services Health: http://localhost:${PORT}/api/services/health`);
     });
   } catch (error) {
