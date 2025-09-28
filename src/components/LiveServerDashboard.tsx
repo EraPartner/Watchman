@@ -187,6 +187,50 @@ export const LiveServerDashboard = () => {
   const torIp: string | undefined = frontendCfg?.services?.tor?.ip ?? undefined;
   const torPortValue: number | undefined = frontendCfg?.services?.tor?.port ?? torCardStats?.orPort ?? undefined;
 
+  // Helper: chunk an array into fixed-size rows
+  const chunk = <T,>(arr: T[], size: number): T[][] => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) {
+      out.push(arr.slice(i, i + size));
+    }
+    return out;
+  };
+
+  // Build arrays of tile elements so we can chunk and render rows exactly 3 per row
+  const softwareTiles: JSX.Element[] = [];
+  if (adguardData && adguardCardStats) {
+    softwareTiles.push(
+      <AdGuardCard
+        key="adguard"
+        name={'AdGuard Home'}
+        status={mapServiceStatus(adguardData.health.status)}
+        stats={adguardCardStats}
+      />
+    );
+  }
+  if (torData && torCardStats) {
+    softwareTiles.push(
+      <TorCard
+        key="tor"
+        name={torCardStats.nickname || 'Tor Relay'}
+        status={torCardStats.running ? 'online' : 'offline'}
+        stats={torCardStats}
+        ip={torIp}
+        port={torPortValue}
+      />
+    );
+  }
+  softwareTiles.push(<BitcoinCard key="bitcoin" />);
+  softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
+
+  const hardwareTiles: JSX.Element[] = [
+    <SynologyCard key="synology" />,
+    <RoonCard key="roon" />,
+  ];
+
+  const softwareRows = chunk(softwareTiles, 3);
+  const hardwareRows = chunk(hardwareTiles, 3);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -269,27 +313,19 @@ export const LiveServerDashboard = () => {
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Software</h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-3">
-          {adguardData && adguardCardStats && (
-            <AdGuardCard
-              name={'AdGuard Home'}
-              status={mapServiceStatus(adguardData.health.status)}
-              stats={adguardCardStats}
-            />
-          )}
-
-          {torData && torCardStats && (
-            <TorCard
-              name={torCardStats.nickname || 'Tor Relay'}
-              status={torCardStats.running ? 'online' : 'offline'}
-              stats={torCardStats}
-              ip={torIp}
-              port={torPortValue}
-            />
-          )}
-
-          <BitcoinCard />
-          <QBittorrentCard />
+        <div className="mt-3 space-y-4">
+          {softwareRows.map((row, idx) => (
+            <div
+              key={`software-row-${idx}`}
+              className={`flex flex-col sm:flex-row gap-6 ${row.length < 3 ? 'justify-center' : ''}`}
+            >
+              {row.map((tile, i) => (
+                <div key={`software-${idx}-${i}`} className="flex-1 min-w-0">
+                  {tile}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -298,9 +334,19 @@ export const LiveServerDashboard = () => {
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Hardware</h3>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-3">
-          <SynologyCard />
-          <RoonCard />
+        <div className="mt-3 space-y-4">
+          {hardwareRows.map((row, idx) => (
+            <div
+              key={`hardware-row-${idx}`}
+              className={`flex flex-col sm:flex-row gap-6 ${row.length < 3 ? 'justify-center' : ''}`}
+            >
+              {row.map((tile, i) => (
+                <div key={`hardware-${idx}-${i}`} className="flex-1 min-w-0">
+                  {tile}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </div>
