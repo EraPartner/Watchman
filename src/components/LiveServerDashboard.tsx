@@ -317,7 +317,7 @@ export const LiveServerDashboard = () => {
           {softwareRows.map((row, idx) => (
             <div
               key={`software-row-${idx}`}
-              className={`flex flex-col sm:flex-row gap-6 ${row.length < 3 ? 'justify-center' : ''}`}
+              className={`flex flex-col sm:flex-row gap-6 items-stretch ${row.length < 3 ? 'justify-center' : ''}`}
             >
               {row.map((tile, i) => (
                 <div key={`software-${idx}-${i}`} className="flex-1 min-w-0">
@@ -338,7 +338,7 @@ export const LiveServerDashboard = () => {
           {hardwareRows.map((row, idx) => (
             <div
               key={`hardware-row-${idx}`}
-              className={`flex flex-col sm:flex-row gap-6 ${row.length < 3 ? 'justify-center' : ''}`}
+              className={`flex flex-col sm:flex-row gap-6 items-stretch ${row.length < 3 ? 'justify-center' : ''}`}
             >
               {row.map((tile, i) => (
                 <div key={`hardware-${idx}-${i}`} className="flex-1 min-w-0">
