@@ -149,6 +149,7 @@ export interface FrontendConfig {
     };
     nostrcheck?: {
       relayUrl?: string | null;
+      webUrl?: string | null;
       enabled?: boolean;
       configured?: boolean;
     };

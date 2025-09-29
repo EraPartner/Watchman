@@ -15,19 +15,43 @@ interface NostrcheckCardProps {
 export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, url }) => {
   const { config } = useConfig();
 
-  // Prefer configured backend value if present
-  // Default relay URL set to the requested public host unless overridden by backend config or prop
-  const relayUrl = config?.services.nostrcheck?.relayUrl || url || 'https://tornostrtorrent.com';
-  // Normalize display: strip http(s)/ws(s) scheme and trailing slash so addresses look clean
-  const displayUrl = relayUrl.replace(/^(?:https?:|wss?:)\/\//, '').replace(/\/$/, '');
-  // Ensure we have a clickable href with a scheme. If the backend provides host:port without scheme, default to http://
-  const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(relayUrl);
-  const normalizedHref = hasScheme ? relayUrl : `http://${relayUrl}`;
+  // Read backend config values
+  const nostrCfg = config?.services?.nostrcheck as { webUrl?: string | null; relayUrl?: string | null } | undefined;
+
+  // Relay (raw) — the URL user asked to show under the name
+  const relayRaw = nostrCfg?.relayUrl || url || 'localhost:3000';
+  // Web UI — the clickable web UI URL to show under the "Relay" section (NOSTRCHECK_WEB_URL)
+  const webRaw = nostrCfg?.webUrl || null;
+
+  const formatDisplay = (raw?: string | null) => {
+    if (!raw) return 'N/A';
+    return String(raw).replace(/^(?:https?:|wss?:)\/\//, '').replace(/\/$/, '');
+  };
+
+  // Build hrefs: allow choosing a preference for https when a scheme is missing (used for web UI)
+  const makeHref = (raw?: string | null, preferHttps = false) => {
+    if (!raw) return null;
+    const r = String(raw);
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(r);
+    if (hasScheme) return r;
+    return preferHttps ? `https://${r}` : `http://${r}`;
+  };
+
+  const relayDisplay = formatDisplay(relayRaw);
+  const relayHref = makeHref(relayRaw, false);
+  const webDisplay = formatDisplay(webRaw);
+  // Prefer https for the web UI when a scheme is not provided
+  const webHref = makeHref(webRaw, true);
 
   const openRelay = () => {
-    // open in new tab
-    if (!normalizedHref) return;
-    window.open(normalizedHref, '_blank');
+    // open chosen href (prefer relayHref here for header link)
+    if (!relayHref) return;
+    window.open(relayHref, '_blank');
+  };
+
+  const openWeb = () => {
+    if (!webHref) return;
+    window.open(webHref, '_blank');
   };
 
   return (
@@ -38,12 +62,13 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, ur
             <Globe className="h-4 w-4" />
             {name}
           </CardTitle>
+          {/* Clickable relay URL under the name (NOSTRCHECK_RELAY_URL) */}
           <button
             onClick={openRelay}
             className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
             title="Open relay"
           >
-            <span>{displayUrl}</span>
+            <span>{relayDisplay}</span>
             <ExternalLink className="h-3 w-3" />
           </button>
         </div>
@@ -61,17 +86,29 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, ur
               <Wifi className="h-3 w-3" />
               Relay
             </div>
-            <div className="font-mono font-semibold text-sm">{displayUrl}</div>
+            {/* Under the Relay section show the clickable Web UI URL (NOSTRCHECK_WEB_URL) when available */}
+            {webHref ? (
+              <button onClick={openWeb} className="font-mono font-semibold text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">
+                <span>{webDisplay}</span>
+                <ExternalLink className="h-3 w-3" />
+              </button>
+            ) : (
+              <div className="font-mono font-semibold text-sm">{relayDisplay}</div>
+            )}
           </div>
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs text-gray-500">This card shows a Nostr relay running on the LAN. Configure the relay URL in the backend environment configuration.</div>
 
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={openRelay}>
               Open Relay
             </Button>
+            {webHref && (
+              <Button variant="outline" size="sm" onClick={openWeb}>
+                Open Web UI
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>

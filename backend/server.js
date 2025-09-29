@@ -686,6 +686,8 @@ app.get('/api/config/frontend', (req, res) => {
       },
       nostrcheck: {
         relayUrl: process.env.NOSTRCHECK_RELAY_URL || null,
+        // Expose an optional clickable web UI URL (http(s)://...) for the relay
+        webUrl: process.env.NOSTRCHECK_WEB_URL || null,
         enabled: (process.env.NOSTRCHECK_ENABLED || 'false').toLowerCase() === 'true',
         configured: !!process.env.NOSTRCHECK_RELAY_URL
       }
