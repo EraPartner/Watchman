@@ -39,9 +39,10 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, ur
 
   const relayDisplay = formatDisplay(relayRaw);
   const relayHref = makeHref(relayRaw, false);
-  const webDisplay = formatDisplay(webRaw);
   // Prefer https for the web UI when a scheme is not provided
   const webHref = makeHref(webRaw, true);
+  // Display the Web UI including scheme if present/added (user requested showing https://tornostrtorrent.win)
+  const webDisplay = webHref ? String(webHref).replace(/\/$/, '') : 'N/A';
 
   const openRelay = () => {
     // open chosen href (prefer relayHref here for header link)
