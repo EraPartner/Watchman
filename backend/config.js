@@ -38,6 +38,11 @@ const getConfig = () => ({
     authToken: process.env.ADGUARD_AUTH_TOKEN,
     timeout: parseInt(process.env.ADGUARD_TIMEOUT) || 10000,
   },
+  nostrcheck: {
+    // Optional: frontend can read this to point to a LAN relay (ws:// or wss://)
+    relayUrl: process.env.NOSTRCHECK_RELAY_URL || null,
+    enabled: (process.env.NOSTRCHECK_ENABLED || 'false').toLowerCase() === 'true'
+  },
   server: {
     port: parseInt(process.env.PORT) || 3001,
     nodeEnv: process.env.NODE_ENV || 'development',

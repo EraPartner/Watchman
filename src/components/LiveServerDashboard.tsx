@@ -15,6 +15,7 @@ import RoonCard from './RoonCard';
 import PhilipsBridgeCard from './PhilipsBridgeCard';
 import AlbyHubCard from './AlbyHubCard';
 import { MacMiniCard } from './MacMiniCard';
+import { NostrcheckCard } from './NostrcheckCard';
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -223,6 +224,17 @@ export const LiveServerDashboard = () => {
       />
     );
   }
+  // Nostrcheck / local Nostr relay tile - use the frontend config exposed by the backend
+  const nostrCfg = frontendCfg?.services?.nostrcheck as any | undefined;
+  const nostrStatus = nostrCfg && nostrCfg.configured ? 'online' as const : 'offline' as const;
+  softwareTiles.push(
+    <NostrcheckCard
+      key="nostrcheck"
+      name={'Nostr Relay'}
+      status={nostrStatus}
+      url={nostrCfg?.relayUrl}
+    />
+  );
   softwareTiles.push(<BitcoinCard key="bitcoin" />);
   softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
 
