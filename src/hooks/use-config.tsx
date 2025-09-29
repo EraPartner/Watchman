@@ -14,6 +14,7 @@ interface FrontendConfig {
     };
     nostrcheck?: {
       relayUrl?: string | null;
+      webUrl?: string | null;
       enabled?: boolean;
       configured?: boolean;
     };
@@ -48,6 +49,7 @@ export const useConfig = () => {
             },
             nostrcheck: {
               relayUrl: null,
+              webUrl: null,
               enabled: false,
               configured: false
             }

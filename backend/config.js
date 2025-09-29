@@ -41,6 +41,8 @@ const getConfig = () => ({
   nostrcheck: {
     // Optional: frontend can read this to point to a LAN relay (ws:// or wss://)
     relayUrl: process.env.NOSTRCHECK_RELAY_URL || null,
+    // A clickable web URL (http(s)://...) to open the relay's web UI if available
+    webUrl: process.env.NOSTRCHECK_WEB_URL || null,
     enabled: (process.env.NOSTRCHECK_ENABLED || 'false').toLowerCase() === 'true'
   },
   server: {
