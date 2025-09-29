@@ -5,6 +5,7 @@ import { TorManager } from './TorManager.js';
 import { QBittorrentService } from './QBittorrentService.js';
 import SynologyService from './SynologyService.js';
 import RoonService from './RoonService.js';
+import PhilipsBridgeService from './PhilipsBridgeService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -93,6 +94,15 @@ export default class ServiceManager {
         usePing: process.env.ROON_USE_PING === 'false' ? false : true
       });
       this.services.set('roon', roonService);
+
+      // Initialize Philips Hue Bridge / Philips Bridge service (optional - requires PHILIPS_BRIDGE_HOST)
+      const philipsService = new PhilipsBridgeService({
+        host: process.env.PHILIPS_BRIDGE_HOST,
+        pingCount: process.env.PHILIPS_PING_COUNT ? parseInt(process.env.PHILIPS_PING_COUNT) : undefined,
+        timeout: process.env.PHILIPS_TIMEOUT ? parseInt(process.env.PHILIPS_TIMEOUT) : undefined,
+        usePing: process.env.PHILIPS_USE_PING === 'false' ? false : true
+      });
+      this.services.set('philips', philipsService);
       
       this.initialized = true;
       console.log('✅ All services initialized successfully');

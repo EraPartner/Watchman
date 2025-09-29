@@ -496,6 +496,49 @@ app.get('/api/synology/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// Philips Bridge endpoints
+app.get('/api/philips/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
+  try {
+    const philipsService = serviceManager.getService('philips');
+    if (!philipsService) {
+      return res.status(503).json({
+        error: 'Philips Bridge service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await serviceManager.getServiceHealth('philips');
+    console.log(`✅ Philips Bridge status connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Philips Bridge status connection failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch Philips Bridge status',
+      status: 'offline',
+      message: error.message
+    });
+  }
+});
+
+app.get('/api/philips/stats', statsCacheMiddleware, async (req, res) => {
+  try {
+    const philipsService = serviceManager.getService('philips');
+    if (!philipsService) {
+      return res.status(503).json({ error: 'Philips Bridge service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('philips');
+    console.log(`✅ Philips Bridge stats connection successful`);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Philips Bridge stats connection failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch Philips Bridge stats',
+      message: error.message
+    });
+  }
+});
+
 // Frontend configuration endpoint
 app.get('/api/config/frontend', (req, res) => {
   res.json({
