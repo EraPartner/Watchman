@@ -299,6 +299,15 @@ class ApiClient {
     return this.request('/api/philips/stats');
   }
 
+  // Alby Hub endpoints
+  async getAlbyStatus(): Promise<ServiceHealth> {
+    return this.request('/api/albyhub/status');
+  }
+
+  async getAlbyStats(): Promise<any> {
+    return this.request('/api/albyhub/stats');
+  }
+
   // Health check
   async getServicesHealth(): Promise<ServicesHealthResponse> {
     return this.request('/api/services/health');

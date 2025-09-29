@@ -13,6 +13,7 @@ import { QBittorrentCard } from './QBittorrentCard';
 import SynologyCard from './SynologyCard';
 import RoonCard from './RoonCard';
 import PhilipsBridgeCard from './PhilipsBridgeCard';
+import AlbyHubCard from './AlbyHubCard';
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -229,6 +230,11 @@ export const LiveServerDashboard = () => {
     <RoonCard key="roon" />,
     <PhilipsBridgeCard key="philips" />,
   ];
+
+  // Alby Hub tile: render when we have at least its health info
+  softwareTiles.push(
+    <AlbyHubCard key="albyhub" />
+  );
 
   const softwareRows = chunk(softwareTiles, 3);
   const hardwareRows = chunk(hardwareTiles, 3);
