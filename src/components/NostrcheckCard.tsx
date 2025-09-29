@@ -5,6 +5,8 @@ import { ExternalLink, Globe, Wifi, AlertTriangle } from 'lucide-react';
 import { ServerStatus } from '../types/server';
 import { useConfig } from '../hooks/use-config';
 import { ServerStatusBadge } from './ServerStatusBadge';
+import { buildHref, openHref } from '../lib/url';
+import ServiceLink from '@/components/ServiceLink';
 
 interface NostrcheckCardProps {
   name: string;
@@ -23,37 +25,11 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, ur
   // Web UI — the clickable web UI URL to show under the "Relay" section (NOSTRCHECK_WEB_URL)
   const webRaw = nostrCfg?.webUrl || null;
 
-  const formatDisplay = (raw?: string | null) => {
-    if (!raw) return 'N/A';
-    return String(raw).replace(/^(?:https?:|wss?:)\/\//, '').replace(/\/$/, '');
-  };
-
-  // Build hrefs: allow choosing a preference for https when a scheme is missing (used for web UI)
-  const makeHref = (raw?: string | null, preferHttps = false) => {
-    if (!raw) return null;
-    const r = String(raw);
-    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(r);
-    if (hasScheme) return r;
-    return preferHttps ? `https://${r}` : `http://${r}`;
-  };
-
-  const relayDisplay = formatDisplay(relayRaw);
-  const relayHref = makeHref(relayRaw, false);
-  // Prefer https for the web UI when a scheme is not provided
-  const webHref = makeHref(webRaw, true);
-  // Display the Web UI including scheme if present/added (user requested showing https://tornostrtorrent.win)
-  const webDisplay = webHref ? String(webHref).replace(/\/$/, '') : 'N/A';
-
-  const openRelay = () => {
-    // open chosen href (prefer relayHref here for header link)
-    if (!relayHref) return;
-    window.open(relayHref, '_blank');
-  };
-
-  const openWeb = () => {
-    if (!webHref) return;
-    window.open(webHref, '_blank');
-  };
+  // Build hrefs and use ServiceLink for consistent display
+  const relayHref = buildHref(relayRaw, false);
+  const webHref = buildHref(webRaw, true);
+  const openRelay = () => openHref(relayHref);
+  const openWeb = () => openHref(webHref);
 
   return (
     <Card className="w-full">
@@ -64,14 +40,7 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, ur
             {name}
           </CardTitle>
           {/* Clickable relay URL under the name (NOSTRCHECK_RELAY_URL) */}
-          <button
-            onClick={openRelay}
-            className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
-            title="Open relay"
-          >
-            <span>{relayDisplay}</span>
-            <ExternalLink className="h-3 w-3" />
-          </button>
+          <ServiceLink raw={relayRaw} preferHttps={false} title="Open relay" compact />
         </div>
 
         <div className="flex items-center gap-2">
@@ -89,18 +58,14 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, ur
             </div>
             {/* Under the Relay section show the clickable Web UI URL (NOSTRCHECK_WEB_URL) when available */}
             {webHref ? (
-              <button onClick={openWeb} className="font-mono font-semibold text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">
-                <span>{webDisplay}</span>
-                <ExternalLink className="h-3 w-3" />
-              </button>
+              <ServiceLink raw={webRaw} preferHttps={true} title="Open web UI" />
             ) : (
-              <div className="font-mono font-semibold text-sm">{relayDisplay}</div>
+              <div className="font-mono font-semibold text-sm">{relayRaw}</div>
             )}
           </div>
         </div>
 
         <div className="space-y-2">
-
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={openRelay}>
               Open Relay

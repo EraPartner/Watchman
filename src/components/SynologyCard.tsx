@@ -6,6 +6,7 @@ import { ServerStatusBadge } from './ServerStatusBadge';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../services/ApiClient';
 import { useFrontendConfig } from '../hooks/useServicesHealth';
+import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
 
 // Updated interfaces to match your backend's actual data structure
 interface SynologyStats {
@@ -121,16 +122,14 @@ const SynologyCard: React.FC = () => {
               </div>
               <div className="font-medium">
                 {synologyHref ? (
-                  <a
-                    href={synologyHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => openHref(synologyHref)}
                     className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
                     title={`Open ${synDisplay || cfg?.host} in new tab`}
                   >
-                    <span className="truncate">{synDisplay || cfg?.host}</span>
+                    <span className="truncate">{formatDisplayUrl(synDisplay || cfg?.host)}</span>
                     <ExternalLink className="h-3 w-3" />
-                  </a>
+                  </button>
                 ) : (
                   synDisplay || cfg?.host || 'Unknown'
                 )}

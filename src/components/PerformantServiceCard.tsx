@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth, useServiceStats } from '@/hooks/useServiceHealth';
-import { Activity, RefreshCw, ExternalLink, Zap, AlertTriangle, Server, BarChart2, Clock } from 'lucide-react';
+import { Activity, RefreshCw, ExternalLink, Zap, AlertTriangle, Server, Clock } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
+import { buildHref, openHref } from '../lib/url';
+import ServiceLink from '@/components/ServiceLink';
 
 interface PerformantServiceCardProps {
   serviceName: string;
@@ -96,6 +98,11 @@ export const PerformantServiceCard = memo<PerformantServiceCardProps>(({
             {priority === 'high' && <Zap className="h-4 w-4 text-yellow-500" />}
             <CardTitle className="text-lg font-semibold">{displayName}</CardTitle>
           </div>
+          {webUrl && (
+            <div className="flex flex-col">
+              <ServiceLink raw={webUrl} preferHttps={true} title={`Open ${displayName} web interface`} compact />
+            </div>
+          )}
           {statusMetrics && (
             <ServerStatusBadge status={(health?.status as any) || (health ? 'offline' : 'loading')} />
           )}
@@ -130,7 +137,7 @@ export const PerformantServiceCard = memo<PerformantServiceCardProps>(({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => window.open(webUrl, '_blank')}
+              onClick={() => openHref(buildHref(webUrl, true))}
               className="h-8 w-8 p-0"
             >
               <ExternalLink className="h-4 w-4" />

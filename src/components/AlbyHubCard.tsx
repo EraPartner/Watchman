@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { apiClient } from '../services/ApiClient';
 import { Server, ExternalLink } from 'lucide-react';
+import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
 
 export const AlbyHubCard: React.FC = () => {
   const [status, setStatus] = useState<'online'|'offline'|'warning'|'loading'>('loading');
@@ -82,10 +83,14 @@ export const AlbyHubCard: React.FC = () => {
             <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1"><Server className="h-3 w-3" /> URL</div>
             <div>
               {backendHref ? (
-                <a href={backendHref} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">
-                  <span className="font-mono font-semibold text-sm truncate">{backendDisplay}</span>
+                <button
+                  onClick={() => openHref(backendHref)}
+                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
+                  title={`Open ${backendDisplay}`}
+                >
+                  <span className="truncate">{formatDisplayUrl(backendDisplay)}</span>
                   <ExternalLink className="h-3 w-3" />
-                </a>
+                </button>
               ) : (
                 <div className="font-mono font-semibold text-sm">Configured via backend</div>
               )}

@@ -5,6 +5,7 @@ import { AlertTriangle, ExternalLink, Shield, Zap, Hash, BarChart2, Link as Link
 import { TorServerStats, ServerStatus } from '../types/server';
 import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
 import { ServerStatusBadge } from './ServerStatusBadge';
+import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
 
 // Tor Project logo SVG component
 const TorIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -76,16 +77,15 @@ export const TorCard = ({
               <span className="text-xs text-muted-foreground">({stats.nickname})</span>
             )}
           </CardTitle>
-          <a 
-            href={`${APP_CONFIG.TOR_METRICS_BASE_URL}/${stats.nickname}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          {/* Use the shared URL helper to format and open the metrics link */}
+          <button
+            onClick={() => openHref(`${APP_CONFIG.TOR_METRICS_BASE_URL}/${stats.nickname}`)}
             className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
             title="View relay details on Tor Metrics"
           >
-            <span>{ip}:{port}</span>
+            <span className="truncate">{formatDisplayUrl(`${ip}:${port}`)}</span>
             <ExternalLink className="h-3 w-3" />
-          </a>
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <ServerStatusBadge status={status} />

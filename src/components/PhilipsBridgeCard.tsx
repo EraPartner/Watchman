@@ -5,6 +5,7 @@ import { ServerStatusBadge } from './ServerStatusBadge';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../services/ApiClient';
 import { APP_CONFIG } from '../lib/constants';
+import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
 
 const formatPingDisplay = (ping?: boolean | null) => {
   if (ping === true) return 'ICMP: Responding';
@@ -84,16 +85,14 @@ const PhilipsBridgeCard: React.FC = () => {
             </div>
             <div className="font-medium">
               {hostHref ? (
-                <a
-                  href={hostHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => openHref(hostHref)}
                   className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
                   title={`Open ${hostValue} in new tab`}
                 >
-                  <span className="truncate">{hostValue}</span>
+                  <span className="truncate">{formatDisplayUrl(hostValue)}</span>
                   <ExternalLink className="h-3 w-3" />
-                </a>
+                </button>
               ) : (
                 hostValue || 'Unknown'
               )}
