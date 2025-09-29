@@ -147,6 +147,11 @@ export interface FrontendConfig {
       host?: string | null;
       webPort?: number | null;
     };
+    nostrcheck?: {
+      relayUrl?: string | null;
+      enabled?: boolean;
+      configured?: boolean;
+    };
   };
   app: {
     name: string;

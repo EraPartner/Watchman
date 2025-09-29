@@ -683,6 +683,11 @@ app.get('/api/config/frontend', (req, res) => {
         // Provide the raw ALBYHUB_URL so the frontend can construct a clickable host:port link
         url: process.env.ALBYHUB_URL || null,
         configured: !!process.env.ALBYHUB_URL
+      },
+      nostrcheck: {
+        relayUrl: process.env.NOSTRCHECK_RELAY_URL || null,
+        enabled: (process.env.NOSTRCHECK_ENABLED || 'false').toLowerCase() === 'true',
+        configured: !!process.env.NOSTRCHECK_RELAY_URL
       }
     },
     app: {

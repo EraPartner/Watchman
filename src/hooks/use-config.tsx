@@ -8,6 +8,14 @@ interface FrontendConfig {
     };
     tor: {
       nickname?: string;
+      ip?: string;
+      port?: number;
+      metricsUrl?: string;
+    };
+    nostrcheck?: {
+      relayUrl?: string | null;
+      enabled?: boolean;
+      configured?: boolean;
     };
   };
   app: {
@@ -37,6 +45,11 @@ export const useConfig = () => {
             },
             tor: {
               nickname: 'unknown'
+            },
+            nostrcheck: {
+              relayUrl: null,
+              enabled: false,
+              configured: false
             }
           },
           app: {
