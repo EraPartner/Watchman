@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { useServiceHealth, useServiceStats } from '@/hooks/useServiceHealth';
 import { Activity, RefreshCw, ExternalLink, Cpu, Thermometer, AlertTriangle, Server, Clock, HardDrive } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
+import { buildHref, openHref } from '../lib/url';
+import ServiceLink from '@/components/ServiceLink';
 
 interface MacMiniCardProps {
   serviceName?: string; // defaults to 'macmini' to match backend route
@@ -122,7 +124,7 @@ export const MacMiniCard = memo<MacMiniCardProps>(({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => window.open(webUrl, '_blank')}
+              onClick={() => openHref(buildHref(webUrl, true))}
               className="h-8 w-8 p-0"
             >
               <ExternalLink className="h-4 w-4" />

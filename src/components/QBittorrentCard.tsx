@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { QBittorrentStats } from '../types/api';
 import { apiClient } from '../services/ApiClient';
-import { ExternalLink, Server, HardDrive, Download, Upload, Layers, Database, Link as LinkIcon } from 'lucide-react';
+import { Server, HardDrive, Download, Upload, Layers, Database, Link as LinkIcon } from 'lucide-react';
+import ServiceLink from '@/components/ServiceLink';
 
 // qBittorrent logo SVG component
 const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -97,19 +98,6 @@ export const QBittorrentCard: React.FC = () => {
     return formatBytes(bytesPerSecond) + '/s';
   };
 
-  // Helper function to format uptime
-  const formatUptime = (seconds: number) => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    if (days > 0) {
-      return `${days}d ${hours}h`;
-    }
-    if (hours > 0) {
-      return `${hours}h ${Math.floor((seconds % 3600) / 60)}m`;
-    }
-    return `${Math.floor(seconds / 60)}m`;
-  };
-
   // Helper function to get connection status color
   const getConnectionStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -148,28 +136,28 @@ export const QBittorrentCard: React.FC = () => {
                 <LinkIcon className="h-3 w-3" />
                 Host
               </div>
-               <div className="font-mono font-semibold text-sm">
+               <div className="font-medium text-xs">
                  {(() => {
                   const cfgHost = frontendConfig?.host || null;
                   const cfgPort = frontendConfig?.webPort ? String(frontendConfig.webPort) : null;
                   const connPort = stats.connection.port ? String(stats.connection.port) : null;
+                  // Normalize host (strip scheme and any path)
                   const hostOnly = cfgHost ? cfgHost.replace(/^https?:\/\//i, '').replace(/\/.*/, '').trim() : null;
-                  const display = hostOnly ? (cfgPort ? `${hostOnly}:${cfgPort}` : (connPort ? `${hostOnly}:${connPort}` : hostOnly)) : (connPort ? `localhost:${connPort}` : 'Unknown');
-                  const href = (() => {
-                    if (!hostOnly) return null;
-                    const portToUse = cfgPort || connPort;
-                    return `http://${hostOnly}${portToUse ? `:${portToUse}` : ''}`;
-                  })();
+                  const portToUse = cfgPort || connPort || null;
 
-                  return href ? (
-                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">
-                      <span className="truncate">{display}</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                  // Build raw URL for opening. qBittorrent web UI commonly lives under /gui — include it.
+                  const raw = hostOnly
+                    ? `${hostOnly}${portToUse ? `:${portToUse}` : ''}`
+                    : (connPort ? `localhost:${connPort}` : null);
+
+                  const display = hostOnly ? `${hostOnly}${portToUse ? `:${portToUse}` : ''}` : (connPort ? `localhost:${connPort}` : 'Unknown');
+
+                  return raw ? (
+                    <ServiceLink raw={raw} preferHttps={false} title="Open qBittorrent web UI" compact hostOnly />
                   ) : (
                     display
                   );
-                })()}
+                 })()}
               </div>
             </div>
             <div className="space-y-1">
@@ -278,4 +266,4 @@ export const QBittorrentCard: React.FC = () => {
   );
 };
 
-export default QBittorrentCard;
+// Use named export only (no default export)
