@@ -12,6 +12,7 @@ import { BitcoinCard } from './BitcoinCard';
 import { QBittorrentCard } from './QBittorrentCard';
 import SynologyCard from './SynologyCard';
 import RoonCard from './RoonCard';
+import PhilipsBridgeCard from './PhilipsBridgeCard';
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -226,6 +227,7 @@ export const LiveServerDashboard = () => {
   const hardwareTiles: JSX.Element[] = [
     <SynologyCard key="synology" />,
     <RoonCard key="roon" />,
+    <PhilipsBridgeCard key="philips" />,
   ];
 
   const softwareRows = chunk(softwareTiles, 3);

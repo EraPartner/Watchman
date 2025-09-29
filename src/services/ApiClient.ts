@@ -290,6 +290,15 @@ class ApiClient {
     return this.request('/api/roon/stats');
   }
 
+  // Philips Bridge endpoints
+  async getPhilipsStatus(): Promise<any> {
+    return this.request('/api/philips/status');
+  }
+
+  async getPhilipsStats(): Promise<any> {
+    return this.request('/api/philips/stats');
+  }
+
   // Health check
   async getServicesHealth(): Promise<ServicesHealthResponse> {
     return this.request('/api/services/health');
