@@ -635,6 +635,12 @@ app.get('/api/config/frontend', (req, res) => {
          webPort: process.env.SYNOLOGY_WEB_PORT || process.env.SYNOLOGY_HTTP_PORT || process.env.SYNOLOGY_PORT || 5000,
          configured: !!process.env.SYNOLOGY_HOST
        }
+      ,
+      albyhub: {
+        // Provide the raw ALBYHUB_URL so the frontend can construct a clickable host:port link
+        url: process.env.ALBYHUB_URL || null,
+        configured: !!process.env.ALBYHUB_URL
+      }
     },
     app: {
       name: 'Watchman Dashboard',

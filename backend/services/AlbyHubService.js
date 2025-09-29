@@ -69,24 +69,37 @@ export class AlbyHubService {
 
   // Try to call Alby Hub's getInfo API (normalize commonly used endpoints)
   async getInfo() {
-    const infoPaths = ['/api/v1/info', '/api/info', '/info', '/api/v1', '/api'];
+    // Common candidate paths for Alby Hub info / status endpoints
+    const infoPaths = [
+      '/api/v1/info', '/api/info', '/api/getInfo', '/api/v1/getInfo',
+      '/info', '/getInfo', '/api/v1', '/api', '/status', '/health', '/'
+    ];
+
     for (const p of infoPaths) {
       try {
         const data = await this.fetchJson(p);
         if (data) {
-          // Normalize common fields if available
+          // If the API returns a wrapper like { data: {...} }, unwrap it
+          const payload = (data && typeof data === 'object' && data.data) ? data.data : data;
+
+          // Build an info object that keeps the raw payload (so frontend has full access)
           const info = {
-            name: data.name || data.title || data.service || null,
-            version: data.version || data.app_version || data.api_version || null,
-            description: data.description || data.info || null,
-            raw: data
+            name: payload.name || payload.title || payload.service || 'Alby Hub',
+            version: payload.version || payload.app_version || payload.api_version || null,
+            description: payload.description || payload.info || null,
+            // Keep the original raw payload for maximum compatibility in the frontend
+            raw: payload,
+            // Also surface which path produced this data
+            endpoint: p
           };
+
           return info;
         }
       } catch (err) {
         // try next
       }
     }
+
     return null;
   }
 
@@ -161,16 +174,31 @@ export class AlbyHubService {
   async getStats() {
     // Try to fetch Alby-specific info and installed apps
     try {
-      const [info, apps] = await Promise.allSettled([
-        this.getInfo(),
-        this.listApps()
-      ]);
+      // Probe to find a responding endpoint so we can include it in the stats
+      let endpointPath = null;
+      try {
+        const probe = await this.probeEndpoints();
+        endpointPath = probe && probe.endpoint ? probe.endpoint : null;
+      } catch (e) {
+        endpointPath = null;
+      }
+
+      // Only fetch info (apps are not needed for the UI and avoid extra requests)
+      let info = null;
+      try {
+        info = await this.getInfo();
+      } catch (e) {
+        info = null;
+      }
+
+      const resolvedUrl = endpointPath ? `${this.baseUrl.replace(/\/$/, '')}${endpointPath}` : null;
 
       const result = {
         status: 'online',
         timestamp: new Date().toISOString(),
-        info: info.status === 'fulfilled' ? info.value : null,
-        apps: apps.status === 'fulfilled' ? apps.value : null,
+        // include the resolved full URL (frontend expects `url` where it's the URL)
+        url: resolvedUrl,
+        info: info || null,
         lastCheck: new Date().toISOString()
       };
 

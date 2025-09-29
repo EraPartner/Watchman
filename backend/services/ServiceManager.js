@@ -108,7 +108,9 @@ export default class ServiceManager {
       // Initialize Alby Hub service (optional - requires ALBYHUB_URL)
       const albyHubService = new AlbyHubService({
         baseUrl: process.env.ALBYHUB_URL,
-        timeout: process.env.ALBYHUB_TIMEOUT ? parseInt(process.env.ALBYHUB_TIMEOUT) : undefined
+        timeout: process.env.ALBYHUB_TIMEOUT ? parseInt(process.env.ALBYHUB_TIMEOUT) : undefined,
+        // Pass optional auth token (JWT) from environment to allow access to protected Alby Hub endpoints
+        authToken: process.env.ALBYHUB_TOKEN || null
       });
       this.services.set('albyhub', albyHubService);
       
