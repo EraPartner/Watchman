@@ -14,6 +14,7 @@ import SynologyCard from './SynologyCard';
 import RoonCard from './RoonCard';
 import PhilipsBridgeCard from './PhilipsBridgeCard';
 import AlbyHubCard from './AlbyHubCard';
+import { MacMiniCard } from './MacMiniCard';
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -229,6 +230,7 @@ export const LiveServerDashboard = () => {
     <SynologyCard key="synology" />,
     <RoonCard key="roon" />,
     <PhilipsBridgeCard key="philips" />,
+    <MacMiniCard key="macmini" />,
   ];
 
   // Alby Hub tile: render when we have at least its health info
