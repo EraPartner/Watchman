@@ -7,6 +7,7 @@ import SynologyService from './SynologyService.js';
 import RoonService from './RoonService.js';
 import PhilipsBridgeService from './PhilipsBridgeService.js';
 import { AlbyHubService } from './AlbyHubService.js';
+import MacMiniService from './MacMiniService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -104,6 +105,17 @@ export default class ServiceManager {
         usePing: process.env.PHILIPS_USE_PING === 'false' ? false : true
       });
       this.services.set('philips', philipsService);
+      
+      // Initialize Mac Mini service (optional - requires MACMINI_HOST)
+      const macminiService = new MacMiniService({
+        host: process.env.MACMINI_HOST,
+        sshUser: process.env.MACMINI_SSH_USER,
+        sshPort: process.env.MACMINI_SSH_PORT ? parseInt(process.env.MACMINI_SSH_PORT) : undefined,
+        // Use explicit key path variable used in .env.local
+        sshKey: process.env.MACMINI_SSH_KEY_PATH || process.env.MACMINI_SSH_KEY,
+        timeout: process.env.MACMINI_TIMEOUT ? parseInt(process.env.MACMINI_TIMEOUT) : undefined
+      });
+      this.services.set('macmini', macminiService);
       
       // Initialize Alby Hub service (optional - requires ALBYHUB_URL)
       const albyHubService = new AlbyHubService({

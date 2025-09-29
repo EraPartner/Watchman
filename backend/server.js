@@ -582,6 +582,49 @@ app.get('/api/albyhub/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// Mac Mini endpoints: status and stats
+app.get('/api/macmini/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
+  try {
+    const macService = serviceManager.getService('macmini');
+    if (!macService) {
+      return res.status(503).json({
+        error: 'Mac Mini service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await serviceManager.getServiceHealth('macmini');
+    console.log('✅ Mac Mini status connection successful');
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Mac Mini status connection failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch Mac Mini status',
+      status: 'offline',
+      message: error.message
+    });
+  }
+});
+
+app.get('/api/macmini/stats', statsCacheMiddleware, async (req, res) => {
+  try {
+    const macService = serviceManager.getService('macmini');
+    if (!macService) {
+      return res.status(503).json({ error: 'Mac Mini service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('macmini');
+    console.log('✅ Mac Mini stats connection successful');
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Mac Mini stats connection failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch Mac Mini stats',
+      message: error.message
+    });
+  }
+});
+
 // Frontend configuration endpoint
 app.get('/api/config/frontend', (req, res) => {
   res.json({
