@@ -69,6 +69,14 @@ export const LiveServerDashboard = () => {
     retry: 1,
   });
 
+  // Global services health summary (returns health for all registered services)
+  const servicesHealthQuery = useQuery({
+    queryKey: ['services','health'],
+    queryFn: () => apiClient.getServicesHealth(),
+    refetchInterval: 30000,
+    retry: 1,
+  });
+
   const lastUpdateTime = new Date();
 
   // derive adguard/tor/other statuses from queries
@@ -79,8 +87,9 @@ export const LiveServerDashboard = () => {
   const synologyHealth = synologyQuery.data;
   const roonHealth = roonQuery.data;
 
-  const totalServices = 6;
-
+  // We'll derive the total and counts dynamically from the services health endpoint when available.
+  // Fallback to local tile counts if the endpoint is not available yet.
+ 
   // helper to map API service status strings to ServerStatus used by cards
   const mapServiceStatus = (s?: string) => {
     switch (s) {
@@ -97,7 +106,8 @@ export const LiveServerDashboard = () => {
     }
   };
 
-  const normalizedStatuses = [
+  // Build a fallback normalized status list from the queries we already run in this component
+  const fallbackNormalizedStatuses = [
     adguardData?.health?.status || 'loading',
     torData?.torStats?.running ? 'online' : (torData ? 'offline' : 'loading'),
     (bitcoinHealth?.status) || 'loading',
@@ -106,9 +116,35 @@ export const LiveServerDashboard = () => {
     (roonHealth?.status === 'error' ? 'warning' : roonHealth?.status) || 'loading'
   ] as Array<'online'|'offline'|'warning'|'loading'>;
 
-  const onlineCount = normalizedStatuses.filter(s => s === 'online').length;
-  const offlineCount = normalizedStatuses.filter(s => s === 'offline').length;
-  const warningCount = normalizedStatuses.filter(s => s === 'warning').length;
+  // If we have a services health response, we'll derive counts from it later.
+  // For now initialize placeholders; real values will be calculated after tiles are composed
+  let totalServices: number | undefined = undefined;
+  let onlineCount = 0;
+  let offlineCount = 0;
+  let warningCount = 0;
+
+  if (servicesHealthQuery.data && servicesHealthQuery.data.services) {
+    const svcObj = servicesHealthQuery.data.services as Record<string, any>;
+    const statuses = Object.values(svcObj).map((s: any) => {
+      // Normalize backend status strings (map 'error' -> 'warning', 'not_configured' -> 'offline')
+      const st = s && s.status ? String(s.status) : 'offline';
+      if (st === 'error') return 'warning';
+      if (st === 'not_configured') return 'offline';
+      return st as 'online' | 'offline' | 'warning';
+    });
+
+    totalServices = statuses.length;
+    onlineCount = statuses.filter(s => s === 'online').length;
+    offlineCount = statuses.filter(s => s === 'offline').length;
+    warningCount = statuses.filter(s => s === 'warning').length;
+  } else {
+    // fallback: compute total based on known tiles
+    // softwareTiles/hardwareTiles are created further down; estimate from them if available later
+    totalServices = fallbackNormalizedStatuses.length; // fallback to number of queries we run
+    onlineCount = fallbackNormalizedStatuses.filter(s => s === 'online').length;
+    offlineCount = fallbackNormalizedStatuses.filter(s => s === 'offline').length;
+    warningCount = fallbackNormalizedStatuses.filter(s => s === 'warning').length;
+  }
 
   const adguardStats = adguardData?.stats as any as AdGuardServerStats | undefined;
   const totalQueries = adguardStats?.totalQueries ?? 0;
@@ -252,6 +288,40 @@ export const LiveServerDashboard = () => {
 
   const softwareRows = chunk(softwareTiles, 3);
   const hardwareRows = chunk(hardwareTiles, 3);
+
+  // Compute overview counts: prefer the backend services health endpoint. If not available,
+  // fall back to the actual tiles we render so the total matches visible tiles.
+  if (servicesHealthQuery.data && servicesHealthQuery.data.services) {
+    const svcObj = servicesHealthQuery.data.services as Record<string, any>;
+    const statuses = Object.values(svcObj).map((s: any) => {
+      const st = s && s.status ? String(s.status) : 'offline';
+      if (st === 'error') return 'warning';
+      if (st === 'not_configured') return 'offline';
+      return st as 'online' | 'offline' | 'warning';
+    });
+
+    totalServices = statuses.length;
+    onlineCount = statuses.filter(s => s === 'online').length;
+    offlineCount = statuses.filter(s => s === 'offline').length;
+    warningCount = statuses.filter(s => s === 'warning').length;
+  } else {
+    // fallback: derive totals from the tiles we actually render
+    totalServices = softwareTiles.length + hardwareTiles.length;
+    // If tiles are empty (very early load), use fallbackNormalizedStatuses for counts
+    if (totalServices === 0) {
+      totalServices = fallbackNormalizedStatuses.length;
+      onlineCount = fallbackNormalizedStatuses.filter(s => s === 'online').length;
+      offlineCount = fallbackNormalizedStatuses.filter(s => s === 'offline').length;
+      warningCount = fallbackNormalizedStatuses.filter(s => s === 'warning').length;
+    } else {
+      // Count online/warning/offline by inspecting respective card props where available
+      // We can attempt to derive from earlier normalized statuses for the first N tiles
+      const combinedStatuses = fallbackNormalizedStatuses.slice(0, totalServices);
+      onlineCount = combinedStatuses.filter(s => s === 'online').length;
+      offlineCount = combinedStatuses.filter(s => s === 'offline').length;
+      warningCount = combinedStatuses.filter(s => s === 'warning').length;
+    }
+  }
 
   return (
     <div className="space-y-6">
