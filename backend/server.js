@@ -539,6 +539,49 @@ app.get('/api/philips/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// Alby Hub endpoints
+app.get('/api/albyhub/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
+  try {
+    const albyService = serviceManager.getService('albyhub');
+    if (!albyService) {
+      return res.status(503).json({
+        error: 'Alby Hub service not configured',
+        status: 'offline'
+      });
+    }
+
+    const health = await serviceManager.getServiceHealth('albyhub');
+    console.log(`✅ Alby Hub status connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Alby Hub status connection failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch Alby Hub status',
+      status: 'offline',
+      message: error.message
+    });
+  }
+});
+
+app.get('/api/albyhub/stats', statsCacheMiddleware, async (req, res) => {
+  try {
+    const albyService = serviceManager.getService('albyhub');
+    if (!albyService) {
+      return res.status(503).json({ error: 'Alby Hub service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('albyhub');
+    console.log(`✅ Alby Hub stats connection successful`);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Alby Hub stats connection failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch Alby Hub stats',
+      message: error.message
+    });
+  }
+});
+
 // Frontend configuration endpoint
 app.get('/api/config/frontend', (req, res) => {
   res.json({

@@ -6,6 +6,7 @@ import { QBittorrentService } from './QBittorrentService.js';
 import SynologyService from './SynologyService.js';
 import RoonService from './RoonService.js';
 import PhilipsBridgeService from './PhilipsBridgeService.js';
+import { AlbyHubService } from './AlbyHubService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -25,7 +26,7 @@ export default class ServiceManager {
       // Start Tor if it's not already running
       console.log('🚀 Starting Tor proxy...');
       await this.torManager.startTor();
-      
+
       // Build rpcUrl safely: prefer BITCOIN_ONION_URL + BITCOIN_RPC_PORT when both are present,
       // else fallback to BITCOIN_RPC_URL env var, else default to localhost.
       const rpcUrlFromOnion = process.env.BITCOIN_ONION_URL && process.env.BITCOIN_RPC_PORT
@@ -103,6 +104,13 @@ export default class ServiceManager {
         usePing: process.env.PHILIPS_USE_PING === 'false' ? false : true
       });
       this.services.set('philips', philipsService);
+      
+      // Initialize Alby Hub service (optional - requires ALBYHUB_URL)
+      const albyHubService = new AlbyHubService({
+        baseUrl: process.env.ALBYHUB_URL,
+        timeout: process.env.ALBYHUB_TIMEOUT ? parseInt(process.env.ALBYHUB_TIMEOUT) : undefined
+      });
+      this.services.set('albyhub', albyHubService);
       
       this.initialized = true;
       console.log('✅ All services initialized successfully');
