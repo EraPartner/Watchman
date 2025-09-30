@@ -8,13 +8,7 @@ import { ServerStatusBadge } from './ServerStatusBadge';
 import { buildHref, openHref } from '../lib/url';
 import ServiceLink from '@/components/ServiceLink';
 
-interface NostrcheckCardProps {
-  name: string;
-  status: ServerStatus;
-  url?: string;
-}
-
-export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, url }) => {
+export const NostrcheckCard: React.FC<any> = ({ name, status, url, fullHeight = false }) => {
   const { config } = useConfig();
 
   // Read backend config values
@@ -32,7 +26,7 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({ name, status, ur
   const openWeb = () => openHref(webHref);
 
   return (
-    <Card className="w-full">
+    <Card className={`w-full ${fullHeight ? 'h-full' : ''}`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex flex-col">
           <CardTitle className="text-sm font-medium flex items-center gap-2">

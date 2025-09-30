@@ -342,6 +342,46 @@ app.get('/api/qbittorrent/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// IPFS API endpoints
+app.get('/api/ipfs/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
+  try {
+    const ipfsService = serviceManager.getService('ipfs');
+    if (!ipfsService) {
+      return res.status(503).json({ error: 'IPFS service not configured', status: 'offline' });
+    }
+
+    const health = await serviceManager.getServiceHealth('ipfs');
+    console.log(`✅ IPFS status connection successful`);
+    res.json(health);
+  } catch (error) {
+    console.error('❌ IPFS status connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch IPFS status',
+      status: 'offline',
+      message: error.message 
+    });
+  }
+});
+
+app.get('/api/ipfs/stats', statsCacheMiddleware, async (req, res) => {
+  try {
+    const ipfsService = serviceManager.getService('ipfs');
+    if (!ipfsService) {
+      return res.status(503).json({ error: 'IPFS service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('ipfs');
+    console.log(`✅ IPFS stats connection successful`);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ IPFS stats connection failed:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch IPFS stats',
+      message: error.message 
+    });
+  }
+});
+
 // Roon (ROCK) API endpoints - missing previously which caused frontend fetches to 404
 app.get('/api/roon/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {
@@ -632,12 +672,39 @@ app.get('/api/config/frontend', (req, res) => {
       adguard: {
         webUrl: process.env.ADGUARD_MAIN_URL || 'http://127.0.0.1:5213'
       },
-      tor: {
-        nickname: process.env.TOR_RELAY_NICKNAME,
-        ip: process.env.TOR_RELAY_IP || process.env.DEFAULT_IP || '127.0.0.1',
-        port: process.env.TOR_DEFAULT_PORT || 27801,
-        metricsUrl: process.env.TOR_METRICS_URL || 'https://metrics.torproject.org'
-      },
+      ipfs: (() => {
+        const url = process.env.IPFS_API_URL || '';
+        let host = null;
+        let port = null;
+        try {
+          if (url && url.trim()) {
+            const parsed = new URL(url);
+            host = parsed.hostname || null;
+            port = parsed.port || null;
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+
+        host = host || process.env.IPFS_HOST || null;
+        port = port || process.env.IPFS_PORT || null;
+
+        // If the user runs an IPFS web UI, expose a clickable webUrl env var
+        const webUiUrl = process.env.IPFS_WEB_UI_URL || null;
+
+        return {
+          host,
+          port,
+          webUrl: webUiUrl,
+          configured: !!(host || webUiUrl || process.env.IPFS_API_URL)
+        };
+      })(),
+       tor: {
+         nickname: process.env.TOR_RELAY_NICKNAME,
+         ip: process.env.TOR_RELAY_IP || process.env.DEFAULT_IP || '127.0.0.1',
+         port: process.env.TOR_DEFAULT_PORT || 27801,
+         metricsUrl: process.env.TOR_METRICS_URL || 'https://metrics.torproject.org'
+       },
       bitcoin: {
         onionUrl: process.env.BITCOIN_ONION_URL,
         rpcPort: process.env.BITCOIN_RPC_PORT || 8332,

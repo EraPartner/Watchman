@@ -9,6 +9,7 @@ import PhilipsBridgeService from './PhilipsBridgeService.js';
 import { AlbyHubService } from './AlbyHubService.js';
 import MacMiniService from './MacMiniService.js';
 import RouterService from './RouterService.js';
+import IpfsService from './IpfsService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -87,6 +88,16 @@ export default class ServiceManager {
       // Initialize Synology service
       const synologyService = new SynologyService();
       this.services.set('synology', synologyService);
+
+      // Initialize IPFS service (optional - requires IPFS_API_URL)
+      const ipfsApiUrl = process.env.IPFS_API_URL || null;
+      if (ipfsApiUrl) {
+        const ipfsService = new IpfsService({
+          apiUrl: ipfsApiUrl,
+          timeout: process.env.IPFS_TIMEOUT ? parseInt(process.env.IPFS_TIMEOUT) : 5000
+        });
+        this.services.set('ipfs', ipfsService);
+      }
 
       // Initialize Roon service (optional - requires ROON_HOST)
       const roonService = new RoonService({

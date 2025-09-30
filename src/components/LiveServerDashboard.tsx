@@ -10,6 +10,7 @@ import { Button } from './ui/button';
 import { APP_CONFIG } from '../lib/constants';
 import { BitcoinCard } from './BitcoinCard';
 import { QBittorrentCard } from './QBittorrentCard';
+import { IpfsCard } from './IpfsCard';
 import SynologyCard from './SynologyCard';
 import RoonCard from './RoonCard';
 import PhilipsBridgeCard from './PhilipsBridgeCard';
@@ -17,6 +18,10 @@ import AlbyHubCard from './AlbyHubCard';
 import { MacMiniCard } from './MacMiniCard';
 import { NostrcheckCard } from './NostrcheckCard';
 import RouterCard from './RouterCard';
+
+// Local any-typed aliases to allow UI-only props (e.g. fullHeight) without changing original component types
+const NostrcheckAny = NostrcheckCard as unknown as React.FC<any>;
+const AlbyHubAny = AlbyHubCard as unknown as React.FC<any>;
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -56,6 +61,13 @@ export const LiveServerDashboard = () => {
     retry: 1,
   });
 
+  const ipfsQuery = useQuery({
+    queryKey: ['ipfs','status'],
+    queryFn: () => apiClient.getIpfsStatus(),
+    refetchInterval: 30000,
+    retry: 1,
+  });
+
   const synologyQuery = useQuery({
     queryKey: ['synology','status'],
     queryFn: () => apiClient.getSynologyStatus(),
@@ -85,6 +97,7 @@ export const LiveServerDashboard = () => {
   const torData = torQuery.data;
   const bitcoinHealth = bitcoinQuery.data;
   const qbittorrentHealth = qbittorrentQuery.data;
+  const ipfsHealth = ipfsQuery.data;
   const synologyHealth = synologyQuery.data;
   const roonHealth = roonQuery.data;
 
@@ -113,6 +126,7 @@ export const LiveServerDashboard = () => {
     torData?.torStats?.running ? 'online' : (torData ? 'offline' : 'loading'),
     (bitcoinHealth?.status) || 'loading',
     (qbittorrentHealth?.status) || 'loading',
+    (ipfsHealth?.status) || 'loading',
     (synologyHealth?.status) || 'loading',
     (roonHealth?.status === 'error' ? 'warning' : roonHealth?.status) || 'loading'
   ] as Array<'online'|'offline'|'warning'|'loading'>;
@@ -209,6 +223,7 @@ export const LiveServerDashboard = () => {
       torQuery.refetch(),
       bitcoinQuery.refetch(),
       qbittorrentQuery.refetch(),
+      ipfsQuery.refetch(),
       synologyQuery.refetch(),
       roonQuery.refetch(),
     ]);
@@ -216,7 +231,7 @@ export const LiveServerDashboard = () => {
   };
 
   // loading indicator when initial queries are loading
-  if (adguardQuery.isLoading && torQuery.isLoading && bitcoinQuery.isLoading && qbittorrentQuery.isLoading && synologyQuery.isLoading && roonQuery.isLoading) {
+  if (adguardQuery.isLoading && torQuery.isLoading && bitcoinQuery.isLoading && qbittorrentQuery.isLoading && ipfsQuery.isLoading && synologyQuery.isLoading && roonQuery.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -264,6 +279,7 @@ export const LiveServerDashboard = () => {
   // Other software tiles
   softwareTiles.push(<BitcoinCard key="bitcoin" />);
   softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
+  softwareTiles.push(<IpfsCard key="ipfs" />);
 
   // Nostrcheck / local Nostr relay tile - use the frontend config exposed by the backend
   const nostrCfg = frontendCfg?.services?.nostrcheck as any | undefined;
@@ -273,10 +289,10 @@ export const LiveServerDashboard = () => {
   softwareTiles.push(
     <div key="nostr-alby-stacked" className="h-full flex flex-col gap-4">
       <div className="flex-1 min-h-0">
-        <NostrcheckCard name={'Nostr Relay'} status={nostrStatus} url={nostrCfg?.relayUrl} fullHeight />
+        <NostrcheckAny name={'Nostr Relay'} status={nostrStatus} url={nostrCfg?.relayUrl} fullHeight />
       </div>
       <div className="flex-1 min-h-0">
-        <AlbyHubCard fullHeight />
+        <AlbyHubAny fullHeight />
       </div>
     </div>
   );
