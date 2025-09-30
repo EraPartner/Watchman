@@ -695,7 +695,25 @@ app.get('/api/config/frontend', (req, res) => {
       beryl: {
         host: process.env.BERYL_HOST || null,
         ports: process.env.BERYL_PORTS ? String(process.env.BERYL_PORTS).split(/[ ,]+/).map(p => Number(p)).filter(Boolean) : [],
-        configured: !!process.env.BERYL_HOST
+        configured: !!process.env.BERYL_HOST,
+        // If a non-default web port is configured, expose a clickable webUrl so frontend links include the port
+        webUrl: (() => {
+          const h = process.env.BERYL_HOST;
+          const portsRaw = process.env.BERYL_PORTS || '';
+          if (!h) return null;
+          const ports = portsRaw.split(/[ ,]+/).map(p => Number(p)).filter(Boolean);
+          // prefer a single explicit web port if provided; fallback to port 80
+          const webPort = ports.length > 0 ? ports[0] : null;
+          // Prefer https first. If webPort is present and non-standard, include it.
+          const preferHttps = (process.env.BERYL_PREFER_HTTPS || 'true').toLowerCase() !== 'false';
+          if (preferHttps) {
+            if (webPort && webPort !== 443) return `https://${h}:${webPort}`;
+            return `https://${h}`;
+          }
+          // Fallback to http
+          if (webPort && webPort !== 80) return `http://${h}:${webPort}`;
+          return `http://${h}`;
+        })()
       },
       telenet: {
         host: process.env.TELENET_HOST || null,

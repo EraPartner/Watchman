@@ -1,4 +1,3 @@
-// ...existing code...
 import React, { useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ServerStatusBadge } from './ServerStatusBadge';
@@ -40,14 +39,48 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
   const frontendServiceCfg = (frontendCfgQuery.data as any)?.services?.[serviceKey];
   // Prefer host reported by the service health endpoint (serviceObj.host), fallback to frontend config
   const displayHost = useMemo(() => {
+    // Prefer an explicit frontend-provided webUrl (includes non-default ports)
+    if (frontendServiceCfg && frontendServiceCfg.webUrl) return formatDisplayUrl(frontendServiceCfg.webUrl);
+    // Next prefer host from the service health object (same host but may not include port)
     if (serviceObj && serviceObj.host) return String(serviceObj.host);
-    if (frontendServiceCfg && (frontendServiceCfg.host || frontendServiceCfg.ip || frontendServiceCfg.webUrl)) {
-      if (frontendServiceCfg.webUrl) return formatDisplayUrl(frontendServiceCfg.webUrl);
+    // Fallback to frontend config host/ip if available
+    if (frontendServiceCfg && (frontendServiceCfg.host || frontendServiceCfg.ip)) {
       const candidate = frontendServiceCfg.host || frontendServiceCfg.ip;
       return candidate ? String(candidate) : null;
     }
     return null;
   }, [serviceObj, frontendServiceCfg]);
+
+  // Build the href that should be opened when clicking the host link.
+  // If backend provided a `webUrl` use it directly (preserves port). Otherwise fallback to displayHost and buildHref.
+  const hostHref = useMemo(() => {
+    if (frontendServiceCfg && frontendServiceCfg.webUrl) {
+      const raw = String(frontendServiceCfg.webUrl);
+      // If it already has a scheme, return as-is; otherwise build with http
+      const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw);
+      return hasScheme ? raw : `http://${raw}`;
+    }
+    if (serviceObj && serviceObj.host) return buildHref(String(serviceObj.host), false);
+    if (frontendServiceCfg && (frontendServiceCfg.host || frontendServiceCfg.ip)) {
+      const candidate = frontendServiceCfg.host || frontendServiceCfg.ip;
+      return buildHref(String(candidate), false);
+    }
+    return null;
+  }, [frontendServiceCfg, serviceObj]);
+
+  // Additional HTTP fallback URL if available
+  const httpFallbackHref = useMemo(() => {
+    if (frontendServiceCfg && frontendServiceCfg.webUrl) {
+      const raw = String(frontendServiceCfg.webUrl);
+      // If the URL has a scheme and is not http, offer an http fallback
+      const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw);
+      if (hasScheme && !raw.startsWith('http://')) {
+        // Replace https:// with http:// for the fallback
+        return raw.replace(/^https:\/\//i, 'http://');
+      }
+    }
+    return null;
+  }, [frontendServiceCfg]);
 
   const onRetry = useCallback(() => {
     healthQuery.refetch();
@@ -76,13 +109,25 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
             </div>
             <div className="text-sm font-medium truncate">
               {displayHost ? (
-                <button
-                  onClick={() => openHref(buildHref(displayHost, true))}
-                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-                >
-                  <span className="truncate">{displayHost}</span>
-                  <ExternalLink className="h-3 w-3" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openHref(hostHref)}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                  >
+                    <span className="truncate">{displayHost}</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
+                  {/* If we have an explicit http fallback that differs from the primary href, show a tiny fallback button */}
+                  {httpFallbackHref && httpFallbackHref !== hostHref && (
+                    <button
+                      onClick={() => openHref(httpFallbackHref)}
+                      title="Open HTTP fallback"
+                      className="text-xs text-muted-foreground hover:text-gray-700"
+                    >
+                      (https)
+                    </button>
+                  )}
+                </div>
               ) : (
                 <span className="text-muted-foreground">Unknown</span>
               )}
@@ -128,4 +173,3 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
 };
 
 export default RouterCard;
-// ...existing code...
