@@ -5,7 +5,7 @@ import { apiClient } from '../services/ApiClient';
 import { Server, ExternalLink } from 'lucide-react';
 import { formatDisplayUrl, openHref } from '../lib/url';
 
-export const AlbyHubCard: React.FC = () => {
+export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({ fullHeight = false }) => {
   const [status, setStatus] = useState<'online'|'offline'|'warning'|'loading'>('loading');
   // albyUrlRaw holds the ALBYHUB_URL value exposed via backend /api/config/frontend
   const [albyUrlRaw, setAlbyUrlRaw] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export const AlbyHubCard: React.FC = () => {
   }
 
   return (
-    <Card className="w-full">
+    <Card className={`w-full ${fullHeight ? 'h-full' : ''}`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">Alby Hub</CardTitle>
         <ServerStatusBadge status={status} />

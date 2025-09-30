@@ -127,6 +127,16 @@ export interface FrontendConfig {
     adguard: {
       webUrl: string;
     };
+    ipfs?: {
+      host?: string | null;
+      port?: string | number | null;
+      webUrl?: string | null;
+      configured?: boolean;
+    };
+    albyhub?: {
+      url?: string | null;
+      configured?: boolean;
+    };
     tor: {
       nickname?: string;
       ip?: string;
@@ -243,11 +253,13 @@ class ApiClient {
     return this.request('/api/adguard/stats');
   }
 
-  async setAdGuardProtection(enabled: boolean, duration?: number): Promise<{ success: boolean }> {
-    return this.request('/api/adguard/protection', {
-      method: 'POST',
-      body: JSON.stringify({ enabled, duration }),
-    });
+  // IPFS endpoints
+  async getIpfsStatus(): Promise<ServiceHealth> {
+    return this.request('/api/ipfs/status');
+  }
+
+  async getIpfsStats(): Promise<any> {
+    return this.request('/api/ipfs/stats');
   }
 
   // Bitcoin endpoints
