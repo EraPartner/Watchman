@@ -117,11 +117,11 @@ export const LiveServerDashboard = () => {
   ] as Array<'online'|'offline'|'warning'|'loading'>;
 
   // If we have a services health response, we'll derive counts from it later.
-  // For now initialize placeholders; real values will be calculated after tiles are composed
-  let totalServices: number | undefined = undefined;
-  let onlineCount = 0;
-  let offlineCount = 0;
-  let warningCount = 0;
+  // For now declare placeholders; real values will be calculated after tiles are composed
+  let totalServices: number | undefined;
+  let onlineCount: number;
+  let offlineCount: number;
+  let warningCount: number;
 
   if (servicesHealthQuery.data && servicesHealthQuery.data.services) {
     const svcObj = servicesHealthQuery.data.services as Record<string, any>;
@@ -260,19 +260,25 @@ export const LiveServerDashboard = () => {
       />
     );
   }
+  // Other software tiles
+  softwareTiles.push(<BitcoinCard key="bitcoin" />);
+  softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
+
   // Nostrcheck / local Nostr relay tile - use the frontend config exposed by the backend
   const nostrCfg = frontendCfg?.services?.nostrcheck as any | undefined;
   const nostrStatus = nostrCfg && nostrCfg.configured ? 'online' as const : 'offline' as const;
+
+  // Stack Nostrcheck and AlbyHub vertically so the combined tile matches other card heights
   softwareTiles.push(
-    <NostrcheckCard
-      key="nostrcheck"
-      name={'Nostr Relay'}
-      status={nostrStatus}
-      url={nostrCfg?.relayUrl}
-    />
+    <div key="nostr-alby-stacked" className="h-full flex flex-col gap-4">
+      <div className="flex-1 min-h-0">
+        <NostrcheckCard name={'Nostr Relay'} status={nostrStatus} url={nostrCfg?.relayUrl} fullHeight />
+      </div>
+      <div className="flex-1 min-h-0">
+        <AlbyHubCard fullHeight />
+      </div>
+    </div>
   );
-  softwareTiles.push(<BitcoinCard key="bitcoin" />);
-  softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
 
   const hardwareTiles: JSX.Element[] = [
     <SynologyCard key="synology" />,
@@ -280,11 +286,6 @@ export const LiveServerDashboard = () => {
     <PhilipsBridgeCard key="philips" />,
     <MacMiniCard key="macmini" />,
   ];
-
-  // Alby Hub tile: render when we have at least its health info
-  softwareTiles.push(
-    <AlbyHubCard key="albyhub" />
-  );
 
   const softwareRows = chunk(softwareTiles, 3);
   const hardwareRows = chunk(hardwareTiles, 3);

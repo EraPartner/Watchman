@@ -5,7 +5,7 @@ import { AlertTriangle, ExternalLink, Shield, Zap, Hash, BarChart2, Link as Link
 import { TorServerStats, ServerStatus } from '../types/server';
 import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
 import { ServerStatusBadge } from './ServerStatusBadge';
-import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
+import { formatDisplayUrl, openHref } from '../lib/url';
 
 // Tor Project logo SVG component
 const TorIcon = ({ className = "h-4 w-4" }: { className?: string }) => (

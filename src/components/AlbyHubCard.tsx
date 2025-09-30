@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { apiClient } from '../services/ApiClient';
 import { Server, ExternalLink } from 'lucide-react';
-import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
+import { formatDisplayUrl, openHref } from '../lib/url';
 
 export const AlbyHubCard: React.FC = () => {
   const [status, setStatus] = useState<'online'|'offline'|'warning'|'loading'>('loading');
