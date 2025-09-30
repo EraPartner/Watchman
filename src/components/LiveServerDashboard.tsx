@@ -289,13 +289,13 @@ export const LiveServerDashboard = () => {
   softwareTiles.push(
     <div key="nostr-alby-stacked" className="h-full flex flex-col gap-4">
       <div className="flex-1 min-h-0">
-        <NostrcheckAny name={'Nostr Relay'} status={nostrStatus} url={nostrCfg?.relayUrl} fullHeight />
-      </div>
-      <div className="flex-1 min-h-0">
-        <AlbyHubAny fullHeight />
-      </div>
-    </div>
-  );
+        <NostrcheckCard name={'Nostr Relay'} status={nostrStatus} url={nostrCfg?.relayUrl} />
+       </div>
+       <div className="flex-1 min-h-0">
+        <AlbyHubCard />
+       </div>
+     </div>
+   );
 
   const hardwareTiles: JSX.Element[] = [
     <SynologyCard key="synology" />,
