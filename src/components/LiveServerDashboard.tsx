@@ -18,10 +18,7 @@ import AlbyHubCard from './AlbyHubCard';
 import { MacMiniCard } from './MacMiniCard';
 import { NostrcheckCard } from './NostrcheckCard';
 import RouterCard from './RouterCard';
-
-// Local any-typed aliases to allow UI-only props (e.g. fullHeight) without changing original component types
-const NostrcheckAny = NostrcheckCard as unknown as React.FC<any>;
-const AlbyHubAny = AlbyHubCard as unknown as React.FC<any>;
+import HomebridgeCard from './HomebridgeCard';
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -280,6 +277,8 @@ export const LiveServerDashboard = () => {
   softwareTiles.push(<BitcoinCard key="bitcoin" />);
   softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
   softwareTiles.push(<IpfsCard key="ipfs" />);
+  // Homebridge is considered a software service (UI/API) so include it with software tiles
+  softwareTiles.push(<HomebridgeCard key="homebridge" />);
 
   // Nostrcheck / local Nostr relay tile - use the frontend config exposed by the backend
   const nostrCfg = frontendCfg?.services?.nostrcheck as any | undefined;

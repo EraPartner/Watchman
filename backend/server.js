@@ -579,6 +579,83 @@ app.get('/api/philips/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// New status endpoints under /api/status/* to match requested API shape (only allowed endpoints)
+app.get('/api/status/homebridge-version', statsCacheMiddleware, requireAuth, async (req, res) => {
+   try {
+     const hbService = serviceManager.getService('homebridge');
+     if (!hbService) {
+       return res.status(503).json({ error: 'Homebridge service not configured' });
+     }
+
+     // Directly call the service-specific method if available
+     if (typeof hbService.getVersion === 'function') {
+       const ver = await hbService.getVersion();
+       return res.json(ver);
+     }
+
+     // Fallback to stats
+     const stats = await hbService.getStats();
+     res.json({ version: stats?.data?.version || stats?.version || null, raw: stats });
+   } catch (error) {
+     console.error('❌ /api/status/homebridge-version failed:', error.message);
+     res.status(500).json({ error: 'Failed to fetch Homebridge version', message: error.message });
+   }
+ });
+
+ app.get('/api/status/server-information', statsCacheMiddleware, requireAuth, async (req, res) => {
+   try {
+     const hbService = serviceManager.getService('homebridge');
+     if (!hbService) {
+       return res.status(503).json({ error: 'Homebridge service not configured' });
+     }
+
+     if (typeof hbService.getServerInformation === 'function') {
+       const info = await hbService.getServerInformation();
+       return res.json(info);
+     }
+
+     // Fallback to health/status
+     const health = await serviceManager.getServiceHealth('homebridge');
+     res.json({ data: health && health.data ? health.data : null, raw: health });
+   } catch (error) {
+     console.error('❌ /api/status/server-information failed:', error.message);
+     res.status(500).json({ error: 'Failed to fetch server information', message: error.message });
+   }
+ });
+
+// Homebridge endpoints
+app.get('/api/homebridge/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
+  try {
+    const hbService = serviceManager.getService('homebridge');
+    if (!hbService) {
+      return res.status(503).json({ error: 'Homebridge service not configured', status: 'offline' });
+    }
+
+    const health = await serviceManager.getServiceHealth('homebridge');
+    console.log('✅ Homebridge status connection successful');
+    res.json(health);
+  } catch (error) {
+    console.error('❌ Homebridge status connection failed:', error.message);
+    res.status(500).json({ error: 'Failed to fetch Homebridge status', status: 'offline', message: error.message });
+  }
+});
+
+app.get('/api/homebridge/stats', statsCacheMiddleware, async (req, res) => {
+  try {
+    const hbService = serviceManager.getService('homebridge');
+    if (!hbService) {
+      return res.status(503).json({ error: 'Homebridge service not configured' });
+    }
+
+    const stats = await serviceManager.getServiceStats('homebridge');
+    console.log('✅ Homebridge stats connection successful');
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Homebridge stats connection failed:', error.message);
+    res.status(500).json({ error: 'Failed to fetch Homebridge stats', message: error.message });
+  }
+});
+
 // Alby Hub endpoints
 app.get('/api/albyhub/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {

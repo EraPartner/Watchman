@@ -10,6 +10,7 @@ import { AlbyHubService } from './AlbyHubService.js';
 import MacMiniService from './MacMiniService.js';
 import RouterService from './RouterService.js';
 import IpfsService from './IpfsService.js';
+import HomebridgeService from './HomebridgeService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -118,6 +119,32 @@ export default class ServiceManager {
       });
       this.services.set('philips', philipsService);
       
+      // Initialize Homebridge service (optional - requires HOMEBRIDGE_URL)
+      const homebridgeUrl = process.env.HOMEBRIDGE_URL || process.env.HOMEBRIDGE_API_URL || null;
+      if (homebridgeUrl) {
+        const homebridgeService = new HomebridgeService({
+          baseUrl: homebridgeUrl,
+          // Force allowed endpoints for Homebridge
+          statusPath: process.env.HOMEBRIDGE_STATUS_PATH || '/api/status/server-information',
+          versionPath: process.env.HOMEBRIDGE_VERSION_PATH || '/api/status/homebridge-version',
+           timeout: process.env.HOMEBRIDGE_TIMEOUT ? parseInt(process.env.HOMEBRIDGE_TIMEOUT) : undefined,
+           authToken: process.env.HOMEBRIDGE_AUTH_TOKEN || process.env.HOMEBRIDGE_TOKEN || null,
+           username: process.env.HOMEBRIDGE_USERNAME || process.env.HOMEBRIDGE_USER || null,
+           password: process.env.HOMEBRIDGE_PASSWORD || null
+         });
+         this.services.set('homebridge', homebridgeService);
+         // Try a background login now so the session/cookie is available for initial health checks
+         (async () => {
+           try {
+             const ok = await homebridgeService.login();
+             if (ok) console.log('✅ Homebridge background login successful');
+             else console.log('⚠️ Homebridge background login failed or returned non-OK');
+           } catch (e) {
+             console.warn('⚠️ Homebridge background login error:', e && e.message ? e.message : e);
+           }
+         })();
+       }
+
       // Initialize Mac Mini service (optional - requires MACMINI_HOST)
       const macminiService = new MacMiniService({
         host: process.env.MACMINI_HOST,
