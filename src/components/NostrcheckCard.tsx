@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { ExternalLink, Globe, Wifi, AlertTriangle } from 'lucide-react';
+import { Globe, Wifi, AlertTriangle } from 'lucide-react';
 import { ServerStatus } from '../types/server';
 import { useConfig } from '../hooks/use-config';
 import { ServerStatusBadge } from './ServerStatusBadge';
