@@ -317,6 +317,29 @@ class ApiClient {
     return this.request('/api/philips/stats');
   }
 
+  // Homebridge endpoints
+  async getHomebridgeStatus(): Promise<any> {
+    return this.request('/api/homebridge/status');
+  }
+
+  async getHomebridgeStats(): Promise<any> {
+    return this.request('/api/homebridge/stats');
+  }
+
+  // New /api/status/* endpoints
+  async getStatusHomebridge(): Promise<any> {
+    // Use the allowed server-information endpoint as the canonical status endpoint
+    return this.request('/api/status/server-information');
+  }
+
+  async getHomebridgeVersion(): Promise<any> {
+    return this.request('/api/status/homebridge-version');
+  }
+
+  async getHomebridgeServerInformation(): Promise<any> {
+    return this.request('/api/status/server-information');
+  }
+
   // Alby Hub endpoints
   async getAlbyStatus(): Promise<ServiceHealth> {
     return this.request('/api/albyhub/status');
@@ -338,6 +361,23 @@ class ApiClient {
   // Frontend configuration
   async getFrontendConfig(): Promise<FrontendConfig> {
     return this.request('/api/config/frontend');
+  }
+
+  // Authentication helpers
+  async login(username: string, password: string, remember = false): Promise<any> {
+    return this.request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, remember }),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  async logout(): Promise<any> {
+    return this.request('/api/auth/logout', { method: 'POST' });
+  }
+
+  async getAuthMe(): Promise<any> {
+    return this.request('/api/auth/me');
   }
 }
 

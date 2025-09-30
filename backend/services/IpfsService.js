@@ -38,7 +38,6 @@ export default class IpfsService {
     try {
       // Choose initial method: explicit method param -> forcePost -> default GET
       const firstMethod = method ? method : (this.forcePost ? 'POST' : 'GET');
-      if (!method && this.forcePost) console.info(`IPFS service: forcing POST-first requests due to IPFS_FORCE_POST`);
 
       let res = await doRequest(firstMethod);
 
