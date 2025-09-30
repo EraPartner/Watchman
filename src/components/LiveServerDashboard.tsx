@@ -16,6 +16,7 @@ import PhilipsBridgeCard from './PhilipsBridgeCard';
 import AlbyHubCard from './AlbyHubCard';
 import { MacMiniCard } from './MacMiniCard';
 import { NostrcheckCard } from './NostrcheckCard';
+import RouterCard from './RouterCard';
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -285,6 +286,9 @@ export const LiveServerDashboard = () => {
     <RoonCard key="roon" />,
     <PhilipsBridgeCard key="philips" />,
     <MacMiniCard key="macmini" />,
+    // Router hardware tiles: Beryl and Telenet (if configured in backend services/health)
+    <RouterCard key="beryl" name={'Beryl AX'} serviceKey={'beryl'} />,
+    <RouterCard key="telenet" name={'Telenet'} serviceKey={'telenet'} />,
   ];
 
   const softwareRows = chunk(softwareTiles, 3);
