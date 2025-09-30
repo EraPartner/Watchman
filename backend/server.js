@@ -690,6 +690,17 @@ app.get('/api/config/frontend', (req, res) => {
         webUrl: process.env.NOSTRCHECK_WEB_URL || null,
         enabled: (process.env.NOSTRCHECK_ENABLED || 'false').toLowerCase() === 'true',
         configured: !!process.env.NOSTRCHECK_RELAY_URL
+      },
+      // Expose configured routers (BERYL/TELENET) so frontend can show host/ports
+      beryl: {
+        host: process.env.BERYL_HOST || null,
+        ports: process.env.BERYL_PORTS ? String(process.env.BERYL_PORTS).split(/[ ,]+/).map(p => Number(p)).filter(Boolean) : [],
+        configured: !!process.env.BERYL_HOST
+      },
+      telenet: {
+        host: process.env.TELENET_HOST || null,
+        ports: process.env.TELENET_PORTS ? String(process.env.TELENET_PORTS).split(/[ ,]+/).map(p => Number(p)).filter(Boolean) : [],
+        configured: !!process.env.TELENET_HOST
       }
     },
     app: {

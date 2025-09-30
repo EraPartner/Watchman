@@ -8,6 +8,7 @@ import RoonService from './RoonService.js';
 import PhilipsBridgeService from './PhilipsBridgeService.js';
 import { AlbyHubService } from './AlbyHubService.js';
 import MacMiniService from './MacMiniService.js';
+import RouterService from './RouterService.js';
 
 export default class ServiceManager {
   constructor() {
@@ -125,7 +126,34 @@ export default class ServiceManager {
         authToken: process.env.ALBYHUB_TOKEN || null
       });
       this.services.set('albyhub', albyHubService);
-      
+
+      // Initialize Router services (Beryl, Telenet) from environment variables if configured
+      const berylHost = process.env.BERYL_HOST || process.env.ROUTER_BERYL_HOST || null;
+      const berylPorts = process.env.BERYL_PORTS || process.env.ROUTER_BERYL_PORTS || null;
+      if (berylHost) {
+        const berylService = new RouterService({
+          name: 'beryl',
+          host: berylHost,
+          ports: berylPorts ? String(berylPorts).split(/[ ,]+/).map(p => Number(p)).filter(Boolean) : [],
+          timeout: process.env.BERYL_TIMEOUT_MS ? parseInt(process.env.BERYL_TIMEOUT_MS) : 3000,
+          pingCount: process.env.BERYL_PING_COUNT ? parseInt(process.env.BERYL_PING_COUNT) : 1
+        });
+        this.services.set('beryl', berylService);
+      }
+
+      const telenetHost = process.env.TELENET_HOST || process.env.ROUTER_TELENET_HOST || null;
+      const telenetPorts = process.env.TELENET_PORTS || process.env.ROUTER_TELENET_PORTS || null;
+      if (telenetHost) {
+        const telenetService = new RouterService({
+          name: 'telenet',
+          host: telenetHost,
+          ports: telenetPorts ? String(telenetPorts).split(/[ ,]+/).map(p => Number(p)).filter(Boolean) : [],
+          timeout: process.env.TELENET_TIMEOUT_MS ? parseInt(process.env.TELENET_TIMEOUT_MS) : 3000,
+          pingCount: process.env.TELENET_PING_COUNT ? parseInt(process.env.TELENET_PING_COUNT) : 1
+        });
+        this.services.set('telenet', telenetService);
+      }
+
       this.initialized = true;
       console.log('✅ All services initialized successfully');
       
