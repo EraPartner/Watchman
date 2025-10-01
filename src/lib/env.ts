@@ -20,19 +20,18 @@ class EnvValidator {
   }
 
   private validateEnv(): Env {
-    const requiredVars = ['VITE_BACKEND_URL'];
-    const missing = requiredVars.filter(key => !import.meta.env[key]);
-
-    if (missing.length > 0) {
-      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-    }
-
-    // Validate URL format
-    const backendUrl = import.meta.env.VITE_BACKEND_URL;
-    try {
-      new URL(backendUrl);
-    } catch {
-      throw new Error(`VITE_BACKEND_URL must be a valid URL, got: ${backendUrl}`);
+    // VITE_BACKEND_URL is optional in development. If not provided, the client
+    // will use relative endpoints and rely on the dev server proxy.
+    const backendUrlRaw = import.meta.env.VITE_BACKEND_URL || '';
+    let backendUrl = '';
+    if (backendUrlRaw) {
+      try {
+        // Ensure it's a valid URL when provided
+        new URL(backendUrlRaw);
+        backendUrl = backendUrlRaw;
+      } catch {
+        throw new Error(`VITE_BACKEND_URL must be a valid URL when provided, got: ${backendUrlRaw}`);
+      }
     }
 
     return {

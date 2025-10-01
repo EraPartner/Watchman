@@ -172,11 +172,28 @@ export interface FrontendConfig {
 
 class ApiClient {
   private baseUrl: string;
+  private authToken: string | null = null;
   // Map to deduplicate concurrent identical requests
   private inFlightRequests: Map<string, Promise<any>> = new Map();
 
   constructor() {
-    this.baseUrl = env.getRequired('VITE_BACKEND_URL');
+    // Allow VITE_BACKEND_URL to be optional in development. If not set or empty,
+    // use relative paths so the Vite dev-server proxy handles /api calls and cookies
+    // are managed by the browser on the same origin.
+    const raw = env.get('VITE_BACKEND_URL') || '';
+    this.baseUrl = raw ? raw.replace(/\/+$/, '') : '';
+
+    // Restore persisted fallback auth token (if any) so Authorization header
+    // continues to be sent across page reloads in dev scenarios where cookies
+    // may not be available. Use a safe check for browser environment.
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = window.localStorage.getItem('watchman_auth_token');
+        if (saved) this.authToken = saved;
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
   }
 
   private makeRequestKey(url: string, options?: RequestInit) {
@@ -193,7 +210,9 @@ class ApiClient {
   }
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    // If baseUrl is empty, use relative endpoint so requests go to same-origin
+    // and benefit from the dev proxy and browser cookies.
+    const url = this.baseUrl ? `${this.baseUrl}${endpoint}` : endpoint;
 
     const key = this.makeRequestKey(url, options);
     if (this.inFlightRequests.has(key)) {
@@ -208,6 +227,14 @@ class ApiClient {
     // Merge headers safely
     const headers = Object.assign({ 'Content-Type': 'application/json' }, (options && options.headers) || {});
 
+    // If we have an in-memory auth token (returned by login), attach it as a Bearer
+    // Authorization header. This is a fallback for dev environments where cookies
+    // may not be persisted/sent. If the caller provided an Authorization header,
+    // do not overwrite it.
+    if (this.authToken && !(headers as any).Authorization) {
+      (headers as any).Authorization = `Bearer ${this.authToken}`;
+    }
+    
     const fetchOptions: RequestInit = Object.assign({}, options, {
       headers,
       credentials: 'include',
@@ -319,11 +346,13 @@ class ApiClient {
 
   // Homebridge endpoints
   async getHomebridgeStatus(): Promise<any> {
-    return this.request('/api/homebridge/status');
+    // Deprecated helper - route to allowed status endpoint
+    return this.request('/api/status/server-information');
   }
 
   async getHomebridgeStats(): Promise<any> {
-    return this.request('/api/homebridge/stats');
+    // Deprecated helper - route to allowed server-information endpoint
+    return this.request('/api/status/server-information');
   }
 
   // New /api/status/* endpoints
@@ -365,14 +394,43 @@ class ApiClient {
 
   // Authentication helpers
   async login(username: string, password: string, remember = false): Promise<any> {
-    return this.request('/api/auth/login', {
+    const res = await this.request('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password, remember }),
       headers: { 'Content-Type': 'application/json' }
     });
+
+    // If server returned a token in the response body, store it as a fallback
+    // auth token so future requests include an Authorization header when cookies
+    // are not available (dev/proxy scenarios).
+    try {
+      if (res && typeof res === 'object' && res.token) {
+        this.authToken = res.token;
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem('watchman_auth_token', res.token);
+          }
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return res;
   }
 
   async logout(): Promise<any> {
+    // Clear in-memory token as well as calling logout endpoint to clear cookie
+    this.authToken = null;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem('watchman_auth_token');
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
     return this.request('/api/auth/logout', { method: 'POST' });
   }
 

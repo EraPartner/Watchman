@@ -63,8 +63,7 @@ class HomebridgeService {
         let res = await fetch(url, {
           method: 'POST',
           headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'watchman-homebridge-check/1.0' },
-          body: JSON.stringify({ username: this.username, password: this.password }),
-          signal: undefined
+          body: JSON.stringify({ username: this.username, password: this.password })
         });
 
         // If JSON attempt appears to return HTML (login page), try form-encoded fallback
@@ -107,9 +106,9 @@ class HomebridgeService {
         }
 
         // Parse JSON body if possible
-        let body = null;
+        let body;
         try { body = text ? JSON.parse(text) : null; } catch (e) { body = null; }
-        if (!body) {
+        if (!body && res.json) {
           try { body = await res.json().catch(() => null); } catch (e) { body = null; }
         }
 
@@ -152,7 +151,7 @@ class HomebridgeService {
     const attemptFetch = async () => {
       const res = await fetch(url, { method: 'GET', headers: this.buildHeaders() });
       const text = await res.text().catch(() => '');
-      const ct = res.headers.get('content-type') || '';
+      const ct = (res.headers && res.headers.get) ? (res.headers.get('content-type') || '') : '';
 
       // Debug: short snippet
       try { console.debug('[HomebridgeService] GET', url, '->', res.status, res.statusText, 'ct=', ct, 'snippet=', String(text).slice(0,200)); } catch (e) {}
@@ -213,9 +212,8 @@ class HomebridgeService {
     try {
       const data = await this.makeRequest(this.statusPath);
       const responseTime = Date.now() - start;
-      const result = { status: 'online', responseTime, timestamp: new Date().toISOString(), data };
-      this.lastData = result;
-      return result;
+      this.lastData = { status: 'online', responseTime, timestamp: new Date().toISOString(), data };
+      return this.lastData;
     } catch (error) {
       return { status: 'offline', responseTime: Date.now() - start, error: error.message || String(error), lastData: this.lastData, timestamp: new Date().toISOString() };
     }
@@ -231,6 +229,49 @@ class HomebridgeService {
     try {
       const data = await this.makeRequest(this.versionPath);
       const responseTime = Date.now() - start;
-      let version = null;
-      if (data && typeof data === 'object') version = data.version || data.homebridgeVersion || data.homebridge_version || data.serverVersion || null;
-      else if (typeof data === 'string'
+
+      // Normalize different shapes into a simple { version, raw }
+      let version;
+      if (data && typeof data === 'object') version = data.version || data.homebridgeVersion || data.homebridge_version || data.serverVersion || (data.raw && data.raw.version) || null;
+      else if (typeof data === 'string') version = data;
+      return { version: version || null, raw: data, responseTime, timestamp: new Date().toISOString() };
+    } catch (err) {
+      return { error: err && err.message ? err.message : String(err), timestamp: new Date().toISOString() };
+    }
+  }
+
+  // Retrieve server information via allowed endpoint
+  async getServerInformation() {
+    if (!this.baseUrl) return { error: 'HOMEBRIDGE_URL not configured', timestamp: new Date().toISOString() };
+    const start = Date.now();
+    try {
+      const data = await this.makeRequest(this.statusPath);
+      const responseTime = Date.now() - start;
+
+      // Try to coerce common fields into a friendly object for the frontend
+      let normalized = data;
+      if (data && typeof data === 'object') {
+        // Some homebridge versions return { hostname, platform, homebridgeVersion, serverVersion, uptime }
+        const possible = {};
+        if (data.hostname) possible.hostname = data.hostname;
+        if (data.platform) possible.platform = data.platform;
+        if (data.homebridgeVersion) possible.homebridgeVersion = data.homebridgeVersion;
+        if (data.serverVersion) possible.serverVersion = data.serverVersion;
+        if (data.uptime) possible.uptime = data.uptime;
+
+        // If we collected any, use them; otherwise return the raw object
+        normalized = Object.keys(possible).length > 0 ? possible : data;
+      } else {
+        normalized = data;
+      }
+
+      const out = { data: normalized, raw: data, responseTime, timestamp: new Date().toISOString() };
+      this.lastData = out;
+      return out;
+    } catch (err) {
+      return { error: err && err.message ? err.message : String(err), timestamp: new Date().toISOString(), lastData: this.lastData };
+    }
+  }
+}
+
+export default HomebridgeService;
