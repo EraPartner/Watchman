@@ -369,6 +369,10 @@ class ApiClient {
     return this.request('/api/status/server-information');
   }
 
+  async getHomebridgeAccessories(): Promise<any> {
+    return this.request('/api/accessories');
+  }
+
   // Alby Hub endpoints
   async getAlbyStatus(): Promise<ServiceHealth> {
     return this.request('/api/albyhub/status');

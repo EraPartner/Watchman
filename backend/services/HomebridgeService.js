@@ -28,6 +28,9 @@ class HomebridgeService {
     this.loginInProgress = null;
 
     this.lastData = null;
+
+    // Accessories path (Homebridge may expose /accessories)
+    this.accessoriesPath = options.accessoriesPath || process.env.HOMEBRIDGE_ACCESSORIES_PATH || '/accessories';
   }
 
   buildHeaders() {
@@ -237,6 +240,24 @@ class HomebridgeService {
       return { version: version || null, raw: data, responseTime, timestamp: new Date().toISOString() };
     } catch (err) {
       return { error: err && err.message ? err.message : String(err), timestamp: new Date().toISOString() };
+    }
+  }
+
+  // Retrieve accessories list from Homebridge (allowed path)
+  async getAccessories() {
+    if (!this.baseUrl) return { error: 'HOMEBRIDGE_URL not configured', timestamp: new Date().toISOString() };
+    const start = Date.now();
+    try {
+      const data = await this.makeRequest(this.accessoriesPath);
+      const responseTime = Date.now() - start;
+
+      // Expecting an array of accessory objects. Normalize into { data: array, raw, responseTime, timestamp }
+      const arr = Array.isArray(data) ? data : (data && data.accessories && Array.isArray(data.accessories) ? data.accessories : []);
+      const out = { data: arr, raw: data, responseTime, timestamp: new Date().toISOString() };
+      this.lastData = out;
+      return out;
+    } catch (err) {
+      return { error: err && err.message ? err.message : String(err), timestamp: new Date().toISOString(), lastData: this.lastData };
     }
   }
 

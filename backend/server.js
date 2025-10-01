@@ -662,6 +662,27 @@ app.get('/api/homebridge/stats', statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// New: expose accessories endpoint
+app.get('/api/accessories', statsCacheMiddleware, requireAuth, async (req, res) => {
+  try {
+    const hbService = serviceManager.getService('homebridge');
+    if (!hbService) {
+      return res.status(503).json({ error: 'Homebridge service not configured' });
+    }
+
+    if (typeof hbService.getAccessories === 'function') {
+      const accessories = await hbService.getAccessories();
+      return res.json(accessories);
+    }
+
+    // Fallback: try to use getStats or getServerInformation if accessories not available
+    res.status(501).json({ error: 'Accessories endpoint not implemented for this Homebridge service' });
+  } catch (error) {
+    console.error('❌ /api/accessories failed:', error.message);
+    res.status(500).json({ error: 'Failed to fetch accessories', message: error.message });
+  }
+});
+
 // Alby Hub endpoints
 app.get('/api/albyhub/status', healthLimiter, healthCacheMiddleware, async (req, res) => {
   try {

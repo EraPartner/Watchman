@@ -1,15 +1,13 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Server, AlertCircle, ExternalLink } from 'lucide-react';
+import { Server, AlertCircle } from 'lucide-react';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../services/ApiClient';
 import { APP_CONFIG } from '../lib/constants';
-import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
 
 const HomebridgeCard: React.FC = () => {
-	// Only fetch server-information and version from the allowed API endpoints.
-	// These are the canonical sources: /api/status/server-information and /api/status/homebridge-version
+	// Fetch server-information from allowed API endpoint.
 	const serverInfoQuery = useQuery({
 		queryKey: ['homebridge', 'server-information'],
 		queryFn: () => apiClient.getHomebridgeServerInformation(),
@@ -17,42 +15,64 @@ const HomebridgeCard: React.FC = () => {
 		retry: 1,
 	});
 
+	// Fetch version from the allowed version endpoint (/api/status/homebridge-version)
 	const versionQuery = useQuery({
-		queryKey: ['homebridge', 'version'],
+		queryKey: ['homebridge', 'homebridge-version'],
 		queryFn: () => apiClient.getHomebridgeVersion(),
 		refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
 		retry: 1,
 	});
 
-	const loading = serverInfoQuery.isLoading || versionQuery.isLoading || serverInfoQuery.isFetching || versionQuery.isFetching;
+    // Fetch accessories list from backend /api/accessories
+    const accessoriesQuery = useQuery({
+        queryKey: ['homebridge', 'accessories'],
+        queryFn: () => apiClient.getHomebridgeAccessories(),
+        refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
+        retry: 1,
+    });
+
+	const loading = serverInfoQuery.isLoading || versionQuery.isLoading || accessoriesQuery.isLoading || serverInfoQuery.isFetching || versionQuery.isFetching || accessoriesQuery.isFetching;
 	const serverInfoResp = serverInfoQuery.data as any;
 	const versionResp = versionQuery.data as any;
+    const accessoriesResp = accessoriesQuery.data as any;
 
 	// Prefer react-query statuses: success = online, error = hasError
-	const isOnline = serverInfoQuery.isSuccess || versionQuery.isSuccess;
-	const hasError = serverInfoQuery.isError || versionQuery.isError;
+	const isOnline = serverInfoQuery.isSuccess || versionQuery.isSuccess || accessoriesQuery.isSuccess;
+	const hasError = serverInfoQuery.isError || versionQuery.isError || accessoriesQuery.isError;
 
-	// Query-level error messages (react-query stores thrown errors here)
+	// Query-level error messages
 	const serverQueryError = serverInfoQuery.isError ? (serverInfoQuery.error as any)?.message || String(serverInfoQuery.error) : null;
 	const versionQueryError = versionQuery.isError ? (versionQuery.error as any)?.message || String(versionQuery.error) : null;
-
-	// Combined error message to show in the UI (prefer query errors, then API-provided error fields)
+    const accessoriesQueryError = accessoriesQuery.isError ? (accessoriesQuery.error as any)?.message || String(accessoriesQuery.error) : null;
 	const errorMessage = serverQueryError || versionQueryError || serverInfoResp?.error || versionResp?.error || null;
+    const combinedError = errorMessage || accessoriesQueryError || null;
 
-	// Normalize server data for host extraction (support either resp.data or resp directly)
+	// Normalize server data (support either resp.data or resp directly)
 	const serverData = serverInfoResp && (serverInfoResp.data || serverInfoResp);
-	const hostValue = serverData && (serverData.hostname || serverData.host || serverData.url || serverData.baseUrl) || null;
-	let hostHref: string | null = null;
-	if (hostValue) {
-		try {
-			let base = hostValue as string;
-			if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
-			const u = new URL(base);
-			hostHref = u.toString();
-		} catch (err) {
-			hostHref = hostValue ? `http://${hostValue}` : null;
-		}
-	}
+
+    // Normalize accessories array (support resp.data or direct array)
+    const accessoriesArray: any[] = (() => {
+        if (!accessoriesResp) return [];
+        if (Array.isArray(accessoriesResp)) return accessoriesResp;
+        if (Array.isArray(accessoriesResp.data)) return accessoriesResp.data;
+        // Some backends may return { data: { accessories: [...] } }
+        if (accessoriesResp.data && Array.isArray(accessoriesResp.data.accessories)) return accessoriesResp.data.accessories;
+        return [];
+    })();
+
+    // Count online accessories: treat accessory as offline when instance.connectionFailedCount > 0
+    const totalAccessories = accessoriesArray.length;
+    const onlineAccessoriesCount = accessoriesArray.reduce((acc, a) => {
+        try {
+            const inst = a && a.instance;
+            if (!inst) return acc + 1; // if no instance info, assume online
+            const failed = inst.connectionFailedCount;
+            if (typeof failed === 'number') return (failed > 0) ? acc : acc + 1;
+            return acc + 1; // non-numeric => assume online
+        } catch (e) {
+            return acc;
+        }
+    }, 0);
 
 	// Helper to safely read nested fields from various shapes
 	const getFirst = (obj: any, paths: string[][]) => {
@@ -87,56 +107,31 @@ const HomebridgeCard: React.FC = () => {
 		return String(u);
 	};
 
-	// Helper to extract a readable version string from the version endpoint response
-	const versionDisplay = (() => {
-		const vr = versionResp;
-		if (!vr) return null;
-		if (typeof vr === 'object') {
-			// check common places
-			return vr.version || vr.homebridgeVersion || vr.homebridge_version || vr.serverVersion || getFirst(vr, [['raw','version'], ['raw','homebridgeVersion'], ['raw','homebridge_version'], ['raw','serverVersion']]) || null;
-		}
-		if (typeof vr === 'string') return vr;
-		return null;
-	})();
-
-	// Fallback: if the dedicated version endpoint didn't return a value, try serverData fields including nested shapes
-	const versionFinal =
-		versionDisplay || getFirst(serverData, [['homebridgeVersion'], ['serverVersion'], ['nodeVersion'], ['raw','version'], ['raw','nodeVersion']]) || 'N/A';
-
 	const uptimeValue = getFirst(serverData, [['uptime'], ['time','uptime'], ['raw','time','uptime']]);
 	const uptimeDisplay = uptimeValue ? formatUptime(uptimeValue) : 'N/A';
 	const platformDisplay = getFirst(serverData, [['platform'], ['os','platform'], ['raw','os','platform']]) || 'N/A';
-	const serverVersionDisplay = getFirst(serverData, [['serverVersion'], ['raw','serverVersion']]) || 'N/A';
 
-	// Helper to pretty-print server information safely, with uptime formatting
-	const renderServerInfo = () => {
-		const resp = serverInfoQuery.isSuccess ? serverData : null;
-		if (!resp) return 'N/A';
-		const data = resp;
-		if (!data) return 'N/A';
-		if (typeof data === 'string') return data;
-		if (typeof data === 'object') {
-			const parts: string[] = [];
-			const host = getFirst(data, [['hostname'], ['os','hostname'], ['raw','os','hostname']]);
-			if (host) parts.push(`host: ${host}`);
-			const platform = getFirst(data, [['platform'], ['os','platform'], ['raw','os','platform']]);
-			if (platform) parts.push(`platform: ${platform}`);
-			const hbVer = getFirst(data, [['homebridgeVersion'], ['raw','homebridgeVersion']]);
-			if (hbVer) parts.push(`hb: ${hbVer}`);
-			const srvVer = getFirst(data, [['serverVersion'], ['raw','serverVersion'], ['nodeVersion'], ['raw','nodeVersion']]);
-			if (srvVer) parts.push(`server: ${srvVer}`);
-			const up = getFirst(data, [['uptime'], ['time','uptime'], ['raw','time','uptime']]);
-			if (up) parts.push(`uptime: ${formatUptime(up)}`);
-			if (parts.length > 0) return parts.join(' · ');
-			try {
-				const json = JSON.stringify(data);
-				return json.length > 200 ? json.slice(0, 197) + '...' : json;
-			} catch (e) {
-				return 'Unknown';
-			}
+	// Extract installedVersion from the version endpoint response with safe fallbacks
+	const versionFinal = (() => {
+		const vr = versionResp;
+		if (!vr) {
+			// If version endpoint not available, try to find version in serverData/raw
+			const sd = serverData || serverInfoResp || null;
+			if (!sd) return 'N/A';
+			const sCandidate = (typeof sd === 'object' && sd.data) ? sd.data : sd;
+			return sCandidate?.installedVersion || sCandidate?.installed_version || sCandidate?.version || sCandidate?.homebridgeVersion || 'N/A';
 		}
+
+		// Normalize candidate (support resp.data or resp)
+		const candidate = (typeof vr === 'object' && vr.data) ? vr.data : vr;
+		// First look for installedVersion fields
+		const installed = candidate?.installedVersion || candidate?.installed_version || candidate?.installed || (candidate?.raw && (candidate.raw.installedVersion || candidate.raw.installed_version || candidate.raw.installed));
+		if (installed) return String(installed);
+		// Fall back to generic version keys
+		const generic = candidate?.version || candidate?.homebridgeVersion || candidate?.homebridge_version || (candidate?.raw && (candidate.raw.version || candidate.raw.homebridgeVersion || candidate.raw.homebridge_version));
+		if (generic) return String(generic);
 		return 'N/A';
-	};
+	})();
 
 	return (
 		<Card className="w-full">
@@ -149,76 +144,61 @@ const HomebridgeCard: React.FC = () => {
 			</CardHeader>
 			<CardContent className="space-y-4">
 				<div className="grid grid-cols-1 gap-4 text-sm">
-					<div className="space-y-1">
-						<div className="flex items-center gap-1 text-muted-foreground text-xs">
-							<Server className="h-3 w-3" />
-							Host
+					{/* Showing version (from installedVersion), uptime, platform, last seen */}
+				</div>
+
+				{(serverInfoQuery.isSuccess || versionQuery.isSuccess) && (
+					<div className="space-y-4">
+						<div className="flex items-center justify-between text-sm">
+							<div className="text-muted-foreground text-xs">Version</div>
+							<div className="font-medium">{versionFinal}</div>
 						</div>
+
+						<div className="flex items-center justify-between text-sm">
+							<div className="text-muted-foreground text-xs">Uptime</div>
+							<div className="font-medium">{uptimeDisplay}</div>
+						</div>
+
+						<div className="flex items-center justify-between text-sm">
+							<div className="text-muted-foreground text-xs">Platform</div>
+							<div className="font-medium">{platformDisplay}</div>
+						</div>
+
+						<div className="flex items-center justify-between text-sm">
+							<div className="text-muted-foreground text-xs">Last seen</div>
+							<div className="font-medium">
+								{new Date(serverInfoResp?.timestamp || versionResp?.timestamp || Date.now()).toLocaleTimeString()}
+							</div>
+						</div>
+					</div>
+				)}
+
+				{totalAccessories > 0 && (
+					<div className="flex items-center justify-between text-sm">
+						<div className="text-muted-foreground text-xs">Accessories</div>
 						<div className="font-medium">
-							{hostHref ? (
-								<button
-									onClick={() => openHref(buildHref(hostHref, true))}
-									className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
-									title={`Open ${hostValue} in new tab`}
-								>
-									<span className="truncate">{formatDisplayUrl(hostValue)}</span>
-									<ExternalLink className="h-3 w-3" />
-								</button>
-							) : (
-								hostValue || 'Unknown'
-							)}
-						</div>
+							{onlineAccessoriesCount} / {totalAccessories}
 						</div>
 					</div>
+				)}
 
-					{(serverInfoQuery.isSuccess || versionQuery.isSuccess) && (
-						<div className="space-y-4">
-							<div className="flex items-center justify-between text-sm">
-								<div className="text-muted-foreground text-xs">Version</div>
-								<div className="font-medium">{versionFinal}</div>
-							</div>
-
-							<div className="flex items-center justify-between text-sm">
-								<div className="text-muted-foreground text-xs">Server</div>
-								<div className="font-medium text-right break-words max-w-[45%]">{renderServerInfo()}</div>
-							</div>
-
-							<div className="flex items-center justify-between text-sm">
-								<div className="text-muted-foreground text-xs">Uptime</div>
-								<div className="font-medium">{uptimeDisplay}</div>
-							</div>
-
-							<div className="flex items-center justify-between text-sm">
-								<div className="text-muted-foreground text-xs">Platform</div>
-								<div className="font-medium">{platformDisplay}</div>
-							</div>
-
-							<div className="flex items-center justify-between text-sm">
-								<div className="text-muted-foreground text-xs">Last seen</div>
-								<div className="font-medium">
-									{new Date(serverInfoResp?.timestamp || versionResp?.timestamp || Date.now()).toLocaleTimeString()}
-								</div>
-							</div>
+				{!isOnline && !loading && (
+					<div className="flex flex-col items-center justify-center py-6 text-center">
+						<AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
+						<div className="text-sm text-muted-foreground mb-2">
+							{hasError ? 'Connection Error' : 'Homebridge is offline'}
 						</div>
-					)}
-
-					{!isOnline && !loading && (
-						<div className="flex flex-col items-center justify-center py-6 text-center">
-							<AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-							<div className="text-sm text-muted-foreground mb-2">
-								{hasError ? 'Connection Error' : 'Homebridge is offline'}
-							</div>
-							{errorMessage && (
-								<div className="text-xs text-red-500 max-w-full break-words">{errorMessage}</div>
-							)}
-						</div>
-					)}
-
-					<div className="text-xs text-muted-foreground text-center pt-3 border-t">
-						Last updated:{' '}
-						{new Date(serverInfoResp?.timestamp || versionResp?.timestamp || Date.now()).toLocaleTimeString()}
+						{combinedError && (
+							<div className="text-xs text-red-500 max-w-full break-words">{combinedError}</div>
+						)}
 					</div>
-				</CardContent>
+				)}
+
+				<div className="text-xs text-muted-foreground text-center pt-3 border-t">
+					Last updated:{' '}
+					{new Date(serverInfoResp?.timestamp || versionResp?.timestamp || Date.now()).toLocaleTimeString()}
+				</div>
+			</CardContent>
 		</Card>
 	);
 };
