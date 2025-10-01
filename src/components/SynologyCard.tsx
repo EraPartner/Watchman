@@ -210,7 +210,6 @@ const SynologyCard: React.FC = () => {
           </div>
         )}
 
-        <div className="text-xs text-muted-foreground text-center pt-3 border-t">Last updated: {lastUpdate.toLocaleTimeString()}</div>
       </CardContent>
     </Card>
   );

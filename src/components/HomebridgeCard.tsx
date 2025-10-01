@@ -50,25 +50,40 @@ const HomebridgeCard: React.FC = () => {
 	// Normalize server data (support either resp.data or resp directly)
 	const serverData = serverInfoResp && (serverInfoResp.data || serverInfoResp);
 
-    // Normalize accessories array (support resp.data or direct array)
-    const accessoriesArray: any[] = (() => {
+	// Extract services from the /api/accessories response. Each element in the returned
+	// array represents a service (aid/iid). Support common wrapper shapes like
+	// { data: [...] }, { accessories: [...] } or { services: [...] }.
+	const servicesArray: any[] = (() => {
         if (!accessoriesResp) return [];
-        if (Array.isArray(accessoriesResp)) return accessoriesResp;
-        if (Array.isArray(accessoriesResp.data)) return accessoriesResp.data;
-        // Some backends may return { data: { accessories: [...] } }
-        if (accessoriesResp.data && Array.isArray(accessoriesResp.data.accessories)) return accessoriesResp.data.accessories;
-        return [];
+
+        const tryExtract = (obj: any): any[] | null => {
+            if (!obj) return null;
+            if (Array.isArray(obj)) return obj;
+            if (obj.services && Array.isArray(obj.services)) return obj.services;
+            if (obj.accessories && Array.isArray(obj.accessories)) return obj.accessories;
+            if (obj.data && Array.isArray(obj.data)) return obj.data;
+            if (obj.items && Array.isArray(obj.items)) return obj.items;
+            if (obj.raw && Array.isArray(obj.raw)) return obj.raw;
+            if (obj.data && typeof obj.data === 'object') {
+                if (Array.isArray(obj.data.services)) return obj.data.services;
+                if (Array.isArray(obj.data.accessories)) return obj.data.accessories;
+            }
+            return null;
+        };
+
+        return tryExtract(accessoriesResp) || tryExtract(accessoriesResp.data) || tryExtract(accessoriesResp.raw) || [];
     })();
 
-    // Count online accessories: treat accessory as offline when instance.connectionFailedCount > 0
-    const totalAccessories = accessoriesArray.length;
-    const onlineAccessoriesCount = accessoriesArray.reduce((acc, a) => {
+    // Count total services and online services. Treat a service as offline when
+    // instance.connectionFailedCount > 0. If instance info is absent, assume online.
+    const totalServices = servicesArray.length;
+    const onlineServicesCount = servicesArray.reduce((acc, s) => {
         try {
-            const inst = a && a.instance;
-            if (!inst) return acc + 1; // if no instance info, assume online
+            const inst = s && s.instance;
+            if (!inst) return acc + 1;
             const failed = inst.connectionFailedCount;
-            if (typeof failed === 'number') return (failed > 0) ? acc : acc + 1;
-            return acc + 1; // non-numeric => assume online
+            if (typeof failed === 'number') return failed > 0 ? acc : acc + 1;
+            return acc + 1;
         } catch (e) {
             return acc;
         }
@@ -109,7 +124,6 @@ const HomebridgeCard: React.FC = () => {
 
 	const uptimeValue = getFirst(serverData, [['uptime'], ['time','uptime'], ['raw','time','uptime']]);
 	const uptimeDisplay = uptimeValue ? formatUptime(uptimeValue) : 'N/A';
-	const platformDisplay = getFirst(serverData, [['platform'], ['os','platform'], ['raw','os','platform']]) || 'N/A';
 
 	// Extract installedVersion from the version endpoint response with safe fallbacks
 	const versionFinal = (() => {
@@ -160,11 +174,6 @@ const HomebridgeCard: React.FC = () => {
 						</div>
 
 						<div className="flex items-center justify-between text-sm">
-							<div className="text-muted-foreground text-xs">Platform</div>
-							<div className="font-medium">{platformDisplay}</div>
-						</div>
-
-						<div className="flex items-center justify-between text-sm">
 							<div className="text-muted-foreground text-xs">Last seen</div>
 							<div className="font-medium">
 								{new Date(serverInfoResp?.timestamp || versionResp?.timestamp || Date.now()).toLocaleTimeString()}
@@ -173,14 +182,6 @@ const HomebridgeCard: React.FC = () => {
 					</div>
 				)}
 
-				{totalAccessories > 0 && (
-					<div className="flex items-center justify-between text-sm">
-						<div className="text-muted-foreground text-xs">Accessories</div>
-						<div className="font-medium">
-							{onlineAccessoriesCount} / {totalAccessories}
-						</div>
-					</div>
-				)}
 
 				{!isOnline && !loading && (
 					<div className="flex flex-col items-center justify-center py-6 text-center">
@@ -194,10 +195,6 @@ const HomebridgeCard: React.FC = () => {
 					</div>
 				)}
 
-				<div className="text-xs text-muted-foreground text-center pt-3 border-t">
-					Last updated:{' '}
-					{new Date(serverInfoResp?.timestamp || versionResp?.timestamp || Date.now()).toLocaleTimeString()}
-				</div>
 			</CardContent>
 		</Card>
 	);

@@ -146,9 +146,6 @@ const RoonCard: React.FC = () => {
           </div>
         )}
 
-        <div className="text-xs text-muted-foreground text-center pt-3 border-t">
-          Last updated: {new Date(status?.timestamp || stats?.timestamp || Date.now()).toLocaleTimeString()}
-        </div>
       </CardContent>
     </Card>
   );
