@@ -276,9 +276,17 @@ export const LiveServerDashboard = () => {
   // Other software tiles
   softwareTiles.push(<BitcoinCard key="bitcoin" />);
   softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
-  softwareTiles.push(<IpfsCard key="ipfs" />);
-  // Homebridge is considered a software service (UI/API) so include it with software tiles
-  softwareTiles.push(<HomebridgeCard key="homebridge" />);
+  // Stack IPFS and Homebridge vertically so they occupy the same column similar to Nostr/Alby
+  softwareTiles.push(
+    <div key="ipfs-homebridge-stacked" className="h-full flex flex-col gap-4">
+      <div className="flex-1 min-h-0">
+        <IpfsCard />
+      </div>
+      <div className="flex-1 min-h-0">
+        <HomebridgeCard />
+      </div>
+    </div>
+  );
 
   // Nostrcheck / local Nostr relay tile - use the frontend config exposed by the backend
   const nostrCfg = frontendCfg?.services?.nostrcheck as any | undefined;
