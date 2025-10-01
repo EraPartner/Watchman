@@ -33,7 +33,10 @@ if (process.env.NODE_ENV === 'production' && (!FRONTEND_URL || FRONTEND_URL === 
 // Cookie defaults
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  // Only mark secure when running in production AND the frontend origin uses https.
+  // This prevents cookies from being flagged secure for local HTTP dev (which
+  // would prevent the browser from setting them), even if NODE_ENV was set to 'production'.
+  secure: (process.env.NODE_ENV === 'production') && (/^https:/i.test(FRONTEND_URL || '')),
   sameSite: 'lax',
   path: '/',
 };
@@ -103,7 +106,10 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     issueCsrfToken(res);
 
     // Also return a safe minimal user object
-    res.json({ success: true, user: { username } });
+    // Return token in JSON body as a convenience fallback for clients that
+    // cannot persist or send cookies (e.g. certain dev setups). The cookie is
+    // still the primary mechanism.
+    res.json({ success: true, user: { username }, token });
   } catch (error) {
     console.error('❌ Login error:', error && error.message ? error.message : error);
     res.status(500).json({ error: 'Internal server error' });

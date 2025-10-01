@@ -1,5 +1,6 @@
 // Minimal client-side auth hook that uses the backend cookie-based auth endpoints.
 import { useState, useEffect, useCallback } from 'react';
+import { apiClient } from '../services/ApiClient';
 
 type User = { username: string } | null;
 
@@ -13,23 +14,11 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/auth/me', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      if (!res.ok) {
+      const body = await apiClient.getAuthMe().catch(() => null);
+      if (!body || !body.authenticated) {
         setUser(null);
-        setLoading(false);
-        return;
-      }
-      const body = await res.json();
-      if (body && body.authenticated) {
-        setUser(body.user || { username: body.user?.username || 'unknown' });
       } else {
-        setUser(null);
+        setUser(body.user || { username: body.user?.username || 'unknown' });
       }
     } catch (err: any) {
       console.error('Failed to fetch /api/auth/me', err);
@@ -48,26 +37,15 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ username, password, remember })
-      });
-
-      const body = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
+      const body = await apiClient.login(username, password, remember).catch((e) => ({ error: String(e) }));
+      if (!body || body.error) {
         setError(body?.error || 'Login failed');
         setUser(null);
         setLoading(false);
         return { success: false, error: body?.error || 'Login failed' };
       }
 
-      // Success - call /api/auth/me to refresh client state (server sets cookie)
+      // Use apiClient.getAuthMe to refresh state (this will use cookie or fallback token)
       await fetchMe();
       return { success: true, user: body?.user || null };
     } catch (err: any) {
@@ -85,14 +63,9 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' }
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body?.error || 'Logout failed');
+      const res = await apiClient.logout();
+      if (res && res.error) {
+        setError(res.error || 'Logout failed');
         return { success: false };
       }
       setUser(null);
