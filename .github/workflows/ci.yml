@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch: {}
+
+jobs:
+  smoke-test:
+    name: Backend smoke test
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install backend dependencies
+        run: npm run backend:install
+
+      - name: Ensure port 3001 is free (CI safety)
+        shell: bash
+        run: |
+          if lsof -iTCP:3001 -sTCP:LISTEN -t >/dev/null 2>&1; then
+            echo "Port 3001 is in use on runner; killing processes occupying port 3001"
+            lsof -iTCP:3001 -sTCP:LISTEN -t | xargs -r kill -9 || true
+          else
+            echo "Port 3001 is free"
+          fi
+
+      - name: Start backend in background for smoke tests
+        shell: bash
+        run: |
+          cd backend && npm start > ../backend-start.log 2>&1 &
+          echo $! > ../watchman_backend.pid
+          echo "Started backend with PID $(cat ../watchman_backend.pid)"
+
+      - name: Wait for backend /health to become available
+        shell: bash
+        run: |
+          set -eux
+          echo "Waiting for backend health endpoint at http://localhost:3001/health"
+          for i in $(seq 1 60); do
+            if curl -sSf http://localhost:3001/health >/dev/null 2>&1; then
+              echo "Backend is healthy after ${i}s"
+              break
+            fi
+            echo "Waiting for backend... (${i}/60)"
+            sleep 1
+          done
+          if ! curl -sSf http://localhost:3001/health >/dev/null 2>&1; then
+            echo "Backend did not become healthy in time" >&2
+            if [ -f backend-start.log ]; then
+              echo "--- backend log ---"
+              tail -n +1 backend-start.log || true
+              echo "--- end backend log ---"
+            fi
+            exit 1
+          fi
+
+      - name: Upload backend-start.log artifact (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-start-log
+          path: backend-start.log
+
+      - name: Cleanup backend process
+        if: always()
+        shell: bash
+        run: |
+          if [ -f watchman_backend.pid ]; then
+            echo "Killing backend pid $(cat watchman_backend.pid)"
+            kill $(cat watchman_backend.pid) || true
+            rm -f watchman_backend.pid
+          fi
+          if lsof -iTCP:3001 -sTCP:LISTEN -t >/dev/null 2>&1; then
+            echo "Force killing any remaining processes on port 3001"
+            lsof -iTCP:3001 -sTCP:LISTEN -t | xargs -r kill -9 || true
+          fi
+
+  build:
+    name: Lint / Test / Build
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Run lint, format-check and typecheck
+        run: npm run ci
+
+      - name: Run unit tests
+        run: npm test --if-present
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Upload frontend build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
