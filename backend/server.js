@@ -15,6 +15,9 @@ import { issueCsrfToken, verifyCsrf } from './middleware/csrf.js';
 import FailedLoginStore from './services/FailedLoginStore.js';
 import RefreshTokenStore from './services/RefreshTokenStore.js';
 import { requireFields, requireBoolean, requireString } from './middleware/validation.js';
+import { exec as execCb } from 'child_process';
+import { promisify } from 'util';
+const exec = promisify(execCb);
 
 // Load environment variables
 dotenv.config({path:'.env.local'});
@@ -897,6 +900,133 @@ app.get('/api/config/frontend', (req, res) => {
       version: '1.0.0'
     }
   });
+});
+
+// Route: ARP / neighbor lookup for router services
+// Returns: { count: number, hosts: Array<{ ip: string, mac?: string, iface?: string }> , raw?: string }
+app.get('/api/router/arp', healthLimiter, async (req, res) => {
+  try {
+    const serviceName = typeof req.query.service === 'string' ? req.query.service : null;
+    if (!serviceName) return res.status(400).json({ error: 'Missing service query param (e.g. ?service=beryl)' });
+
+    const svc = serviceManager && typeof serviceManager.getService === 'function' ? serviceManager.getService(serviceName) : null;
+    if (!svc) return res.status(404).json({ error: `Service '${serviceName}' not found` });
+
+    const host = svc.host || null;
+    if (!host) return res.status(400).json({ error: `Service '${serviceName}' does not have a configured host` });
+
+    // Choose platform-appropriate command
+    const platform = process.platform;
+    const cmd = platform === 'linux' ? 'ip neigh' : 'arp -a';
+
+    // Execute with a short timeout
+    const { stdout } = await exec(cmd, { timeout: 5000 }).catch(err => ({ stdout: (err && err.stdout) ? String(err.stdout) : '' }));
+    const out = String(stdout || '');
+
+    const hostsMap = new Map();
+
+    if (platform === 'linux') {
+      // Parse `ip neigh` lines like: "192.168.1.10 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE"
+      const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        // ignore failed/incomplete entries
+        if (/\b(INCOMPLETE|FAILED)\b/i.test(line)) continue;
+        const m = line.match(/^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+)(?:.*lladdr\s+([0-9a-f:]{5,}))?(?:.*\b(REACHABLE|STALE|DELAY|PERMANENT|REACHABLE)\b)?/i);
+        if (m) {
+          const ip = m[1];
+          const iface = m[2] || null;
+          const mac = m[3] || null;
+          if (ip && !hostsMap.has(ip)) hostsMap.set(ip, { ip, mac, iface });
+        }
+      }
+    } else {
+      // macOS / BSD-style `arp -a`, lines like: 
+      // ? (192.168.1.5) at aa:bb:cc:dd:ee:ff on en0 ifscope [ethernet]
+      const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        // skip incomplete entries
+        if (/incomplete/i.test(line)) continue;
+        const m = line.match(/\(?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)?\s+at\s+([0-9a-f:]{5,})\s+on\s+(\S+)/i);
+        if (m) {
+          const ip = m[1];
+          const mac = m[2] || null;
+          const iface = m[3] || null;
+          if (ip && !hostsMap.has(ip)) hostsMap.set(ip, { ip, mac, iface });
+        } else {
+          // Fallback: try to extract e.g. "hostname (192.168.1.2) at ..."
+          const alt = line.match(/\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-f:]{5,})/i);
+          if (alt) {
+            const ip = alt[1];
+            const mac = alt[2] || null;
+            if (ip && !hostsMap.has(ip)) hostsMap.set(ip, { ip, mac, iface: null });
+          }
+        }
+      }
+    }
+
+    const hosts = Array.from(hostsMap.values());
+
+    // Exclude multicast and link-local addresses helper
+    const isUnicast = (ip) => {
+      try {
+        if (!ip || typeof ip !== 'string') return false;
+        const parts = ip.split('.').map(Number);
+        if (parts.length !== 4 || parts.some(isNaN)) return false;
+        // Multicast 224.0.0.0/4
+        if (parts[0] >= 224 && parts[0] <= 239) return false;
+        // Link-local 169.254.0.0/16
+        if (parts[0] === 169 && parts[1] === 254) return false;
+        return true;
+      } catch (e) { return false; }
+    };
+
+    // Determine LAN hosts relevant to the requested router service dynamically.
+    // Strategy:
+    // 1) If the router's configured host appears in the ARP table, use its iface
+    //    and select other hosts with the same iface.
+    // 2) If not found, fallback to prefix matching (strict /24 first, then /16).
+    // 3) If no LAN candidates found, return an empty lan list (safer than including multicast).
+    const svcIp = host; // the configured service host
+    let lanHosts = [];
+
+    if (svcIp) {
+      // Try to find a direct ARP entry for the router host to get iface
+      const svcEntry = hosts.find(h => h.ip === svcIp);
+      if (svcEntry && svcEntry.iface) {
+        lanHosts = hosts.filter(h => h.iface === svcEntry.iface && isUnicast(h.ip));
+      } else {
+        // Fallback: try /24 prefix
+        const octets = svcIp.split('.');
+        if (octets.length === 4) {
+          const p24 = `${octets[0]}.${octets[1]}.${octets[2]}.`;
+          lanHosts = hosts.filter(h => String(h.ip).startsWith(p24) && isUnicast(h.ip));
+          if (lanHosts.length === 0) {
+            // Try /16
+            const p16 = `${octets[0]}.${octets[1]}.`;
+            lanHosts = hosts.filter(h => String(h.ip).startsWith(p16) && isUnicast(h.ip));
+          }
+        }
+      }
+    }
+
+    // Final fallback: if still empty, return empty LAN list (avoid including multicast/remote nets)
+    if (!lanHosts || lanHosts.length === 0) lanHosts = [];
+
+    // Return both full hosts and lan-specific subset plus a small note about filtering
+    res.json({
+      count: hosts.length,
+      hosts,
+      lan: {
+        count: lanHosts.length,
+        hosts: lanHosts
+      },
+      note: svcIp ? (lanHosts.length > 0 ? `Filtered by iface or prefix for ${svcIp}` : `No LAN hosts matched for ${svcIp}`) : 'No service host provided',
+      raw: out.substring(0, 10000)
+    });
+  } catch (error) {
+    console.error('❌ ARP lookup failed:', error && error.message ? error.message : error);
+    res.status(500).json({ error: 'Failed to run ARP lookup', message: error && error.message ? error.message : String(error) });
+  }
 });
 
 // 404 handler

@@ -396,6 +396,18 @@ class ApiClient {
     return this.request('/api/config/frontend');
   }
 
+  // Router ARP lookup
+  async getRouterArp(serviceName: string): Promise<{
+    count: number;
+    hosts: Array<{ ip: string; mac?: string; iface?: string }>;
+    lan?: { count: number; hosts: Array<{ ip: string; mac?: string; iface?: string }> };
+    note?: string;
+    raw?: string;
+  }> {
+    const endpoint = `/api/router/arp?service=${encodeURIComponent(String(serviceName))}`;
+    return this.request(endpoint);
+  }
+
   // Authentication helpers
   async login(username: string, password: string, remember = false): Promise<any> {
     const res = await this.request('/api/auth/login', {
@@ -408,11 +420,13 @@ class ApiClient {
     // auth token so future requests include an Authorization header when cookies
     // are not available (dev/proxy scenarios).
     try {
-      if (res && typeof res === 'object' && res.token) {
-        this.authToken = res.token;
+      const r = res as any;
+      const token = r && typeof r === 'object' && ('token' in r) ? (r as any).token : null;
+      if (token) {
+        this.authToken = String(token);
         try {
           if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem('watchman_auth_token', res.token);
+            window.localStorage.setItem('watchman_auth_token', String(token));
           }
         } catch (e) {
           // ignore storage errors

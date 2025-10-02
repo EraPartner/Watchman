@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { Server, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
@@ -21,6 +21,7 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
     retry: 1,
   });
 
+  // Frontend configuration query (declare early so dependent hooks can use it)
   const frontendCfgQuery = useQuery({
     queryKey: ['frontend','config'],
     queryFn: () => apiClient.getFrontendConfig(),
@@ -28,7 +29,74 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
     retry: 1,
   });
 
+  // Decide whether ARP lookup should be enabled (only if serviceKey and a host is known)
+  const arpEnabled = !!serviceKey && Boolean(
+    (healthQuery.data && (healthQuery.data.services || {})[serviceKey] && (healthQuery.data.services as Record<string, any>)[serviceKey]?.host) ||
+    (frontendCfgQuery && (frontendCfgQuery.data as any)?.services?.[serviceKey]?.host)
+  );
+
+  // ARP lookup for connected hosts on the router
+  const arpQuery = useQuery({
+    queryKey: ['router','arp', serviceKey],
+    queryFn: async () => {
+      // First try the high-level apiClient if available
+      try {
+        if (apiClient && typeof (apiClient as any).getRouterArp === 'function') {
+          return await (apiClient as any).getRouterArp(serviceKey);
+        }
+      } catch (err) {
+        // swallow and try fallback
+        console.debug('RouterCard: apiClient.getRouterArp threw, falling back to fetch:', err);
+      }
+
+      // Fallback: directly fetch the backend endpoint so the UI stays functional
+      const url = `/api/router/arp?service=${encodeURIComponent(String(serviceKey))}`;
+      const resp = await fetch(url, { credentials: 'include' });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`ARP fetch failed: ${resp.status} ${resp.statusText} ${text}`);
+      }
+      return resp.json();
+    },
+    refetchInterval: 30000,
+    retry: 1,
+    // only run if a host is configured (prevents spurious calls)
+    enabled: arpEnabled
+  });
+
+  // Diagnostic: log apiClient shape once to help debug HMR/module issues
+  useEffect(() => {
+    try {
+      console.debug('RouterCard: apiClient type:', typeof apiClient, 'has getRouterArp:', !!(apiClient as any)?.getRouterArp);
+      if (apiClient) console.debug('RouterCard: apiClient keys:', Object.keys(apiClient as any));
+    } catch (e) {
+      console.debug('RouterCard: apiClient diagnostic error', e);
+    }
+  }, []);
+
   const serviceObj = healthQuery.data?.services ? (healthQuery.data.services as Record<string, any>)[serviceKey] : null;
+
+  const selectedArp = (arpQuery.data && (arpQuery.data.lan && Array.isArray((arpQuery.data.lan as any).hosts) && (arpQuery.data.lan as any).hosts.length > 0))
+    ? (arpQuery.data.lan as any)
+    : arpQuery.data || null;
+  const connectedCount = selectedArp ? (selectedArp.count ?? null) : null;
+  const connectedHosts = selectedArp?.hosts ?? [];
+  const arpLoading = arpQuery.isLoading || arpQuery.isFetching;
+  const totalArpCount = arpQuery.data ? (arpQuery.data.count ?? null) : null;
+  const totalArpHosts = arpQuery.data?.hosts ?? [];
+  const arpNote = arpQuery.data?.note ?? null;
+  const arpRaw = arpQuery.data?.raw ?? null;
+  const [showRaw, setShowRaw] = React.useState(false);
+
+  // Robust arp error extraction
+  let arpError: string | null = null;
+  if (arpQuery.error) {
+    const e = arpQuery.error as any;
+    if (e instanceof Error && e.message) arpError = e.message;
+    else if (e && typeof e === 'object') arpError = String(e.message || e.error || JSON.stringify(e));
+    else arpError = String(e);
+    console.debug('RouterCard: ARP error for', serviceKey, arpError);
+  }
 
   const status = serviceObj ? (serviceObj.status as string) : (healthQuery.isLoading ? 'loading' : 'not_configured');
   const responseTime = serviceObj?.responseTime ?? serviceObj?.response_time ?? null;
@@ -85,7 +153,9 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
   const onRetry = useCallback(() => {
     healthQuery.refetch();
     frontendCfgQuery.refetch();
-  }, [healthQuery, frontendCfgQuery]);
+    // also retry ARP query instantly
+    arpQuery.refetch?.();
+  }, [healthQuery, frontendCfgQuery, arpQuery]);
 
   const isOnline = status === 'online';
   const hasError = status === 'warning' || status === 'error' || status === 'not_configured';
@@ -149,6 +219,50 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
               )}
             </div>
           </div>
+
+          {/* Connected devices (ARP) */}
+          <div className="flex items-center justify-between mt-2">
+            <div className="text-xs text-muted-foreground">Connected</div>
+            <div className="text-sm font-medium">
+              {arpLoading ? (
+                <span className="text-muted-foreground">Scanning...</span>
+              ) : arpError ? (
+                <span className="text-red-600">Error</span>
+              ) : (connectedCount !== null ? (
+                // If we have both total and lan-filtered counts, show both for clarity
+                totalArpCount !== null && totalArpCount !== connectedCount ? (
+                  `${connectedCount} device${connectedCount === 1 ? '' : 's'} (LAN of ${totalArpCount})`
+                ) : (
+                  `${connectedCount} device${connectedCount === 1 ? '' : 's'}`
+                )
+              ) : 'N/A')}
+            </div>
+          </div>
+
+          {arpNote && (
+            <div className="mt-1 text-xs text-muted-foreground">{arpNote}</div>
+          )}
+
+          {/* Small control to view raw ARP output when debugging */}
+          {arpRaw && (
+            <div className="mt-1">
+              <button onClick={() => setShowRaw(s => !s)} className="text-xs text-muted-foreground hover:underline">{showRaw ? 'Hide raw' : 'Show raw'}</button>
+              {showRaw && (
+                <pre className="mt-1 text-xs text-muted-foreground bg-gray-50 p-2 rounded max-h-40 overflow-auto">{arpRaw}</pre>
+              )}
+            </div>
+          )}
+
+          {/* Display ARP error message for debugging/visibility */}
+          {arpError && (
+            <div className="mt-1 text-xs text-red-600 truncate" title={arpError}>{arpError}</div>
+          )}
+
+          {connectedHosts && connectedHosts.length > 0 && (
+            <div className="text-xs text-muted-foreground mt-1">
+              {connectedHosts.slice(0,3).map(h => h.ip).join(', ')}{connectedHosts.length > 3 ? ` (+${connectedHosts.length - 3} more)` : ''}
+            </div>
+          )}
 
           {lastCheck && (
             <div className="text-xs text-muted-foreground mt-2">Last: {new Date(lastCheck).toLocaleString()}</div>
