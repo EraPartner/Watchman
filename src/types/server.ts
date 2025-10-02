@@ -1,14 +1,14 @@
-export type ServerStatus = 'online' | 'offline' | 'warning' | 'maintenance';
+export type ServerStatus = "online" | "offline" | "warning" | "maintenance";
 
-export type ServerType = 
-  | 'bitcoin' 
-  | 'network' 
-  | 'torrent' 
-  | 'storage' 
-  | 'iot' 
-  | 'proxy' 
-  | 'wallet'
-  | 'tor';
+export type ServerType =
+  | "bitcoin"
+  | "network"
+  | "torrent"
+  | "storage"
+  | "iot"
+  | "proxy"
+  | "wallet"
+  | "tor";
 
 export interface ServerStats {
   uptime?: string;
@@ -57,12 +57,12 @@ export interface TorServerStats extends ServerStats {
   version?: string;
   nickname?: string;
   fingerprint: string;
-  relayType: 'relay' | 'exit' | 'bridge' | 'client';
+  relayType: "relay" | "exit" | "bridge" | "client";
   bandwidth: {
-    current: number;    // KB/s
-    average: number;    // KB/s
-    burst: number;      // KB/s
-    observed?: number;  // KB/s - Optional to match API response
+    current: number; // KB/s
+    average: number; // KB/s
+    burst: number; // KB/s
+    observed?: number; // KB/s - Optional to match API response
   };
   connections: {
     current: number;
@@ -72,7 +72,7 @@ export interface TorServerStats extends ServerStats {
     active: number;
     total: number;
   };
-  flags: string[];      // Like ['Fast', 'Guard', 'HSDir', 'Running', 'Stable', 'V2Dir', 'Valid']
+  flags: string[]; // Like ['Fast', 'Guard', 'HSDir', 'Running', 'Stable', 'V2Dir', 'Valid']
   consensusWeight?: number;
   exitPolicy?: string;
   hibernating?: boolean;
@@ -86,6 +86,6 @@ export interface TorServerStats extends ServerStats {
 }
 
 export interface ServerWithService extends Server {
-  serviceType?: 'adguard' | 'synology' | 'qbittorrent' | 'bitcoin' | 'tor';
+  serviceType?: "adguard" | "synology" | "qbittorrent" | "bitcoin" | "tor";
   serviceStats?: AdGuardServerStats | TorServerStats | ServerStats;
 }

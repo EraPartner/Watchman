@@ -1,11 +1,11 @@
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig, loadEnv } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
-  const env = loadEnv(mode, process.cwd(), '');
+  const env = loadEnv(mode, process.cwd(), "");
 
   return {
     plugins: [
@@ -14,11 +14,12 @@ export default defineConfig(({ mode }) => {
         fastRefresh: true,
         // Remove React DevTools in production
         babel: {
-          plugins: mode === 'production' ? [
-            ['transform-react-remove-prop-types', { removeImport: true }]
-          ] : []
-        }
-      })
+          plugins:
+            mode === "production"
+              ? [["transform-react-remove-prop-types", { removeImport: true }]]
+              : [],
+        },
+      }),
     ],
     resolve: {
       alias: {
@@ -35,26 +36,27 @@ export default defineConfig(({ mode }) => {
       },
       // Proxy API calls to backend server
       proxy: {
-        '/api': {
-          target: 'http://localhost:3001',
+        "/api": {
+          target: "http://localhost:3001",
           changeOrigin: true,
           secure: false,
         },
-        '/ws': {
-          target: 'http://localhost:3001',
+        "/ws": {
+          target: "http://localhost:3001",
           ws: true,
           changeOrigin: true,
-        }
-      }
+        },
+      },
     },
     build: {
       // Remove console logs in production
-      minify: 'terser',
+      minify: "terser",
       terserOptions: {
         compress: {
-          drop_console: mode === 'production',
+          drop_console: mode === "production",
           drop_debugger: true,
-          pure_funcs: mode === 'production' ? ['console.log', 'console.info'] : [],
+          pure_funcs:
+            mode === "production" ? ["console.log", "console.info"] : [],
         },
       },
       // Improve chunk splitting for better caching
@@ -62,23 +64,30 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             // Vendor chunks for better caching
-            'react-vendor': ['react', 'react-dom'],
-            'router': ['react-router-dom'],
-            'query': ['@tanstack/react-query'],
-            'ui-vendor': ['lucide-react', '@radix-ui/react-progress', '@radix-ui/react-toast', '@radix-ui/react-tooltip'],
-            'utils': ['clsx', 'tailwind-merge', 'class-variance-authority'],
+            "react-vendor": ["react", "react-dom"],
+            router: ["react-router-dom"],
+            query: ["@tanstack/react-query"],
+            "ui-vendor": [
+              "lucide-react",
+              "@radix-ui/react-progress",
+              "@radix-ui/react-toast",
+              "@radix-ui/react-tooltip",
+            ],
+            utils: ["clsx", "tailwind-merge", "class-variance-authority"],
           },
           // Optimize chunk naming for better caching
           chunkFileNames: (chunkInfo) => {
             return `assets/js/[name]-[hash].js`;
           },
           assetFileNames: (assetInfo) => {
-            const info = assetInfo.name.split('.');
+            const info = assetInfo.name.split(".");
             const ext = info[info.length - 1];
             if (/\.(css)$/.test(assetInfo.name)) {
               return `assets/css/[name]-[hash].${ext}`;
             }
-            if (/\.(png|jpe?g|svg|gif|tiff|bmp|ico|webp)$/i.test(assetInfo.name)) {
+            if (
+              /\.(png|jpe?g|svg|gif|tiff|bmp|ico|webp)$/i.test(assetInfo.name)
+            ) {
               return `assets/images/[name]-[hash].${ext}`;
             }
             return `assets/[name]-[hash].${ext}`;
@@ -86,40 +95,40 @@ export default defineConfig(({ mode }) => {
         },
       },
       // Source maps only in development
-      sourcemap: mode !== 'production',
+      sourcemap: mode !== "production",
       // Target modern browsers for better performance
-      target: 'esnext',
+      target: "esnext",
       // Increase chunk size warning limit
       chunkSizeWarningLimit: 1000,
       // Enable CSS code splitting
       cssCodeSplit: true,
     },
     // Prevent accidental exposure of env vars
-    envPrefix: 'VITE_',
+    envPrefix: "VITE_",
     // Optimize dependencies
     optimizeDeps: {
       include: [
-        'react',
-        'react-dom',
-        'react-router-dom',
-        '@tanstack/react-query',
-        'lucide-react',
-        'clsx',
-        'tailwind-merge'
+        "react",
+        "react-dom",
+        "react-router-dom",
+        "@tanstack/react-query",
+        "lucide-react",
+        "clsx",
+        "tailwind-merge",
       ],
-      exclude: ['@tanstack/react-query-devtools']
+      exclude: ["@tanstack/react-query-devtools"],
     },
     // Enable esbuild for faster builds
     esbuild: {
-      target: 'esnext',
-      drop: mode === 'production' ? ['console', 'debugger'] : [],
+      target: "esnext",
+      drop: mode === "production" ? ["console", "debugger"] : [],
     },
     // Performance optimizations
     worker: {
-      format: 'es'
+      format: "es",
     },
     css: {
-      devSourcemap: mode === 'development'
-    }
-  }
-})
+      devSourcemap: mode === "development",
+    },
+  };
+});

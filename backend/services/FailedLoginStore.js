@@ -5,12 +5,15 @@ class FailedLoginStore {
     // key -> { attempts, lockedUntil }
     // key can be username or ip or username:ip
     this.store = new Map();
-    this.maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10);
-    this.lockoutMs = parseInt(process.env.LOGIN_LOCKOUT_MS || String(15 * 60 * 1000), 10); // default 15 minutes
+    this.maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS || "5", 10);
+    this.lockoutMs = parseInt(
+      process.env.LOGIN_LOCKOUT_MS || String(15 * 60 * 1000),
+      10
+    ); // default 15 minutes
   }
 
   _key(username, ip) {
-    return `${username || 'anon'}:${ip || 'unknown'}`;
+    return `${username || "anon"}:${ip || "unknown"}`;
   }
 
   recordFailure(username, ip) {

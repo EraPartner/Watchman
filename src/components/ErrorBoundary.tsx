@@ -1,7 +1,7 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
-import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import React, { Component, ErrorInfo, ReactNode } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface Props {
   children: ReactNode;
@@ -26,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // In production, you might want to log this to an error reporting service
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
     this.setState({ error, errorInfo });
   }
 
@@ -50,9 +50,10 @@ export class ErrorBoundary extends Component<Props, State> {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              An unexpected error occurred. Please try refreshing the page or contact support if the problem persists.
+              An unexpected error occurred. Please try refreshing the page or
+              contact support if the problem persists.
             </p>
-            {import.meta.env.MODE === 'development' && this.state.error && (
+            {import.meta.env.MODE === "development" && this.state.error && (
               <div className="p-4 bg-muted rounded-md">
                 <pre className="text-xs overflow-auto">
                   {this.state.error.message}
@@ -60,7 +61,10 @@ export class ErrorBoundary extends Component<Props, State> {
                 </pre>
               </div>
             )}
-            <Button onClick={this.handleReset} className="flex items-center gap-2">
+            <Button
+              onClick={this.handleReset}
+              className="flex items-center gap-2"
+            >
               <RefreshCw className="h-4 w-4" />
               Try Again
             </Button>

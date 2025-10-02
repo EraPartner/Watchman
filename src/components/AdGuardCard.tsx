@@ -1,9 +1,18 @@
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Progress } from './ui/progress';
-import { Shield, AlertTriangle, ExternalLink, Activity, Globe, Zap, Server, BarChart2 } from 'lucide-react';
-import { AdGuardServerStats, ServerStatus } from '../types/server';
-import { useConfig } from '../hooks/use-config';
-import { ServerStatusBadge } from './ServerStatusBadge';
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Progress } from "./ui/progress";
+import {
+  Shield,
+  AlertTriangle,
+  ExternalLink,
+  Activity,
+  Globe,
+  Zap,
+  Server,
+  BarChart2,
+} from "lucide-react";
+import { AdGuardServerStats, ServerStatus } from "../types/server";
+import { useConfig } from "../hooks/use-config";
+import { ServerStatusBadge } from "./ServerStatusBadge";
 
 // AdGuard Home logo SVG component
 const AdGuardIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -30,11 +39,7 @@ interface AdGuardCardProps {
   stats: AdGuardServerStats;
 }
 
-export const AdGuardCard = ({ 
-  name, 
-  status, 
-  stats
-}: AdGuardCardProps) => {
+export const AdGuardCard = ({ name, status, stats }: AdGuardCardProps) => {
   const { config } = useConfig();
 
   const formatNumber = (num: number) => {
@@ -52,22 +57,27 @@ export const AdGuardCard = ({
   };
 
   const formatProcessingTime = (time: number, units: string) => {
-    if (time === 0) return 'N/A';
-    return `${time.toFixed(1)}${units === 'milliseconds' ? 'ms' : units.charAt(0)}`;
+    if (time === 0) return "N/A";
+    return `${time.toFixed(1)}${
+      units === "milliseconds" ? "ms" : units.charAt(0)
+    }`;
   };
 
   const handleUrlClick = () => {
-    const adguardWebUrl = config?.services.adguard.webUrl || 'http://127.0.0.1:5213';
-    window.open(adguardWebUrl, '_blank');
+    const adguardWebUrl =
+      config?.services.adguard.webUrl || "http://127.0.0.1:5213";
+    window.open(adguardWebUrl, "_blank");
   };
 
-  const displayUrl = (config?.services.adguard.webUrl || 'http://127.0.0.1:5213')
-    .replace(/^https?:\/\//, '');
+  const displayUrl = (
+    config?.services.adguard.webUrl || "http://127.0.0.1:5213"
+  ).replace(/^https?:\/\//, "");
 
   // Calculate total blocked from all protection types
-  const totalProtectionBlocked = (stats.safebrowsingBlocked || 0) + 
-                                (stats.safesearchBlocked || 0) + 
-                                (stats.parentalBlocked || 0);
+  const totalProtectionBlocked =
+    (stats.safebrowsingBlocked || 0) +
+    (stats.safesearchBlocked || 0) +
+    (stats.parentalBlocked || 0);
 
   return (
     <Card className="w-full">
@@ -88,12 +98,12 @@ export const AdGuardCard = ({
         </div>
         <div className="flex items-center gap-2">
           <ServerStatusBadge status={status} />
-           {!stats.protectionEnabled && (
-             <AlertTriangle className="h-4 w-4 text-yellow-500" />
-           )}
-         </div>
+          {!stats.protectionEnabled && (
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          )}
+        </div>
       </CardHeader>
-      
+
       <CardContent className="space-y-3">
         {/* Status and Version Info */}
         <div className="grid grid-cols-1 gap-3">
@@ -102,7 +112,9 @@ export const AdGuardCard = ({
               <Server className="h-3 w-3" />
               Version
             </div>
-            <div className="font-mono font-semibold text-sm">{stats.version}</div>
+            <div className="font-mono font-semibold text-sm">
+              {stats.version}
+            </div>
           </div>
         </div>
 
@@ -117,15 +129,19 @@ export const AdGuardCard = ({
               {formatNumber(stats.totalQueries)}
             </span>
           </div>
-          
+
           {/* Query breakdown */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="text-center p-2 bg-green-50 rounded">
-              <div className="font-mono font-semibold text-green-600">{formatNumber(stats.allowedQueries)}</div>
+              <div className="font-mono font-semibold text-green-600">
+                {formatNumber(stats.allowedQueries)}
+              </div>
               <div className="text-gray-500">Allowed</div>
             </div>
             <div className="text-center p-2 bg-red-50 rounded">
-              <div className="font-mono font-semibold text-red-600">{formatNumber(stats.blockedQueries)}</div>
+              <div className="font-mono font-semibold text-red-600">
+                {formatNumber(stats.blockedQueries)}
+              </div>
               <div className="text-gray-500">Blocked</div>
             </div>
           </div>
@@ -133,13 +149,12 @@ export const AdGuardCard = ({
           {/* Blocking rate progress */}
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span className="flex items-center gap-1"><BarChart2 className="h-3 w-3" /> Blocking Rate</span>
+              <span className="flex items-center gap-1">
+                <BarChart2 className="h-3 w-3" /> Blocking Rate
+              </span>
               <span>{formatPercentage(stats.blockingRate)}</span>
             </div>
-            <Progress 
-              value={stats.blockingRate} 
-              className="h-2"
-            />
+            <Progress value={stats.blockingRate} className="h-2" />
           </div>
         </div>
 
@@ -153,19 +168,25 @@ export const AdGuardCard = ({
             <div className="grid grid-cols-3 gap-1 text-xs">
               {stats.safebrowsingBlocked > 0 && (
                 <div className="text-center p-1 bg-orange-50 rounded">
-                  <div className="font-mono font-semibold text-orange-600">{formatNumber(stats.safebrowsingBlocked)}</div>
+                  <div className="font-mono font-semibold text-orange-600">
+                    {formatNumber(stats.safebrowsingBlocked)}
+                  </div>
                   <div className="text-gray-500 text-[10px]">Malware</div>
                 </div>
               )}
               {stats.safesearchBlocked > 0 && (
                 <div className="text-center p-1 bg-purple-50 rounded">
-                  <div className="font-mono font-semibold text-purple-600">{formatNumber(stats.safesearchBlocked)}</div>
+                  <div className="font-mono font-semibold text-purple-600">
+                    {formatNumber(stats.safesearchBlocked)}
+                  </div>
                   <div className="text-gray-500 text-[10px]">SafeSearch</div>
                 </div>
               )}
               {stats.parentalBlocked > 0 && (
                 <div className="text-center p-1 bg-blue-50 rounded">
-                  <div className="font-mono font-semibold text-blue-600">{formatNumber(stats.parentalBlocked)}</div>
+                  <div className="font-mono font-semibold text-blue-600">
+                    {formatNumber(stats.parentalBlocked)}
+                  </div>
                   <div className="text-gray-500 text-[10px]">Parental</div>
                 </div>
               )}
@@ -183,7 +204,10 @@ export const AdGuardCard = ({
             <div className="text-xs text-gray-500">Avg Response Time</div>
             <div className="font-mono font-semibold text-sm flex items-center gap-1">
               <Zap className="h-3 w-3 text-yellow-500" />
-              {formatProcessingTime(stats.avgProcessingTime, stats.timeUnits || 'ms')}
+              {formatProcessingTime(
+                stats.avgProcessingTime,
+                stats.timeUnits || "ms"
+              )}
             </div>
           </div>
         </div>
@@ -197,20 +221,32 @@ export const AdGuardCard = ({
           <div className="space-y-1 text-xs">
             <div className="flex justify-between">
               <span className="text-gray-500">Most Blocked:</span>
-              <span className="font-mono text-red-600 truncate ml-2 max-w-[120px]" title={stats.topBlockedDomain}>
+              <span
+                className="font-mono text-red-600 truncate ml-2 max-w-[120px]"
+                title={stats.topBlockedDomain}
+              >
                 {stats.topBlockedDomain}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Most Queried:</span>
-              <span className="font-mono text-blue-600 truncate ml-2 max-w-[120px]" title={stats.topQueriedDomain}>
+              <span
+                className="font-mono text-blue-600 truncate ml-2 max-w-[120px]"
+                title={stats.topQueriedDomain}
+              >
                 {stats.topQueriedDomain}
               </span>
             </div>
-            {stats.topClient && stats.topClient !== 'N/A' && (
+            {stats.topClient && stats.topClient !== "N/A" && (
               <div className="flex justify-between">
-                <span className="text-gray-500"><ExternalLink className="h-3 w-3 inline-block mr-1"/>Top Client:</span>
-                <span className="font-mono text-gray-700 truncate ml-2 max-w-[120px]" title={stats.topClient}>
+                <span className="text-gray-500">
+                  <ExternalLink className="h-3 w-3 inline-block mr-1" />
+                  Top Client:
+                </span>
+                <span
+                  className="font-mono text-gray-700 truncate ml-2 max-w-[120px]"
+                  title={stats.topClient}
+                >
                   {stats.topClient}
                 </span>
               </div>
@@ -220,19 +256,23 @@ export const AdGuardCard = ({
 
         {/* Status indicators */}
         <div className="flex gap-2 text-xs">
-          <div className={`px-2 py-1 rounded-full ${
-            stats.protectionEnabled 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-red-100 text-red-800'
-          }`}>
-            {stats.protectionEnabled ? 'Protected' : 'Unprotected'}
+          <div
+            className={`px-2 py-1 rounded-full ${
+              stats.protectionEnabled
+                ? "bg-green-100 text-green-800"
+                : "bg-red-100 text-red-800"
+            }`}
+          >
+            {stats.protectionEnabled ? "Protected" : "Unprotected"}
           </div>
-          <div className={`px-2 py-1 rounded-full ${
-            stats.running 
-              ? 'bg-blue-100 text-blue-800' 
-              : 'bg-gray-100 text-gray-800'
-          }`}>
-            {stats.running ? 'Running' : 'Stopped'}
+          <div
+            className={`px-2 py-1 rounded-full ${
+              stats.running
+                ? "bg-blue-100 text-blue-800"
+                : "bg-gray-100 text-gray-800"
+            }`}
+          >
+            {stats.running ? "Running" : "Stopped"}
           </div>
           {stats.blockingRate > 50 && (
             <div className="px-2 py-1 rounded-full bg-orange-100 text-orange-800">

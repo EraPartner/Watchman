@@ -7,7 +7,10 @@ class PerformanceMonitor {
     this.startTime = Date.now();
 
     // Keep reference to interval so it can be cleared on shutdown
-    this._hourlyResetInterval = setInterval(() => this.resetHourlyMetrics(), 60 * 60 * 1000);
+    this._hourlyResetInterval = setInterval(
+      () => this.resetHourlyMetrics(),
+      60 * 60 * 1000
+    );
   }
 
   // Middleware to track request performance
@@ -17,15 +20,15 @@ class PerformanceMonitor {
       const endpoint = `${req.method} ${req.route?.path || req.path}`;
 
       // Track request count
-      this.incrementCounter('requests', endpoint);
+      this.incrementCounter("requests", endpoint);
 
       // Track response when finished
-      res.on('finish', () => {
+      res.on("finish", () => {
         const duration = Number(process.hrtime.bigint() - startTime) / 1000000; // Convert to ms
         this.recordResponseTime(endpoint, duration);
 
         if (res.statusCode >= 400) {
-          this.incrementCounter('errors', endpoint);
+          this.incrementCounter("errors", endpoint);
         }
       });
 
@@ -54,9 +57,12 @@ class PerformanceMonitor {
 
   getCounterMap(type) {
     switch (type) {
-      case 'requests': return this.requestCounts;
-      case 'errors': return this.errorCounts;
-      default: return this.requestCounts; // fallback to requests map to avoid allocations
+      case "requests":
+        return this.requestCounts;
+      case "errors":
+        return this.errorCounts;
+      default:
+        return this.requestCounts; // fallback to requests map to avoid allocations
     }
   }
 
@@ -65,46 +71,56 @@ class PerformanceMonitor {
     const uptime = Date.now() - this.startTime;
     const memUsage = process.memoryUsage();
 
-    const totalRequests = Array.from(this.requestCounts.values()).reduce((a, b) => a + b, 0);
-    const totalErrors = Array.from(this.errorCounts.values()).reduce((a, b) => a + b, 0);
+    const totalRequests = Array.from(this.requestCounts.values()).reduce(
+      (a, b) => a + b,
+      0
+    );
+    const totalErrors = Array.from(this.errorCounts.values()).reduce(
+      (a, b) => a + b,
+      0
+    );
 
     return {
       uptime: {
         ms: uptime,
-        human: this.formatUptime(uptime)
+        human: this.formatUptime(uptime),
       },
       memory: {
-        used: Math.round(memUsage.heapUsed / 1024 / 1024 * 100) / 100,
-        total: Math.round(memUsage.heapTotal / 1024 / 1024 * 100) / 100,
-        external: Math.round(memUsage.external / 1024 / 1024 * 100) / 100,
-        rss: Math.round(memUsage.rss / 1024 / 1024 * 100) / 100
+        used: Math.round((memUsage.heapUsed / 1024 / 1024) * 100) / 100,
+        total: Math.round((memUsage.heapTotal / 1024 / 1024) * 100) / 100,
+        external: Math.round((memUsage.external / 1024 / 1024) * 100) / 100,
+        rss: Math.round((memUsage.rss / 1024 / 1024) * 100) / 100,
       },
       requests: {
         total: totalRequests,
         byEndpoint: Object.fromEntries(this.requestCounts),
-        rps: this.calculateRPS(totalRequests, uptime)
+        rps: this.calculateRPS(totalRequests, uptime),
       },
       errors: {
         total: totalErrors,
         byEndpoint: Object.fromEntries(this.errorCounts),
-        rate: this.calculateErrorRate(totalRequests, totalErrors)
+        rate: this.calculateErrorRate(totalRequests, totalErrors),
       },
       performance: this.getPerformanceMetrics(),
       process: {
         pid: process.pid,
         nodeVersion: process.version,
-        cpuUsage: process.cpuUsage()
-      }
+        cpuUsage: process.cpuUsage(),
+      },
     };
   }
 
   calculateRPS(totalRequests, uptimeMs) {
     const uptimeSeconds = uptimeMs / 1000;
-    return uptimeSeconds > 0 ? Math.round((totalRequests / uptimeSeconds) * 100) / 100 : 0;
+    return uptimeSeconds > 0
+      ? Math.round((totalRequests / uptimeSeconds) * 100) / 100
+      : 0;
   }
 
   calculateErrorRate(totalRequests, totalErrors) {
-    return totalRequests > 0 ? Math.round((totalErrors / totalRequests) * 10000) / 100 : 0;
+    return totalRequests > 0
+      ? Math.round((totalErrors / totalRequests) * 10000) / 100
+      : 0;
   }
 
   getPerformanceMetrics() {
@@ -122,7 +138,7 @@ class PerformanceMonitor {
           p50: Math.round(sorted[Math.floor(sorted.length * 0.5)] * 100) / 100,
           p95: Math.round(sorted[Math.floor(sorted.length * 0.95)] * 100) / 100,
           p99: Math.round(sorted[Math.floor(sorted.length * 0.99)] * 100) / 100,
-          samples: times.length
+          samples: times.length,
         };
       }
     }
@@ -143,7 +159,7 @@ class PerformanceMonitor {
   }
 
   resetHourlyMetrics() {
-    console.info('📊 Resetting hourly performance metrics');
+    console.info("📊 Resetting hourly performance metrics");
     this.requestCounts.clear();
     this.errorCounts.clear();
     this.responseTimes.clear();
@@ -172,14 +188,19 @@ class PerformanceMonitor {
     }
 
     return {
-      status: issues.length === 0 ? 'healthy' : issues.length < 3 ? 'warning' : 'critical',
+      status:
+        issues.length === 0
+          ? "healthy"
+          : issues.length < 3
+          ? "warning"
+          : "critical",
       issues,
       metrics: {
         uptime: stats.uptime.human,
         memoryUsage: `${stats.memory.used}MB`,
         requestRate: `${stats.requests.rps} RPS`,
-        errorRate: `${stats.errors.rate}%`
-      }
+        errorRate: `${stats.errors.rate}%`,
+      },
     };
   }
 
@@ -188,7 +209,7 @@ class PerformanceMonitor {
     if (this._hourlyResetInterval) {
       clearInterval(this._hourlyResetInterval);
       this._hourlyResetInterval = null;
-      console.info('📊 Performance monitor shutdown complete');
+      console.info("📊 Performance monitor shutdown complete");
     }
   }
 }

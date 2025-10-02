@@ -21,7 +21,7 @@ type QueuedRequest = {
   reject?: (e: any) => void;
 };
 
-const BG_QUEUE_STORAGE_KEY = 'watchman:bgsync:queue:v1';
+const BG_QUEUE_STORAGE_KEY = "watchman:bgsync:queue:v1";
 
 function timeoutSignal(ms: number) {
   const ac = new AbortController();
@@ -37,14 +37,20 @@ class RequestBatcher {
 
   constructor(options?: { batchTimeout?: number; maxBatchSize?: number }) {
     if (options) {
-      if (typeof options.batchTimeout === 'number') this.batchTimeout = options.batchTimeout;
-      if (typeof options.maxBatchSize === 'number') this.maxBatchSize = options.maxBatchSize;
+      if (typeof options.batchTimeout === "number")
+        this.batchTimeout = options.batchTimeout;
+      if (typeof options.maxBatchSize === "number")
+        this.maxBatchSize = options.maxBatchSize;
     }
   }
 
   // Backwards-compatible: old callers could pass resolve/reject; new callers can await the promise.
-  batchHealthCheck(serviceName: string, resolve?: (r: HealthResult) => void, reject?: (e: any) => void): Promise<HealthResult> | void {
-    const batchKey = 'health-check';
+  batchHealthCheck(
+    serviceName: string,
+    resolve?: (r: HealthResult) => void,
+    reject?: (e: any) => void
+  ): Promise<HealthResult> | void {
+    const batchKey = "health-check";
 
     if (!this.batches.has(batchKey)) {
       this.batches.set(batchKey, { services: new Set(), promises: [] });
@@ -64,7 +70,10 @@ class RequestBatcher {
 
     // Ensure a single timer per batch
     if (!this.timers.has(batchKey)) {
-      const id = window.setTimeout(() => this.processBatch(batchKey), this.batchTimeout);
+      const id = window.setTimeout(
+        () => this.processBatch(batchKey),
+        this.batchTimeout
+      );
       this.timers.set(batchKey, id);
     }
 
@@ -102,30 +111,35 @@ class RequestBatcher {
       // Use a short timeout for the fetch so callers won't hang indefinitely
       const { signal, clear } = timeoutSignal(10_000);
 
-      const response = await fetch('/api/services/health-batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/services/health-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ services }),
-        signal
+        signal,
       });
 
       clear();
 
       if (!response.ok) {
         const text = await response.text().catch(() => String(response.status));
-        throw new Error(`Batch health request failed: ${response.status} - ${text}`);
+        throw new Error(
+          `Batch health request failed: ${response.status} - ${text}`
+        );
       }
 
       const results: Record<string, HealthResult> = await response.json();
 
       batch.promises.forEach(({ serviceName, resolve }) => {
-        const result = results[serviceName] || { status: 'offline' };
+        const result = results[serviceName] || { status: "offline" };
         try {
           resolve(result);
         } catch (e) {
           // Ignore individual resolver errors to allow the rest to proceed
           // eslint-disable-next-line no-console
-          console.error('Resolver threw when resolving batched health check', e);
+          console.error(
+            "Resolver threw when resolving batched health check",
+            e
+          );
         }
       });
     } catch (error) {
@@ -144,7 +158,8 @@ class RequestBatcher {
 
 class BackgroundSync {
   queue: QueuedRequest[] = [];
-  isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  isOnline: boolean =
+    typeof navigator !== "undefined" ? navigator.onLine : true;
   maxConcurrent = 3;
   activeRequests = 0;
   isProcessing = false;
@@ -160,21 +175,25 @@ class BackgroundSync {
   }
 
   setupEventListeners() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
-    window.addEventListener('online', () => {
+    window.addEventListener("online", () => {
       this.isOnline = true;
       this.processQueue();
     });
 
-    window.addEventListener('offline', () => {
+    window.addEventListener("offline", () => {
       this.isOnline = false;
     });
   }
 
   saveQueueToStorage() {
     try {
-      const serializable = this.queue.map((q) => ({ id: q.id, url: q.url, options: this.serializeOptions(q.options) }));
+      const serializable = this.queue.map((q) => ({
+        id: q.id,
+        url: q.url,
+        options: this.serializeOptions(q.options),
+      }));
       localStorage.setItem(BG_QUEUE_STORAGE_KEY, JSON.stringify(serializable));
     } catch (e) {
       // ignore storage errors
@@ -185,9 +204,14 @@ class BackgroundSync {
     try {
       const raw = localStorage.getItem(BG_QUEUE_STORAGE_KEY);
       if (!raw) return;
-      const parsed: Array<{ id: string; url: string; options?: any }> = JSON.parse(raw);
+      const parsed: Array<{ id: string; url: string; options?: any }> =
+        JSON.parse(raw);
       // Rehydrate into in-memory queue; note: resolve/reject won't be present for persisted items
-      this.queue = parsed.map((p) => ({ id: p.id, url: p.url, options: this.deserializeOptions(p.options) }));
+      this.queue = parsed.map((p) => ({
+        id: p.id,
+        url: p.url,
+        options: this.deserializeOptions(p.options),
+      }));
     } catch (e) {
       // ignore parse errors
     }
@@ -211,22 +235,30 @@ class BackgroundSync {
     return {
       method: obj.method,
       headers,
-      body: obj.body
+      body: obj.body,
     } as RequestInit;
   }
 
   queueRequest(url: string, options?: RequestInit): Promise<Response> {
     return new Promise((resolve, reject) => {
-      const req: QueuedRequest = { id: String(Date.now()) + ':' + Math.random().toString(36).slice(2), url, options, resolve, reject };
+      const req: QueuedRequest = {
+        id: String(Date.now()) + ":" + Math.random().toString(36).slice(2),
+        url,
+        options,
+        resolve,
+        reject,
+      };
 
       if (this.isOnline) {
         // Try immediate fetch but still fall back to queue on failure
-        fetch(url, options).then((res) => resolve(res)).catch((err) => {
-          // Queue for later
-          this.queue.push(req);
-          this.saveQueueToStorage();
-          reject(err);
-        });
+        fetch(url, options)
+          .then((res) => resolve(res))
+          .catch((err) => {
+            // Queue for later
+            this.queue.push(req);
+            this.saveQueueToStorage();
+            reject(err);
+          });
       } else {
         this.queue.push(req);
         this.saveQueueToStorage();

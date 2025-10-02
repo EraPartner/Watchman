@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { apiClient } from '../services/ApiClient';
+import { useState, useEffect } from "react";
+import { apiClient } from "../services/ApiClient";
 
 interface FrontendConfig {
   services: {
@@ -37,27 +37,29 @@ export const useConfig = () => {
         setConfig(frontendConfig);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch configuration');
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch configuration"
+        );
         // Fallback configuration if backend is unavailable
         setConfig({
           services: {
             adguard: {
-              webUrl: 'http://127.0.0.1:5213'
+              webUrl: "http://127.0.0.1:5213",
             },
             tor: {
-              nickname: 'unknown'
+              nickname: "unknown",
             },
             nostrcheck: {
               relayUrl: null,
               webUrl: null,
               enabled: false,
-              configured: false
-            }
+              configured: false,
+            },
           },
           app: {
-            name: 'Watchman Dashboard',
-            version: '1.0.0'
-          }
+            name: "Watchman Dashboard",
+            version: "1.0.0",
+          },
         });
       } finally {
         setLoading(false);

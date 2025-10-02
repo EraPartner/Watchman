@@ -1,6 +1,6 @@
 // Minimal client-side auth hook that uses the backend cookie-based auth endpoints.
-import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../services/ApiClient';
+import { useState, useEffect, useCallback } from "react";
+import { apiClient } from "../services/ApiClient";
 
 type User = { username: string } | null;
 
@@ -18,10 +18,10 @@ export function useAuth() {
       if (!body || !body.authenticated) {
         setUser(null);
       } else {
-        setUser(body.user || { username: body.user?.username || 'unknown' });
+        setUser(body.user || { username: body.user?.username || "unknown" });
       }
     } catch (err: any) {
-      console.error('Failed to fetch /api/auth/me', err);
+      console.error("Failed to fetch /api/auth/me", err);
       setUser(null);
     } finally {
       setLoading(false);
@@ -37,22 +37,24 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const body = await apiClient.login(username, password, remember).catch((e) => ({ error: String(e) }));
+      const body = await apiClient
+        .login(username, password, remember)
+        .catch((e) => ({ error: String(e) }));
       if (!body || body.error) {
-        setError(body?.error || 'Login failed');
+        setError(body?.error || "Login failed");
         setUser(null);
         setLoading(false);
-        return { success: false, error: body?.error || 'Login failed' };
+        return { success: false, error: body?.error || "Login failed" };
       }
 
       // Use apiClient.getAuthMe to refresh state (this will use cookie or fallback token)
       await fetchMe();
       return { success: true, user: body?.user || null };
     } catch (err: any) {
-      console.error('Login request failed', err);
-      setError('Network error');
+      console.error("Login request failed", err);
+      setError("Network error");
       setLoading(false);
-      return { success: false, error: 'Network error' };
+      return { success: false, error: "Network error" };
     } finally {
       setLoading(false);
     }
@@ -65,14 +67,14 @@ export function useAuth() {
     try {
       const res = await apiClient.logout();
       if (res && res.error) {
-        setError(res.error || 'Logout failed');
+        setError(res.error || "Logout failed");
         return { success: false };
       }
       setUser(null);
       return { success: true };
     } catch (err: any) {
-      console.error('Logout failed', err);
-      setError('Network error');
+      console.error("Logout failed", err);
+      setError("Network error");
       return { success: false };
     } finally {
       setLoading(false);

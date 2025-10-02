@@ -1,62 +1,75 @@
-import { WebSocketServer } from 'ws';
-import EventEmitter from 'events';
-import { verifyToken } from '../middleware/auth.js';
+import { WebSocketServer } from "ws";
+import EventEmitter from "events";
+import { verifyToken } from "../middleware/auth.js";
 
 export class WebSocketManager extends EventEmitter {
   constructor() {
     super();
     this.wss = null;
     this.clients = new Set();
-    this.isEnabled = process.env.ENABLE_WEBSOCKETS !== 'false';
+    this.isEnabled = process.env.ENABLE_WEBSOCKETS !== "false";
     this._heartbeatInterval = null;
   }
 
   initialize(server) {
     if (!this.isEnabled) {
-      console.log('📡 WebSocket disabled via environment variable');
+      console.log("📡 WebSocket disabled via environment variable");
       return;
     }
 
     if (this.wss) {
-      console.warn('📡 WebSocket server already initialized; skipping re-initialization');
+      console.warn(
+        "📡 WebSocket server already initialized; skipping re-initialization"
+      );
       return;
     }
 
-    this.wss = new WebSocketServer({ 
+    this.wss = new WebSocketServer({
       server,
-      path: '/ws',
-      clientTracking: true
+      path: "/ws",
+      clientTracking: true,
     });
 
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on("connection", (ws, req) => {
       try {
         // Verify JWT token from cookie header or Authorization header
-        const authHeader = req.headers['authorization'] || '';
+        const authHeader = req.headers["authorization"] || "";
         let token = null;
-        if (authHeader && String(authHeader).startsWith('Bearer ')) {
+        if (authHeader && String(authHeader).startsWith("Bearer ")) {
           token = String(authHeader).slice(7);
         }
 
         // Parse cookies if not provided via Authorization
         if (!token && req.headers && req.headers.cookie) {
           const cookieHeader = req.headers.cookie;
-          const cookies = Object.fromEntries(cookieHeader.split(';').map(c => {
-            const [k, ...v] = c.split('=');
-            return [k.trim(), decodeURIComponent(v.join('='))];
-          }));
+          const cookies = Object.fromEntries(
+            cookieHeader.split(";").map((c) => {
+              const [k, ...v] = c.split("=");
+              return [k.trim(), decodeURIComponent(v.join("="))];
+            })
+          );
           if (cookies.token) token = cookies.token;
         }
 
         const decoded = token ? verifyToken(token) : null;
         if (!decoded) {
-          console.warn('📡 WebSocket connection rejected: missing or invalid token from', req.socket.remoteAddress);
-          try { ws.close(1008, 'Unauthorized'); } catch (e) { /* ignore */ }
+          console.warn(
+            "📡 WebSocket connection rejected: missing or invalid token from",
+            req.socket.remoteAddress
+          );
+          try {
+            ws.close(1008, "Unauthorized");
+          } catch (e) {
+            /* ignore */
+          }
           return;
         }
 
-        ws._username = decoded.username || 'unknown';
+        ws._username = decoded.username || "unknown";
 
-        console.log(`📡 WebSocket client connected from ${req.socket.remoteAddress} as ${ws._username}`);
+        console.log(
+          `📡 WebSocket client connected from ${req.socket.remoteAddress} as ${ws._username}`
+        );
         this.clients.add(ws);
 
         // Mark client as alive for heartbeat
@@ -64,35 +77,46 @@ export class WebSocketManager extends EventEmitter {
 
         // Send initial connection message
         try {
-          ws.send(JSON.stringify({
-            type: 'connection',
-            message: 'Connected to Watchman WebSocket server',
-            timestamp: new Date().toISOString()
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "connection",
+              message: "Connected to Watchman WebSocket server",
+              timestamp: new Date().toISOString(),
+            })
+          );
         } catch (err) {
-          console.warn('📡 Failed to send welcome message to client', err && err.message ? err.message : err);
+          console.warn(
+            "📡 Failed to send welcome message to client",
+            err && err.message ? err.message : err
+          );
         }
-
       } catch (err) {
-        console.error('📡 Error during WebSocket connection handshake:', err && err.message ? err.message : err);
-        try { ws.close(1011, 'Internal error'); } catch (e) { /* ignore */ }
+        console.error(
+          "📡 Error during WebSocket connection handshake:",
+          err && err.message ? err.message : err
+        );
+        try {
+          ws.close(1011, "Internal error");
+        } catch (e) {
+          /* ignore */
+        }
         return;
       }
 
       // Handle client disconnect
-      ws.on('close', () => {
+      ws.on("close", () => {
         this.clients.delete(ws);
-        console.log('📡 WebSocket client disconnected');
+        console.log("📡 WebSocket client disconnected");
       });
 
       // Handle client errors
-      ws.on('error', (error) => {
-        console.error('📡 WebSocket client error:', error);
+      ws.on("error", (error) => {
+        console.error("📡 WebSocket client error:", error);
         this.clients.delete(ws);
       });
 
       // Handle ping/pong for connection keepalive
-      ws.on('pong', () => {
+      ws.on("pong", () => {
         ws.isAlive = true;
       });
     });
@@ -102,24 +126,32 @@ export class WebSocketManager extends EventEmitter {
       if (!this.wss) return;
       this.wss.clients.forEach((ws) => {
         if (ws.isAlive === false) {
-          console.log('📡 Terminating dead WebSocket connection');
-          try { ws.terminate(); } catch (e) { /* ignore */ }
+          console.log("📡 Terminating dead WebSocket connection");
+          try {
+            ws.terminate();
+          } catch (e) {
+            /* ignore */
+          }
           return;
         }
 
         ws.isAlive = false;
-        try { ws.ping(); } catch (e) { /* ignore */ }
+        try {
+          ws.ping();
+        } catch (e) {
+          /* ignore */
+        }
       });
     }, 30000); // 30 seconds
 
-    this.wss.on('close', () => {
+    this.wss.on("close", () => {
       if (this._heartbeatInterval) {
         clearInterval(this._heartbeatInterval);
         this._heartbeatInterval = null;
       }
     });
 
-    console.log('📡 WebSocket server initialized on /ws');
+    console.log("📡 WebSocket server initialized on /ws");
   }
 
   // Broadcast service health updates
@@ -127,10 +159,10 @@ export class WebSocketManager extends EventEmitter {
     if (!this.isEnabled || !this.wss) return;
 
     const message = JSON.stringify({
-      type: 'service_update',
+      type: "service_update",
       service: serviceName,
       data,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     let sentCount = 0;
@@ -140,14 +172,16 @@ export class WebSocketManager extends EventEmitter {
           ws.send(message);
           sentCount++;
         } catch (error) {
-          console.error('📡 Error sending WebSocket message:', error);
+          console.error("📡 Error sending WebSocket message:", error);
           this.clients.delete(ws);
         }
       }
     });
 
     if (sentCount > 0) {
-      console.debug(`📡 Broadcasted ${serviceName} update to ${sentCount} clients`);
+      console.debug(
+        `📡 Broadcasted ${serviceName} update to ${sentCount} clients`
+      );
     }
   }
 
@@ -156,11 +190,11 @@ export class WebSocketManager extends EventEmitter {
     if (!this.isEnabled || !this.wss) return;
 
     const alert = JSON.stringify({
-      type: 'alert',
+      type: "alert",
       level, // 'info', 'warning', 'error'
       message,
       service,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     this.clients.forEach((ws) => {
@@ -168,7 +202,7 @@ export class WebSocketManager extends EventEmitter {
         try {
           ws.send(alert);
         } catch (error) {
-          console.error('📡 Error sending alert:', error);
+          console.error("📡 Error sending alert:", error);
           this.clients.delete(ws);
         }
       }
@@ -186,14 +220,14 @@ export class WebSocketManager extends EventEmitter {
     return {
       enabled: true,
       clients: this.clients.size,
-      totalClients: this.wss.clients.size
+      totalClients: this.wss.clients.size,
     };
   }
 
   shutdown() {
     if (!this.wss) return;
 
-    console.info('📡 Shutting down WebSocket server...');
+    console.info("📡 Shutting down WebSocket server...");
 
     // Stop heartbeat
     if (this._heartbeatInterval) {
@@ -204,7 +238,11 @@ export class WebSocketManager extends EventEmitter {
     // Terminate all clients
     try {
       this.wss.clients.forEach((ws) => {
-        try { ws.terminate(); } catch (e) { /* ignore */ }
+        try {
+          ws.terminate();
+        } catch (e) {
+          /* ignore */
+        }
       });
     } catch (e) {
       // ignore
@@ -213,10 +251,13 @@ export class WebSocketManager extends EventEmitter {
     // Close the server
     try {
       this.wss.close(() => {
-        console.info('📡 WebSocket server closed');
+        console.info("📡 WebSocket server closed");
       });
     } catch (e) {
-      console.warn('📡 Error closing WebSocket server', e && e.message ? e.message : e);
+      console.warn(
+        "📡 Error closing WebSocket server",
+        e && e.message ? e.message : e
+      );
     }
 
     this.clients.clear();

@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiClient, FrontendConfig } from '../services/ApiClient';
-import { APP_CONFIG } from '../lib/constants';
+import { useQuery } from "@tanstack/react-query";
+import { apiClient, FrontendConfig } from "../services/ApiClient";
+import { APP_CONFIG } from "../lib/constants";
 
 export const useServicesHealth = () => {
   return useQuery({
-    queryKey: ['services-health'],
+    queryKey: ["services-health"],
     queryFn: () => apiClient.getServicesHealth(),
     staleTime: 5000,
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
@@ -14,7 +14,7 @@ export const useServicesHealth = () => {
 
 export const useFrontendConfig = () => {
   return useQuery<FrontendConfig>({
-    queryKey: ['frontend-config'],
+    queryKey: ["frontend-config"],
     queryFn: () => apiClient.getFrontendConfig(),
     staleTime: 60000,
     refetchInterval: 60000,

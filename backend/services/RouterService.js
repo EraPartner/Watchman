@@ -1,21 +1,33 @@
-import net from 'net';
-import ping from 'ping';
+import net from "net";
+import ping from "ping";
 
 export default class RouterService {
   constructor(opts = {}) {
-    this.name = opts.name || 'router';
+    this.name = opts.name || "router";
     this.host = opts.host || null;
-    this.ports = Array.isArray(opts.ports) ? opts.ports : (opts.ports ? String(opts.ports).split(/[,\s]+/).map(p=>Number(p)).filter(Boolean) : []);
-    this.timeout = typeof opts.timeout === 'number' ? opts.timeout : (opts.timeoutMs || 3000);
-    this.pingCount = typeof opts.pingCount === 'number' ? opts.pingCount : 1;
+    this.ports = Array.isArray(opts.ports)
+      ? opts.ports
+      : opts.ports
+      ? String(opts.ports)
+          .split(/[,\s]+/)
+          .map((p) => Number(p))
+          .filter(Boolean)
+      : [];
+    this.timeout =
+      typeof opts.timeout === "number" ? opts.timeout : opts.timeoutMs || 3000;
+    this.pingCount = typeof opts.pingCount === "number" ? opts.pingCount : 1;
   }
 
   async _pingHost() {
     if (!this.host) return { alive: false, time: null };
     try {
-      const res = await ping.promise.probe(this.host, { timeout: Math.max(1, Math.ceil(this.timeout/1000)), min_reply: this.pingCount });
+      const res = await ping.promise.probe(this.host, {
+        timeout: Math.max(1, Math.ceil(this.timeout / 1000)),
+        min_reply: this.pingCount,
+      });
       // ping.promise.probe returns time as string or 'unknown'
-      const time = res && res.time && !isNaN(Number(res.time)) ? Number(res.time) : null;
+      const time =
+        res && res.time && !isNaN(Number(res.time)) ? Number(res.time) : null;
       return { alive: Boolean(res && res.alive), time };
     } catch (err) {
       return { alive: false, time: null };
@@ -30,12 +42,14 @@ export default class RouterService {
       const onDone = (ok) => {
         if (done) return;
         done = true;
-        try { socket.destroy(); } catch (e) {}
+        try {
+          socket.destroy();
+        } catch (e) {}
         resolve(ok);
       };
       socket.setTimeout(this.timeout);
-      socket.once('error', () => onDone(false));
-      socket.once('timeout', () => onDone(false));
+      socket.once("error", () => onDone(false));
+      socket.once("timeout", () => onDone(false));
       socket.connect(port, this.host, () => onDone(true));
     });
   }
@@ -44,35 +58,41 @@ export default class RouterService {
     const checkedAt = new Date().toISOString();
     if (!this.host) {
       return {
-        status: 'not_configured',
+        status: "not_configured",
         responseTime: null,
         ports: {},
         lastCheck: checkedAt,
-        error: 'Host not configured'
+        error: "Host not configured",
       };
     }
 
     // Run ping and port checks concurrently (ping first)
     const pingPromise = this._pingHost();
-    const portPromises = (this.ports && this.ports.length > 0) ? this.ports.map(p => this.tcpCheck(p)) : [];
+    const portPromises =
+      this.ports && this.ports.length > 0
+        ? this.ports.map((p) => this.tcpCheck(p))
+        : [];
 
-    const [pingRes, ...portResults] = await Promise.all([pingPromise, ...portPromises]);
+    const [pingRes, ...portResults] = await Promise.all([
+      pingPromise,
+      ...portPromises,
+    ]);
 
     const portsMap = {};
     if (this.ports && this.ports.length > 0) {
       for (let i = 0; i < this.ports.length; i++) {
-        portsMap[this.ports[i]] = !!(portResults[i]);
+        portsMap[this.ports[i]] = !!portResults[i];
       }
     }
 
-    const anyPortOpen = Object.values(portsMap).some(v => v === true);
+    const anyPortOpen = Object.values(portsMap).some((v) => v === true);
     const icmpAlive = Boolean(pingRes && pingRes.alive);
     const responseTime = pingRes && pingRes.time ? pingRes.time : null;
 
     // Determine status per your requirement: online if one of the ports is open; otherwise warning if ICMP responds; else offline
-    let status = 'offline';
-    if (anyPortOpen) status = 'online';
-    else if (icmpAlive) status = 'warning';
+    let status = "offline";
+    if (anyPortOpen) status = "online";
+    else if (icmpAlive) status = "warning";
 
     return {
       status,
@@ -80,7 +100,7 @@ export default class RouterService {
       icmpAlive,
       ports: portsMap,
       host: this.host,
-      lastCheck: checkedAt
+      lastCheck: checkedAt,
     };
   }
 
@@ -89,7 +109,7 @@ export default class RouterService {
     return {
       host: this.host,
       ports: this.ports,
-      configured: !!this.host
+      configured: !!this.host,
     };
   }
 }

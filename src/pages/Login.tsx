@@ -1,20 +1,20 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 const Login = () => {
   const { login, isAuthenticated, loading, error } = useAuth();
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   // If already authenticated, redirect to home
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/');
+      navigate("/");
     }
   }, [isAuthenticated, navigate]);
 
@@ -22,15 +22,15 @@ const Login = () => {
     e.preventDefault();
     setFormError(null);
     if (!username || !password) {
-      setFormError('Please enter username and password');
+      setFormError("Please enter username and password");
       return;
     }
 
     const res = await login(username, password, remember);
     if (res.success) {
-      navigate('/');
+      navigate("/");
     } else {
-      setFormError(res.error || 'Login failed');
+      setFormError(res.error || "Login failed");
     }
   };
 
@@ -61,12 +61,18 @@ const Login = () => {
           </label>
 
           <label className="flex items-center gap-2 text-sm mb-4">
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
             Remember me
           </label>
 
           {(formError || error) && (
-            <div className="text-sm text-red-600 mb-2">{formError || error}</div>
+            <div className="text-sm text-red-600 mb-2">
+              {formError || error}
+            </div>
           )}
 
           <div className="flex items-center justify-between">
@@ -75,9 +81,11 @@ const Login = () => {
               className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded disabled:opacity-60"
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? "Signing in..." : "Sign in"}
             </button>
-            <a className="text-sm text-muted-foreground" href="/">Cancel</a>
+            <a className="text-sm text-muted-foreground" href="/">
+              Cancel
+            </a>
           </div>
         </form>
       </div>

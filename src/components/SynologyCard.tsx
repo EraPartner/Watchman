@@ -1,16 +1,24 @@
-import React, { useCallback, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Progress } from './ui/progress';
-import { ExternalLink, Cpu, Thermometer, Server, Network, AlertCircle, RefreshCw } from 'lucide-react';
-import { ServerStatusBadge } from './ServerStatusBadge';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../services/ApiClient';
-import { useFrontendConfig } from '../hooks/useServicesHealth';
-import { formatDisplayUrl, buildHref, openHref } from '../lib/url';
+import React, { useCallback, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Progress } from "./ui/progress";
+import {
+  ExternalLink,
+  Cpu,
+  Thermometer,
+  Server,
+  Network,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
+import { ServerStatusBadge } from "./ServerStatusBadge";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "../services/ApiClient";
+import { useFrontendConfig } from "../hooks/useServicesHealth";
+import { formatDisplayUrl, buildHref, openHref } from "../lib/url";
 
 // Updated interfaces to match your backend's actual data structure
 interface SynologyStats {
-  status: 'online' | 'offline' | 'error';
+  status: "online" | "offline" | "error";
   timestamp: string;
   system?: {
     name: string;
@@ -33,10 +41,10 @@ interface SynologyStats {
 }
 
 const formatBytes = (bytes?: number | null): string => {
-  if (!Number.isFinite(bytes) || (bytes ?? 0) === 0) return '0 B';
+  if (!Number.isFinite(bytes) || (bytes ?? 0) === 0) return "0 B";
   const b = Math.max(0, bytes || 0);
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.min(Math.floor(Math.log(b) / Math.log(k)), sizes.length - 1);
   return `${(b / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 };
@@ -48,14 +56,14 @@ const clampPercentage = (v?: number) => {
 
 const SynologyCard: React.FC = () => {
   const statusQuery = useQuery({
-    queryKey: ['synology', 'status'],
+    queryKey: ["synology", "status"],
     queryFn: () => apiClient.getSynologyStatus(),
     refetchInterval: 30000,
     retry: 1,
   });
 
   const statsQuery = useQuery({
-    queryKey: ['synology', 'stats'],
+    queryKey: ["synology", "stats"],
     queryFn: () => apiClient.getSynologyStats(),
     refetchInterval: 30000,
     retry: 1,
@@ -69,22 +77,41 @@ const SynologyCard: React.FC = () => {
 
   // Show loading if either query is loading (previously used && which required both)
   const loading = statusQuery.isLoading || statsQuery.isLoading;
-  const isOnline = (status?.status === 'online') || (stats?.status === 'online');
+  const isOnline = status?.status === "online" || stats?.status === "online";
   // ServiceHealth uses 'warning'/'not_configured' while stats may use 'error'
-  const hasError = (status?.status === 'warning' || status?.status === 'not_configured') || (stats?.status === 'error');
+  const hasError =
+    status?.status === "warning" ||
+    status?.status === "not_configured" ||
+    stats?.status === "error";
 
   // prefer stats.timestamp for detailed timestamp; fallback to status.lastCheck or now
-  const lastUpdate = useMemo(() => new Date(stats?.timestamp || status?.lastCheck || Date.now()), [stats?.timestamp, status?.lastCheck]);
+  const lastUpdate = useMemo(
+    () => new Date(stats?.timestamp || status?.lastCheck || Date.now()),
+    [stats?.timestamp, status?.lastCheck]
+  );
 
   // Compute host + href from frontend config (if available) and memoize to avoid recomputing each render
   const { synDisplay, synologyHref } = useMemo(() => {
     const synHost = cfg?.host ?? null;
     const synPort = cfg?.webPort ? String(cfg.webPort) : null;
-    if (!synHost) return { synDisplay: null as string | null, synologyHref: null as string | null };
+    if (!synHost)
+      return {
+        synDisplay: null as string | null,
+        synologyHref: null as string | null,
+      };
 
-    const hostOnly = synHost.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
-    const display = hostOnly ? (synPort ? `${hostOnly}:${synPort}` : hostOnly) : (synHost || null);
-    const href = hostOnly ? `https://${hostOnly}${synPort ? `:${synPort}` : ''}` : null;
+    const hostOnly = synHost
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/.*$/, "")
+      .trim();
+    const display = hostOnly
+      ? synPort
+        ? `${hostOnly}:${synPort}`
+        : hostOnly
+      : synHost || null;
+    const href = hostOnly
+      ? `https://${hostOnly}${synPort ? `:${synPort}` : ""}`
+      : null;
     return { synDisplay: display, synologyHref: href };
   }, [cfg?.host, cfg?.webPort]);
 
@@ -101,7 +128,17 @@ const SynologyCard: React.FC = () => {
           <Server className="h-4 w-4" />
           Synology NAS
         </CardTitle>
-        <ServerStatusBadge status={loading ? 'loading' : isOnline ? 'online' : hasError ? 'error' : 'offline'} />
+        <ServerStatusBadge
+          status={
+            loading
+              ? "loading"
+              : isOnline
+              ? "online"
+              : hasError
+              ? "error"
+              : "offline"
+          }
+        />
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -112,7 +149,9 @@ const SynologyCard: React.FC = () => {
                 <Server className="h-3 w-3" />
                 Model
               </div>
-              <div className="font-medium">{stats?.system?.model || 'Unknown'}</div>
+              <div className="font-medium">
+                {stats?.system?.model || "Unknown"}
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -127,11 +166,13 @@ const SynologyCard: React.FC = () => {
                     className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
                     title={`Open ${synDisplay || cfg?.host} in new tab`}
                   >
-                    <span className="truncate">{formatDisplayUrl(synDisplay || cfg?.host)}</span>
+                    <span className="truncate">
+                      {formatDisplayUrl(synDisplay || cfg?.host)}
+                    </span>
                     <ExternalLink className="h-3 w-3" />
                   </button>
                 ) : (
-                  synDisplay || cfg?.host || 'Unknown'
+                  synDisplay || cfg?.host || "Unknown"
                 )}
               </div>
             </div>
@@ -151,9 +192,14 @@ const SynologyCard: React.FC = () => {
                     <Cpu className="h-3 w-3" />
                     CPU Usage
                   </div>
-                  <span className="font-medium">{clampPercentage(stats.cpu.usage)}%</span>
+                  <span className="font-medium">
+                    {clampPercentage(stats.cpu.usage)}%
+                  </span>
                 </div>
-                <Progress value={clampPercentage(stats.cpu.usage)} className="h-2" />
+                <Progress
+                  value={clampPercentage(stats.cpu.usage)}
+                  className="h-2"
+                />
 
                 {stats.cpu.temperature && stats.cpu.temperature > 0 && (
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -175,12 +221,18 @@ const SynologyCard: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-muted rounded-md p-2">
-                    <div className="text-xs text-muted-foreground">Download</div>
-                    <div className="text-sm font-medium">{formatBytes(stats.network.bytesReceived || 0)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Download
+                    </div>
+                    <div className="text-sm font-medium">
+                      {formatBytes(stats.network.bytesReceived || 0)}
+                    </div>
                   </div>
                   <div className="bg-muted rounded-md p-2">
                     <div className="text-xs text-muted-foreground">Upload</div>
-                    <div className="text-sm font-medium">{formatBytes(stats.network.bytesTransmitted || 0)}</div>
+                    <div className="text-sm font-medium">
+                      {formatBytes(stats.network.bytesTransmitted || 0)}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -190,26 +242,37 @@ const SynologyCard: React.FC = () => {
 
         {stats?.errors && stats.errors.length > 0 && isOnline && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2">
-            <div className="text-xs text-yellow-800 font-medium mb-1">⚠️ Some data unavailable:</div>
-            <div className="text-xs text-yellow-700">{stats.errors.map(e => e.component).join(', ')} failed to load</div>
+            <div className="text-xs text-yellow-800 font-medium mb-1">
+              ⚠️ Some data unavailable:
+            </div>
+            <div className="text-xs text-yellow-700">
+              {stats.errors.map((e) => e.component).join(", ")} failed to load
+            </div>
           </div>
         )}
 
         {!isOnline && !loading && (
           <div className="flex flex-col items-center justify-center py-6 text-center">
             <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-            <div className="text-sm text-muted-foreground mb-2">{hasError ? 'Connection Error' : 'Synology NAS is offline'}</div>
+            <div className="text-sm text-muted-foreground mb-2">
+              {hasError ? "Connection Error" : "Synology NAS is offline"}
+            </div>
             {(stats?.error || status?.error) && (
-              <div className="text-xs text-red-500 max-w-full break-words">{stats?.error || status?.error}</div>
+              <div className="text-xs text-red-500 max-w-full break-words">
+                {stats?.error || status?.error}
+              </div>
             )}
             <div className="mt-3 text-xs">
-              <button onClick={onRetry} className="text-blue-500 hover:text-blue-700 underline" disabled={loading}>
+              <button
+                onClick={onRetry}
+                className="text-blue-500 hover:text-blue-700 underline"
+                disabled={loading}
+              >
                 Retry Connection
               </button>
             </div>
           </div>
         )}
-
       </CardContent>
     </Card>
   );

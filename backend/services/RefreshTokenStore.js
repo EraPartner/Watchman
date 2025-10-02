@@ -1,5 +1,5 @@
 // ...existing code...
-import crypto from 'crypto';
+import crypto from "crypto";
 
 // Simple in-memory refresh token store. This should be replaced with a persistent store (Redis/DB) for production.
 class RefreshTokenStore {
@@ -9,11 +9,18 @@ class RefreshTokenStore {
     // Optionally map username -> Set(tokens) to allow revoking all for a user
     this.userTokens = new Map();
     // Default TTL for refresh tokens (30 days)
-    this.defaultTtlMs = (process.env.REFRESH_TOKEN_TTL_DAYS ? parseInt(process.env.REFRESH_TOKEN_TTL_DAYS, 10) : 30) * 24 * 60 * 60 * 1000;
+    this.defaultTtlMs =
+      (process.env.REFRESH_TOKEN_TTL_DAYS
+        ? parseInt(process.env.REFRESH_TOKEN_TTL_DAYS, 10)
+        : 30) *
+      24 *
+      60 *
+      60 *
+      1000;
   }
 
   generateToken() {
-    return crypto.randomBytes(48).toString('hex');
+    return crypto.randomBytes(48).toString("hex");
   }
 
   create(username) {

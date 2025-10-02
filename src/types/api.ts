@@ -1,6 +1,6 @@
 // API Response Types
 export interface ServiceHealth {
-  status: 'online' | 'offline' | 'warning' | 'loading';
+  status: "online" | "offline" | "warning" | "loading";
   error?: string;
 }
 

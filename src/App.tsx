@@ -18,14 +18,14 @@ const queryClient = new QueryClient({
     queries: {
       retry: (failureCount, error) => {
         // Don't retry on 4xx errors (client errors)
-        if (error?.message?.includes('4')) return false;
+        if (error?.message?.includes("4")) return false;
         return failureCount < 3;
       },
       staleTime: 5 * 60 * 1000, // 5 minutes
       gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
-      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
     mutations: {
       retry: 1,
@@ -54,7 +54,14 @@ function App() {
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={<AuthGuard><IndexPage /></AuthGuard>} />
+                <Route
+                  path="/"
+                  element={
+                    <AuthGuard>
+                      <IndexPage />
+                    </AuthGuard>
+                  }
+                />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>

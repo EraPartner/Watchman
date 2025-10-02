@@ -1,37 +1,37 @@
 class AdGuardService {
   constructor(config) {
     this.baseUrl = config.baseUrl;
-    
+
     // Handle both authToken and username/password authentication
     if (config.authToken) {
       this.authToken = config.authToken;
     } else if (config.username && config.password) {
       // Create Base64 encoded token from username:password
       const credentials = `${config.username}:${config.password}`;
-      this.authToken = Buffer.from(credentials).toString('base64');
+      this.authToken = Buffer.from(credentials).toString("base64");
     } else {
       this.authToken = null;
     }
-    
+
     this.timeout = config.timeout || 5000;
   }
 
   async checkHealth() {
     const startTime = Date.now();
-    
+
     try {
       const headers = {
-        'Content-Type': 'application/json'
+        "Content-Type": "application/json",
       };
-      
+
       if (this.authToken) {
-        headers['Authorization'] = `Basic ${this.authToken}`;
+        headers["Authorization"] = `Basic ${this.authToken}`;
       }
 
       const response = await fetch(`${this.baseUrl}/control/status`, {
-        method: 'GET',
+        method: "GET",
         headers,
-        signal: AbortSignal.timeout(this.timeout)
+        signal: AbortSignal.timeout(this.timeout),
       });
 
       if (!response.ok) {
@@ -40,22 +40,22 @@ class AdGuardService {
 
       const status = await response.json();
       const responseTime = Date.now() - startTime;
-      
+
       const health = {
-        status: status.running ? 'online' : 'warning',
+        status: status.running ? "online" : "warning",
         responseTime,
         lastCheck: new Date(),
       };
 
       if (!status.protection_enabled) {
-        health.status = 'warning';
-        health.error = 'Protection is disabled';
+        health.status = "warning";
+        health.error = "Protection is disabled";
       }
 
       return health;
     } catch (error) {
       return {
-        status: 'offline',
+        status: "offline",
         responseTime: Date.now() - startTime,
         lastCheck: new Date(),
         error: error.message,
@@ -66,28 +66,30 @@ class AdGuardService {
   async getStats() {
     try {
       const headers = {
-        'Content-Type': 'application/json'
+        "Content-Type": "application/json",
       };
-      
+
       if (this.authToken) {
-        headers['Authorization'] = `Basic ${this.authToken}`;
+        headers["Authorization"] = `Basic ${this.authToken}`;
       }
 
       const [statusResponse, statsResponse] = await Promise.all([
         fetch(`${this.baseUrl}/control/status`, {
-          method: 'GET',
+          method: "GET",
           headers,
-          signal: AbortSignal.timeout(this.timeout)
+          signal: AbortSignal.timeout(this.timeout),
         }),
         fetch(`${this.baseUrl}/control/stats`, {
-          method: 'GET',
+          method: "GET",
           headers,
-          signal: AbortSignal.timeout(this.timeout)
-        })
+          signal: AbortSignal.timeout(this.timeout),
+        }),
       ]);
 
       if (!statusResponse.ok || !statsResponse.ok) {
-        throw new Error(`API request failed: ${statusResponse.status} or ${statsResponse.status}`);
+        throw new Error(
+          `API request failed: ${statusResponse.status} or ${statsResponse.status}`
+        );
       }
 
       const status = await statusResponse.json();
@@ -95,15 +97,17 @@ class AdGuardService {
 
       // Calculate blocking statistics according to AdGuard's logic
       const totalQueries = stats.num_dns_queries;
-      const blockedQueries = stats.num_blocked_filtering + 
-                           stats.num_replaced_safebrowsing + 
-                           stats.num_replaced_safesearch + 
-                           stats.num_replaced_parental;
+      const blockedQueries =
+        stats.num_blocked_filtering +
+        stats.num_replaced_safebrowsing +
+        stats.num_replaced_safesearch +
+        stats.num_replaced_parental;
       const allowedQueries = totalQueries - blockedQueries;
-      const blockingRate = totalQueries > 0 ? (blockedQueries / totalQueries) * 100 : 0;
+      const blockingRate =
+        totalQueries > 0 ? (blockedQueries / totalQueries) * 100 : 0;
 
       // Extract top domain from the array format used by AdGuard
-      const extractTopEntry = (topArray, fallback = 'N/A') => {
+      const extractTopEntry = (topArray, fallback = "N/A") => {
         if (!topArray || topArray.length === 0) return fallback;
         const firstEntry = topArray[0];
         if (!firstEntry) return fallback;
@@ -120,22 +124,22 @@ class AdGuardService {
         httpPort: status.http_port,
         language: status.language,
         dhcpAvailable: status.dhcp_available,
-        
+
         // DNS Query statistics
         totalQueries,
         blockedQueries,
         allowedQueries,
         blockingRate: Math.round(blockingRate * 100) / 100,
-        
+
         // Performance metrics
         avgProcessingTime: stats.avg_processing_time,
         timeUnits: stats.time_units,
-        
+
         // Top lists
         topBlockedDomain: extractTopEntry(stats.top_blocked_domains),
         topQueriedDomain: extractTopEntry(stats.top_queried_domains),
         topClient: extractTopEntry(stats.top_clients),
-        
+
         // Additional stats
         safebrowsingBlocked: stats.num_replaced_safebrowsing,
         safesearchBlocked: stats.num_replaced_safesearch,
@@ -154,18 +158,18 @@ class AdGuardService {
       }
 
       const headers = {
-        'Content-Type': 'application/json'
+        "Content-Type": "application/json",
       };
-      
+
       if (this.authToken) {
-        headers['Authorization'] = `Basic ${this.authToken}`;
+        headers["Authorization"] = `Basic ${this.authToken}`;
       }
 
       const response = await fetch(`${this.baseUrl}/control/protection`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeout)
+        signal: AbortSignal.timeout(this.timeout),
       });
 
       if (!response.ok) {
