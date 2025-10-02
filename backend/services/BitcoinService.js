@@ -1,23 +1,26 @@
-import { execSync } from 'child_process';
-import fetch from 'node-fetch';
-import { SocksProxyAgent } from 'socks-proxy-agent';
-import { Buffer } from 'buffer';
+import { execSync } from "child_process";
+import fetch from "node-fetch";
+import { SocksProxyAgent } from "socks-proxy-agent";
+import { Buffer } from "buffer";
 
 export class BitcoinService {
   constructor(config = {}) {
     // Determine timeout values (ms) and corresponding curl timeouts (s)
     const timeoutMs = config.timeout || 120000; // default to 120 seconds
-    const connectTimeoutSec = config.connectTimeout || Math.max(15, Math.ceil(timeoutMs / 1000));
-    const maxTimeSec = config.maxTime || Math.max(connectTimeoutSec, Math.ceil(timeoutMs / 1000));
+    const connectTimeoutSec =
+      config.connectTimeout || Math.max(15, Math.ceil(timeoutMs / 1000));
+    const maxTimeSec =
+      config.maxTime ||
+      Math.max(connectTimeoutSec, Math.ceil(timeoutMs / 1000));
 
     this.config = {
-      rpcUrl: config.rpcUrl || 'http://127.0.0.1:8332',
+      rpcUrl: config.rpcUrl || "http://127.0.0.1:8332",
       rpcUser: config.rpcUser || process.env.BITCOIN_RPC_USER,
       rpcPassword: config.rpcPassword || process.env.BITCOIN_RPC_PASSWORD,
       timeout: timeoutMs, // total timeout in ms
       connectTimeout: connectTimeoutSec,
       maxTime: maxTimeSec,
-      ...config
+      ...config,
     };
 
     // If configured to use a SOCKS proxy, create and cache the agent here
@@ -30,7 +33,7 @@ export class BitcoinService {
       } catch (err) {
         // Fail gracefully; proxyAgent will be undefined and code will handle it later
         this.proxyAgent = undefined;
-        console.warn('⚠️  Failed to create SocksProxyAgent:', err.message);
+        console.warn("⚠️  Failed to create SocksProxyAgent:", err.message);
       }
     }
   }
@@ -38,25 +41,25 @@ export class BitcoinService {
   async checkHealth() {
     try {
       // Try to get basic blockchain info to check if Bitcoin node is responsive
-      const result = await this.executeRpcCommand('getblockchaininfo');
+      const result = await this.executeRpcCommand("getblockchaininfo");
 
       if (result && result.chain) {
         return {
-          status: 'online',
-          timestamp: new Date().toISOString()
+          status: "online",
+          timestamp: new Date().toISOString(),
         };
       } else {
         return {
-          status: 'warning',
-          error: 'Bitcoin node responding but data incomplete',
-          timestamp: new Date().toISOString()
+          status: "warning",
+          error: "Bitcoin node responding but data incomplete",
+          timestamp: new Date().toISOString(),
         };
       }
     } catch (error) {
       return {
-        status: 'offline',
+        status: "offline",
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -64,19 +67,19 @@ export class BitcoinService {
   async getStats() {
     try {
       // Get blockchain info
-      const blockchainInfo = await this.executeRpcCommand('getblockchaininfo');
+      const blockchainInfo = await this.executeRpcCommand("getblockchaininfo");
 
       // Get network info for connections and version
-      const networkInfo = await this.executeRpcCommand('getnetworkinfo');
+      const networkInfo = await this.executeRpcCommand("getnetworkinfo");
 
       // Get mempool info
-      const mempoolInfo = await this.executeRpcCommand('getmempoolinfo');
+      const mempoolInfo = await this.executeRpcCommand("getmempoolinfo");
 
       // Get uptime
-      const uptime = await this.executeRpcCommand('uptime');
+      const uptime = await this.executeRpcCommand("uptime");
 
       return {
-        version: networkInfo.subversion || networkInfo.version || 'Unknown',
+        version: networkInfo.subversion || networkInfo.version || "Unknown",
         protocolVersion: networkInfo.protocolversion || 0,
         blocks: blockchainInfo.blocks || 0,
         headers: blockchainInfo.headers || 0,
@@ -86,7 +89,7 @@ export class BitcoinService {
         difficulty: blockchainInfo.difficulty || 0,
         verificationProgress: blockchainInfo.verificationprogress || 0,
         initialBlockDownload: blockchainInfo.initialblockdownload || false,
-        chain: blockchainInfo.chain || 'unknown',
+        chain: blockchainInfo.chain || "unknown",
         // size_on_disk is provided by Bitcoin Core and represents the on-disk chain size in bytes
         blockchainSize: blockchainInfo.size_on_disk || 0,
         networkHashPs: blockchainInfo.networkhashps || 0,
@@ -97,7 +100,7 @@ export class BitcoinService {
           maxmempool: mempoolInfo.maxmempool || 0,
           mempoolminfee: mempoolInfo.mempoolminfee || 0,
         },
-        uptime: uptime || 0
+        uptime: uptime || 0,
       };
     } catch (error) {
       throw new Error(`Failed to get Bitcoin stats: ${error.message}`);
@@ -106,33 +109,45 @@ export class BitcoinService {
 
   async executeRpcCommand(method, params = []) {
     if (!this.config.rpcUser || !this.config.rpcPassword) {
-      throw new Error('Bitcoin RPC credentials not configured');
+      throw new Error("Bitcoin RPC credentials not configured");
     }
 
     // If using proxy, first check if it's available
     if (this.config.useProxy) {
       const proxyAvailable = await this.checkProxyConnection();
       if (!proxyAvailable) {
-        throw new Error(`Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`);
+        throw new Error(
+          `Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`
+        );
       }
     }
 
-    const body = JSON.stringify({ jsonrpc: '1.0', id: 'watchman', method, params });
+    const body = JSON.stringify({
+      jsonrpc: "1.0",
+      id: "watchman",
+      method,
+      params,
+    });
     // Use proper JSON content type
-    const headers = { 'content-type': 'application/json' };
+    const headers = { "content-type": "application/json" };
 
     // Add basic auth header if credentials are provided
     if (this.config.rpcUser && this.config.rpcPassword) {
-      const token = Buffer.from(`${this.config.rpcUser}:${this.config.rpcPassword}`).toString('base64');
-      headers['authorization'] = `Basic ${token}`;
+      const token = Buffer.from(
+        `${this.config.rpcUser}:${this.config.rpcPassword}`
+      ).toString("base64");
+      headers["authorization"] = `Basic ${token}`;
     }
 
     // Prepare fetch options
     const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), this.config.timeout);
+    const timeoutHandle = setTimeout(
+      () => controller.abort(),
+      this.config.timeout
+    );
 
     const fetchOptions = {
-      method: 'POST',
+      method: "POST",
       headers,
       body,
       signal: controller.signal,
@@ -153,9 +168,11 @@ export class BitcoinService {
 
       if (!response.ok) {
         const status = response.status;
-        const text = await response.text().catch(() => '');
-        if (status === 401 || text.includes('Unauthorized')) {
-          throw new Error('Bitcoin RPC authentication failed - check credentials');
+        const text = await response.text().catch(() => "");
+        if (status === 401 || text.includes("Unauthorized")) {
+          throw new Error(
+            "Bitcoin RPC authentication failed - check credentials"
+          );
         }
         throw new Error(`Bitcoin RPC returned HTTP ${status} ${text}`);
       }
@@ -170,16 +187,37 @@ export class BitcoinService {
     } catch (error) {
       // Normalize common network errors
       const msg = (error && error.message) || String(error);
-      if (msg.includes('The user aborted a request') || msg === 'The operation was aborted.' || msg.includes('aborted')) {
-        throw new Error('Bitcoin RPC request timed out - node may be slow or unreachable');
-      } else if (msg.includes('ECONNREFUSED')) {
-        throw new Error('Bitcoin node not reachable - check if Bitcoin Core is running');
-      } else if (msg.includes('401') || msg.includes('Unauthorized')) {
-        throw new Error('Bitcoin RPC authentication failed - check credentials');
-      } else if (msg.includes('ENOTFOUND') || msg.includes('Could not resolve host')) {
-        throw new Error('Cannot resolve Bitcoin node hostname - check network or Tor proxy');
-      } else if (msg.includes('SOCKS') || msg.includes('proxy') || msg.includes('Proxy')) {
-        throw new Error('SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port');
+      if (
+        msg.includes("The user aborted a request") ||
+        msg === "The operation was aborted." ||
+        msg.includes("aborted")
+      ) {
+        throw new Error(
+          "Bitcoin RPC request timed out - node may be slow or unreachable"
+        );
+      } else if (msg.includes("ECONNREFUSED")) {
+        throw new Error(
+          "Bitcoin node not reachable - check if Bitcoin Core is running"
+        );
+      } else if (msg.includes("401") || msg.includes("Unauthorized")) {
+        throw new Error(
+          "Bitcoin RPC authentication failed - check credentials"
+        );
+      } else if (
+        msg.includes("ENOTFOUND") ||
+        msg.includes("Could not resolve host")
+      ) {
+        throw new Error(
+          "Cannot resolve Bitcoin node hostname - check network or Tor proxy"
+        );
+      } else if (
+        msg.includes("SOCKS") ||
+        msg.includes("proxy") ||
+        msg.includes("Proxy")
+      ) {
+        throw new Error(
+          "SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port"
+        );
       } else {
         throw new Error(`Bitcoin RPC call failed: ${msg}`);
       }
@@ -188,10 +226,13 @@ export class BitcoinService {
 
   async checkProxyConnection() {
     try {
-      const result = execSync(`nc -z ${this.config.torProxy.host} ${this.config.torProxy.port}`, {
-        timeout: 5000,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
+      const result = execSync(
+        `nc -z ${this.config.torProxy.host} ${this.config.torProxy.port}`,
+        {
+          timeout: 5000,
+          stdio: ["pipe", "pipe", "pipe"],
+        }
+      );
       return true;
     } catch {
       return false;

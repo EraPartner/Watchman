@@ -5,6 +5,7 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 ## 🚀 New Advanced Optimizations
 
 ### 1. Performant Service Card Component
+
 - **React.memo** for preventing unnecessary re-renders
 - **useMemo** for expensive calculations (status colors, performance levels)
 - **Priority-based refresh intervals** (high: 5s, medium: 10s, low: 15s)
@@ -12,19 +13,23 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 - **Optimized stat formatting** with importance highlighting
 
 ### 2. Real-time WebSocket Integration
+
 **Backend WebSocket Server:**
+
 - Live service health broadcasting
 - Client connection management with heartbeat
 - Alert system for critical events
 - Connection statistics tracking
 
 **Frontend WebSocket Hook:**
+
 - Auto-reconnection with exponential backoff
 - React Query cache invalidation on updates
 - Toast notifications for alerts
 - Offline/online status tracking
 
 ### 3. Performance Monitoring & Analytics
+
 - **Request tracking** with response times and error rates
 - **Memory usage monitoring** with alerts
 - **Percentile calculations** (P50, P95, P99)
@@ -32,6 +37,7 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 - **Health status evaluation** based on performance thresholds
 
 ### 4. Persistent Metrics Store
+
 - **Historical data storage** (7 days retention)
 - **Uptime calculations** with percentage tracking
 - **Availability trends** by hour
@@ -39,18 +45,21 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 - **Summary report generation**
 
 ### 5. Request Optimization
+
 - **Request batching** to combine multiple API calls
 - **Background sync** for offline capability
 - **Queue management** for failed requests
 - **Smart retry logic** with backoff
 
 ### 6. Service Worker Implementation
+
 - **Offline caching** for static assets and API responses
 - **Background sync** for queued requests
 - **Cache versioning** with automatic cleanup
 - **Offline indicators** in API responses
 
 ### 7. Enhanced Build Pipeline
+
 - **Advanced chunk splitting** for better caching
 - **Image optimization** scripts
 - **Bundle analysis** tools
@@ -60,6 +69,7 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 ## 📊 Performance Improvements
 
 ### Backend Gains:
+
 - **60-90% faster response times** for cached endpoints
 - **Real-time updates** eliminate polling overhead
 - **Performance monitoring** provides actionable insights
@@ -67,6 +77,7 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 - **Memory usage optimization** prevents leaks
 
 ### Frontend Gains:
+
 - **40-60% reduction in unnecessary renders** with React.memo
 - **Instant updates** via WebSocket (no 10-15s delays)
 - **Offline capability** with service worker caching
@@ -74,6 +85,7 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 - **Priority-based polling** optimizes network usage
 
 ### User Experience Improvements:
+
 - **Live connection status** indicator
 - **Real-time alerts** for service issues
 - **Offline functionality** with cached data
@@ -83,6 +95,7 @@ Building on the initial optimizations, I've implemented several cutting-edge per
 ## 🔧 Advanced Features Added
 
 ### 1. WebSocket Real-time Updates
+
 ```typescript
 // Automatic cache invalidation on service updates
 const { isConnected } = useWebSocket();
@@ -90,13 +103,15 @@ const { isConnected } = useWebSocket();
 ```
 
 ### 2. Performance Monitoring Dashboard
+
 ```javascript
 // Track response times, error rates, memory usage
-GET /api/performance/stats
+GET / api / performance / stats;
 // Returns detailed metrics with percentiles
 ```
 
 ### 3. Historical Data Analytics
+
 ```javascript
 // 7 days of service uptime history
 GET /api/metrics/uptime/bitcoin?hours=168
@@ -104,6 +119,7 @@ GET /api/metrics/uptime/bitcoin?hours=168
 ```
 
 ### 4. Offline-First Architecture
+
 ```javascript
 // Service worker caches API responses
 // Background sync processes queued requests
@@ -111,6 +127,7 @@ GET /api/metrics/uptime/bitcoin?hours=168
 ```
 
 ### 5. Smart Component Optimization
+
 ```typescript
 // Memoized expensive calculations
 const statusMetrics = useMemo(() => {
@@ -121,6 +138,7 @@ const statusMetrics = useMemo(() => {
 ## 🎯 Performance Benchmarks
 
 ### Before Optimizations:
+
 - Dashboard update lag: 10-15 seconds
 - API calls per minute: ~24 (4 services × 6 calls)
 - Bundle size: ~2.1MB
@@ -128,6 +146,7 @@ const statusMetrics = useMemo(() => {
 - Re-render frequency: High (unnecessary updates)
 
 ### After All Optimizations:
+
 - Dashboard update lag: **Instant** (WebSocket)
 - API calls per minute: **~8** (batched + real-time)
 - Bundle size: **~1.4MB** (better chunking)

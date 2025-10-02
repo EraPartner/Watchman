@@ -1,7 +1,7 @@
 // A small auth guard that prevents children from mounting until the user is authenticated.
-import React, { ReactNode } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import { Navigate } from 'react-router-dom';
+import React, { ReactNode } from "react";
+import { useAuth } from "../hooks/useAuth";
+import { Navigate } from "react-router-dom";
 
 const AuthGuard = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, loading } = useAuth();

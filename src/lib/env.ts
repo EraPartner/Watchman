@@ -22,15 +22,17 @@ class EnvValidator {
   private validateEnv(): Env {
     // VITE_BACKEND_URL is optional in development. If not provided, the client
     // will use relative endpoints and rely on the dev server proxy.
-    const backendUrlRaw = import.meta.env.VITE_BACKEND_URL || '';
-    let backendUrl = '';
+    const backendUrlRaw = import.meta.env.VITE_BACKEND_URL || "";
+    let backendUrl = "";
     if (backendUrlRaw) {
       try {
         // Ensure it's a valid URL when provided
         new URL(backendUrlRaw);
         backendUrl = backendUrlRaw;
       } catch {
-        throw new Error(`VITE_BACKEND_URL must be a valid URL when provided, got: ${backendUrlRaw}`);
+        throw new Error(
+          `VITE_BACKEND_URL must be a valid URL when provided, got: ${backendUrlRaw}`
+        );
       }
     }
 

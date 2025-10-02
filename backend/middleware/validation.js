@@ -14,7 +14,7 @@ export function requireFields(fields) {
 export function requireBoolean(field) {
   return (req, res, next) => {
     const val = req.body && req.body[field];
-    if (typeof val !== 'boolean') {
+    if (typeof val !== "boolean") {
       return res.status(400).json({ error: `Field ${field} must be boolean` });
     }
     next();
@@ -24,8 +24,10 @@ export function requireBoolean(field) {
 export function requireString(field) {
   return (req, res, next) => {
     const val = req.body && req.body[field];
-    if (typeof val !== 'string' || val.trim().length === 0) {
-      return res.status(400).json({ error: `Field ${field} must be a non-empty string` });
+    if (typeof val !== "string" || val.trim().length === 0) {
+      return res
+        .status(400)
+        .json({ error: `Field ${field} must be a non-empty string` });
     }
     next();
   };

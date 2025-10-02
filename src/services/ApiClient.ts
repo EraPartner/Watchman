@@ -1,9 +1,9 @@
-import { env } from '../lib/env';
-import { APP_CONFIG } from '../lib/constants';
+import { env } from "../lib/env";
+import { APP_CONFIG } from "../lib/constants";
 
 // Simple API client that only talks to our backend
 export interface ServiceHealth {
-  status: 'online' | 'offline' | 'warning' | 'not_configured';
+  status: "online" | "offline" | "warning" | "not_configured";
   responseTime?: number;
   error?: string;
   lastCheck?: string;
@@ -18,22 +18,22 @@ interface AdGuardStats {
   httpPort: number;
   language: string;
   dhcpAvailable: boolean;
-  
+
   // DNS Query statistics
   totalQueries: number;
   blockedQueries: number;
   allowedQueries: number;
   blockingRate: number;
-  
+
   // Performance metrics
   avgProcessingTime: number;
   timeUnits: string;
-  
+
   // Top lists
   topBlockedDomain: string;
   topQueriedDomain: string;
   topClient: string;
-  
+
   // Additional stats
   safebrowsingBlocked: number;
   safesearchBlocked: number;
@@ -69,7 +69,7 @@ interface RoonPortCheck {
 }
 
 interface RoonStatus {
-  status: 'online' | 'offline' | 'error';
+  status: "online" | "offline" | "error";
   timestamp: string;
   data?: {
     host?: string;
@@ -180,15 +180,15 @@ class ApiClient {
     // Allow VITE_BACKEND_URL to be optional in development. If not set or empty,
     // use relative paths so the Vite dev-server proxy handles /api calls and cookies
     // are managed by the browser on the same origin.
-    const raw = env.get('VITE_BACKEND_URL') || '';
-    this.baseUrl = raw ? raw.replace(/\/+$/, '') : '';
+    const raw = env.get("VITE_BACKEND_URL") || "";
+    this.baseUrl = raw ? raw.replace(/\/+$/, "") : "";
 
     // Restore persisted fallback auth token (if any) so Authorization header
     // continues to be sent across page reloads in dev scenarios where cookies
     // may not be available. Use a safe check for browser environment.
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem('watchman_auth_token');
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = window.localStorage.getItem("watchman_auth_token");
         if (saved) this.authToken = saved;
       }
     } catch (e) {
@@ -197,11 +197,15 @@ class ApiClient {
   }
 
   private makeRequestKey(url: string, options?: RequestInit) {
-    const method = (options && options.method) ? String(options.method).toUpperCase() : 'GET';
-    let bodyKey = '';
+    const method =
+      options && options.method ? String(options.method).toUpperCase() : "GET";
+    let bodyKey = "";
     try {
       if (options && options.body != null) {
-        bodyKey = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+        bodyKey =
+          typeof options.body === "string"
+            ? options.body
+            : JSON.stringify(options.body);
       }
     } catch (e) {
       bodyKey = String(options && (options as any).body);
@@ -209,7 +213,10 @@ class ApiClient {
     return `${method} ${url} ${bodyKey}`;
   }
 
-  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options?: RequestInit
+  ): Promise<T> {
     // If baseUrl is empty, use relative endpoint so requests go to same-origin
     // and benefit from the dev proxy and browser cookies.
     const url = this.baseUrl ? `${this.baseUrl}${endpoint}` : endpoint;
@@ -225,7 +232,10 @@ class ApiClient {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     // Merge headers safely
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, (options && options.headers) || {});
+    const headers = Object.assign(
+      { "Content-Type": "application/json" },
+      (options && options.headers) || {}
+    );
 
     // If we have an in-memory auth token (returned by login), attach it as a Bearer
     // Authorization header. This is a fallback for dev environments where cookies
@@ -234,11 +244,11 @@ class ApiClient {
     if (this.authToken && !(headers as any).Authorization) {
       (headers as any).Authorization = `Bearer ${this.authToken}`;
     }
-    
+
     const fetchOptions: RequestInit = Object.assign({}, options, {
       headers,
-      credentials: 'include',
-      signal: controller.signal
+      credentials: "include",
+      signal: controller.signal,
     });
 
     const promise = (async () => {
@@ -247,18 +257,31 @@ class ApiClient {
         clearTimeout(timeout);
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          throw new Error(errorData && (errorData.error || JSON.stringify(errorData)) || `API request failed: ${response.status} ${response.statusText}`);
+          const errorData = await response
+            .json()
+            .catch(() => ({ error: "Unknown error" }));
+          throw new Error(
+            (errorData && (errorData.error || JSON.stringify(errorData))) ||
+              `API request failed: ${response.status} ${response.statusText}`
+          );
         }
 
         return response.json();
       } catch (error: any) {
         clearTimeout(timeout);
-        if (error && error.name === 'AbortError') {
-          throw new Error(`Network error: request to ${endpoint} timed out after ${timeoutMs}ms`);
+        if (error && error.name === "AbortError") {
+          throw new Error(
+            `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`
+          );
         }
-        if (error instanceof TypeError && error.message && error.message.includes('fetch')) {
-          throw new Error(`Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`);
+        if (
+          error instanceof TypeError &&
+          error.message &&
+          error.message.includes("fetch")
+        ) {
+          throw new Error(
+            `Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`
+          );
         }
         throw error;
       } finally {
@@ -273,147 +296,161 @@ class ApiClient {
 
   // AdGuard endpoints
   async getAdGuardStatus(): Promise<ServiceHealth> {
-    return this.request('/api/adguard/status');
+    return this.request("/api/adguard/status");
   }
 
   async getAdGuardStats(): Promise<AdGuardStats> {
-    return this.request('/api/adguard/stats');
+    return this.request("/api/adguard/stats");
   }
 
   // IPFS endpoints
   async getIpfsStatus(): Promise<ServiceHealth> {
-    return this.request('/api/ipfs/status');
+    return this.request("/api/ipfs/status");
   }
 
   async getIpfsStats(): Promise<any> {
-    return this.request('/api/ipfs/stats');
+    return this.request("/api/ipfs/stats");
   }
 
   // Bitcoin endpoints
   async getBitcoinStatus(): Promise<ServiceHealth> {
-    return this.request('/api/bitcoin/status');
+    return this.request("/api/bitcoin/status");
   }
 
   async getBitcoinStats(): Promise<BitcoinStats> {
-    return this.request('/api/bitcoin/stats');
+    return this.request("/api/bitcoin/stats");
   }
 
   // qBittorrent endpoints
   async getQBittorrentStatus(): Promise<ServiceHealth> {
-    return this.request('/api/qbittorrent/status');
+    return this.request("/api/qbittorrent/status");
   }
 
   async getQBittorrentStats(): Promise<QBittorrentStats> {
-    return this.request('/api/qbittorrent/stats');
+    return this.request("/api/qbittorrent/stats");
   }
 
   // Tor endpoints
   async getTorRelay(nickname?: string): Promise<TorRelay> {
-    const endpoint = nickname ? `/api/tor/relay/${nickname}` : '/api/tor/relay';
+    const endpoint = nickname ? `/api/tor/relay/${nickname}` : "/api/tor/relay";
     return this.request(endpoint);
   }
 
   async getTorHealth(): Promise<ServiceHealth> {
-    return this.request('/api/tor/health');
+    return this.request("/api/tor/health");
   }
 
   // Synology endpoints
   async getSynologyStatus(): Promise<ServiceHealth> {
-    return this.request('/api/synology/status');
+    return this.request("/api/synology/status");
   }
 
   async getSynologyStats(): Promise<any> {
-    return this.request('/api/synology/stats');
+    return this.request("/api/synology/stats");
   }
 
   // Roon endpoints
   async getRoonStatus(): Promise<RoonStatus> {
-    return this.request('/api/roon/status');
+    return this.request("/api/roon/status");
   }
 
   async getRoonStats(): Promise<RoonStatus> {
-    return this.request('/api/roon/stats');
+    return this.request("/api/roon/stats");
   }
 
   // Philips Bridge endpoints
   async getPhilipsStatus(): Promise<any> {
-    return this.request('/api/philips/status');
+    return this.request("/api/philips/status");
   }
 
   async getPhilipsStats(): Promise<any> {
-    return this.request('/api/philips/stats');
+    return this.request("/api/philips/stats");
   }
 
   // Homebridge endpoints
   async getHomebridgeStatus(): Promise<any> {
     // Deprecated helper - route to allowed status endpoint
-    return this.request('/api/status/server-information');
+    return this.request("/api/status/server-information");
   }
 
   async getHomebridgeStats(): Promise<any> {
     // Deprecated helper - route to allowed server-information endpoint
-    return this.request('/api/status/server-information');
+    return this.request("/api/status/server-information");
   }
 
   // New /api/status/* endpoints
   async getStatusHomebridge(): Promise<any> {
     // Use the allowed server-information endpoint as the canonical status endpoint
-    return this.request('/api/status/server-information');
+    return this.request("/api/status/server-information");
   }
 
   async getHomebridgeVersion(): Promise<any> {
-    return this.request('/api/status/homebridge-version');
+    return this.request("/api/status/homebridge-version");
   }
 
   async getHomebridgeServerInformation(): Promise<any> {
-    return this.request('/api/status/server-information');
+    return this.request("/api/status/server-information");
   }
 
   async getHomebridgeAccessories(): Promise<any> {
-    return this.request('/api/accessories');
+    return this.request("/api/accessories");
   }
 
   // Alby Hub endpoints
   async getAlbyStatus(): Promise<ServiceHealth> {
-    return this.request('/api/albyhub/status');
+    return this.request("/api/albyhub/status");
   }
 
   async getAlbyStats(): Promise<any> {
-    return this.request('/api/albyhub/stats');
+    return this.request("/api/albyhub/stats");
   }
 
   // Health check
   async getServicesHealth(): Promise<ServicesHealthResponse> {
-    return this.request('/api/services/health');
+    return this.request("/api/services/health");
   }
 
-  async getBackendHealth(): Promise<{ status: string; timestamp: string; service: string; version: string }> {
-    return this.request('/health');
+  async getBackendHealth(): Promise<{
+    status: string;
+    timestamp: string;
+    service: string;
+    version: string;
+  }> {
+    return this.request("/health");
   }
 
   // Frontend configuration
   async getFrontendConfig(): Promise<FrontendConfig> {
-    return this.request('/api/config/frontend');
+    return this.request("/api/config/frontend");
   }
 
   // Router ARP lookup
   async getRouterArp(serviceName: string): Promise<{
     count: number;
     hosts: Array<{ ip: string; mac?: string; iface?: string }>;
-    lan?: { count: number; hosts: Array<{ ip: string; mac?: string; iface?: string }> };
+    lan?: {
+      count: number;
+      hosts: Array<{ ip: string; mac?: string; iface?: string }>;
+    };
     note?: string;
     raw?: string;
   }> {
-    const endpoint = `/api/router/arp?service=${encodeURIComponent(String(serviceName))}`;
+    const endpoint = `/api/router/arp?service=${encodeURIComponent(
+      String(serviceName)
+    )}`;
     return this.request(endpoint);
   }
 
   // Authentication helpers
-  async login(username: string, password: string, remember = false): Promise<any> {
-    const res = await this.request('/api/auth/login', {
-      method: 'POST',
+  async login(
+    username: string,
+    password: string,
+    remember = false
+  ): Promise<any> {
+    const res = await this.request("/api/auth/login", {
+      method: "POST",
       body: JSON.stringify({ username, password, remember }),
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
     });
 
     // If server returned a token in the response body, store it as a fallback
@@ -421,12 +458,13 @@ class ApiClient {
     // are not available (dev/proxy scenarios).
     try {
       const r = res as any;
-      const token = r && typeof r === 'object' && ('token' in r) ? (r as any).token : null;
+      const token =
+        r && typeof r === "object" && "token" in r ? (r as any).token : null;
       if (token) {
         this.authToken = String(token);
         try {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem('watchman_auth_token', String(token));
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem("watchman_auth_token", String(token));
           }
         } catch (e) {
           // ignore storage errors
@@ -443,17 +481,17 @@ class ApiClient {
     // Clear in-memory token as well as calling logout endpoint to clear cookie
     this.authToken = null;
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.removeItem('watchman_auth_token');
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.removeItem("watchman_auth_token");
       }
     } catch (e) {
       // ignore storage errors
     }
-    return this.request('/api/auth/logout', { method: 'POST' });
+    return this.request("/api/auth/logout", { method: "POST" });
   }
 
   async getAuthMe(): Promise<any> {
-    return this.request('/api/auth/me');
+    return this.request("/api/auth/me");
   }
 }
 

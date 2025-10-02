@@ -1,22 +1,22 @@
-import NodeCache from 'node-cache';
+import NodeCache from "node-cache";
 
 // Cache instances with different TTL strategies
-const healthCache = new NodeCache({ 
+const healthCache = new NodeCache({
   stdTTL: 10, // 10 seconds for health checks
   checkperiod: 15,
-  useClones: false // Better performance for simple objects
+  useClones: false, // Better performance for simple objects
 });
 
-const statsCache = new NodeCache({ 
+const statsCache = new NodeCache({
   stdTTL: 30, // 30 seconds for stats
   checkperiod: 45,
-  useClones: false
+  useClones: false,
 });
 
-const longTermCache = new NodeCache({ 
+const longTermCache = new NodeCache({
   stdTTL: 300, // 5 minutes for less frequently changing data
   checkperiod: 360,
-  useClones: false
+  useClones: false,
 });
 
 /**
@@ -39,14 +39,17 @@ export const cacheMiddleware = (cache, keyGenerator = (req) => req.url) => {
       }
     } catch (err) {
       // If cache lookup fails for any reason, don't block the request
-      console.warn('⚠️ Cache middleware error (continuing):', err && err.message ? err.message : err);
+      console.warn(
+        "⚠️ Cache middleware error (continuing):",
+        err && err.message ? err.message : err
+      );
     }
-    
+
     // Store original res.json
     const originalJson = res.json.bind(res);
-    
+
     // Override res.json to cache successful responses
-    res.json = function(data) {
+    res.json = function (data) {
       try {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
@@ -54,7 +57,11 @@ export const cacheMiddleware = (cache, keyGenerator = (req) => req.url) => {
             console.debug(`💾 Cached response for ${key}`);
           } catch (e) {
             // ignore cache set errors
-            console.warn('⚠️ Failed to set cache for', key, e && e.message ? e.message : e);
+            console.warn(
+              "⚠️ Failed to set cache for",
+              key,
+              e && e.message ? e.message : e
+            );
           }
         }
       } catch (e) {
@@ -62,7 +69,7 @@ export const cacheMiddleware = (cache, keyGenerator = (req) => req.url) => {
       }
       return originalJson(data);
     };
-    
+
     next();
   };
 };
@@ -73,15 +80,15 @@ export const statsCacheMiddleware = cacheMiddleware(statsCache);
 export const longTermCacheMiddleware = cacheMiddleware(longTermCache);
 
 // Cache management utilities
-export const clearCache = (type = 'all') => {
+export const clearCache = (type = "all") => {
   switch (type) {
-    case 'health':
+    case "health":
       healthCache.flushAll();
       break;
-    case 'stats':
+    case "stats":
       statsCache.flushAll();
       break;
-    case 'longterm':
+    case "longterm":
       longTermCache.flushAll();
       break;
     default:
@@ -95,5 +102,5 @@ export const clearCache = (type = 'all') => {
 export const getCacheStats = () => ({
   health: healthCache.getStats(),
   stats: statsCache.getStats(),
-  longterm: longTermCache.getStats()
+  longterm: longTermCache.getStats(),
 });

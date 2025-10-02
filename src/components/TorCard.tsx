@@ -1,11 +1,20 @@
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { Progress } from './ui/progress';
-import { AlertTriangle, ExternalLink, Shield, Zap, Hash, BarChart2, Link as LinkIcon, Database } from 'lucide-react';
-import { TorServerStats, ServerStatus } from '../types/server';
-import { RELAY_TYPE_COLORS, APP_CONFIG } from '../lib/constants';
-import { ServerStatusBadge } from './ServerStatusBadge';
-import { formatDisplayUrl, openHref } from '../lib/url';
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Progress } from "./ui/progress";
+import {
+  AlertTriangle,
+  ExternalLink,
+  Shield,
+  Zap,
+  Hash,
+  BarChart2,
+  Link as LinkIcon,
+  Database,
+} from "lucide-react";
+import { TorServerStats, ServerStatus } from "../types/server";
+import { RELAY_TYPE_COLORS, APP_CONFIG } from "../lib/constants";
+import { ServerStatusBadge } from "./ServerStatusBadge";
+import { formatDisplayUrl, openHref } from "../lib/url";
 
 // Tor Project logo SVG component
 const TorIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -38,15 +47,12 @@ interface TorCardProps {
   port?: number;
 }
 
-export const TorCard = ({ 
-  name, 
-  status, 
-  stats, 
-  ip, 
-  port
-}: TorCardProps) => {
+export const TorCard = ({ name, status, stats, ip, port }: TorCardProps) => {
   const getRelayTypeColor = (relayType: string) => {
-    return RELAY_TYPE_COLORS[relayType as keyof typeof RELAY_TYPE_COLORS] || 'text-gray-600';
+    return (
+      RELAY_TYPE_COLORS[relayType as keyof typeof RELAY_TYPE_COLORS] ||
+      "text-gray-600"
+    );
   };
 
   const formatBandwidth = (kbps: number) => {
@@ -74,16 +80,22 @@ export const TorCard = ({
             <TorIcon className="h-4 w-4 text-[#7D4698]" />
             {name}
             {stats.nickname && (
-              <span className="text-xs text-muted-foreground">({stats.nickname})</span>
+              <span className="text-xs text-muted-foreground">
+                ({stats.nickname})
+              </span>
             )}
           </CardTitle>
           {/* Use the shared URL helper to format and open the metrics link */}
           <button
-            onClick={() => openHref(`${APP_CONFIG.TOR_METRICS_BASE_URL}/${stats.nickname}`)}
+            onClick={() =>
+              openHref(`${APP_CONFIG.TOR_METRICS_BASE_URL}/${stats.nickname}`)
+            }
             className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 mt-1 w-fit"
             title="View relay details on Tor Metrics"
           >
-            <span className="truncate">{formatDisplayUrl(`${ip}:${port}`)}</span>
+            <span className="truncate">
+              {formatDisplayUrl(`${ip}:${port}`)}
+            </span>
             <ExternalLink className="h-3 w-3" />
           </button>
         </div>
@@ -94,20 +106,23 @@ export const TorCard = ({
               <AlertTriangle className="h-4 w-4 text-yellow-500" />
             </div>
           )}
-          {!stats.flags?.includes('Running') && (
+          {!stats.flags?.includes("Running") && (
             <div title="Relay not running">
               <AlertTriangle className="h-4 w-4 text-red-500" />
             </div>
           )}
         </div>
       </CardHeader>
-      
+
       <CardContent className="space-y-4">
         {/* Connection Info */}
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             {stats.orPort && (
-              <span className="text-xs flex items-center gap-1"><Database className="h-3 w-3" />OR Port: {stats.orPort}</span>
+              <span className="text-xs flex items-center gap-1">
+                <Database className="h-3 w-3" />
+                OR Port: {stats.orPort}
+              </span>
             )}
           </div>
         </div>
@@ -116,9 +131,11 @@ export const TorCard = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Type:</span>
-            <Badge 
-              variant="outline" 
-              className={`${getRelayTypeColor(stats.relayType)} capitalize border-current`}
+            <Badge
+              variant="outline"
+              className={`${getRelayTypeColor(
+                stats.relayType
+              )} capitalize border-current`}
             >
               {stats.relayType}
             </Badge>
@@ -139,18 +156,28 @@ export const TorCard = ({
               {formatBandwidth(stats.bandwidth.current)} current
             </span>
           </div>
-          
+
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
-              <span className="text-blue-600">Avg: {formatBandwidth(stats.bandwidth.average)}</span>
-              <span className="text-green-600">Burst: {formatBandwidth(stats.bandwidth.burst)}</span>
+              <span className="text-blue-600">
+                Avg: {formatBandwidth(stats.bandwidth.average)}
+              </span>
+              <span className="text-green-600">
+                Burst: {formatBandwidth(stats.bandwidth.burst)}
+              </span>
             </div>
-            <Progress 
-              value={Math.min((stats.bandwidth.current / stats.bandwidth.burst) * 100, 100)} 
+            <Progress
+              value={Math.min(
+                (stats.bandwidth.current / stats.bandwidth.burst) * 100,
+                100
+              )}
               className="h-2"
             />
             <div className="text-xs text-center text-muted-foreground">
-              {Math.round((stats.bandwidth.current / stats.bandwidth.burst) * 100)}% of burst capacity
+              {Math.round(
+                (stats.bandwidth.current / stats.bandwidth.burst) * 100
+              )}
+              % of burst capacity
             </div>
           </div>
         </div>
@@ -164,7 +191,11 @@ export const TorCard = ({
             </span>
             <div className="flex gap-1 overflow-x-auto scrollbar-hide">
               {stats.flags.map((flag) => (
-                <Badge key={flag} variant="secondary" className="text-xs whitespace-nowrap flex-shrink-0">
+                <Badge
+                  key={flag}
+                  variant="secondary"
+                  className="text-xs whitespace-nowrap flex-shrink-0"
+                >
                   {flag}
                 </Badge>
               ))}
@@ -175,20 +206,36 @@ export const TorCard = ({
         {/* Additional Info */}
         <div className="space-y-1 text-xs">
           <div className="flex justify-between">
-            <span className="flex items-center gap-1 text-muted-foreground"><Hash className="h-3 w-3" />Fingerprint:</span>
-            <span className="font-mono text-xs">{stats.fingerprint?.slice(0, 16)}...</span>
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <Hash className="h-3 w-3" />
+              Fingerprint:
+            </span>
+            <span className="font-mono text-xs">
+              {stats.fingerprint?.slice(0, 16)}...
+            </span>
           </div>
           {stats.consensusWeight && (
             <div className="flex justify-between">
-              <span className="flex items-center gap-1 text-muted-foreground"><BarChart2 className="h-3 w-3" />Consensus Weight:</span>
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <BarChart2 className="h-3 w-3" />
+                Consensus Weight:
+              </span>
               <span>{formatNumber(stats.consensusWeight)}</span>
             </div>
           )}
           {stats.exitPolicy && (
             <div className="flex justify-between">
-              <span className="flex items-center gap-1 text-muted-foreground"><LinkIcon className="h-3 w-3" />Exit Policy:</span>
-              <span className="text-xs truncate max-w-24" title={stats.exitPolicy}>
-                {stats.exitPolicy.length > 20 ? stats.exitPolicy.slice(0, 20) + '...' : stats.exitPolicy}
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <LinkIcon className="h-3 w-3" />
+                Exit Policy:
+              </span>
+              <span
+                className="text-xs truncate max-w-24"
+                title={stats.exitPolicy}
+              >
+                {stats.exitPolicy.length > 20
+                  ? stats.exitPolicy.slice(0, 20) + "..."
+                  : stats.exitPolicy}
               </span>
             </div>
           )}
