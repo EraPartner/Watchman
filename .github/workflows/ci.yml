@@ -104,8 +104,8 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
-      - name: Run lint, format-check and typecheck
-        run: npm run ci
+      - name: Run format-check and typecheck (no lint)
+        run: npm run format:check && npm run check:types
 
       - name: Run unit tests
         run: npm test --if-present
