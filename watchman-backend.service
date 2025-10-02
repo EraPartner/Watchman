@@ -1,0 +1,44 @@
+[Unit]
+Description=Watchman Backend Server
+Documentation=https://github.com/yourusername/watchman
+After=network.target
+
+[Service]
+Type=simple
+User=watchman
+Group=watchman
+WorkingDirectory=/opt/watchman/backend
+ExecStart=/usr/bin/node server.js
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/watchman/backend
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Environment
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/watchman/backend/.env.local
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=watchman-backend
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

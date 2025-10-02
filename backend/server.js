@@ -35,58 +35,105 @@ import {
 } from "./middleware/validation.js";
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
+import { validateEnvironment, getConfig } from "./config.js";
+
 const exec = promisify(execCb);
 
 // Load environment variables
 dotenv.config({ path: ".env.local" });
 
+// Validate environment before starting server
+validateEnvironment();
+
+const config = getConfig();
 const app = express();
 const server = createServer(app);
-const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.FRONTEND_URL;
+const PORT = config.server.port;
+const FRONTEND_URL = config.server.frontendUrl;
 
-// Enforce FRONTEND_URL in production to avoid open CORS
-if (
-  process.env.NODE_ENV === "production" &&
-  (!FRONTEND_URL || FRONTEND_URL === "*")
-) {
-  console.error(
-    "❌ FRONTEND_URL must be set to your frontend origin in production to avoid open CORS."
-  );
-  process.exit(1);
+// Production security checks
+if (process.env.NODE_ENV === "production") {
+  // Enforce FRONTEND_URL in production to avoid open CORS
+  if (!FRONTEND_URL || FRONTEND_URL === "*") {
+    console.error(
+      "❌ FRONTEND_URL must be set to your frontend origin in production to avoid open CORS."
+    );
+    process.exit(1);
+  }
+
+  // Ensure HTTPS in production
+  if (!FRONTEND_URL.startsWith('https://')) {
+    console.warn(
+      "⚠️  WARNING: FRONTEND_URL should use HTTPS in production for security"
+    );
+  }
+
+  // Validate JWT secret is set and strong
+  if (!config.auth.jwtSecret || config.auth.jwtSecret.length < 32) {
+    console.error(
+      "❌ JWT_SECRET must be at least 32 characters long in production"
+    );
+    process.exit(1);
+  }
 }
 
-// Cookie defaults
+// Cookie defaults with improved security
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  // Only mark secure when running in production AND the frontend origin uses https.
-  // This prevents cookies from being flagged secure for local HTTP dev (which
-  // would prevent the browser from setting them), even if NODE_ENV was set to 'production'.
-  secure:
-    process.env.NODE_ENV === "production" &&
-    /^https:/i.test(FRONTEND_URL || ""),
-  sameSite: "lax",
+  secure: process.env.NODE_ENV === "production" && FRONTEND_URL?.startsWith('https://'),
+  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
   path: "/",
+  // Add domain for production
+  ...(process.env.NODE_ENV === "production" && FRONTEND_URL && {
+    domain: new URL(FRONTEND_URL).hostname
+  })
 };
 
 // Initialize service manager and WebSocket
 let serviceManager;
 let httpServerInstance = null;
 
+// Global error handlers for production
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception:', err);
+  if (process.env.NODE_ENV === 'production') {
+    // Graceful shutdown
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  if (process.env.NODE_ENV === 'production') {
+    // Graceful shutdown
+    process.exit(1);
+  }
+});
+
 async function initializeServer() {
   console.log("🚀 Initializing Watchman Backend Server...");
+  console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
+  console.log(`🔌 Port: ${PORT}`);
 
-  serviceManager = new ServiceManager();
-  await serviceManager.initializeServices();
+  try {
+    serviceManager = new ServiceManager();
+    await serviceManager.initializeServices();
 
-  // Initialize WebSocket server
-  WebSocketManager.initialize(server);
+    // Initialize WebSocket server
+    WebSocketManager.initialize(server);
 
-  console.log("✅ Service initialization complete");
+    console.log("✅ Service initialization complete");
+  } catch (error) {
+    console.error("❌ Failed to initialize services:", error);
+    process.exit(1);
+  }
 }
 
-// Middleware
+// Enhanced middleware with production-ready security
 app.use(performanceMonitor.trackRequest());
+
+// Enhanced Helmet configuration for production
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -95,8 +142,11 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", ...(FRONTEND_URL ? [FRONTEND_URL] : [])],
       },
     },
+    crossOriginEmbedderPolicy: false, // Required for some monitoring tools
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" }
   })
 );
 app.use(compression({ level: 6, threshold: 1024 }));
@@ -1382,13 +1432,9 @@ async function startServer() {
     httpServerInstance = server.listen(PORT, () => {
       console.info(`🚀 Watchman Backend Server running on port ${PORT}`);
       console.info(`📊 Health check: http://localhost:${PORT}/health`);
-      console.info(`🛡️ AdGuard API: http://localhost:${PORT}/api/adguard/*`);
-      console.info(`₿ Bitcoin API: http://localhost:${PORT}/api/bitcoin/*`);
-      console.info(`🌐 Tor API: http://localhost:${PORT}/api/tor/*`);
       console.info(
         `🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`
       );
-      console.info(`🖥️ Synology API: http://localhost:${PORT}/api/synology/*`);
       console.info(
         `🔍 Services Health: http://localhost:${PORT}/api/services/health`
       );

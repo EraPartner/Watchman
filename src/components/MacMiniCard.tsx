@@ -135,11 +135,7 @@ export const MacMiniCard = memo<MacMiniCardProps>(
 
     return (
       <Card
-        className={`h-full transition-all duration-300 hover:shadow-lg border-l-4 ${
-          statusMetrics?.isHealthy
-            ? "border-l-green-500 hover:border-l-green-600"
-            : "border-l-red-500 hover:border-l-red-600"
-        }`}
+        className={`h-full transition-all duration-300 hover:shadow-lg `}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
           <div className="flex items-center gap-3">

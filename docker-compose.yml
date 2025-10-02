@@ -1,73 +1,60 @@
 version: '3.8'
 
 services:
-  traefik:
-    image: traefik:v2.10
-    command: >
-      --api.insecure=false
-      --providers.docker=true
-      --providers.docker.exposedbydefault=false
-      --entrypoints.web.address=:80
-      --entrypoints.websecure.address=:443
-      --certificatesresolvers.le.acme.tlschallenge=true
-      --certificatesresolvers.le.acme.email=you@example.com
-      --certificatesresolvers.le.acme.storage=/acme/acme.json
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./docker/acme.json:/acme/acme.json
-    restart: unless-stopped
-    networks:
-      - watchman_net
-
+  # Backend service
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: watchman-backend:latest
+    container_name: watchman-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
     env_file:
       - ./backend/.env.local
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.watchman-backend.loadbalancer.server.port=3001"
-      - "traefik.http.routers.watchman-backend-api.rule=Host(`watchman.example.com`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.watchman-backend-api.entrypoints=websecure"
-      - "traefik.http.routers.watchman-backend-api.tls.certresolver=le"
-      - "traefik.http.routers.watchman-backend-ws.rule=Host(`watchman.example.com`) && PathPrefix(`/ws`)"
-      - "traefik.http.routers.watchman-backend-ws.entrypoints=websecure"
-      - "traefik.http.routers.watchman-backend-ws.tls.certresolver=le"
-    restart: unless-stopped
+    volumes:
+      - ./backend/logs:/app/logs
     networks:
-      - watchman_net
+      - watchman-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # Frontend service (static files served by Node.js serve)
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    image: watchman-frontend:latest
+    container_name: watchman-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
     depends_on:
       backend:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.watchman-frontend-http.rule=Host(`watchman.example.com`)"
-      - "traefik.http.routers.watchman-frontend-http.entrypoints=web"
-      - "traefik.http.routers.watchman-frontend-http.middlewares=redirect-to-https@docker"
-      - "traefik.http.routers.watchman-frontend.rule=Host(`watchman.example.com`)"
-      - "traefik.http.routers.watchman-frontend.entrypoints=websecure"
-      - "traefik.http.routers.watchman-frontend.tls.certresolver=le"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-    restart: unless-stopped
     networks:
-      - watchman_net
+      - watchman-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 networks:
-  watchman_net:
+  watchman-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  backend-logs:

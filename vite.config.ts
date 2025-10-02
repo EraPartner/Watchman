@@ -47,6 +47,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
       },
+      // Security headers for dev server
+      headers: {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+      },
     },
     build: {
       // Remove console logs in production
@@ -54,48 +60,32 @@ export default defineConfig(({ mode }) => {
       terserOptions: {
         compress: {
           drop_console: mode === "production",
-          drop_debugger: true,
-          pure_funcs:
-            mode === "production" ? ["console.log", "console.info"] : [],
+          drop_debugger: mode === "production",
         },
       },
       // Improve chunk splitting for better caching
       rollupOptions: {
         output: {
           manualChunks: {
-            // Vendor chunks for better caching
-            "react-vendor": ["react", "react-dom"],
-            router: ["react-router-dom"],
-            query: ["@tanstack/react-query"],
-            "ui-vendor": [
-              "lucide-react",
+            // Vendor chunk for better caching
+            vendor: ["react", "react-dom", "react-router-dom"],
+            ui: [
               "@radix-ui/react-progress",
               "@radix-ui/react-toast",
               "@radix-ui/react-tooltip",
             ],
-            utils: ["clsx", "tailwind-merge", "class-variance-authority"],
+            query: ["@tanstack/react-query"],
           },
-          // Optimize chunk naming for better caching
-          chunkFileNames: (chunkInfo) => {
-            return `assets/js/[name]-[hash].js`;
-          },
-          assetFileNames: (assetInfo) => {
-            const info = assetInfo.name.split(".");
-            const ext = info[info.length - 1];
-            if (/\.(css)$/.test(assetInfo.name)) {
-              return `assets/css/[name]-[hash].${ext}`;
-            }
-            if (
-              /\.(png|jpe?g|svg|gif|tiff|bmp|ico|webp)$/i.test(assetInfo.name)
-            ) {
-              return `assets/images/[name]-[hash].${ext}`;
-            }
-            return `assets/[name]-[hash].${ext}`;
-          },
+          // Security: Don't expose source paths in production
+          ...(mode === "production" && {
+            entryFileNames: "assets/[name].[hash].js",
+            chunkFileNames: "assets/[name].[hash].js",
+            assetFileNames: "assets/[name].[hash].[ext]",
+          }),
         },
       },
       // Source maps only in development
-      sourcemap: mode !== "production",
+      sourcemap: mode === "development",
       // Target modern browsers for better performance
       target: "esnext",
       // Increase chunk size warning limit
@@ -104,7 +94,7 @@ export default defineConfig(({ mode }) => {
       cssCodeSplit: true,
     },
     // Prevent accidental exposure of env vars
-    envPrefix: "VITE_",
+    envPrefix: ["VITE_"],
     // Optimize dependencies
     optimizeDeps: {
       include: [
@@ -112,11 +102,7 @@ export default defineConfig(({ mode }) => {
         "react-dom",
         "react-router-dom",
         "@tanstack/react-query",
-        "lucide-react",
-        "clsx",
-        "tailwind-merge",
       ],
-      exclude: ["@tanstack/react-query-devtools"],
     },
     // Enable esbuild for faster builds
     esbuild: {

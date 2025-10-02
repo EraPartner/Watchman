@@ -1,0 +1,42 @@
+# Remote Caddyfile template for the Caddy host (put this on the remote machine)
+# Replace your.subdomain.example.com with your real hostname.
+# Place Cloudflare Origin CA cert and key on the remote host at /etc/caddy/origin.pem and /etc/caddy/origin.key
+
+your.subdomain.example.com {
+    # Present the Cloudflare Origin CA cert to Cloudflare
+    tls /etc/caddy/origin.pem /etc/caddy/origin.key
+
+    # Compression
+    encode zstd gzip
+
+    # API -> backend tunneled to remote loopback
+    @api {
+        path /api/*
+    }
+    handle @api {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    # Websocket -> backend
+    @ws {
+        path /ws/*
+    }
+    handle @ws {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    # Everything else -> frontend (tunneled)
+    handle {
+        reverse_proxy 127.0.0.1:5000
+    }
+}
+
+# Redirect http to https
+http://your.subdomain.example.com {
+    redir https://{host}{uri} 308
+}
+
+# Notes:
+# - Ensure ssh reverse tunnels forward remote 127.0.0.1:3001 and 127.0.0.1:5000 from the origin host.
+# - Put origin cert as /etc/caddy/origin.pem and origin key as /etc/caddy/origin.key on the remote host.
+# - Reload Caddy after editing: `caddy reload --config /etc/caddy/Caddyfile` or via your service manager.

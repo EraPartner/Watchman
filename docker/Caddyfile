@@ -1,0 +1,30 @@
+# Replace watchman.example.com with your real subdomain
+# This Caddyfile uses Cloudflare Origin CA certs mounted at /certs/origin.pem & /certs/origin.key
+
+watchman.example.com {
+    # Use the origin cert/key you get from Cloudflare (trusted by Cloudflare only)
+    tls /certs/origin.pem /certs/origin.key
+
+    # Gzip/ Brotli encoding
+    encode zstd gzip
+
+    # API routes -> backend
+    handle_path /api/* {
+        reverse_proxy backend:3001
+    }
+
+    # WebSocket route -> backend (preserve websocket)
+    handle_path /ws/* {
+        reverse_proxy backend:3001
+    }
+
+    # Everything else -> frontend static server
+    handle {
+        reverse_proxy frontend:5000
+    }
+}
+
+# Optional: redirect HTTP to HTTPS explicitly
+http://watchman.example.com {
+    redir https://{host}{uri} 308
+}

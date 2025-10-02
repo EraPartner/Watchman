@@ -1,0 +1,71 @@
+# Caddyfile Template for LAN Deployment
+# Replace BACKEND_HOST_IP with your actual backend server IP (e.g., 192.168.1.100)
+# Replace YOUR_DOMAIN with your domain or use IP address for LAN-only access
+
+{$DOMAIN:localhost} {
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY" 
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss: ws: {$BACKEND_HOST}; font-src 'self'"
+        -Server
+    }
+
+    # Enable compression
+    encode gzip
+
+    # API endpoints
+    reverse_proxy /api/* {$BACKEND_HOST:http://192.168.1.100:3001} {
+        # Health check the backend
+        health_uri /health
+        health_interval 30s
+        health_timeout 5s
+        
+        # Forward headers properly
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+
+    # WebSocket support for real-time updates
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+        path /ws
+    }
+    reverse_proxy @websocket {$BACKEND_HOST:http://192.168.1.100:3001}
+
+    # Health endpoint (allow direct access)
+    reverse_proxy /health {$BACKEND_HOST:http://192.168.1.100:3001}
+
+    # Static assets with long cache
+    @static path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot *.map
+    header @static {
+        Cache-Control "public, max-age=31536000, immutable"
+        +Vary "Accept-Encoding"
+    }
+
+    # Serve the built React app
+    root * {$WEBROOT:/var/www/watchman}
+    try_files {path} /index.html
+    file_server
+
+    # Access logging
+    log {
+        output file /var/log/caddy/watchman.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+        format console
+    }
+}
+
+# Optional: Redirect HTTP to HTTPS (if using SSL)
+http://{$DOMAIN:localhost} {
+    redir https://{host}{uri} permanent
+}
