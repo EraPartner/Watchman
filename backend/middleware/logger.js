@@ -1,12 +1,12 @@
 // Structured logging middleware with security-focused redaction
-import { createWriteStream } from 'fs';
-import { join } from 'path';
+import { createWriteStream } from "fs";
+import { join } from "path";
 
 // Simple structured logger that redacts sensitive data
 class Logger {
   constructor(options = {}) {
-    this.level = options.level || process.env.LOG_LEVEL || 'info';
-    this.logFile = options.logFile || join(process.cwd(), 'logs', 'app.log');
+    this.level = options.level || process.env.LOG_LEVEL || "info";
+    this.logFile = options.logFile || join(process.cwd(), "logs", "app.log");
     this.redactPatterns = [
       /password[=:]\s*["']?([^"'\s]+)["']?/gi,
       /token[=:]\s*["']?([^"'\s]+)["']?/gi,
@@ -25,9 +25,9 @@ class Logger {
 
   redact(message) {
     let redacted = String(message);
-    this.redactPatterns.forEach(pattern => {
+    this.redactPatterns.forEach((pattern) => {
       redacted = redacted.replace(pattern, (match, group) => {
-        return match.replace(group, '[REDACTED]');
+        return match.replace(group, "[REDACTED]");
       });
     });
     return redacted;
@@ -64,17 +64,17 @@ class Logger {
     if (!this.shouldLog(level)) return;
 
     const formatted = this.format(level, message, meta);
-    
+
     // Write to console in development
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== "production") {
       const colors = {
-        error: '\x1b[31m',
-        warn: '\x1b[33m',
-        info: '\x1b[36m',
-        debug: '\x1b[90m',
+        error: "\x1b[31m",
+        warn: "\x1b[33m",
+        info: "\x1b[36m",
+        debug: "\x1b[90m",
       };
-      const reset = '\x1b[0m';
-      console.log(`${colors[level] || ''}${formatted}${reset}`);
+      const reset = "\x1b[0m";
+      console.log(`${colors[level] || ""}${formatted}${reset}`);
     } else {
       // In production, write to file/stdout
       console.log(formatted);
@@ -82,19 +82,19 @@ class Logger {
   }
 
   error(message, meta = {}) {
-    this.write('error', message, meta);
+    this.write("error", message, meta);
   }
 
   warn(message, meta = {}) {
-    this.write('warn', message, meta);
+    this.write("warn", message, meta);
   }
 
   info(message, meta = {}) {
-    this.write('info', message, meta);
+    this.write("info", message, meta);
   }
 
   debug(message, meta = {}) {
-    this.write('debug', message, meta);
+    this.write("debug", message, meta);
   }
 }
 
@@ -103,32 +103,33 @@ const logger = new Logger();
 
 // Request ID middleware
 export function requestIdMiddleware(req, res, next) {
-  req.requestId = req.headers['x-request-id'] || 
+  req.requestId =
+    req.headers["x-request-id"] ||
     `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  res.setHeader('X-Request-ID', req.requestId);
+  res.setHeader("X-Request-ID", req.requestId);
   next();
 }
 
 // Request logging middleware
 export function requestLogger(req, res, next) {
   const startTime = Date.now();
-  
+
   // Log request
-  logger.info('Incoming request', {
+  logger.info("Incoming request", {
     requestId: req.requestId,
     method: req.method,
     path: req.path,
     ip: req.ip,
-    userAgent: req.headers['user-agent'],
+    userAgent: req.headers["user-agent"],
   });
 
   // Log response
-  res.on('finish', () => {
+  res.on("finish", () => {
     const duration = Date.now() - startTime;
-    const level = res.statusCode >= 500 ? 'error' : 
-                  res.statusCode >= 400 ? 'warn' : 'info';
-    
-    logger[level]('Request completed', {
+    const level =
+      res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+
+    logger[level]("Request completed", {
       requestId: req.requestId,
       method: req.method,
       path: req.path,

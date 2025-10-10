@@ -1,15 +1,15 @@
 // Account lockout mechanism to prevent brute force attacks
-import logger from './logger.js';
+import logger from "./logger.js";
 
 class AccountLockoutManager {
   constructor(options = {}) {
     this.maxAttempts = options.maxAttempts || 5;
     this.lockoutDuration = options.lockoutDuration || 15 * 60 * 1000; // 15 minutes
     this.cleanupInterval = options.cleanupInterval || 60 * 1000; // 1 minute
-    
+
     // Store failed attempts: Map<username, { count, firstAttempt, lockedUntil }>
     this.attempts = new Map();
-    
+
     // Periodic cleanup of old entries
     this.cleanupTimer = setInterval(() => this.cleanup(), this.cleanupInterval);
   }
@@ -23,9 +23,9 @@ class AccountLockoutManager {
   recordFailedAttempt(username, ip) {
     const key = this.getKey(username, ip);
     const now = Date.now();
-    
+
     let record = this.attempts.get(key);
-    
+
     if (!record) {
       record = {
         count: 1,
@@ -35,21 +35,21 @@ class AccountLockoutManager {
     } else {
       record.count++;
     }
-    
+
     // Check if account should be locked
     if (record.count >= this.maxAttempts) {
       record.lockedUntil = now + this.lockoutDuration;
-      
-      logger.warn('Account locked due to failed login attempts', {
+
+      logger.warn("Account locked due to failed login attempts", {
         username,
         ip,
         attempts: record.count,
         lockedUntil: new Date(record.lockedUntil).toISOString(),
       });
     }
-    
+
     this.attempts.set(key, record);
-    
+
     return {
       locked: record.lockedUntil && record.lockedUntil > now,
       attemptsRemaining: Math.max(0, this.maxAttempts - record.count),
@@ -67,17 +67,17 @@ class AccountLockoutManager {
     const key = this.getKey(username, ip);
     const record = this.attempts.get(key);
     const now = Date.now();
-    
+
     if (!record || !record.lockedUntil) {
       return { locked: false, lockedUntil: null };
     }
-    
+
     if (record.lockedUntil <= now) {
       // Lock expired, clean up
       this.attempts.delete(key);
       return { locked: false, lockedUntil: null };
     }
-    
+
     return {
       locked: true,
       lockedUntil: new Date(record.lockedUntil),
@@ -113,21 +113,21 @@ class AccountLockoutManager {
   cleanup() {
     const now = Date.now();
     const expiredKeys = [];
-    
+
     for (const [key, record] of this.attempts.entries()) {
       // Remove entries where:
       // 1. Lock has expired, or
       // 2. First attempt was more than 1 hour ago (to prevent memory leak)
       if (
         (record.lockedUntil && record.lockedUntil <= now) ||
-        (now - record.firstAttempt > 60 * 60 * 1000)
+        now - record.firstAttempt > 60 * 60 * 1000
       ) {
         expiredKeys.push(key);
       }
     }
-    
-    expiredKeys.forEach(key => this.attempts.delete(key));
-    
+
+    expiredKeys.forEach((key) => this.attempts.delete(key));
+
     if (expiredKeys.length > 0) {
       logger.debug(`Cleaned up ${expiredKeys.length} expired lockout records`);
     }
@@ -141,7 +141,7 @@ class AccountLockoutManager {
     const now = Date.now();
     let locked = 0;
     let failed = 0;
-    
+
     for (const record of this.attempts.values()) {
       if (record.lockedUntil && record.lockedUntil > now) {
         locked++;
@@ -149,7 +149,7 @@ class AccountLockoutManager {
         failed++;
       }
     }
-    
+
     return {
       totalTracked: this.attempts.size,
       locked,
@@ -180,27 +180,27 @@ const lockoutManager = new AccountLockoutManager({
 export function checkLockout(req, res, next) {
   const username = req.body?.username;
   const ip = req.ip || req.connection.remoteAddress;
-  
+
   if (!username) {
     return next();
   }
-  
+
   const status = lockoutManager.isLocked(username, ip);
-  
+
   if (status.locked) {
-    logger.warn('Login attempt on locked account', {
+    logger.warn("Login attempt on locked account", {
       username,
       ip,
       lockedUntil: status.lockedUntil.toISOString(),
     });
-    
+
     return res.status(429).json({
-      error: 'Account temporarily locked due to too many failed login attempts',
+      error: "Account temporarily locked due to too many failed login attempts",
       lockedUntil: status.lockedUntil.toISOString(),
-      message: 'Please try again later',
+      message: "Please try again later",
     });
   }
-  
+
   next();
 }
 

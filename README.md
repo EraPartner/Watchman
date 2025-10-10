@@ -22,7 +22,6 @@ This repository contains a Vite + React TypeScript frontend and a Node.js/Expres
 - [Production build & deploy](#production-build--deploy)
 - [Environment variables](#environment-variables)
 - [CI / GitHub Actions](#ci--github-actions)
-- [Docker / Docker Compose example](#docker--docker-compose-example)
 - [Troubleshooting & debugging](#troubleshooting--debugging)
 - [Security notes](#security-notes)
 - [Contributing](#contributing)
@@ -33,6 +32,7 @@ This repository contains a Vite + React TypeScript frontend and a Node.js/Expres
 ## Quickstart (development)
 
 Prerequisites:
+
 - Node.js 18+ and npm
 - Git
 
@@ -76,47 +76,24 @@ npm ci
 npm run build
 ```
 
-2. Serve the `dist/` directory with a static server or a CDN. Common options:
-- Nginx or Caddy (reverse proxy + static serve)
-- Upload `dist/` to an object storage or static hosting (Netlify, Vercel, etc.)
+2. Serve the `dist/` directory with a static server or upload to a CDN/static hosting service (Netlify, Vercel, etc.)
 
-3. Start the backend in production mode (on the server):
+3. Start the backend in production mode:
 
 ```bash
 cd backend
 npm ci
-# ensure environment is provided (see below)
 NODE_ENV=production npm start
 ```
 
-Consider running the backend under a process manager (systemd, pm2) and put an HTTP(S) reverse proxy (Nginx/Caddy) in front to enable TLS, request buffering and headers.
-
-### Example Nginx reverse proxy snippet
-
-```nginx
-server {
-  listen 80;
-  server_name watchman.example.com;
-
-  location / {
-    root /var/www/watchman/dist;
-    try_files $uri $uri/ /index.html;
-  }
-
-  location /api/ {
-    proxy_pass http://127.0.0.1:3001/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-  }
-}
-```
+Consider running the backend under a process manager like systemd or pm2 for automatic restarts.
 
 ---
 
 ## Environment variables
 
 - Frontend: uses Vite. Prefix environment vars with `VITE_` to expose to the client.
+
   - Example: `VITE_FRONTEND_PORT`, `VITE_HMR_PORT`
 
 - Backend: the backend reads `.env.local` in the repo root (or `backend/.env.local` depending on your setup). Copy `backend/.env.example` to `backend/.env.local` and update values.
@@ -149,43 +126,15 @@ Manual runs are supported via `workflow_dispatch` in the workflow. If you change
 
 ---
 
-## Docker / Docker Compose example
-
-Below is a minimal Docker Compose example to run frontend (static) and backend. Adjust images, build contexts, and environment variables to your environment.
-
-```yaml
-version: '3.8'
-services:
-  backend:
-    build: ./backend
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - FRONTEND_URL=https://watchman.example.com
-    ports:
-      - 3001:3001
-    restart: unless-stopped
-
-  frontend:
-    image: nginx:alpine
-    volumes:
-      - ./dist:/usr/share/nginx/html:ro
-    ports:
-      - 80:80
-    restart: unless-stopped
-```
-
-This assumes you built the frontend locally (`npm run build`) and have a Dockerfile for the backend.
-
----
-
 ## Troubleshooting & debugging
 
 - Build fails with `Cannot find package 'babel-plugin-transform-react-remove-prop-types'`:
+
   - Ensure `babel-plugin-transform-react-remove-prop-types` is installed as a devDependency and `package-lock.json` is committed.
   - Run `npm ci` then `npm run build` locally to reproduce and debug.
 
 - Backend `/health` not responding in CI smoke-test:
+
   - Download the `backend-start-log` artifact from the workflow run to inspect startup errors.
   - Ensure required external services (Tor, Synology, etc.) are either mocked or their absence is handled gracefully by the service manager.
 
@@ -226,12 +175,3 @@ If you plan to add a new service integration, follow the existing `services/` pa
 ## License
 
 This project is licensed under the MIT License — see the `LICENSE` file for details.
-
----
-
-If you want, I can also:
-- Add a `docs/DEPLOY.md` with step-by-step production deployment (systemd/pm2/Nginx examples).
-- Add a `docker-compose.yml` in the repo for easy local deployments.
-- Add a small healthcheck script for the runner that also validates a simple authenticated API endpoint.
-
-Which of those would you like next?
