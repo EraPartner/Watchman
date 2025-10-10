@@ -38,6 +38,21 @@ import { exec as execCb } from "child_process";
 import { promisify } from "util";
 import { validateEnvironment, getConfig } from "./config.js";
 import logger, { requestIdMiddleware, requestLogger } from "./middleware/logger.js";
+// Enhanced security middleware imports
+import {
+  advancedSecurityHeaders,
+  ddosProtection,
+  suspiciousPatternDetection,
+  timingAttackProtection,
+} from "./middleware/securityHeaders.js";
+import { enforceIPControl, ipControl, requireWhitelistedIP } from "./middleware/ipControl.js";
+import { auditLogger, auditMiddleware } from "./middleware/auditLogger.js";
+import { securityMonitor, monitorSecurityEvents, trackFailedLogin } from "./middleware/securityMonitor.js";
+import {
+  sanitizeInputs,
+  validateInputSecurity,
+  limitUserAction,
+} from "./middleware/inputSanitization.js";
 
 const exec = promisify(execCb);
 
@@ -1382,6 +1397,101 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
       error: "Failed to run ARP lookup",
       message: error && error.message ? error.message : String(error),
     });
+  }
+});
+
+// Security administration endpoints (require auth + whitelist)
+app.get("/api/security/alerts", requireAuth, requireWhitelistedIP, (req, res) => {
+  try {
+    const filters = {
+      severity: req.query.severity,
+      type: req.query.type,
+      since: req.query.since,
+      limit: req.query.limit ? parseInt(req.query.limit) : 100,
+    };
+    
+    const alerts = securityMonitor.getAlerts(filters);
+    res.json({ alerts, count: alerts.length });
+  } catch (error) {
+    logger.error('Failed to retrieve security alerts', { error: error.message });
+    res.status(500).json({ error: 'Failed to retrieve alerts' });
+  }
+});
+
+app.get("/api/security/stats", requireAuth, requireWhitelistedIP, (req, res) => {
+  try {
+    const stats = securityMonitor.getStats();
+    res.json(stats);
+  } catch (error) {
+    logger.error('Failed to retrieve security stats', { error: error.message });
+    res.status(500).json({ error: 'Failed to retrieve stats' });
+  }
+});
+
+app.get("/api/security/ip-control", requireAuth, requireWhitelistedIP, (req, res) => {
+  try {
+    const stats = ipControl.getStats();
+    res.json(stats);
+  } catch (error) {
+    logger.error('Failed to retrieve IP control stats', { error: error.message });
+    res.status(500).json({ error: 'Failed to retrieve IP control stats' });
+  }
+});
+
+app.post("/api/security/ip-control/whitelist", requireAuth, requireWhitelistedIP, verifyCsrf, async (req, res) => {
+  try {
+    const { ip, action } = req.body;
+    
+    if (!ip || !action) {
+      return res.status(400).json({ error: 'IP and action required' });
+    }
+    
+    if (action === 'add') {
+      await ipControl.addToWhitelist(ip);
+      auditLogger.logConfigChange(req.user.username, req.ip, 'ip_whitelist', null, ip);
+      res.json({ success: true, message: `IP ${ip} added to whitelist` });
+    } else if (action === 'remove') {
+      await ipControl.removeFromWhitelist(ip);
+      auditLogger.logConfigChange(req.user.username, req.ip, 'ip_whitelist', ip, null);
+      res.json({ success: true, message: `IP ${ip} removed from whitelist` });
+    } else {
+      res.status(400).json({ error: 'Invalid action. Use "add" or "remove"' });
+    }
+  } catch (error) {
+    logger.error('Failed to update IP whitelist', { error: error.message });
+    res.status(500).json({ error: 'Failed to update whitelist' });
+  }
+});
+
+app.post("/api/security/ip-control/blacklist", requireAuth, requireWhitelistedIP, verifyCsrf, async (req, res) => {
+  try {
+    const { ip, action, duration } = req.body;
+    
+    if (!ip || !action) {
+      return res.status(400).json({ error: 'IP and action required' });
+    }
+    
+    if (action === 'add') {
+      if (duration) {
+        // Temporary block
+        ipControl.tempBlock(ip, parseInt(duration) * 1000);
+        res.json({ success: true, message: `IP ${ip} temporarily blocked for ${duration}ms` });
+      } else {
+        // Permanent block
+        await ipControl.addToBlacklist(ip);
+        auditLogger.logConfigChange(req.user.username, req.ip, 'ip_blacklist', null, ip);
+        res.json({ success: true, message: `IP ${ip} added to blacklist` });
+      }
+    } else if (action === 'remove') {
+      await ipControl.removeFromBlacklist(ip);
+      auditLogger.logConfigChange(req.user.username, req.ip, 'ip_blacklist', ip, null);
+      res.json({ success: true, message: `IP ${ip} removed from blacklist` });
+    } else {
+      res.status(400).json({ error: 'Invalid action. Use "add" or "remove"' });
+    }
+  } catch (error) {
+    logger.error('Failed to update IP blacklist', { error: error.message });
+    res.status(500).json({ error: 'Failed to update blacklist' });
   }
 });
 
