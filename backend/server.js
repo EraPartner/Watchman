@@ -28,6 +28,7 @@ import {
 import { issueCsrfToken, verifyCsrf } from "./middleware/csrf.js";
 import FailedLoginStore from "./services/FailedLoginStore.js";
 import RefreshTokenStore from "./services/RefreshTokenStore.js";
+import { checkLockout, recordFailedLogin, resetLoginAttempts } from "./middleware/accountLockout.js";
 import {
   requireFields,
   requireBoolean,
@@ -36,6 +37,7 @@ import {
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
 import { validateEnvironment, getConfig } from "./config.js";
+import logger, { requestIdMiddleware, requestLogger } from "./middleware/logger.js";
 
 const exec = promisify(execCb);
 
@@ -111,10 +113,10 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 async function initializeServer() {
-  console.log("🚀 Initializing Watchman Backend Server...");
-  console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
-  console.log(`🔌 Port: ${PORT}`);
+  logger.info("Initializing Watchman Backend Server...");
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Frontend URL: ${FRONTEND_URL}`);
+  logger.info(`Port: ${PORT}`);
 
   try {
     serviceManager = new ServiceManager();
@@ -123,14 +125,16 @@ async function initializeServer() {
     // Initialize WebSocket server
     WebSocketManager.initialize(server);
 
-    console.log("✅ Service initialization complete");
+    logger.info("Service initialization complete");
   } catch (error) {
-    console.error("❌ Failed to initialize services:", error);
+    logger.error("Failed to initialize services", { error });
     process.exit(1);
   }
 }
 
 // Enhanced middleware with production-ready security
+app.use(requestIdMiddleware); // Add request ID tracking
+app.use(requestLogger); // Add structured logging
 app.use(performanceMonitor.trackRequest());
 
 // Enhanced Helmet configuration for production
@@ -143,12 +147,36 @@ app.use(
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:"],
         connectSrc: ["'self'", ...(FRONTEND_URL ? [FRONTEND_URL] : [])],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
       },
     },
-    crossOriginEmbedderPolicy: false, // Required for some monitoring tools
-    referrerPolicy: { policy: "strict-origin-when-cross-origin" }
+    crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    noSniff: true,
+    xssFilter: true,
+    hidePoweredBy: true,
+    frameguard: { action: 'deny' },
+    permittedCrossDomainPolicies: { permittedPolicies: "none" },
   })
 );
+
+// Add Permissions-Policy header
+app.use((req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()'
+  );
+  next();
+});
+
 app.use(compression({ level: 6, threshold: 1024 }));
 app.use(
   cors({
@@ -163,17 +191,41 @@ app.use(cookieParser());
 app.use("/api/", generalLimiter);
 
 // Authentication endpoints
-app.post("/api/auth/login", authLimiter, async (req, res) => {
+app.post("/api/auth/login", authLimiter, checkLockout, async (req, res) => {
   try {
     const { username, password, remember } = req.body || {};
+    const ip = req.ip || req.connection.remoteAddress;
+    
     if (!username || !password) {
       return res.status(400).json({ error: "Missing username or password" });
     }
 
     const ok = await authenticateCredentials(username, password);
     if (!ok) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      // Record failed attempt
+      const lockoutStatus = recordFailedLogin(username, ip);
+      
+      logger.warn('Failed login attempt', {
+        username,
+        ip,
+        attemptsRemaining: lockoutStatus.attemptsRemaining,
+        requestId: req.requestId,
+      });
+      
+      return res.status(401).json({
+        error: "Invalid credentials",
+        attemptsRemaining: lockoutStatus.attemptsRemaining,
+      });
     }
+
+    // Success - reset attempts
+    resetLoginAttempts(username, ip);
+    
+    logger.info('Successful login', {
+      username,
+      ip,
+      requestId: req.requestId,
+    });
 
     const token = signToken({ username });
 
@@ -188,15 +240,13 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
     issueCsrfToken(res);
 
     // Also return a safe minimal user object
-    // Return token in JSON body as a convenience fallback for clients that
-    // cannot persist or send cookies (e.g. certain dev setups). The cookie is
-    // still the primary mechanism.
     res.json({ success: true, user: { username }, token });
   } catch (error) {
-    console.error(
-      "❌ Login error:",
-      error && error.message ? error.message : error
-    );
+    logger.error("Login error", {
+      error: error.message,
+      stack: error.stack,
+      requestId: req.requestId,
+    });
     res.status(500).json({ error: "Internal server error" });
   }
 });

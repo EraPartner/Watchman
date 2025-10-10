@@ -1,6 +1,9 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { Client } from "ssh2";
+import ping from "ping";
+import { validateCommand, buildSafeCommand } from "../middleware/commandSanitizer.js";
+import logger from "../middleware/logger.js";
 
 const execAsync = promisify(exec);
 
@@ -345,6 +348,105 @@ class MacMiniService {
         lastData: this.lastData,
       };
     }
+  }
+
+  async executeSSHCommand(cmd) {
+    // Validate command for security
+    const validation = validateCommand(cmd);
+    if (!validation.valid) {
+      const error = new Error(`Command validation failed: ${validation.error}`);
+      logger.error('SSH command validation failed', { 
+        command: cmd, 
+        error: validation.error 
+      });
+      throw error;
+    }
+
+    // Use the sanitized version
+    const safeCmd = validation.sanitized;
+
+    if (!this.sshUser || !this.sshKey) {
+      throw new Error(
+        "SSH credentials not configured (MACMINI_SSH_USER and MACMINI_SSH_KEY_PATH required)"
+      );
+    }
+
+    const connectionOpts = {
+      host: this.host,
+      port: this.sshPort,
+      username: this.sshUser,
+      privateKey: this.sshKey,
+      readyTimeout: this.timeout,
+      // Additional security settings
+      algorithms: {
+        // Only use secure algorithms
+        kex: [
+          'curve25519-sha256',
+          'curve25519-sha256@libssh.org',
+          'ecdh-sha2-nistp256',
+          'ecdh-sha2-nistp384',
+          'ecdh-sha2-nistp521',
+          'diffie-hellman-group-exchange-sha256',
+        ],
+        cipher: [
+          'aes128-gcm@openssh.com',
+          'aes256-gcm@openssh.com',
+          'aes128-ctr',
+          'aes192-ctr',
+          'aes256-ctr',
+        ],
+      },
+    };
+
+    return new Promise((resolve, reject) => {
+      const conn = new Client();
+      let stdout = "";
+      let stderr = "";
+      let finished = false;
+
+      const cleanup = () => {
+        if (!finished) {
+          finished = true;
+          conn.end();
+        }
+      };
+
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('SSH command execution timeout'));
+      }, this.timeout + 3000);
+
+      conn
+        .on("ready", () => {
+          conn.exec(safeCmd, { timeout: this.timeout + 3000 }, (err, stream) => {
+            if (err) {
+              clearTimeout(timeout);
+              cleanup();
+              return reject(err);
+            }
+            stream
+              .on("close", (code, signal) => {
+                clearTimeout(timeout);
+                cleanup();
+                resolve({ stdout, stderr, code, signal });
+              })
+              .on("data", (data) => {
+                stdout += data.toString();
+              })
+              .stderr.on("data", (data) => {
+                stderr += data.toString();
+              });
+          });
+        })
+        .on("error", (err) => {
+          clearTimeout(timeout);
+          if (!finished) {
+            cleanup();
+            reject(err);
+          }
+        })
+        .connect(connectionOpts);
+    });
   }
 
   disconnect() {

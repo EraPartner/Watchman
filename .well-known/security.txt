@@ -1,0 +1,29 @@
+Contact: mailto:security@your-domain.com
+Expires: 2026-12-31T23:59:59.000Z
+Preferred-Languages: en
+Canonical: https://your-domain.com/.well-known/security.txt
+
+# Security Policy
+
+If you discover a security vulnerability in this project, please report it responsibly.
+
+## Reporting a Vulnerability
+
+Please send details to security@your-domain.com including:
+- Description of the vulnerability
+- Steps to reproduce
+- Potential impact
+- Suggested fix (if any)
+
+## Response Time
+
+We aim to respond to security reports within 48 hours and provide a fix within 7 days for critical issues.
+
+## Safe Harbor
+
+We support responsible disclosure and will not take legal action against researchers who:
+- Make a good faith effort to avoid privacy violations and data destruction
+- Report vulnerabilities promptly
+- Keep vulnerability details confidential until patched
+
+Thank you for helping keep our users safe!

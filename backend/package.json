@@ -14,7 +14,12 @@
     "health-check": "curl -f http://localhost:3001/health || exit 1",
     "validate-env": "node -e \"import('./config.js').then(({validateEnvironment}) => validateEnvironment())\"",
     "lint": "eslint *.js services/*.js middleware/*.js",
-    "security-audit": "npm audit --audit-level moderate"
+    "security-audit": "npm audit --audit-level moderate",
+    "security:check": "npm audit && npm run security:secrets",
+    "security:fix": "npm audit fix",
+    "security:secrets": "echo 'Checking for exposed secrets...' && ! grep -r -E '(password|secret|token|key).*=.*[A-Za-z0-9]{20,}' --exclude-dir=node_modules --exclude=package*.json . || (echo '⚠️  Possible secrets found!' && exit 1)",
+    "precommit": "npm run validate-env && npm run lint",
+    "docker:scan": "docker scan watchman-backend:latest || echo 'Install Docker Scan for vulnerability scanning'"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
