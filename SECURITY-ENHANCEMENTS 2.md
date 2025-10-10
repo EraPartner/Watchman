@@ -18,6 +18,7 @@ This document describes the comprehensive security enhancements implemented in t
 - **Suspicious Pattern Detection**: Identifies SQL injection, XSS, path traversal attempts
 
 **Features:**
+
 - Nonce generation for CSP inline scripts
 - Clear-Site-Data header on logout
 - Automatic suspicious request logging
@@ -36,11 +37,13 @@ Comprehensive IP whitelist/blacklist management system:
 - **Auto-cleanup**: Expired temp blocks removed automatically
 
 **Default Behavior:**
+
 - Localhost (127.0.0.1, ::1) always whitelisted
 - If no non-localhost IPs in whitelist, all IPs allowed
 - Once whitelist has other IPs, only whitelisted IPs can access
 
 **API Endpoints:**
+
 ```
 GET  /api/security/ip-control          - View current IP lists
 POST /api/security/ip-control/whitelist - Add/remove IPs from whitelist
@@ -61,18 +64,20 @@ Creates detailed audit trails for all security-relevant events:
 - **Security Events**: Attacks, violations, suspicious activity
 
 **Log Storage:**
+
 - Daily log files: `logs/audit/audit-YYYY-MM-DD.log`
 - JSON format for easy parsing
 - Automatic sensitive data redaction (passwords, tokens, keys)
 
 **Audit Event Types:**
+
 ```javascript
-auditLogger.logAuthentication(username, ip, success, metadata)
-auditLogger.logAuthorization(username, ip, resource, action, allowed)
-auditLogger.logDataAccess(username, ip, resource, action)
-auditLogger.logConfigChange(username, ip, setting, oldValue, newValue)
-auditLogger.logSecurityEvent(type, ip, severity, description)
-auditLogger.logServiceControl(username, ip, service, action, success)
+auditLogger.logAuthentication(username, ip, success, metadata);
+auditLogger.logAuthorization(username, ip, resource, action, allowed);
+auditLogger.logDataAccess(username, ip, resource, action);
+auditLogger.logConfigChange(username, ip, setting, oldValue, newValue);
+auditLogger.logSecurityEvent(type, ip, severity, description);
+auditLogger.logServiceControl(username, ip, service, action, success);
 ```
 
 ### 4. Real-time Security Monitoring
@@ -82,12 +87,14 @@ auditLogger.logServiceControl(username, ip, service, action, success)
 Active threat detection and alerting system:
 
 **Monitored Events:**
+
 - Failed login attempts (threshold: 5 in 5 minutes)
 - Suspicious patterns (threshold: 3 in 1 minute)
 - Rate limit violations (threshold: 10 in 5 minutes)
 - Unauthorized access attempts (threshold: 3 in 5 minutes)
 
 **Alert System:**
+
 - Real-time alert generation
 - Alert severity levels: low, medium, high, critical
 - In-memory alert storage (last 1000 alerts)
@@ -95,16 +102,18 @@ Active threat detection and alerting system:
 - Extensible for email/webhook/SIEM integration
 
 **API Endpoints:**
+
 ```
 GET /api/security/alerts - Retrieve security alerts
 GET /api/security/stats  - Security monitoring statistics
 ```
 
 **Alert Subscription:**
+
 ```javascript
 const unsubscribe = securityMonitor.subscribe((alert) => {
   // Handle alert (send email, webhook, etc.)
-  console.log('Security Alert:', alert);
+  console.log("Security Alert:", alert);
 });
 ```
 
@@ -115,11 +124,13 @@ const unsubscribe = securityMonitor.subscribe((alert) => {
 Multi-layer input protection:
 
 **Sanitization:**
+
 - XSS prevention: Remove `<>`, javascript:, event handlers
 - Deep object sanitization (recursive)
 - Applied to body, query, params
 
 **Attack Detection:**
+
 - SQL Injection patterns
 - XSS attempts
 - Path traversal (../)
@@ -127,12 +138,14 @@ Multi-layer input protection:
 - All attempts logged for forensics
 
 **Password Security:**
+
 - Minimum 12 characters
 - Requires: uppercase, lowercase, number, special char
 - Common password dictionary check
 - Strength scoring (0-100)
 
 **User Action Rate Limiting:**
+
 - Per-user, per-action limits
 - Password changes: 3/hour
 - Settings changes: 10/10 minutes
@@ -140,13 +153,14 @@ Multi-layer input protection:
 - Independent from IP-based rate limiting
 
 **Functions:**
+
 ```javascript
-validatePasswordStrength(password) // Returns validation result
-sanitizeString(input)               // Clean single string
-deepSanitize(object)               // Clean entire object
-hasSQLInjection(input)             // Check for SQL patterns
-hasXSS(input)                      // Check for XSS patterns
-hasPathTraversal(input)            // Check for path traversal
+validatePasswordStrength(password); // Returns validation result
+sanitizeString(input); // Clean single string
+deepSanitize(object); // Clean entire object
+hasSQLInjection(input); // Check for SQL patterns
+hasXSS(input); // Check for XSS patterns
+hasPathTraversal(input); // Check for path traversal
 ```
 
 ## Security Architecture
@@ -234,6 +248,7 @@ Managed via API or configuration file `backend/config/ip-control.json`:
 The security monitoring system is ready for dashboard integration:
 
 **Metrics Available:**
+
 - Total security alerts
 - Alerts by severity
 - Alerts by type
@@ -243,13 +258,14 @@ The security monitoring system is ready for dashboard integration:
 - Suspicious activity patterns
 
 **WebSocket Events:**
+
 ```javascript
 // Subscribe to real-time alerts
-ws.on('security:alert', (alert) => {
+ws.on("security:alert", (alert) => {
   // Display in dashboard
 });
 
-ws.on('security:stats', (stats) => {
+ws.on("security:stats", (stats) => {
   // Update metrics
 });
 ```
@@ -285,6 +301,7 @@ tail -f backend/backend.log | grep "Failed login"
 ### 3. Responding to Security Events
 
 **High-severity alerts:**
+
 1. Investigate immediately
 2. Check audit logs for full context
 3. Block offending IPs if necessary
@@ -292,6 +309,7 @@ tail -f backend/backend.log | grep "Failed login"
 5. Update security rules
 
 **IP Blocking:**
+
 ```bash
 # Temporary block (1 hour)
 curl -X POST http://localhost:3001/api/security/ip-control/blacklist \
@@ -313,26 +331,31 @@ curl -X POST http://localhost:3001/api/security/ip-control/blacklist \
 ## Attack Scenarios & Mitigations
 
 ### SQL Injection
+
 - **Detection:** Input validation middleware
 - **Prevention:** Input sanitization, prepared statements
 - **Response:** Request blocked, IP logged, alert raised
 
 ### XSS (Cross-Site Scripting)
+
 - **Detection:** Pattern matching on inputs
 - **Prevention:** Content Security Policy, input sanitization
 - **Response:** Request blocked, suspicious activity logged
 
 ### Brute Force Login
+
 - **Detection:** Failed login tracking
 - **Prevention:** Account lockout after 5 attempts (15 min)
 - **Response:** Temporary IP block, security alert
 
 ### DDoS
+
 - **Detection:** Request rate monitoring (50+ req/10s)
 - **Prevention:** Rate limiting, temporary IP blocks
 - **Response:** Automatic IP blocking, alert raised
 
 ### Account Enumeration
+
 - **Detection:** Timing attack protection
 - **Prevention:** Constant-time password comparison
 - **Response:** Random delays on all auth responses
@@ -355,7 +378,7 @@ curl http://localhost:3001/api/auth/login  # Should work
 curl http://localhost:3001/api/auth/login  # Should return 403
 
 # Test rate limiting
-for i in {1..200}; do 
+for i in {1..200}; do
   curl http://localhost:3001/health
 done
 # Should eventually return 429
@@ -388,6 +411,7 @@ Planned security improvements:
 ## Support & Documentation
 
 For questions or issues:
+
 1. Check logs: `backend/logs/` and `backend/logs/audit/`
 2. Review SECURITY.md for baseline security
 3. See SECURITY-EXPLAINED.md for detailed explanations
