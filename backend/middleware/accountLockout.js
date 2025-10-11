@@ -101,122 +101,75 @@ class AccountLockoutManager {
    * @returns {string} Unique key
    */
   getKey(username, ip) {
-    // Combine username and IP for tracking
-    // This prevents one IP from locking all accounts
-    // and one user from being locked across all IPs
+    // Use a combination of username and IP to track attempts
+    // This helps prevent IP-based lockouts from affecting multiple users
+    // and user-based lockouts from being bypassed by changing IP
     return `${username}:${ip}`;
   }
 
   /**
-   * Clean up expired lockouts and old attempts
+   * Cleanup old entries to prevent memory leaks
    */
   cleanup() {
     const now = Date.now();
-    const expiredKeys = [];
-
     for (const [key, record] of this.attempts.entries()) {
-      // Remove entries where:
-      // 1. Lock has expired, or
-      // 2. First attempt was more than 1 hour ago (to prevent memory leak)
-      if (
-        (record.lockedUntil && record.lockedUntil <= now) ||
-        now - record.firstAttempt > 60 * 60 * 1000
-      ) {
-        expiredKeys.push(key);
+      // Clean up if the lock has expired and there are no recent attempts
+      const isLockExpired = record.lockedUntil && record.lockedUntil <= now;
+      const isAttemptOld = now - record.firstAttempt > this.lockoutDuration * 2; // Arbitrary cleanup threshold
+
+      if (isLockExpired || isAttemptOld) {
+        this.attempts.delete(key);
       }
-    }
-
-    expiredKeys.forEach((key) => this.attempts.delete(key));
-
-    if (expiredKeys.length > 0) {
-      logger.debug(`Cleaned up ${expiredKeys.length} expired lockout records`);
     }
   }
 
   /**
-   * Get statistics about current lockouts
-   * @returns {Object} Statistics
+   * Stop the cleanup timer
    */
-  getStats() {
-    const now = Date.now();
-    let locked = 0;
-    let failed = 0;
-
-    for (const record of this.attempts.values()) {
-      if (record.lockedUntil && record.lockedUntil > now) {
-        locked++;
-      } else {
-        failed++;
-      }
-    }
-
-    return {
-      totalTracked: this.attempts.size,
-      locked,
-      failed,
-    };
-  }
-
-  /**
-   * Shutdown cleanup timer
-   */
-  shutdown() {
+  stopCleanup() {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
     }
   }
 }
 
-// Singleton instance
-const lockoutManager = new AccountLockoutManager({
-  maxAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS) || 5,
-  lockoutDuration: parseInt(process.env.LOCKOUT_DURATION) || 15 * 60 * 1000,
-});
+// Instantiate the manager
+const accountLockoutManager = new AccountLockoutManager();
 
 /**
- * Express middleware to check for account lockout
+ * Middleware to check if an account is locked
  */
-export function checkLockout(req, res, next) {
-  const username = req.body?.username;
-  const ip = req.ip || req.connection.remoteAddress;
+export const checkLockout = (req, res, next) => {
+  const { username } = req.body;
+  const ip = req.ip;
+  const { locked, lockedUntil } = accountLockoutManager.isLocked(username, ip);
 
-  if (!username) {
-    return next();
-  }
-
-  const status = lockoutManager.isLocked(username, ip);
-
-  if (status.locked) {
-    logger.warn("Login attempt on locked account", {
-      username,
-      ip,
-      lockedUntil: status.lockedUntil.toISOString(),
-    });
-
+  if (locked) {
+    const minutesRemaining = Math.ceil((lockedUntil - Date.now()) / 60000);
+    logger.warn("Blocked login attempt to locked account", { username, ip });
     return res.status(429).json({
-      error: "Account temporarily locked due to too many failed login attempts",
-      lockedUntil: status.lockedUntil.toISOString(),
-      message: "Please try again later",
+      message: `Account locked. Please try again in ${minutesRemaining} minutes.`,
     });
   }
 
   next();
-}
+};
 
-/**
- * Record failed login attempt
- */
-export function recordFailedLogin(username, ip) {
-  return lockoutManager.recordFailedAttempt(username, ip);
-}
+// Function to record a failed login
+export const recordFailedLogin = async (username, ip) => {
+  const result = accountLockoutManager.recordFailedAttempt(username, ip);
+  if (result.locked) {
+    logger.warn("Account has been locked", {
+      username,
+      ip,
+      lockedUntil: result.lockedUntil.toISOString(),
+    });
+  }
+};
 
-/**
- * Reset attempts on successful login
- */
-export function resetLoginAttempts(username, ip) {
-  lockoutManager.resetAttempts(username, ip);
-}
+// Function to reset login attempts on success
+export const resetLoginAttempts = async (username, ip) => {
+  accountLockoutManager.resetAttempts(username, ip);
+};
 
-export { lockoutManager };
-export default lockoutManager;
+export default accountLockoutManager;

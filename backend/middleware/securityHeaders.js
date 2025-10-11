@@ -93,7 +93,7 @@ export function suspiciousPatternDetection(req, res, next) {
     // XSS attempts
     /<script|javascript:|onerror=|onclick=/i,
     // Path traversal
-    /\.\.[\/\\]/,
+    /\.\.[/\\]/,
     // Command injection
     /[;&|`$(){}]/,
     // Common attack tools

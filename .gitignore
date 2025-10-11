@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Process files
+*.pid
+
+# Temporary files
+cookies.txt
+Node
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

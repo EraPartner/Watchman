@@ -26,8 +26,6 @@ import {
   verifyToken,
 } from "./middleware/auth.js";
 import { issueCsrfToken, verifyCsrf } from "./middleware/csrf.js";
-import FailedLoginStore from "./services/FailedLoginStore.js";
-import RefreshTokenStore from "./services/RefreshTokenStore.js";
 import {
   checkLockout,
   recordFailedLogin,
@@ -36,7 +34,6 @@ import {
 import {
   requireFields,
   requireBoolean,
-  requireString,
 } from "./middleware/validation.js";
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
@@ -45,29 +42,11 @@ import logger, {
   requestIdMiddleware,
   requestLogger,
 } from "./middleware/logger.js";
-// Enhanced security middleware imports
 import {
-  advancedSecurityHeaders,
-  ddosProtection,
-  suspiciousPatternDetection,
-  timingAttackProtection,
-} from "./middleware/securityHeaders.js";
-import {
-  enforceIPControl,
   ipControl,
+  enforceIPControl,
   requireWhitelistedIP,
 } from "./middleware/ipControl.js";
-import { auditLogger, auditMiddleware } from "./middleware/auditLogger.js";
-import {
-  securityMonitor,
-  monitorSecurityEvents,
-  trackFailedLogin,
-} from "./middleware/securityMonitor.js";
-import {
-  sanitizeInputs,
-  validateInputSecurity,
-  limitUserAction,
-} from "./middleware/inputSanitization.js";
 
 const exec = promisify(execCb);
 
@@ -224,67 +203,52 @@ app.use(cookieParser());
 app.use("/api/", generalLimiter);
 
 // Authentication endpoints
-app.post("/api/auth/login", authLimiter, checkLockout, async (req, res) => {
-  try {
-    const { username, password, remember } = req.body || {};
-    const ip = req.ip || req.connection.remoteAddress;
+app.post(
+  "/api/auth/login",
+  authLimiter,
+  checkLockout,
+  requireFields(["username", "password"]),
+  async (req, res) => {
+    const { username, password } = req.body;
+    const ip = req.ip;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: "Missing username or password" });
-    }
+    try {
+      const user = await authenticateCredentials(username, password);
 
-    const ok = await authenticateCredentials(username, password);
-    if (!ok) {
-      // Record failed attempt
-      const lockoutStatus = recordFailedLogin(username, ip);
+      if (!user) {
+        await recordFailedLogin(username, ip);
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
 
-      logger.warn("Failed login attempt", {
-        username,
-        ip,
-        attemptsRemaining: lockoutStatus.attemptsRemaining,
-        requestId: req.requestId,
+      // On successful login, reset failed attempts
+      await resetLoginAttempts(username, ip);
+
+      // Issue tokens
+      const accessToken = signToken({ sub: user.id }, "access");
+
+      // Set secure HTTP-only cookie with CSRF protection
+      res.cookie("token", accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 8 * 60 * 60 * 1000, // 8 hours
       });
 
-      return res.status(401).json({
-        error: "Invalid credentials",
-        attemptsRemaining: lockoutStatus.attemptsRemaining,
+      // Issue a double-submit CSRF token cookie (accessible to JS)
+      issueCsrfToken(res);
+
+      res.status(200).json({
+        message: "Login successful",
+        accessToken,
       });
+    } catch (error) {
+      logger.error("Login error", { error: error.message });
+      res.status(500).json({ message: "Internal server error" });
     }
-
-    // Success - reset attempts
-    resetLoginAttempts(username, ip);
-
-    logger.info("Successful login", {
-      username,
-      ip,
-      requestId: req.requestId,
-    });
-
-    const token = signToken({ username });
-
-    const cookieOpts = Object.assign({}, COOKIE_OPTIONS, {
-      // If remember is truthy, keep cookie for 30 days, otherwise short-lived session
-      maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000,
-    });
-
-    res.cookie("token", token, cookieOpts);
-
-    // Issue a double-submit CSRF token cookie (accessible to JS)
-    issueCsrfToken(res);
-
-    // Also return a safe minimal user object
-    res.json({ success: true, user: { username }, token });
-  } catch (error) {
-    logger.error("Login error", {
-      error: error.message,
-      stack: error.stack,
-      requestId: req.requestId,
-    });
-    res.status(500).json({ error: "Internal server error" });
   }
-});
+);
 
-app.post("/api/auth/logout", (req, res) => {
+app.post("/api/auth/logout", requireAuth, async (req, res) => {
   res.clearCookie("token", Object.assign({}, COOKIE_OPTIONS));
   // Clear csrf cookie too
   res.clearCookie(process.env.CSRF_COOKIE_NAME || "csrfToken", { path: "/" });
@@ -1339,18 +1303,14 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
 
     // Exclude multicast and link-local addresses helper
     const isUnicast = (ip) => {
-      try {
-        if (!ip || typeof ip !== "string") return false;
-        const parts = ip.split(".").map(Number);
-        if (parts.length !== 4 || parts.some(isNaN)) return false;
-        // Multicast 224.0.0.0/4
-        if (parts[0] >= 224 && parts[0] <= 239) return false;
-        // Link-local 169.254.0.0/16
-        if (parts[0] === 169 && parts[1] === 254) return false;
-        return true;
-      } catch (e) {
-        return false;
-      }
+      if (!ip || typeof ip !== "string") return false;
+      const parts = ip.split(".").map(Number);
+      if (parts.length !== 4 || parts.some(isNaN)) return false;
+      // Multicast 224.0.0.0/4
+      if (parts[0] >= 224 && parts[0] <= 239) return false;
+      // Link-local 169.254.0.0/16
+      if (parts[0] === 169 && parts[1] === 254) return false;
+      return true;
     };
 
     // Determine LAN hosts relevant to the requested router service dynamically.
@@ -1583,7 +1543,7 @@ app.use("*", (req, res) => {
 });
 
 // Error handler
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error("❌ Unhandled error:", err);
   res.status(500).json({ error: "Internal server error" });
 });

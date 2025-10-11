@@ -42,7 +42,7 @@
 - [x] CSRF protection enabled
 - [x] Rate limiting on auth endpoints
 - [ ] Multi-factor authentication (recommended)
-- [ ] Account lockout after failed attempts
+- [x] Account lockout after failed attempts
 
 ### Network Security
 

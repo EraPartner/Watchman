@@ -1,5 +1,4 @@
 // Structured logging middleware with security-focused redaction
-import { createWriteStream } from "fs";
 import { join } from "path";
 
 // Simple structured logger that redacts sensitive data

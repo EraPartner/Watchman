@@ -135,7 +135,7 @@ class RequestBatcher {
           resolve(result);
         } catch (e) {
           // Ignore individual resolver errors to allow the rest to proceed
-          // eslint-disable-next-line no-console
+           
           console.error(
             "Resolver threw when resolving batched health check",
             e
