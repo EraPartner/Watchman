@@ -1,177 +1,132 @@
 # Watchman
 
-A centralized dashboard to monitor and control self‑hosted services (AdGuard Home, Synology, Tor, Bitcoin, qBittorrent, and more).
+A centralized dashboard to monitor and control self-hosted services (AdGuard Home, Synology, Tor, Bitcoin, qBittorrent,
+and more).
 
-This repository contains a Vite + React TypeScript frontend and a Node.js/Express backend that expose health and control endpoints for various services. The app is built for local, home‑lab, and small production deployments.
+## 📁 Project Structure
 
----
+This is a modern monorepo structure using npm workspaces:
 
-## Highlights
+```
+Watchman/
+├── apps/                    # Application packages
+│   ├── frontend/           # React + TypeScript + Vite frontend
+│   └── backend/            # Node.js + Express backend
+├── docs/                   # All documentation
+├── tools/                  # Development tools & scripts
+├── packages/               # Shared packages (future use)
+└── tests/                  # Integration & E2E tests
+```
 
-- Modern frontend: React + TypeScript + Vite
-- Backend: Node.js (Express) with modular services
-- Real-time status, service health checks, and control endpoints
-- CI workflow with smoke tests for the backend and build/test steps for the frontend
-- Designed to be deployed on a single server or as separate frontend/backend services
+## 🚀 Quick Start
 
----
-
-## Table of contents
-
-- [Quickstart (development)](#quickstart-development)
-- [Production build & deploy](#production-build--deploy)
-- [Environment variables](#environment-variables)
-- [CI / GitHub Actions](#ci--github-actions)
-- [Troubleshooting & debugging](#troubleshooting--debugging)
-- [Security notes](#security-notes)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## Quickstart (development)
-
-Prerequisites:
+### Prerequisites
 
 - Node.js 18+ and npm
 - Git
 
-Clone and install:
+### Installation
 
 ```bash
+# Clone the repository
 git clone <YOUR_REPO_URL>
 cd Watchman
-npm ci
-npm run backend:install
+
+# Install all dependencies (uses npm workspaces)
+npm install
+
+# Start both frontend and backend in development mode
+npm run dev
 ```
 
-Run frontend and backend concurrently (dev mode):
+### Development Commands
 
 ```bash
-# run frontend + backend together
-npm run dev:both
-```
+# Start both frontend and backend
+npm run dev
 
-- Frontend: http://localhost:5173 (default)
-- Backend: http://localhost:3001 (default)
+# Start frontend only (port 5173)
+npm run dev:frontend
 
-Useful scripts
+# Start backend only (port 3001)
+npm run dev:backend
 
-- `npm run dev` — start the frontend dev server (Vite)
-- `npm run dev:backend` — start the backend (`cd backend && npm run dev`) with nodemon
-- `npm run dev:both` — run frontend and backend concurrently
-- `npm run build` — build frontend for production
-- `npm run format` — run Prettier
-- `npm run check:types` — TypeScript typecheck
-- `npm test` — run unit tests (vitest)
-
----
-
-## Production build & deploy
-
-1. Build the frontend:
-
-```bash
-npm ci
+# Build frontend for production
 npm run build
-```
 
-2. Serve the `dist/` directory with a static server or upload to a CDN/static hosting service (Netlify, Vercel, etc.)
+# Run linters
+npm run lint
 
-3. Start the backend in production mode:
-
-```bash
-cd backend
-npm ci
-NODE_ENV=production npm start
-```
-
-Consider running the backend under a process manager like systemd or pm2 for automatic restarts.
-
----
-
-## Environment variables
-
-- Frontend: uses Vite. Prefix environment vars with `VITE_` to expose to the client.
-
-  - Example: `VITE_FRONTEND_PORT`, `VITE_HMR_PORT`
-
-- Backend: the backend reads `.env.local` in the repo root (or `backend/.env.local` depending on your setup). Copy `backend/.env.example` to `backend/.env.local` and update values.
-
-Common backend env variables (examples — confirm in `backend/server.js` and middleware files):
-
-```
-PORT=3001
-NODE_ENV=production
-FRONTEND_URL=https://watchman.example.com
-CSRF_COOKIE_NAME=csrfToken
-ADGUARD_MAIN_URL=http://127.0.0.1:5213
-IPFS_API_URL=http://127.0.0.1:5001
-IPFS_WEB_UI_URL=http://127.0.0.1:8080
-```
-
-Security note: Do not commit `.env.local` or secrets to Git. Use your host's secret manager or environment variable injection for production.
-
----
-
-## CI / GitHub Actions
-
-This repository includes a GitHub Actions workflow at `.github/workflows/ci.yml` that:
-
-- Runs two separate jobs:
-  - `smoke-test`: installs backend deps, starts the backend in the runner, and polls `/health` to ensure the server boots (uploads `backend-start.log` artifact for debugging).
-  - `build`: installs root deps, runs format-check + typecheck, runs tests, and builds the frontend (uploads `dist` as artifact).
-
-Manual runs are supported via `workflow_dispatch` in the workflow. If you change package dependencies, ensure `package-lock.json` is committed so `npm ci` on the runner installs consistent deps.
-
----
-
-## Troubleshooting & debugging
-
-- Build fails with `Cannot find package 'babel-plugin-transform-react-remove-prop-types'`:
-
-  - Ensure `babel-plugin-transform-react-remove-prop-types` is installed as a devDependency and `package-lock.json` is committed.
-  - Run `npm ci` then `npm run build` locally to reproduce and debug.
-
-- Backend `/health` not responding in CI smoke-test:
-
-  - Download the `backend-start-log` artifact from the workflow run to inspect startup errors.
-  - Ensure required external services (Tor, Synology, etc.) are either mocked or their absence is handled gracefully by the service manager.
-
-- ESLint / Prettier issues in CI:
-  - Run `npm run format` and `npm run format:check` locally, commit changes, and push. CI uses `npm run format:check` and `npm run check:types`.
-
----
-
-## Security notes
-
-- Use `FRONTEND_URL` to restrict allowed CORS origins in production (do not use `*`).
-- Keep secrets out of source control. Use environment-based secret injection or a secrets manager.
-- Use HTTPS (TLS) in front of both the frontend and backend services.
-- Set `secure` cookie flags and proper SameSite policies in production — see `backend/server.js` cookie configuration.
-
----
-
-## Contributing
-
-We welcome contributions. Please follow these steps:
-
-1. Fork the repo and create a feature branch.
-2. Keep changes focused and atomic.
-3. Run format & typecheck locally:
-
-```bash
+# Format code with Prettier
 npm run format
-npm run check:types
-npm test
+
+# Run tests
+npm run test
+
+# Clean all node_modules
+npm run clean
 ```
 
-4. Open a pull request with a clear description of the change.
+## 📦 Workspace Structure
 
-If you plan to add a new service integration, follow the existing `services/` pattern and add UI components under `src/components`.
+This project uses **npm workspaces** to manage multiple packages in a monorepo:
 
----
+- **apps/frontend**: React application with Vite
+- **apps/backend**: Express.js API server
+- **packages/shared**: Shared utilities (future use)
 
-## License
+Each workspace has its own `package.json` and can be developed independently.
 
-This project is licensed under the MIT License — see the `LICENSE` file for details.
+## 🔧 Configuration
+
+- **Frontend config**: `apps/frontend/` (vite.config.ts, tailwind.config.ts, etc.)
+- **Backend config**: `apps/backend/config.js`
+- **Environment variables**: `.env.local` (root level)
+- **Editor config**: `.editorconfig`, `.prettierrc` (root level, applies to all)
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the **`/docs`** directory:
+
+- **[docs/INDEX.md](./docs/INDEX.md)** - Documentation index
+- **[docs/PROJECT-STRUCTURE.md](./docs/PROJECT-STRUCTURE.md)** - Detailed structure guide
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Architecture overview
+- **[docs/API-DOCUMENTATION.md](./docs/API-DOCUMENTATION.md)** - API documentation
+- **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** - Development guide
+- **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** - Deployment guide
+- **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Troubleshooting
+- **[docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)** - Contributing guidelines
+- **[docs/SECURITY.md](./docs/SECURITY.md)** - Security documentation
+- **[docs/CHANGELOG.md](./docs/CHANGELOG.md)** - Change history
+
+## 🔐 Security
+
+This project includes comprehensive security features:
+
+- JWT authentication
+- Rate limiting
+- CSRF protection
+- Input sanitization
+- Security headers (Helmet)
+- Audit logging
+- Account lockout protection
+
+See [docs/SECURITY.md](./docs/SECURITY.md) for more details.
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+npm run test
+
+# Run tests in watch mode (frontend)
+npm run test --workspace=apps/frontend -- --watch
+```
+
+## 📝 License
+
+MIT
+
+## 🤝 Contributing
+
+See [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md) for contribution guidelines.

@@ -7,10 +7,21 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+apps/*/node_modules
+packages/*/node_modules
+
+# Build outputs
 dist
 dist-ssr
+apps/*/dist
 *.local
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # Process files
 *.pid
@@ -29,3 +40,20 @@ Node
 *.njsproj
 *.sln
 *.sw?
+
+# Lock files (keep package-lock.json, ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# Test coverage
+coverage
+.nyc_output
+
+# Cache
+.cache
+.parcel-cache
+.eslintcache
+
+# OS files
+.DS_Store
+Thumbs.db

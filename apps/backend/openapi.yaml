@@ -1,0 +1,1229 @@
+openapi: 3.0.3
+info:
+  title: Watchman Backend API
+  description: |
+    Watchman is a comprehensive service monitoring and management dashboard.
+    This API provides endpoints for monitoring various services including AdGuard, Bitcoin, 
+    qBittorrent, IPFS, Tor, Synology NAS, Homebridge, Alby Hub, and more.
+  version: 1.0.0
+  contact:
+    name: Watchman API Support
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: https://api.watchman.local
+    description: Production server
+
+tags:
+  - name: Health
+    description: System health and status checks
+  - name: Authentication
+    description: User authentication and session management
+  - name: Cache
+    description: Cache management operations
+  - name: AdGuard
+    description: AdGuard DNS monitoring and control
+  - name: Bitcoin
+    description: Bitcoin node monitoring
+  - name: qBittorrent
+    description: qBittorrent torrent client monitoring
+  - name: IPFS
+    description: IPFS node monitoring
+  - name: Tor
+    description: Tor relay monitoring
+  - name: Roon
+    description: Roon music server monitoring
+  - name: Synology
+    description: Synology NAS monitoring
+  - name: Philips
+    description: Philips Hue Bridge monitoring
+  - name: Homebridge
+    description: Homebridge smart home monitoring
+  - name: Alby Hub
+    description: Alby Hub Lightning wallet monitoring
+  - name: Mac Mini
+    description: Mac Mini server monitoring
+  - name: Services
+    description: Multi-service operations
+  - name: Router
+    description: Router and network operations
+  - name: Security
+    description: Security monitoring and IP control
+  - name: Config
+    description: Configuration endpoints
+
+security:
+  - bearerAuth: [ ]
+  - cookieAuth: [ ]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        message:
+          type: string
+          description: Detailed error message
+        status:
+          type: string
+          description: Status indicator
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ ok, error, offline ]
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+        version:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        accessToken:
+          type: string
+
+    AuthMeResponse:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        user:
+          type: object
+          properties:
+            username:
+              type: string
+
+    CacheClearRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Cache type to clear (e.g., 'health', 'stats', 'all')
+
+    CacheClearResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    ServiceHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ online, offline, degraded ]
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+
+    ServiceStats:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+
+    AllServicesHealth:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        services:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ServiceHealth"
+
+    AdGuardProtectionRequest:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: Enable or disable AdGuard protection
+        duration:
+          type: integer
+          description: Optional duration in seconds
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+
+    RouterArpResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        hosts:
+          type: array
+          items:
+            type: object
+            properties:
+              ip:
+                type: string
+              mac:
+                type: string
+              iface:
+                type: string
+        lan:
+          type: object
+          properties:
+            count:
+              type: integer
+            hosts:
+              type: array
+              items:
+                type: object
+                properties:
+                  ip:
+                    type: string
+                  mac:
+                    type: string
+                  iface:
+                    type: string
+        note:
+          type: string
+        raw:
+          type: string
+
+    SecurityAlert:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        severity:
+          type: string
+          enum: [ low, medium, high, critical ]
+        type:
+          type: string
+        message:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    SecurityAlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityAlert"
+        count:
+          type: integer
+
+    SecurityStatsResponse:
+      type: object
+      properties:
+        totalAlerts:
+          type: integer
+        alertsBySeverity:
+          type: object
+          additionalProperties:
+            type: integer
+        recentActivity:
+          type: array
+          items:
+            type: object
+
+    IPControlStatsResponse:
+      type: object
+      properties:
+        whitelist:
+          type: array
+          items:
+            type: string
+        blacklist:
+          type: array
+          items:
+            type: string
+        tempBlocks:
+          type: object
+          additionalProperties: true
+
+    IPControlRequest:
+      type: object
+      required:
+        - ip
+        - action
+      properties:
+        ip:
+          type: string
+          pattern: '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$'
+        action:
+          type: string
+          enum: [ add, remove ]
+        duration:
+          type: integer
+          description: Duration in seconds (for blacklist temporary blocks)
+
+    FrontendConfigResponse:
+      type: object
+      properties:
+        services:
+          type: object
+          additionalProperties: true
+        app:
+          type: object
+          properties:
+            name:
+              type: string
+            version:
+              type: string
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    ForbiddenError:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    ServiceUnavailableError:
+      description: Service not configured or unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Basic health check
+      description: Returns the basic health status of the backend server
+      operationId: getHealth
+      security: [ ]
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT token
+      operationId: login
+      security: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+          headers:
+            Set-Cookie:
+              description: JWT token in HTTP-only cookie
+              schema:
+                type: string
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Logout and clear authentication cookies
+      operationId: logout
+      responses:
+        "200":
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: Returns authentication status and user information
+      operationId: getAuthMe
+      security: [ ]
+      responses:
+        "200":
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthMeResponse"
+
+  /api/cache/clear:
+    post:
+      tags:
+        - Cache
+      summary: Clear cache
+      description: Clear server-side cache (requires authentication and CSRF token)
+      operationId: clearCache
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CacheClearRequest"
+      responses:
+        "200":
+          description: Cache cleared successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CacheClearResponse"
+        "400":
+          description: Invalid cache type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /api/adguard/protection:
+    post:
+      tags:
+        - AdGuard
+      summary: Toggle AdGuard protection
+      description: Enable or disable AdGuard DNS protection (requires authentication and CSRF token)
+      operationId: setAdGuardProtection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdGuardProtectionRequest"
+      responses:
+        "200":
+          description: Protection toggled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/adguard/status:
+    get:
+      tags:
+        - AdGuard
+      summary: Get AdGuard status
+      description: Returns the current status of AdGuard DNS
+      operationId: getAdGuardStatus
+      security: [ ]
+      responses:
+        "200":
+          description: AdGuard status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/adguard/stats:
+    get:
+      tags:
+        - AdGuard
+      summary: Get AdGuard statistics
+      description: Returns AdGuard DNS statistics
+      operationId: getAdGuardStats
+      security: [ ]
+      responses:
+        "200":
+          description: AdGuard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/bitcoin/health:
+    get:
+      tags:
+        - Bitcoin
+      summary: Get Bitcoin node health
+      description: Returns the health status of the Bitcoin node
+      operationId: getBitcoinHealth
+      security: [ ]
+      responses:
+        "200":
+          description: Bitcoin node health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/bitcoin/status:
+    get:
+      tags:
+        - Bitcoin
+      summary: Get Bitcoin node status
+      description: Returns the current status of the Bitcoin node
+      operationId: getBitcoinStatus
+      security: [ ]
+      responses:
+        "200":
+          description: Bitcoin node status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/bitcoin/stats:
+    get:
+      tags:
+        - Bitcoin
+      summary: Get Bitcoin node statistics
+      description: Returns Bitcoin node statistics
+      operationId: getBitcoinStats
+      security: [ ]
+      responses:
+        "200":
+          description: Bitcoin node statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/qbittorrent/status:
+    get:
+      tags:
+        - qBittorrent
+      summary: Get qBittorrent status
+      description: Returns the current status of qBittorrent
+      operationId: getQBittorrentStatus
+      security: [ ]
+      responses:
+        "200":
+          description: qBittorrent status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/qbittorrent/stats:
+    get:
+      tags:
+        - qBittorrent
+      summary: Get qBittorrent statistics
+      description: Returns qBittorrent statistics
+      operationId: getQBittorrentStats
+      security: [ ]
+      responses:
+        "200":
+          description: qBittorrent statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/ipfs/status:
+    get:
+      tags:
+        - IPFS
+      summary: Get IPFS node status
+      description: Returns the current status of the IPFS node
+      operationId: getIpfsStatus
+      security: [ ]
+      responses:
+        "200":
+          description: IPFS node status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/ipfs/stats:
+    get:
+      tags:
+        - IPFS
+      summary: Get IPFS node statistics
+      description: Returns IPFS node statistics
+      operationId: getIpfsStats
+      security: [ ]
+      responses:
+        "200":
+          description: IPFS node statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/roon/status:
+    get:
+      tags:
+        - Roon
+      summary: Get Roon server status
+      description: Returns the current status of the Roon music server
+      operationId: getRoonStatus
+      security: [ ]
+      responses:
+        "200":
+          description: Roon server status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/roon/stats:
+    get:
+      tags:
+        - Roon
+      summary: Get Roon server statistics
+      description: Returns Roon server statistics
+      operationId: getRoonStats
+      security: [ ]
+      responses:
+        "200":
+          description: Roon server statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/tor/relay/{nickname}:
+    get:
+      tags:
+        - Tor
+      summary: Get Tor relay information
+      description: Returns information about a Tor relay
+      operationId: getTorRelay
+      parameters:
+        - name: nickname
+          in: path
+          required: false
+          schema:
+            type: string
+          description: Tor relay nickname
+      responses:
+        "200":
+          description: Tor relay information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/tor/health:
+    get:
+      tags:
+        - Tor
+      summary: Get Tor service health
+      description: Returns the health status of the Tor service
+      operationId: getTorHealth
+      security: [ ]
+      responses:
+        "200":
+          description: Tor service health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/synology/status:
+    get:
+      tags:
+        - Synology
+      summary: Get Synology NAS status
+      description: Returns the current status of the Synology NAS
+      operationId: getSynologyStatus
+      security: [ ]
+      responses:
+        "200":
+          description: Synology NAS status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/synology/stats:
+    get:
+      tags:
+        - Synology
+      summary: Get Synology NAS statistics
+      description: Returns Synology NAS statistics
+      operationId: getSynologyStats
+      security: [ ]
+      responses:
+        "200":
+          description: Synology NAS statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/philips/status:
+    get:
+      tags:
+        - Philips
+      summary: Get Philips Bridge status
+      description: Returns the current status of the Philips Hue Bridge
+      operationId: getPhilipsStatus
+      security: [ ]
+      responses:
+        "200":
+          description: Philips Bridge status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/philips/stats:
+    get:
+      tags:
+        - Philips
+      summary: Get Philips Bridge statistics
+      description: Returns Philips Hue Bridge statistics
+      operationId: getPhilipsStats
+      security: [ ]
+      responses:
+        "200":
+          description: Philips Bridge statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/homebridge/status:
+    get:
+      tags:
+        - Homebridge
+      summary: Get Homebridge status
+      description: Returns the current status of Homebridge
+      operationId: getHomebridgeStatus
+      security: [ ]
+      responses:
+        "200":
+          description: Homebridge status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/homebridge/stats:
+    get:
+      tags:
+        - Homebridge
+      summary: Get Homebridge statistics
+      description: Returns Homebridge statistics
+      operationId: getHomebridgeStats
+      security: [ ]
+      responses:
+        "200":
+          description: Homebridge statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/status/homebridge-version:
+    get:
+      tags:
+        - Homebridge
+      summary: Get Homebridge version
+      description: Returns the version of Homebridge
+      operationId: getHomebridgeVersion
+      responses:
+        "200":
+          description: Homebridge version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/status/server-information:
+    get:
+      tags:
+        - Homebridge
+      summary: Get Homebridge server information
+      description: Returns detailed Homebridge server information
+      operationId: getServerInformation
+      responses:
+        "200":
+          description: Server information
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/accessories:
+    get:
+      tags:
+        - Homebridge
+      summary: Get Homebridge accessories
+      description: Returns list of Homebridge accessories
+      operationId: getAccessories
+      responses:
+        "200":
+          description: List of accessories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "501":
+          description: Not implemented
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/albyhub/status:
+    get:
+      tags:
+        - Alby Hub
+      summary: Get Alby Hub status
+      description: Returns the current status of Alby Hub
+      operationId: getAlbyHubStatus
+      security: [ ]
+      responses:
+        "200":
+          description: Alby Hub status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/albyhub/stats:
+    get:
+      tags:
+        - Alby Hub
+      summary: Get Alby Hub statistics
+      description: Returns Alby Hub statistics
+      operationId: getAlbyHubStats
+      security: [ ]
+      responses:
+        "200":
+          description: Alby Hub statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/macmini/status:
+    get:
+      tags:
+        - Mac Mini
+      summary: Get Mac Mini status
+      description: Returns the current status of the Mac Mini server
+      operationId: getMacMiniStatus
+      security: [ ]
+      responses:
+        "200":
+          description: Mac Mini status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceHealth"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/macmini/stats:
+    get:
+      tags:
+        - Mac Mini
+      summary: Get Mac Mini statistics
+      description: Returns Mac Mini statistics
+      operationId: getMacMiniStats
+      security: [ ]
+      responses:
+        "200":
+          description: Mac Mini statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStats"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailableError"
+
+  /api/services/health:
+    get:
+      tags:
+        - Services
+      summary: Get all services health
+      description: Returns health status of all configured services
+      operationId: getAllServicesHealth
+      security: [ ]
+      responses:
+        "200":
+          description: All services health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllServicesHealth"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/router/arp:
+    get:
+      tags:
+        - Router
+      summary: Get ARP table
+      description: Returns the ARP/neighbor table for a router service
+      operationId: getRouterArp
+      security: [ ]
+      parameters:
+        - name: service
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Service name (e.g., 'beryl', 'telenet')
+      responses:
+        "200":
+          description: ARP table data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouterArpResponse"
+        "400":
+          description: Missing or invalid service parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/security/alerts:
+    get:
+      tags:
+        - Security
+      summary: Get security alerts
+      description: Returns security alerts (requires authentication and whitelisted IP)
+      operationId: getSecurityAlerts
+      parameters:
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [ low, medium, high, critical ]
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Security alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityAlertsResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/security/stats:
+    get:
+      tags:
+        - Security
+      summary: Get security statistics
+      description: Returns security statistics (requires authentication and whitelisted IP)
+      operationId: getSecurityStats
+      responses:
+        "200":
+          description: Security statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityStatsResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/security/ip-control:
+    get:
+      tags:
+        - Security
+      summary: Get IP control statistics
+      description: Returns IP control whitelist/blacklist statistics (requires authentication and whitelisted IP)
+      operationId: getIpControl
+      responses:
+        "200":
+          description: IP control statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IPControlStatsResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/security/ip-control/whitelist:
+    post:
+      tags:
+        - Security
+      summary: Manage IP whitelist
+      description: Add or remove IP from whitelist (requires authentication, whitelisted IP, and CSRF token)
+      operationId: manageIpWhitelist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IPControlRequest"
+      responses:
+        "200":
+          description: Whitelist updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/security/ip-control/blacklist:
+    post:
+      tags:
+        - Security
+      summary: Manage IP blacklist
+      description: Add or remove IP from blacklist (requires authentication, whitelisted IP, and CSRF token)
+      operationId: manageIpBlacklist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IPControlRequest"
+      responses:
+        "200":
+          description: Blacklist updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/config/frontend:
+    get:
+      tags:
+        - Config
+      summary: Get frontend configuration
+      description: Returns configuration data for the frontend application
+      operationId: getFrontendConfig
+      security: [ ]
+      responses:
+        "200":
+          description: Frontend configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrontendConfigResponse"
