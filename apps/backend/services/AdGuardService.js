@@ -45,6 +45,7 @@ class AdGuardService {
         status: status.running ? "online" : "warning",
         responseTime,
         lastCheck: new Date(),
+        currentVersion: status.version || "unknown",
       };
 
       if (!status.protection_enabled) {
@@ -179,6 +180,39 @@ class AdGuardService {
       return { success: true };
     } catch (error) {
       throw new Error(`Failed to set protection: ${error.message}`);
+    }
+  }
+
+  async checkForUpdates() {
+    try {
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (this.authToken) {
+        headers["Authorization"] = `Basic ${this.authToken}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/control/status`, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(this.timeout),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const status = await response.json();
+
+      return {
+        currentVersion: status.version || "unknown",
+        updateAvailable: status.new_version ? true : false,
+        latestVersion: status.new_version || status.version || "unknown",
+        canAutoUpdate: status.can_autoupdate || false,
+      };
+    } catch (error) {
+      throw new Error(`Failed to check for updates: ${error.message}`);
     }
   }
 }

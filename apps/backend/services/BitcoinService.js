@@ -9,6 +9,94 @@ import { Buffer } from "buffer";
 const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 
+function cleanVersionString(version) {
+  if (typeof version !== "string") return "";
+
+  // Handle /Satoshi:X.Y.Z/ format
+  const satoshiMatch = version.match(/\/Satoshi:(\d+\.\d+\.\d+)/);
+  if (satoshiMatch) {
+    return satoshiMatch[1];
+  }
+
+  // Handle other formats - remove slashes and extra text
+  let cleaned = version
+    .trim()
+    .replace(/^\//, "") // Remove leading slash
+    .replace(/\/$/, "") // Remove trailing slash
+    .replace(/^[vV]ersion:\s*/, ""); // Remove "version:" prefix
+
+  // Extract version number if present
+  const versionMatch = cleaned.match(/(\d+\.\d+\.\d+)/);
+  if (versionMatch) {
+    return versionMatch[1];
+  }
+
+  return cleaned.substring(0, 32);
+}
+
+function parseNumericVersion(version) {
+  if (typeof version !== "number") {
+    return null;
+  }
+
+  // Bitcoin Core version number format:
+  // Major version * 10000 + Minor version * 100 + Revision
+  // Example: 270000 = 27 * 10000 + 0 * 100 + 0 = v27.0.0
+  const major = Math.floor(version / 10000);
+  const minor = Math.floor((version % 10000) / 100);
+  const patch = version % 100;
+
+  return `${major}.${minor}.${patch}`;
+}
+
+function getBitcoinVersion(networkInfo) {
+  if (!networkInfo) return "unknown";
+
+  // Try subversion first (string format like "/Satoshi:27.0.0/")
+  if (networkInfo.subversion) {
+    const cleaned = cleanVersionString(networkInfo.subversion);
+    if (cleaned && cleaned !== "" && cleaned !== "unknown") return cleaned;
+  }
+
+  // Try numeric version (number format like 270000)
+  if (typeof networkInfo.version === "number") {
+    const parsed = parseNumericVersion(networkInfo.version);
+    if (parsed) return parsed;
+  }
+
+  // Try version as string (in case it's already formatted)
+  if (typeof networkInfo.version === "string") {
+    const cleaned = cleanVersionString(networkInfo.version);
+    if (cleaned && cleaned !== "" && cleaned !== "unknown") return cleaned;
+  }
+
+  return "unknown";
+}
+
+function getVersionFromGitHubTag(tag) {
+  if (typeof tag !== "string") return "";
+  // Extract version number from GitHub tag, e.g., "v27.0" -> "27.0"
+  const match = tag.match(/v?(\d+\.\d+(?:\.\d+)?)/);
+  return match ? match[1] : "";
+}
+
+function isUpdateAvailable(current, latest) {
+  if (!current || !latest || current === "unknown" || latest === "unknown") {
+    return false;
+  }
+
+  const currentParts = current.split(".").map(Number);
+  const latestParts = latest.split(".").map(Number);
+
+  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
+    const currentVer = currentParts[i] || 0;
+    const latestVer = latestParts[i] || 0;
+    if (latestVer > currentVer) return true;
+    if (latestVer < currentVer) return false;
+  }
+  return false;
+}
+
 export class BitcoinService {
   constructor(config = {}) {
     // Determine timeout values (ms) and corresponding curl timeouts (s)
@@ -46,13 +134,24 @@ export class BitcoinService {
 
   async checkHealth() {
     try {
-      // Try to get basic blockchain info to check if Bitcoin node is responsive
-      const result = await this.executeRpcCommand("getblockchaininfo");
+      // Get both blockchain info and network info to include version
+      const [blockchainInfo, networkInfo] = await Promise.all([
+        this.executeRpcCommand("getblockchaininfo"),
+        this.executeRpcCommand("getnetworkinfo").catch(() => null),
+      ]);
 
-      if (result && result.chain) {
+      if (blockchainInfo && blockchainInfo.chain) {
+        // Extract version from network info
+        const currentVersion = networkInfo?.subversion
+          ? cleanVersionString(networkInfo.subversion)
+          : networkInfo?.version
+          ? String(networkInfo.version)
+          : "unknown";
+
         return {
           status: "online",
           timestamp: new Date().toISOString(),
+          currentVersion,
         };
       } else {
         return {
@@ -168,7 +267,9 @@ export class BitcoinService {
       fetchOptions.agent = this.proxyAgent;
     } else {
       // For non-proxy requests, use the standard HTTP/HTTPS agent to fix connection issues
-      fetchOptions.agent = this.config.rpcUrl.startsWith('https:') ? httpsAgent : httpAgent;
+      fetchOptions.agent = this.config.rpcUrl.startsWith("https:")
+        ? httpsAgent
+        : httpAgent;
     }
 
     try {
@@ -245,6 +346,47 @@ export class BitcoinService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async checkForUpdates() {
+    try {
+      // Get network info which contains the version
+      const networkInfo = await this.executeRpcCommand("getnetworkinfo");
+
+      // Use getBitcoinVersion to handle both numeric and string formats
+      const currentVersion = getBitcoinVersion(networkInfo);
+
+      // Fetch latest Bitcoin Core release from GitHub API
+      const response = await fetch(
+        "https://api.github.com/repos/bitcoin/bitcoin/releases/latest",
+        {
+          headers: {
+            "User-Agent": "Watchman-Dashboard",
+            Accept: "application/vnd.github.v3+json",
+          },
+          signal: AbortSignal.timeout(10000),
+          agent: httpsAgent, // Use HTTPS agent for GitHub API
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`GitHub API returned ${response.status}`);
+      }
+
+      const releaseData = await response.json();
+      const latestVersion = getVersionFromGitHubTag(
+        releaseData.tag_name || releaseData.name || ""
+      );
+
+      return {
+        currentVersion: currentVersion || "unknown",
+        updateAvailable: isUpdateAvailable(currentVersion, latestVersion),
+        latestVersion: latestVersion || "unknown",
+        releaseUrl: releaseData.html_url,
+      };
+    } catch (error) {
+      throw new Error(`Failed to check for updates: ${error.message}`);
     }
   }
 }

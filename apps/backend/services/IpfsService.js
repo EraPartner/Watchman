@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import http from "http";
 import https from "https";
+import { isUpdateAvailable } from "../utils/versionComparison.js";
 
 // Create agents with keepAlive to fix connection issues
 const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
@@ -102,7 +103,7 @@ export default class IpfsService {
       this.lastCheck = checkedAt;
       return {
         status: "online",
-        version:
+        currentVersion:
           v && (v.Version || v.version) ? v.Version || v.version : "unknown",
         lastCheck: checkedAt,
       };
@@ -183,6 +184,49 @@ export default class IpfsService {
       };
     } catch (error) {
       throw new Error(`Failed to fetch IPFS stats: ${error.message}`);
+    }
+  }
+
+  async checkForUpdates() {
+    try {
+      // Get current IPFS version
+      const version = await this._fetch("/api/v0/version", "POST");
+      const currentVersion =
+        version && (version.Version || version.version)
+          ? version.Version || version.version
+          : "unknown";
+
+      // Fetch latest Kubo (go-ipfs) release from GitHub API
+      const response = await fetch(
+        "https://api.github.com/repos/ipfs/kubo/releases/latest",
+        {
+          headers: {
+            "User-Agent": "Watchman-Dashboard",
+            Accept: "application/vnd.github.v3+json",
+          },
+          signal: AbortSignal.timeout(10000),
+          agent: httpsAgent, // Use HTTPS agent for GitHub API
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`GitHub API returned ${response.status}`);
+      }
+
+      const releaseData = await response.json();
+      const latestVersion =
+        releaseData.tag_name?.replace(/^v/, "") ||
+        releaseData.name ||
+        "unknown";
+
+      return {
+        currentVersion,
+        updateAvailable: isUpdateAvailable(currentVersion, latestVersion),
+        latestVersion,
+        releaseUrl: releaseData.html_url,
+      };
+    } catch (error) {
+      throw new Error(`Failed to check for updates: ${error.message}`);
     }
   }
 }

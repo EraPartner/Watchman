@@ -13,6 +13,7 @@ import {
 import { AdGuardServerStats, ServerStatus } from "../types/server";
 import { useConfig } from "../hooks/use-config";
 import { ServerStatusBadge } from "./ServerStatusBadge";
+import { UpdateBadge } from "./UpdateBadge";
 
 // AdGuard Home logo SVG component
 const AdGuardIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -97,6 +98,7 @@ export const AdGuardCard = ({ name, status, stats }: AdGuardCardProps) => {
           </button>
         </div>
         <div className="flex items-center gap-2">
+          <UpdateBadge service="adguard" />
           <ServerStatusBadge status={status} />
           {!stats.protectionEnabled && (
             <AlertTriangle className="h-4 w-4 text-yellow-500" />

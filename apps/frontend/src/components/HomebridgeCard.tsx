@@ -1,7 +1,8 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { AlertCircle, Server } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { ServerStatusBadge } from "./ServerStatusBadge";
+import { UpdateBadge } from "./UpdateBadge";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
 import { APP_CONFIG } from "../lib/constants";
@@ -204,21 +205,21 @@ const HomebridgeCard: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Server className="h-4 w-4" />
-          Homebridge
-        </CardTitle>
-        <ServerStatusBadge
-          status={
-            loading
-              ? "loading"
-              : isOnline
-                ? "online"
-                : hasError
-                  ? "error"
-                  : "offline"
-          }
-        />
+        <CardTitle className="text-sm font-medium">Homebridge</CardTitle>
+        <div className="flex items-center gap-2">
+          {isOnline && <UpdateBadge service="homebridge" />}
+          <ServerStatusBadge
+            status={
+              loading
+                ? "loading"
+                : isOnline
+                  ? "online"
+                  : hasError
+                    ? "error"
+                    : "offline"
+            }
+          />
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-4 text-sm">

@@ -14,6 +14,7 @@ import {
 import { ServerStatus, TorServerStats } from "../types/server";
 import { APP_CONFIG, RELAY_TYPE_COLORS } from "../lib/constants";
 import { ServerStatusBadge } from "./ServerStatusBadge";
+import { UpdateBadge } from "./UpdateBadge";
 import { formatDisplayUrl, openHref } from "../lib/url";
 
 // Tor Project logo SVG component
@@ -100,6 +101,9 @@ export const TorCard = ({ name, status, stats, ip, port }: TorCardProps) => {
           </button>
         </div>
         <div className="flex items-center gap-2">
+          {status !== "loading" && status !== "offline" && (
+            <UpdateBadge service="tor" />
+          )}
           <ServerStatusBadge status={status} />
           {stats.hibernating && (
             <div title="Relay is hibernating">

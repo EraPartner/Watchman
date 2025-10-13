@@ -1,4 +1,9 @@
 import { SocksProxyAgent } from "socks-proxy-agent";
+import https from "https";
+import fetch from "node-fetch";
+
+// Create HTTPS agent with keepAlive for external API requests
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 
 class TorService {
   constructor(config) {
@@ -33,11 +38,16 @@ class TorService {
         };
       }
 
+      // Extract version from relay info
+      const currentVersion =
+        relayInfo.version || relayInfo.platform || "unknown";
+
       if (!relayInfo.running) {
         return {
           status: "offline",
           responseTime,
           lastCheck: new Date(),
+          currentVersion,
           error: `Relay "${this.relayNickname}" is not running`,
         };
       }
@@ -47,6 +57,7 @@ class TorService {
           status: "warning",
           responseTime,
           lastCheck: new Date(),
+          currentVersion,
           error: `Relay "${this.relayNickname}" is hibernating`,
         };
       }
@@ -55,6 +66,7 @@ class TorService {
         status: "online",
         responseTime,
         lastCheck: new Date(),
+        currentVersion,
       };
     } catch (error) {
       return {
@@ -175,6 +187,92 @@ class TorService {
         throw new Error(`Request timeout after ${this.timeout}ms`);
       }
       throw error;
+    }
+  }
+
+  async checkForUpdates() {
+    try {
+      // Get current relay info which includes version
+      const relayInfo = await this.searchRelayByNickname(this.relayNickname);
+
+      if (!relayInfo) {
+        throw new Error(`Relay "${this.relayNickname}" not found`);
+      }
+
+      const currentVersion =
+        relayInfo.version || relayInfo.platform || "Unknown";
+
+      // Fetch latest stable version from Tor Project's GitLab API
+      const response = await fetch(
+        "https://gitlab.torproject.org/api/v4/projects/tpo%2Fcore%2Ftor/repository/tags?per_page=50",
+        {
+          headers: {
+            "User-Agent": "Watchman-Dashboard",
+          },
+          signal: AbortSignal.timeout(10000),
+          agent: httpsAgent,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`GitLab API returned ${response.status}`);
+      }
+
+      const tags = await response.json();
+
+      // Filter out alpha and rc versions to get stable releases only
+      const stableTags = tags.filter(
+        (tag) =>
+          !tag.name.includes("alpha") &&
+          !tag.name.includes("rc") &&
+          tag.name.match(/tor-\d+\.\d+\.\d+\.\d+/)
+      );
+
+      if (stableTags.length === 0) {
+        throw new Error("No stable Tor versions found in GitLab");
+      }
+
+      // Extract version number from tag name (format: tor-0.4.8.19)
+      const latestTag = stableTags[0].name;
+      const latestVersion = latestTag.replace("tor-", "");
+
+      // Extract version numbers for comparison
+      const extractVersion = (ver) => {
+        const match = String(ver).match(/(\d+)\.(\d+)\.(\d+)\.(\d+)/);
+        if (!match) return null;
+        return {
+          major: parseInt(match[1]),
+          minor: parseInt(match[2]),
+          patch: parseInt(match[3]),
+          build: parseInt(match[4]),
+        };
+      };
+
+      const current = extractVersion(currentVersion);
+      const latest = extractVersion(latestVersion);
+
+      let updateAvailable = false;
+      if (current && latest) {
+        updateAvailable =
+          latest.major > current.major ||
+          (latest.major === current.major && latest.minor > current.minor) ||
+          (latest.major === current.major &&
+            latest.minor === current.minor &&
+            latest.patch > current.patch) ||
+          (latest.major === current.major &&
+            latest.minor === current.minor &&
+            latest.patch === current.patch &&
+            latest.build > current.build);
+      }
+
+      return {
+        currentVersion,
+        updateAvailable,
+        latestVersion,
+        recommendedUrl: "https://www.torproject.org/download/",
+      };
+    } catch (error) {
+      throw new Error(`Failed to check for updates: ${error.message}`);
     }
   }
 }

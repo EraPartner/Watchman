@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
+import { UpdateBadge } from "./UpdateBadge";
 import { apiClient } from "../services/ApiClient";
 import {
-  Cloud,
   Database,
   Link as LinkIcon,
   Map as MapIcon,
@@ -146,10 +146,16 @@ export const IpfsCard: React.FC<{ name?: string }> = ({ name = "IPFS" }) => {
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Cloud className="h-4 w-4" /> {name}
-        </CardTitle>
-        <ServerStatusBadge status={status} />
+        <div className="flex flex-col">
+          <CardTitle className="text-sm font-medium">{name}</CardTitle>
+          {buildLink()}
+        </div>
+        <div className="flex items-center gap-2">
+          {status !== "loading" && status !== "offline" && (
+            <UpdateBadge service="ipfs" />
+          )}
+          <ServerStatusBadge status={status} />
+        </div>
       </CardHeader>
 
       {stats && (

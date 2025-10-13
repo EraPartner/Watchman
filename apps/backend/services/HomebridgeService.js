@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import http from "http";
 import https from "https";
+import { isUpdateAvailable } from "../utils/versionComparison.js";
 
 // Create agents with keepAlive to fix connection issues
 const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
@@ -336,13 +337,39 @@ class HomebridgeService {
       };
     const start = Date.now();
     try {
-      const data = await this.makeRequest(this.statusPath);
+      // Get both status and version info
+      const [statusData, versionData] = await Promise.all([
+        this.makeRequest(this.statusPath),
+        this.makeRequest(this.versionPath).catch(() => null),
+      ]);
+
       const responseTime = Date.now() - start;
+
+      // Extract version from versionData
+      let currentVersion = "unknown";
+      if (versionData && typeof versionData === "object") {
+        currentVersion =
+          versionData.installedVersion ||
+          versionData.installed_version ||
+          versionData.homebridge ||
+          versionData.version ||
+          versionData.homebridgeVersion ||
+          versionData.homebridge_version ||
+          versionData.serverVersion ||
+          (versionData.raw && versionData.raw.installedVersion) ||
+          (versionData.raw && versionData.raw.homebridge) ||
+          (versionData.raw && versionData.raw.version) ||
+          "unknown";
+      } else if (typeof versionData === "string") {
+        currentVersion = versionData;
+      }
+
       this.lastData = {
         status: "online",
         responseTime,
         timestamp: new Date().toISOString(),
-        data,
+        currentVersion,
+        data: statusData,
       };
       return this.lastData;
     } catch (error) {
@@ -378,6 +405,7 @@ class HomebridgeService {
       let version;
       if (data && typeof data === "object")
         version =
+          data.homebridge ||
           data.version ||
           data.homebridgeVersion ||
           data.homebridge_version ||
@@ -478,6 +506,59 @@ class HomebridgeService {
         timestamp: new Date().toISOString(),
         lastData: this.lastData,
       };
+    }
+  }
+
+  async checkForUpdates() {
+    try {
+      // Use checkHealth() to get the current version - this is the same method used by the status endpoint
+      const healthData = await this.checkHealth();
+
+      // Extract current version from health data
+      let currentVersion = "unknown";
+      if (
+        healthData &&
+        healthData.currentVersion &&
+        healthData.currentVersion !== "unknown"
+      ) {
+        currentVersion = healthData.currentVersion;
+      }
+
+      if (currentVersion === "unknown") {
+        throw new Error("Could not determine current Homebridge version");
+      }
+
+      // Fetch latest Homebridge release from npm registry - always use httpsAgent for npm
+      const response = await fetch(
+        "https://registry.npmjs.org/homebridge/latest",
+        {
+          headers: {
+            "User-Agent": "Watchman-Dashboard",
+            Accept: "application/json",
+          },
+          signal: AbortSignal.timeout(10000),
+          agent: httpsAgent, // Always HTTPS for npm registry
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`npm registry returned ${response.status}`);
+      }
+
+      const packageData = await response.json();
+      const latestVersion = packageData.version || "unknown";
+
+      // Use the utility function for version comparison
+      const updateAvailable = isUpdateAvailable(currentVersion, latestVersion);
+
+      return {
+        currentVersion,
+        updateAvailable,
+        latestVersion,
+        releaseUrl: "https://www.npmjs.com/package/homebridge",
+      };
+    } catch (error) {
+      throw new Error(`Failed to check for updates: ${error.message}`);
     }
   }
 }

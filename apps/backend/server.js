@@ -415,6 +415,26 @@ app.get("/api/adguard/stats", statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// AdGuard update check endpoint
+app.get("/api/adguard/updates", statsCacheMiddleware, async (req, res) => {
+  try {
+    const adguardService = serviceManager.getService("adguard");
+    if (!adguardService) {
+      return res.status(503).json({ error: "AdGuard service not configured" });
+    }
+
+    const updateInfo = await adguardService.checkForUpdates();
+    console.log(`✅ AdGuard update check successful`);
+    res.json(updateInfo);
+  } catch (error) {
+    console.error("❌ AdGuard update check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check for AdGuard updates",
+      message: error.message,
+    });
+  }
+});
+
 // Bitcoin API endpoints
 app.get(
   "/api/bitcoin/health",
@@ -486,6 +506,26 @@ app.get("/api/bitcoin/stats", statsCacheMiddleware, async (req, res) => {
     console.error("❌ Bitcoin stats connection failed:", error.message);
     res.status(500).json({
       error: "Failed to fetch Bitcoin stats",
+      message: error.message,
+    });
+  }
+});
+
+// Bitcoin update check endpoint
+app.get("/api/bitcoin/updates", statsCacheMiddleware, async (req, res) => {
+  try {
+    const bitcoinService = serviceManager.getService("bitcoin");
+    if (!bitcoinService) {
+      return res.status(503).json({ error: "Bitcoin service not configured" });
+    }
+
+    const updateInfo = await bitcoinService.checkForUpdates();
+    console.log(`✅ Bitcoin update check successful`);
+    res.json(updateInfo);
+  } catch (error) {
+    console.error("❌ Bitcoin update check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check for Bitcoin updates",
       message: error.message,
     });
   }
@@ -588,7 +628,27 @@ app.get("/api/ipfs/stats", statsCacheMiddleware, async (req, res) => {
   }
 });
 
-// Roon (ROCK) API endpoints - missing previously which caused frontend fetches to 404
+// IPFS update check endpoint
+app.get("/api/ipfs/updates", statsCacheMiddleware, async (req, res) => {
+  try {
+    const ipfsService = serviceManager.getService("ipfs");
+    if (!ipfsService) {
+      return res.status(503).json({ error: "IPFS service not configured" });
+    }
+
+    const updateInfo = await ipfsService.checkForUpdates();
+    console.log(`✅ IPFS update check successful`);
+    res.json(updateInfo);
+  } catch (error) {
+    console.error("❌ IPFS update check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check for IPFS updates",
+      message: error.message,
+    });
+  }
+});
+
+// Roon (ROCK) API endpoints
 app.get(
   "/api/roon/status",
   healthLimiter,
@@ -679,6 +739,26 @@ app.get(
     }
   }
 );
+
+// Tor update check endpoint
+app.get("/api/tor/updates", statsCacheMiddleware, async (req, res) => {
+  try {
+    const torService = serviceManager.getService("tor");
+    if (!torService) {
+      return res.status(503).json({ error: "Tor service not configured" });
+    }
+
+    const updateInfo = await torService.checkForUpdates();
+    console.log(`✅ Tor update check successful`);
+    res.json(updateInfo);
+  } catch (error) {
+    console.error("❌ Tor update check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check for Tor updates",
+      message: error.message,
+    });
+  }
+});
 
 // Service health check endpoint
 app.get(
@@ -930,6 +1010,26 @@ app.get("/api/homebridge/stats", statsCacheMiddleware, async (req, res) => {
     console.error("❌ Homebridge stats connection failed:", error.message);
     res.status(500).json({
       error: "Failed to fetch Homebridge stats",
+      message: error.message,
+    });
+  }
+});
+
+// Homebridge update check endpoint
+app.get("/api/homebridge/updates", statsCacheMiddleware, async (req, res) => {
+  try {
+    const hbService = serviceManager.getService("homebridge");
+    if (!hbService) {
+      return res.status(503).json({ error: "Homebridge service not configured" });
+    }
+
+    const updateInfo = await hbService.checkForUpdates();
+    console.log(`✅ Homebridge update check successful`);
+    res.json(updateInfo);
+  } catch (error) {
+    console.error("❌ Homebridge update check failed:", error.message);
+    res.status(500).json({
+      error: "Failed to check for Homebridge updates",
       message: error.message,
     });
   }

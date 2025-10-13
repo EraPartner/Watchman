@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
+import { UpdateBadge } from "./UpdateBadge";
 import { BitcoinStats } from "../types/api";
 import { apiClient } from "../services/ApiClient";
 import {
@@ -131,7 +132,12 @@ export const BitcoinCard: React.FC = () => {
           <BitcoinIcon className="h-4 w-4 text-[#F7931A]" />
           Bitcoin Core
         </CardTitle>
-        <ServerStatusBadge status={status} />
+        <div className="flex items-center gap-2">
+          {status !== "loading" && status !== "offline" && (
+            <UpdateBadge service="bitcoin" />
+          )}
+          <ServerStatusBadge status={status} />
+        </div>
       </CardHeader>
       {stats && (
         <CardContent className="space-y-3">
