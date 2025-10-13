@@ -11,6 +11,7 @@ import MacMiniService from "./MacMiniService.js";
 import RouterService from "./RouterService.js";
 import IpfsService from "./IpfsService.js";
 import HomebridgeService from "./HomebridgeService.js";
+import RaspberryPiService from "./RaspberryPiService.js";
 
 export default class ServiceManager {
   constructor() {
@@ -256,6 +257,18 @@ export default class ServiceManager {
         });
         this.services.set("telenet", telenetService);
       }
+
+      // Initialize Raspberry Pi service (optional - requires RASPI_HOST)
+      const raspiService = new RaspberryPiService({
+        host: process.env.RASPI_HOST,
+        port: process.env.RASPI_PORT
+          ? parseInt(process.env.RASPI_PORT)
+          : undefined,
+        timeout: process.env.RASPI_TIMEOUT
+          ? parseInt(process.env.RASPI_TIMEOUT)
+          : undefined,
+      });
+      this.services.set("raspi", raspiService);
 
       this.initialized = true;
       console.log("✅ All services initialized successfully");

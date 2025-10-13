@@ -37,6 +37,7 @@
     "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2",
     "node-ssh": "^13.2.0",
+    "pigpio-client": "^1.5.2",
     "ping": "^1.0.0",
     "socks-proxy-agent": "^8.0.5",
     "swagger-ui-express": "^5.0.1",

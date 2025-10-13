@@ -16,6 +16,7 @@ import RoonCard from "./RoonCard";
 import PhilipsBridgeCard from "./PhilipsBridgeCard";
 import AlbyHubCard from "./AlbyHubCard";
 import { MacMiniCard } from "./MacMiniCard";
+import { RaspberryPiCard } from "./RaspberryPiCard";
 import { NostrcheckCard } from "./NostrcheckCard";
 import RouterCard from "./RouterCard";
 import HomebridgeCard from "./HomebridgeCard";
@@ -350,9 +351,17 @@ export const LiveServerDashboard = () => {
 
   const hardwareTiles: JSX.Element[] = [
     <SynologyCard key="synology" />,
-    <RoonCard key="roon" />,
-    <PhilipsBridgeCard key="philips" />,
+    // Stack Roon and Philips Bridge vertically like Nostr/AlbyHub
+    <div key="roon-philips-stacked" className="h-full flex flex-col gap-4">
+      <div className="flex-[1.5] min-h-0">
+        <RoonCard />
+      </div>
+      <div className="flex-1 min-h-0">
+        <PhilipsBridgeCard />
+      </div>
+    </div>,
     <MacMiniCard key="macmini" />,
+    <RaspberryPiCard key="raspberrypi" />,
     // Router hardware tiles: Beryl and Telenet (if configured in backend services/health)
     <RouterCard key="beryl" name={"Beryl AX"} serviceKey={"beryl"} />,
     <RouterCard key="telenet" name={"Telenet"} serviceKey={"telenet"} />,

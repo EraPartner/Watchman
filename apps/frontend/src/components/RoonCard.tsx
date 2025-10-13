@@ -89,7 +89,7 @@ const RoonCard: React.FC = () => {
   }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full h-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Server className="h-4 w-4" />
@@ -142,7 +142,7 @@ const RoonCard: React.FC = () => {
                 Ping
               </div>
               <div className="text-right">
-                <div className="font-medium">
+                <div className="font-medium text-xs">
                   {formatPingDisplay(stats?.data?.ping ?? status?.data?.ping)}
                 </div>
               </div>
@@ -155,7 +155,7 @@ const RoonCard: React.FC = () => {
                   <Network className="h-3 w-3" />
                   Ports
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2">
                   {(stats?.data?.ports || status?.data?.ports).map((p: any) => (
                     <div
                       key={p.port}
@@ -164,10 +164,10 @@ const RoonCard: React.FC = () => {
                       }`}
                     >
                       <div className="text-xs text-muted-foreground">
-                        Port (Roon ARC)
+                        Port {p.port} (Roon ARC)
                       </div>
                       <div className="text-sm font-medium">
-                        {p.port} — {p.open ? "open" : "closed"}
+                        {p.open ? "Open" : "Closed"}
                       </div>
                     </div>
                   ))}

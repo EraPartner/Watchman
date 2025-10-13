@@ -1064,6 +1064,56 @@ app.get("/api/macmini/stats", statsCacheMiddleware, async (req, res) => {
   }
 });
 
+// Raspberry Pi endpoints
+app.get(
+  "/api/raspi/status",
+  healthLimiter,
+  healthCacheMiddleware,
+  async (req, res) => {
+    try {
+      const raspiService = serviceManager.getService("raspi");
+      if (!raspiService) {
+        return res.status(503).json({
+          error: "Raspberry Pi service not configured",
+          status: "offline",
+        });
+      }
+
+      const health = await serviceManager.getServiceHealth("raspi");
+      console.log("✅ Raspberry Pi status connection successful");
+      res.json(health);
+    } catch (error) {
+      console.error("❌ Raspberry Pi status connection failed:", error.message);
+      res.status(500).json({
+        error: "Failed to fetch Raspberry Pi status",
+        status: "offline",
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.get("/api/raspi/stats", statsCacheMiddleware, async (req, res) => {
+  try {
+    const raspiService = serviceManager.getService("raspi");
+    if (!raspiService) {
+      return res
+        .status(503)
+        .json({ error: "Raspberry Pi service not configured" });
+    }
+
+    const stats = await serviceManager.getServiceStats("raspi");
+    console.log("✅ Raspberry Pi stats connection successful");
+    res.json(stats);
+  } catch (error) {
+    console.error("❌ Raspberry Pi stats connection failed:", error.message);
+    res.status(500).json({
+      error: "Failed to fetch Raspberry Pi stats",
+      message: error.message,
+    });
+  }
+});
+
 // Frontend configuration endpoint
 app.get("/api/config/frontend", (req, res) => {
   res.json({
