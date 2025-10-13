@@ -1,4 +1,10 @@
 import fetch from "node-fetch";
+import http from "http";
+import https from "https";
+
+// Create agents with keepAlive to fix connection issues
+const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 
 export default class IpfsService {
   constructor(config = {}) {
@@ -27,7 +33,10 @@ export default class IpfsService {
       try {
         let opts;
         if (reqMethod === "GET") {
-          opts = { signal: controller.signal };
+          opts = {
+            signal: controller.signal,
+            agent: url.startsWith("https:") ? httpsAgent : httpAgent,
+          };
         } else {
           // Some proxies / setups require POST requests to have a Content-Type and a body
           opts = {
@@ -35,6 +44,7 @@ export default class IpfsService {
             headers: { "Content-Type": "application/json" },
             body: "",
             signal: controller.signal,
+            agent: url.startsWith("https:") ? httpsAgent : httpAgent,
           };
         }
         const res = await fetch(url, opts);

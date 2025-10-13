@@ -12,13 +12,6 @@ export default defineConfig(({ mode }) => {
       react({
         // Enable React Fast Refresh
         fastRefresh: true,
-        // Remove React DevTools in production
-        babel: {
-          plugins:
-            mode === "production"
-              ? [["transform-react-remove-prop-types", { removeImport: true }]]
-              : [],
-        },
       }),
     ],
     resolve: {
@@ -30,6 +23,13 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_FRONTEND_PORT) || 5173,
       host: true,
       strictPort: true,
+      // Allow access from both localhost and production domain
+      allowedHosts: [
+        "localhost",
+        ".localhost",
+        "watchman.tornostrtorrent.win",
+        ".tornostrtorrent.win",
+      ],
       // Enable HMR over network
       hmr: {
         port: parseInt(env.VITE_HMR_PORT) || 24678,

@@ -36,10 +36,9 @@ export function verifyToken(token) {
 // Authenticate credentials against env variables
 export async function authenticateCredentials(username, password) {
   // Basic input checks to avoid abuse
-  if (!username || !password) return false;
-  if (typeof username !== "string" || typeof password !== "string")
-    return false;
-  if (username.length > 128 || password.length > 256) return false;
+  if (!username || !password) return null;
+  if (typeof username !== "string" || typeof password !== "string") return null;
+  if (username.length > 128 || password.length > 256) return null;
 
   // Always perform bcrypt compare to mitigate username enumeration via timing
   const hashToCompare = AUTH_PASSWORD_HASH || DUMMY_HASH;
@@ -47,10 +46,17 @@ export async function authenticateCredentials(username, password) {
     const passwordMatches = await bcrypt.compare(password, hashToCompare);
     // Only succeed if username matches configured username AND password matches real hash
     const usernameMatches = AUTH_USERNAME && username === AUTH_USERNAME;
-    return usernameMatches && passwordMatches;
+    if (usernameMatches && passwordMatches) {
+      // Return user object with username and id
+      return {
+        username: AUTH_USERNAME,
+        id: AUTH_USERNAME, // Using username as ID since we only have one user
+      };
+    }
+    return null;
   } catch (err) {
     console.error("Error comparing password hash", err);
-    return false;
+    return null;
   }
 }
 

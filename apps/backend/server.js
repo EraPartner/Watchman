@@ -250,7 +250,8 @@ app.post(
 
       res.status(200).json({
         message: "Login successful",
-        accessToken,
+        token: accessToken,
+        user: { username: user.username, id: user.id },
       });
     } catch (error) {
       logger.error("Login error", { error: error.message });

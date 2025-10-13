@@ -1,7 +1,13 @@
 import { execSync } from "child_process";
 import fetch from "node-fetch";
+import http from "http";
+import https from "https";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Buffer } from "buffer";
+
+// Create agents with keepAlive to fix connection issues
+const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 
 export class BitcoinService {
   constructor(config = {}) {
@@ -160,6 +166,9 @@ export class BitcoinService {
       // Passing a protocol mapping caused: "options.agent must be one of Agent-like Object... Received an instance of Object".
       // Provide the agent instance directly to avoid that error.
       fetchOptions.agent = this.proxyAgent;
+    } else {
+      // For non-proxy requests, use the standard HTTP/HTTPS agent to fix connection issues
+      fetchOptions.agent = this.config.rpcUrl.startsWith('https:') ? httpsAgent : httpAgent;
     }
 
     try {

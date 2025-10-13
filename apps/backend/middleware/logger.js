@@ -1,9 +1,15 @@
 // Structured logging middleware with security-focused redaction
 import { join } from "path";
 
+// Check if logging is enabled (default: true)
+const LOG_ENABLED = process.env.LOG_ENABLED !== "false";
+// Check if request logging is enabled (default: true, but respects LOG_ENABLED)
+const LOG_REQUESTS = process.env.LOG_REQUESTS !== "false" && LOG_ENABLED;
+
 // Simple structured logger that redacts sensitive data
 class Logger {
   constructor(options = {}) {
+    this.enabled = LOG_ENABLED;
     this.level = options.level || process.env.LOG_LEVEL || "info";
     this.logFile = options.logFile || join(process.cwd(), "logs", "app.log");
     this.redactPatterns = [
@@ -60,7 +66,7 @@ class Logger {
   }
 
   write(level, message, meta = {}) {
-    if (!this.shouldLog(level)) return;
+    if (!this.enabled || !this.shouldLog(level)) return;
 
     const formatted = this.format(level, message, meta);
 
@@ -111,6 +117,11 @@ export function requestIdMiddleware(req, res, next) {
 
 // Request logging middleware
 export function requestLogger(req, res, next) {
+  // Skip logging if disabled
+  if (!LOG_REQUESTS) {
+    return next();
+  }
+
   const startTime = Date.now();
 
   // Log request

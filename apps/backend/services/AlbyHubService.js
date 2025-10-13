@@ -1,4 +1,10 @@
 import fetch from "node-fetch";
+import http from "http";
+import https from "https";
+
+// Create agents with keepAlive to fix connection issues
+const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 
 export class AlbyHubService {
   constructor(config = {}) {
@@ -33,6 +39,8 @@ export class AlbyHubService {
         method: "GET",
         signal: controller.signal,
         headers: this.defaultHeaders,
+        // Add agent support based on URL protocol
+        agent: url.startsWith("https") ? httpsAgent : httpAgent,
       });
       clearTimeout(timeoutId);
       return res;

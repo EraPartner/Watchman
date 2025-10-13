@@ -1,6 +1,32 @@
 import { env } from "../lib/env";
 import { APP_CONFIG } from "../lib/constants";
 
+// Smart backend URL detection
+const getBackendUrl = (): string => {
+  const envUrl = env.get("VITE_BACKEND_URL");
+
+  // If explicitly set, use it
+  if (envUrl) {
+    return envUrl;
+  }
+
+  // In development mode, use relative URLs (Vite proxy will handle it)
+  if (import.meta.env.DEV) {
+    return "";
+  }
+
+  // In production, construct URL from current window location
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    // Use port 3001 for production backend
+    return `${protocol}//${hostname}:3001`;
+  }
+
+  // Fallback
+  return "http://localhost:3001";
+};
+
 // Simple API client that only talks to our backend
 export interface ServiceHealth {
   status: "online" | "offline" | "warning" | "not_configured";
@@ -177,11 +203,8 @@ class ApiClient {
   private inFlightRequests: Map<string, Promise<any>> = new Map();
 
   constructor() {
-    // Allow VITE_BACKEND_URL to be optional in development. If not set or empty,
-    // use relative paths so the Vite dev-server proxy handles /api calls and cookies
-    // are managed by the browser on the same origin.
-    const raw = env.get("VITE_BACKEND_URL") || "";
-    this.baseUrl = raw ? raw.replace(/\/+$/, "") : "";
+    // Use smart URL detection
+    this.baseUrl = getBackendUrl();
 
     // Restore persisted fallback auth token (if any) so Authorization header
     // continues to be sent across page reloads in dev scenarios where cookies

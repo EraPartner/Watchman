@@ -1,4 +1,10 @@
 import fetch from "node-fetch";
+import http from "http";
+import https from "https";
+
+// Create agents with keepAlive to fix connection issues
+const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 
 // HomebridgeService: interacts with Homebridge UI/API using only the allowed endpoints.
 // Allowed endpoints used by this service:
@@ -99,6 +105,7 @@ class HomebridgeService {
             username: this.username,
             password: this.password,
           }),
+          agent: url.startsWith("https:") ? httpsAgent : httpAgent,
         });
 
         // If JSON attempt appears to return HTML (login page), try form-encoded fallback
@@ -120,6 +127,7 @@ class HomebridgeService {
                 "User-Agent": "watchman-homebridge-check/1.0",
               },
               body: form.toString(),
+              agent: url.startsWith("https:") ? httpsAgent : httpAgent,
             });
             ct = res.headers.get("content-type") || "";
             text = await res.text().catch(() => "");
@@ -227,6 +235,7 @@ class HomebridgeService {
       const res = await fetch(url, {
         method: "GET",
         headers: this.buildHeaders(),
+        agent: url.startsWith("https:") ? httpsAgent : httpAgent,
       });
       const text = await res.text().catch(() => "");
       const ct =

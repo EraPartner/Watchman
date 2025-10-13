@@ -1,7 +1,33 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { env } from "../lib/env";
 
-const API_BASE_URL = env.get("VITE_BACKEND_URL") || "http://localhost:3001";
+// Smart backend URL detection
+const getBackendUrl = (): string => {
+  const envUrl = env.get("VITE_BACKEND_URL");
+
+  // If explicitly set, use it
+  if (envUrl) {
+    return envUrl;
+  }
+
+  // In development mode, use relative URLs (Vite proxy will handle it)
+  if (import.meta.env.DEV) {
+    return "";
+  }
+
+  // In production, construct URL from current window location
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    // Use port 3001 for production backend
+    return `${protocol}//${hostname}:3001`;
+  }
+
+  // Fallback
+  return "http://localhost:3001";
+};
+
+const API_BASE_URL = getBackendUrl();
 
 // Service health hook with React Query
 export const useServiceHealth = (serviceName: string, options = {}) => {

@@ -1,4 +1,11 @@
 import fetch from "node-fetch";
+import http from "http";
+import https from "https";
+import logger from "../middleware/logger.js";
+
+// Create agents with keepAlive to fix connection issues
+const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
 
 export class QBittorrentService {
   constructor(config = {}) {
@@ -48,6 +55,7 @@ export class QBittorrentService {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         signal: controller.signal,
+        agent: loginUrl.startsWith("https:") ? httpsAgent : httpAgent,
       });
 
       clearTimeout(timeoutId);
@@ -65,9 +73,14 @@ export class QBittorrentService {
       return false;
     } catch (error) {
       if (error.name === "AbortError") {
-        console.error("❌ qBittorrent authentication timed out");
+        logger.debug("qBittorrent authentication timed out", {
+          service: "qbittorrent",
+        });
       } else {
-        console.error("❌ qBittorrent authentication failed:", error.message);
+        logger.debug("qBittorrent authentication failed", {
+          service: "qbittorrent",
+          error: error.message,
+        });
       }
       return false;
     }
@@ -92,13 +105,16 @@ export class QBittorrentService {
           Cookie: this.cookie,
         },
         signal: controller.signal,
+        agent: url.startsWith("https:") ? httpsAgent : httpAgent,
       });
 
       clearTimeout(timeoutId);
 
       if (response.status === 403) {
         // Re-authenticate and retry
-        console.log("🔄 qBittorrent session expired, re-authenticating...");
+        logger.debug("qBittorrent session expired, re-authenticating", {
+          service: "qbittorrent",
+        });
         this.cookie = null;
         const authenticated = await this.authenticate();
         if (!authenticated) {
@@ -116,6 +132,7 @@ export class QBittorrentService {
             Cookie: this.cookie,
           },
           signal: retryController.signal,
+          agent: url.startsWith("https:") ? httpsAgent : httpAgent,
         });
 
         clearTimeout(retryTimeoutId);
@@ -185,7 +202,10 @@ export class QBittorrentService {
         lastCheck: new Date().toISOString(),
       };
     } catch (error) {
-      console.error("qBittorrent health check failed:", error.message);
+      logger.debug("qBittorrent health check failed", {
+        service: "qbittorrent",
+        error: error.message,
+      });
 
       const responseTime = Date.now() - startTime;
 
@@ -248,7 +268,10 @@ export class QBittorrentService {
         freeSpaceOnDisk: serverState.free_space_on_disk || 0,
       };
     } catch (error) {
-      console.error("Failed to fetch qBittorrent stats:", error.message);
+      logger.debug("Failed to fetch qBittorrent stats", {
+        service: "qbittorrent",
+        error: error.message,
+      });
       throw error;
     }
   }
