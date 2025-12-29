@@ -8,10 +8,7 @@ export const formatDisplayUrl = (raw?: string | null) => {
 };
 
 // Build an href from a raw value. If preferHttps is true and no scheme exists, use https://
-export const buildHref = (
-  raw?: string | null,
-  preferHttps = false
-): string | null => {
+export const buildHref = (raw?: string | null, preferHttps = false): string | null => {
   if (!raw) return null;
   const r = String(raw);
   const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(r);

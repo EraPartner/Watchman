@@ -1,5 +1,12 @@
 import dotenv from "dotenv";
-dotenv.config();
+import fs from "fs";
+
+// Prefer .env.local for backend configuration; fall back to .env
+if (fs.existsSync(".env.local")) {
+  dotenv.config({ path: ".env.local" });
+} else {
+  dotenv.config();
+}
 
 // Environment variable validation
 const requiredEnvVars = [
@@ -9,20 +16,20 @@ const requiredEnvVars = [
   "FRONTEND_URL",
 ];
 
-// Optional but recommended for production
-const recommendedEnvVars = ["ADGUARD_BASE_URL", "ADGUARD_AUTH_TOKEN"];
+// Optional but recommended for production (align names to .env.local)
+const recommendedEnvVars = ["ADGUARD_MAIN_URL", "ADGUARD_MAIN_AUTH"];
 
 const validateEnvironment = () => {
   const missing = requiredEnvVars.filter((envVar) => !process.env[envVar]);
   const missingRecommended = recommendedEnvVars.filter(
-    (envVar) => !process.env[envVar]
+    (envVar) => !process.env[envVar],
   );
 
   if (missing.length > 0) {
     console.error("❌ Missing required environment variables:");
     missing.forEach((envVar) => console.error(`  - ${envVar}`));
     console.error(
-      "\n📝 Please check your .env.local file and ensure all required variables are set."
+      "\n📝 Please check your .env.local file and ensure all required variables are set.",
     );
     console.error("💡 Use backend/.env.example as a template.");
     process.exit(1);
@@ -30,7 +37,7 @@ const validateEnvironment = () => {
 
   if (process.env.NODE_ENV === "production" && missingRecommended.length > 0) {
     console.warn(
-      "⚠️  Missing recommended environment variables for production:"
+      "⚠️  Missing recommended environment variables for production:",
     );
     missingRecommended.forEach((envVar) => console.warn(`  - ${envVar}`));
   }
@@ -42,7 +49,7 @@ const validateEnvironment = () => {
     process.env.JWT_SECRET.length < 32
   ) {
     console.error(
-      "❌ JWT_SECRET must be at least 32 characters long in production"
+      "❌ JWT_SECRET must be at least 32 characters long in production",
     );
     process.exit(1);
   }
@@ -54,6 +61,16 @@ const validateEnvironment = () => {
   ) {
     console.error("❌ FRONTEND_URL must be a valid URL (http:// or https://)");
     process.exit(1);
+  }
+  // Warn if production without HTTPS
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.FRONTEND_URL &&
+    !process.env.FRONTEND_URL.startsWith("https://")
+  ) {
+    console.warn(
+      "⚠️  FRONTEND_URL should use HTTPS in production for security (cookies, HSTS)",
+    );
   }
 
   console.log("✅ Environment validation passed");

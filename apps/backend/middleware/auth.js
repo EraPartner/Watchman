@@ -15,7 +15,7 @@ const DUMMY_HASH =
 
 if (!JWT_SECRET) {
   console.warn(
-    "⚠️ JWT_SECRET not set in environment. Auth will not function correctly."
+    "⚠️ JWT_SECRET not set in environment. Auth will not function correctly.",
   );
 }
 

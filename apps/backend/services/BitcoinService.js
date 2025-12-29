@@ -145,8 +145,8 @@ export class BitcoinService {
         const currentVersion = networkInfo?.subversion
           ? cleanVersionString(networkInfo.subversion)
           : networkInfo?.version
-          ? String(networkInfo.version)
-          : "unknown";
+            ? String(networkInfo.version)
+            : "unknown";
 
         return {
           status: "online",
@@ -222,7 +222,7 @@ export class BitcoinService {
       const proxyAvailable = await this.checkProxyConnection();
       if (!proxyAvailable) {
         throw new Error(
-          `Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`
+          `Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`,
         );
       }
     }
@@ -239,7 +239,7 @@ export class BitcoinService {
     // Add basic auth header if credentials are provided
     if (this.config.rpcUser && this.config.rpcPassword) {
       const token = Buffer.from(
-        `${this.config.rpcUser}:${this.config.rpcPassword}`
+        `${this.config.rpcUser}:${this.config.rpcPassword}`,
       ).toString("base64");
       headers["authorization"] = `Basic ${token}`;
     }
@@ -248,7 +248,7 @@ export class BitcoinService {
     const controller = new AbortController();
     const timeoutHandle = setTimeout(
       () => controller.abort(),
-      this.config.timeout
+      this.config.timeout,
     );
 
     const fetchOptions = {
@@ -281,7 +281,7 @@ export class BitcoinService {
         const text = await response.text().catch(() => "");
         if (status === 401 || text.includes("Unauthorized")) {
           throw new Error(
-            "Bitcoin RPC authentication failed - check credentials"
+            "Bitcoin RPC authentication failed - check credentials",
           );
         }
         throw new Error(`Bitcoin RPC returned HTTP ${status} ${text}`);
@@ -303,22 +303,22 @@ export class BitcoinService {
         msg.includes("aborted")
       ) {
         throw new Error(
-          "Bitcoin RPC request timed out - node may be slow or unreachable"
+          "Bitcoin RPC request timed out - node may be slow or unreachable",
         );
       } else if (msg.includes("ECONNREFUSED")) {
         throw new Error(
-          "Bitcoin node not reachable - check if Bitcoin Core is running"
+          "Bitcoin node not reachable - check if Bitcoin Core is running",
         );
       } else if (msg.includes("401") || msg.includes("Unauthorized")) {
         throw new Error(
-          "Bitcoin RPC authentication failed - check credentials"
+          "Bitcoin RPC authentication failed - check credentials",
         );
       } else if (
         msg.includes("ENOTFOUND") ||
         msg.includes("Could not resolve host")
       ) {
         throw new Error(
-          "Cannot resolve Bitcoin node hostname - check network or Tor proxy"
+          "Cannot resolve Bitcoin node hostname - check network or Tor proxy",
         );
       } else if (
         msg.includes("SOCKS") ||
@@ -326,7 +326,7 @@ export class BitcoinService {
         msg.includes("Proxy")
       ) {
         throw new Error(
-          "SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port"
+          "SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port",
         );
       } else {
         throw new Error(`Bitcoin RPC call failed: ${msg}`);
@@ -341,7 +341,7 @@ export class BitcoinService {
         {
           timeout: 5000,
           stdio: ["pipe", "pipe", "pipe"],
-        }
+        },
       );
       return true;
     } catch {
@@ -367,7 +367,7 @@ export class BitcoinService {
           },
           signal: AbortSignal.timeout(10000),
           agent: httpsAgent, // Use HTTPS agent for GitHub API
-        }
+        },
       );
 
       if (!response.ok) {
@@ -376,7 +376,7 @@ export class BitcoinService {
 
       const releaseData = await response.json();
       const latestVersion = getVersionFromGitHubTag(
-        releaseData.tag_name || releaseData.name || ""
+        releaseData.tag_name || releaseData.name || "",
       );
 
       return {

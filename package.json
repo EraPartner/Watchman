@@ -1,7 +1,7 @@
 {
   "name": "watchman",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "workspaces": [
     "apps/frontend",
@@ -12,21 +12,22 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "dev:backend": "npm run dev --workspace=apps/backend",
-    "start": "npm run dev",
-    "build": "npm run build --workspace=apps/frontend",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:frontend": "npm run start --workspace=apps/frontend",
+    "start:backend": "npm run start --workspace=apps/backend",
+    "build": "concurrently \"npm run build:backend\" \"npm run build:frontend\"",
     "build:frontend": "npm run build --workspace=apps/frontend",
     "build:backend": "npm run build --workspace=apps/backend",
-    "lint": "npm run lint --workspaces",
-    "lint:fix": "npm run lint:fix --workspaces",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "format": "npm run format --workspaces --if-present && prettier --write .",
+    "format:check": "npm run format:check --workspaces --if-present && prettier --check .",
+    "test": "npm run test --workspaces --if-present",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules",
-    "setup": "npm install",
-    "check:router": "node tools/check-router.js"
+    "setup": "npm install"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
-    "prettier": "^2.8.8"
+    "prettier": "^3.4.2"
   }
 }

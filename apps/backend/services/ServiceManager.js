@@ -172,12 +172,12 @@ export default class ServiceManager {
             if (ok) console.log("✅ Homebridge background login successful");
             else
               console.log(
-                "⚠️ Homebridge background login failed or returned non-OK"
+                "⚠️ Homebridge background login failed or returned non-OK",
               );
           } catch (e) {
             console.warn(
               "⚠️ Homebridge background login error:",
-              e && e.message ? e.message : e
+              e && e.message ? e.message : e,
             );
           }
         })();

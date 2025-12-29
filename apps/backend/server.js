@@ -56,6 +56,8 @@ validateEnvironment();
 
 const config = getConfig();
 const app = express();
+// Trust proxy for correct ip detection behind reverse proxies
+app.set("trust proxy", 1);
 const server = createServer(app);
 const PORT = config.server.port;
 const FRONTEND_URL = config.server.frontendUrl;
@@ -65,7 +67,7 @@ if (process.env.NODE_ENV === "production") {
   // Enforce FRONTEND_URL in production to avoid open CORS
   if (!FRONTEND_URL || FRONTEND_URL === "*") {
     console.error(
-      "❌ FRONTEND_URL must be set to your frontend origin in production to avoid open CORS."
+      "❌ FRONTEND_URL must be set to your frontend origin in production to avoid open CORS.",
     );
     process.exit(1);
   }
@@ -73,14 +75,14 @@ if (process.env.NODE_ENV === "production") {
   // Ensure HTTPS in production
   if (!FRONTEND_URL.startsWith("https://")) {
     console.warn(
-      "⚠️  WARNING: FRONTEND_URL should use HTTPS in production for security"
+      "⚠️  WARNING: FRONTEND_URL should use HTTPS in production for security",
     );
   }
 
   // Validate JWT secret is set and strong
   if (!config.auth.jwtSecret || config.auth.jwtSecret.length < 32) {
     console.error(
-      "❌ JWT_SECRET must be at least 32 characters long in production"
+      "❌ JWT_SECRET must be at least 32 characters long in production",
     );
     process.exit(1);
   }
@@ -175,14 +177,14 @@ app.use(
     hidePoweredBy: true,
     frameguard: { action: "deny" },
     permittedCrossDomainPolicies: { permittedPolicies: "none" },
-  })
+  }),
 );
 
 // Add Permissions-Policy header
 app.use((req, res, next) => {
   res.setHeader(
     "Permissions-Policy",
-    "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
+    "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()",
   );
   next();
 });
@@ -190,9 +192,17 @@ app.use((req, res, next) => {
 app.use(compression({ level: 6, threshold: 1024 }));
 app.use(
   cors({
-    origin: FRONTEND_URL || "*",
+    origin: (origin, callback) => {
+      // Allow same-origin or explicit FRONTEND_URL; block others in production
+      if (!origin) return callback(null, true);
+      const allowed = FRONTEND_URL ? [FRONTEND_URL] : [origin];
+      if (process.env.NODE_ENV === "production" && !allowed.includes(origin)) {
+        return callback(new Error("CORS: Origin not allowed"));
+      }
+      return callback(null, true);
+    },
     credentials: true,
-  })
+  }),
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
@@ -201,13 +211,13 @@ app.use(cookieParser());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const swaggerDocument = YAML.load(
-  fs.readFileSync(join(__dirname, "api-docs.yaml"), "utf8")
+  fs.readFileSync(join(__dirname, "api-docs.yaml"), "utf8"),
 );
 
 app.use(
   "/api/docs",
   swaggerUi.serve,
-  swaggerUi.setup(swaggerDocument, { explorer: true })
+  swaggerUi.setup(swaggerDocument, { explorer: true }),
 );
 
 // Apply rate limiting
@@ -257,7 +267,7 @@ app.post(
       logger.error("Login error", { error: error.message });
       res.status(500).json({ message: "Internal server error" });
     }
-  }
+  },
 );
 
 app.post("/api/auth/logout", requireAuth, async (req, res) => {
@@ -321,7 +331,7 @@ app.post(
 
     clearCache(type);
     res.json({ success: true, message: `Cache cleared: ${type || "all"}` });
-  }
+  },
 );
 
 // AdGuard protection endpoint - require boolean 'enabled' and optional numeric 'duration'
@@ -364,7 +374,7 @@ app.post(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 // AdGuard API endpoints - status and stats (re-added)
@@ -393,7 +403,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/adguard/stats", statsCacheMiddleware, async (req, res) => {
@@ -461,7 +471,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get(
@@ -489,7 +499,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/bitcoin/stats", statsCacheMiddleware, async (req, res) => {
@@ -557,7 +567,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/qbittorrent/stats", statsCacheMiddleware, async (req, res) => {
@@ -606,7 +616,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/ipfs/stats", statsCacheMiddleware, async (req, res) => {
@@ -674,7 +684,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/roon/stats", statsCacheMiddleware, async (req, res) => {
@@ -737,7 +747,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 // Tor update check endpoint
@@ -779,7 +789,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 // Synology NAS API endpoints
@@ -808,7 +818,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/synology/stats", statsCacheMiddleware, async (req, res) => {
@@ -863,7 +873,7 @@ app.get(
     } catch (error) {
       console.error(
         "❌ Philips Bridge status connection failed:",
-        error.message
+        error.message,
       );
       res.status(500).json({
         error: "Failed to fetch Philips Bridge status",
@@ -871,7 +881,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/philips/stats", statsCacheMiddleware, async (req, res) => {
@@ -928,7 +938,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get(
@@ -962,7 +972,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 // Homebridge endpoints
@@ -991,7 +1001,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/homebridge/stats", statsCacheMiddleware, async (req, res) => {
@@ -1020,7 +1030,9 @@ app.get("/api/homebridge/updates", statsCacheMiddleware, async (req, res) => {
   try {
     const hbService = serviceManager.getService("homebridge");
     if (!hbService) {
-      return res.status(503).json({ error: "Homebridge service not configured" });
+      return res
+        .status(503)
+        .json({ error: "Homebridge service not configured" });
     }
 
     const updateInfo = await hbService.checkForUpdates();
@@ -1065,7 +1077,7 @@ app.get(
         .status(500)
         .json({ error: "Failed to fetch accessories", message: error.message });
     }
-  }
+  },
 );
 
 // Alby Hub endpoints
@@ -1094,7 +1106,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/albyhub/stats", statsCacheMiddleware, async (req, res) => {
@@ -1142,7 +1154,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/macmini/stats", statsCacheMiddleware, async (req, res) => {
@@ -1190,7 +1202,7 @@ app.get(
         message: error.message,
       });
     }
-  }
+  },
 );
 
 app.get("/api/raspi/stats", statsCacheMiddleware, async (req, res) => {
@@ -1419,7 +1431,7 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
         // ignore failed/incomplete entries
         if (/\b(INCOMPLETE|FAILED)\b/i.test(line)) continue;
         const m = line.match(
-          /^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+)(?:.*lladdr\s+([0-9a-f:]{5,}))?(?:.*\b(REACHABLE|STALE|DELAY|PERMANENT)\b)?/i
+          /^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+)(?:.*lladdr\s+([0-9a-f:]{5,}))?(?:.*\b(REACHABLE|STALE|DELAY|PERMANENT)\b)?/i,
         );
         if (m) {
           const ip = m[1];
@@ -1439,7 +1451,7 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
         // skip incomplete entries
         if (/incomplete/i.test(line)) continue;
         const m = line.match(
-          /\(?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)?\s+at\s+([0-9a-f:]{5,})\s+on\s+(\S+)/i
+          /\(?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)?\s+at\s+([0-9a-f:]{5,})\s+on\s+(\S+)/i,
         );
         if (m) {
           const ip = m[1];
@@ -1449,7 +1461,7 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
         } else {
           // Fallback: try to extract e.g. "hostname (192.168.1.2) at ..."
           const alt = line.match(
-            /\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-f:]{5,})/i
+            /\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-f:]{5,})/i,
           );
           if (alt) {
             const ip = alt[1];
@@ -1489,7 +1501,7 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
       const svcEntry = hosts.find((h) => h.ip === svcIp);
       if (svcEntry && svcEntry.iface) {
         lanHosts = hosts.filter(
-          (h) => h.iface === svcEntry.iface && isUnicast(h.ip)
+          (h) => h.iface === svcEntry.iface && isUnicast(h.ip),
         );
       } else {
         // Fallback: try /24 prefix
@@ -1497,13 +1509,13 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
         if (octets.length === 4) {
           const p24 = `${octets[0]}.${octets[1]}.${octets[2]}.`;
           lanHosts = hosts.filter(
-            (h) => String(h.ip).startsWith(p24) && isUnicast(h.ip)
+            (h) => String(h.ip).startsWith(p24) && isUnicast(h.ip),
           );
           if (lanHosts.length === 0) {
             // Try /16
             const p16 = `${octets[0]}.${octets[1]}.`;
             lanHosts = hosts.filter(
-              (h) => String(h.ip).startsWith(p16) && isUnicast(h.ip)
+              (h) => String(h.ip).startsWith(p16) && isUnicast(h.ip),
             );
           }
         }
@@ -1531,7 +1543,7 @@ app.get("/api/router/arp", healthLimiter, async (req, res) => {
   } catch (error) {
     console.error(
       "❌ ARP lookup failed:",
-      error && error.message ? error.message : error
+      error && error.message ? error.message : error,
     );
     res.status(500).json({
       error: "Failed to run ARP lookup",
@@ -1558,7 +1570,7 @@ app.get(
       });
       res.status(500).json({ error: "Failed to retrieve alerts" });
     }
-  }
+  },
 );
 
 app.get(
@@ -1578,24 +1590,28 @@ app.get(
       });
       res.status(500).json({ error: "Failed to retrieve stats" });
     }
-  }
+  },
 );
 
 // 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({ error: "Endpoint not found" });
+app.use((req, res, next) => {
+  res.status(404).json({ error: "Not Found" });
 });
 
-// Error handler
-app.use((err, req, res, _next) => {
-  console.error("❌ Unhandled error:", err);
-  res.status(500).json({ error: "Internal server error" });
+// Centralized error handler
+app.use((err, req, res, next) => {
+  logger.error("Unhandled error", {
+    message: err.message,
+    stack: process.env.NODE_ENV === "production" ? undefined : err.stack,
+  });
+  const status = err.status || 500;
+  res.status(status).json({ error: err.message || "Internal Server Error" });
 });
 
 // Graceful shutdown helper
 async function gracefulShutdown(signal) {
   console.info(
-    `\n🛑 Received ${signal || "shutdown"}, shutting down gracefully...`
+    `\n🛑 Received ${signal || "shutdown"}, shutting down gracefully...`,
   );
 
   // Stop accepting new connections
@@ -1611,7 +1627,7 @@ async function gracefulShutdown(signal) {
   } catch (err) {
     console.warn(
       "⚠️ Error closing HTTP server:",
-      err && err.message ? err.message : err
+      err && err.message ? err.message : err,
     );
   }
 
@@ -1621,7 +1637,7 @@ async function gracefulShutdown(signal) {
   } catch (err) {
     console.warn(
       "⚠️ Error shutting down WebSocket manager:",
-      err && err.message ? err.message : err
+      err && err.message ? err.message : err,
     );
   }
 
@@ -1633,7 +1649,7 @@ async function gracefulShutdown(signal) {
   } catch (err) {
     console.warn(
       "⚠️ Error shutting down service manager:",
-      err && err.message ? err.message : err
+      err && err.message ? err.message : err,
     );
   }
 
@@ -1680,10 +1696,10 @@ async function startServer() {
       console.info(`📊 Health check: http://localhost:${PORT}/health`);
       console.info(`📖 API Documentation: http://localhost:${PORT}/api/docs`);
       console.info(
-        `🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`
+        `🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`,
       );
       console.info(
-        `🔍 Services Health: http://localhost:${PORT}/api/services/health`
+        `🔍 Services Health: http://localhost:${PORT}/api/services/health`,
       );
     });
   } catch (error) {

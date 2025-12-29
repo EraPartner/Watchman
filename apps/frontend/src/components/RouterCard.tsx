@@ -36,8 +36,8 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
       (healthQuery.data &&
         (healthQuery.data.services || {})[serviceKey] &&
         (healthQuery.data.services as Record<string, any>)[serviceKey]?.host) ||
-        (frontendCfgQuery &&
-          (frontendCfgQuery.data as any)?.services?.[serviceKey]?.host),
+      (frontendCfgQuery &&
+        (frontendCfgQuery.data as any)?.services?.[serviceKey]?.host),
     );
 
   // ARP lookup for connected hosts on the router

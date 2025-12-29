@@ -5,15 +5,20 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "start:prod": "NODE_ENV=production node server.js",
+    "start": "node dist/server.js",
     "dev": "nodemon server.js --watch . --ext js,json",
     "dev:verbose": "nodemon server.js --watch . --ext js,json --verbose",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npm run validate-env && npm run build:bundle && npm run copy:assets",
+    "build:bundle": "npm run clean:dist && esbuild server.js --bundle --platform=node --format=esm --packages=external --target=node18 --sourcemap --outfile=dist/server.js",
+    "copy:assets": "mkdir -p dist && cp -R config dist/ && cp openapi.yaml dist/openapi.yaml && cp api-docs.yaml dist/api-docs.yaml",
+    "clean:dist": "rm -rf dist",
     "logs": "node server.js | bunyan",
     "health-check": "curl -f http://localhost:3001/health || exit 1",
     "validate-env": "node -e \"import('./config.js').then(({validateEnvironment}) => validateEnvironment())\"",
-    "lint": "eslint *.js services/*.js middleware/*.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write '**/*.{js,json}'",
+    "format:check": "prettier --check '**/*.{js,json}'",
     "security-audit": "npm audit --audit-level moderate",
     "security:check": "npm audit && npm run security:secrets",
     "security:fix": "npm audit fix",
@@ -41,10 +46,13 @@
     "ping": "^1.0.0",
     "socks-proxy-agent": "^8.0.5",
     "swagger-ui-express": "^5.0.1",
+    "terser": "^5.19.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "esbuild": "^0.27.2",
     "eslint": "^9.17.0",
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.1.9",
+    "prettier": "^3.4.2"
   }
 }
