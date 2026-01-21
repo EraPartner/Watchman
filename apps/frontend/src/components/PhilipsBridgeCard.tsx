@@ -10,6 +10,7 @@ import {
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 import { APP_CONFIG } from "../lib/constants";
 import { formatDisplayUrl, openHref } from "../lib/url";
 
@@ -20,11 +21,15 @@ const formatPingDisplay = (ping?: boolean | null) => {
 };
 
 const PhilipsBridgeCard: React.FC = () => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled("philips");
+
   const statusQuery = useQuery({
     queryKey: ["philips", "status"],
     queryFn: () => apiClient.getPhilipsStatus(),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isEnabled,
   });
 
   const statsQuery = useQuery({
@@ -32,6 +37,7 @@ const PhilipsBridgeCard: React.FC = () => {
     queryFn: () => apiClient.getPhilipsStats(),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isEnabled,
   });
 
   const loading = statusQuery.isLoading && statsQuery.isLoading;

@@ -10,6 +10,7 @@ import {
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 import { APP_CONFIG } from "../lib/constants";
 import { formatDisplayUrl, openHref } from "../lib/url";
 
@@ -20,11 +21,15 @@ const formatPingDisplay = (ping?: boolean | null) => {
 };
 
 const RoonCard: React.FC = () => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled("roon");
+
   const statusQuery = useQuery({
     queryKey: ["roon", "status"],
     queryFn: () => apiClient.getRoonStatus(),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isEnabled,
   });
 
   const statsQuery = useQuery({
@@ -32,6 +37,7 @@ const RoonCard: React.FC = () => {
     queryFn: () => apiClient.getRoonStats(),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isEnabled,
   });
 
   const loading = statusQuery.isLoading && statsQuery.isLoading;

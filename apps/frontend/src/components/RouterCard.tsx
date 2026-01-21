@@ -4,6 +4,7 @@ import { ServerStatusBadge } from "./ServerStatusBadge";
 import { AlertCircle, ExternalLink, RefreshCw, Server } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 import { Button } from "./ui/button";
 import { buildHref, formatDisplayUrl, openHref } from "../lib/url";
 
@@ -13,12 +14,16 @@ interface RouterCardProps {
 }
 
 const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled(serviceKey);
+
   // Reuse the shared services health endpoint (react-query will dedupe)
   const healthQuery = useQuery({
     queryKey: ["services", "health"],
     queryFn: () => apiClient.getServicesHealth(),
     refetchInterval: 30000,
     retry: 1,
+    enabled: true, // Always fetch - backend only returns enabled services
   });
 
   // Frontend configuration query (declare early so dependent hooks can use it)
@@ -31,7 +36,7 @@ const RouterCard: React.FC<RouterCardProps> = ({ name, serviceKey }) => {
 
   // Decide whether ARP lookup should be enabled (only if serviceKey and a host is known)
   const arpEnabled =
-    !!serviceKey &&
+    isEnabled &&
     Boolean(
       (healthQuery.data &&
         (healthQuery.data.services || {})[serviceKey] &&

@@ -149,6 +149,7 @@ interface ServicesHealthResponse {
 }
 
 export interface FrontendConfig {
+  enabledServices: string[];
   services: {
     adguard: {
       webUrl: string;

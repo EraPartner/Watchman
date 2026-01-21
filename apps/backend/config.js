@@ -1,9 +1,24 @@
 import dotenv from "dotenv";
 import fs from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+// Get current directory for proper path resolution
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Prefer .env.local for backend configuration; fall back to .env
-if (fs.existsSync(".env.local")) {
-  dotenv.config({ path: ".env.local" });
+// Support both dev (config.js) and production (dist/config.js) paths
+const envLocalPath = join(__dirname, ".env.local");
+const envLocalPathParent = join(__dirname, "..", ".env.local");
+const envPath = join(__dirname, ".env");
+
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath });
+} else if (fs.existsSync(envLocalPathParent)) {
+  dotenv.config({ path: envLocalPathParent });
+} else if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
 } else {
   dotenv.config();
 }
@@ -76,6 +91,40 @@ const validateEnvironment = () => {
   console.log("✅ Environment validation passed");
 };
 
+// Parse enabled services from environment variable
+const parseEnabledServices = () => {
+  const enabledServicesEnv = process.env.ENABLED_SERVICES || "";
+
+  if (!enabledServicesEnv) {
+    // If not specified, enable all services by default
+    return new Set([
+      "bitcoin",
+      "adguard",
+      "tor",
+      "qbittorrent",
+      "synology",
+      "ipfs",
+      "roon",
+      "philips",
+      "homebridge",
+      "macmini",
+      "albyhub",
+      "beryl",
+      "telenet",
+      "raspi",
+      "nostrcheck",
+    ]);
+  }
+
+  // Parse comma-separated list
+  const services = enabledServicesEnv
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  return new Set(services);
+};
+
 const getConfig = () => ({
   // Authentication
   auth: {
@@ -114,6 +163,9 @@ const getConfig = () => ({
     nodeEnv: process.env.NODE_ENV || "development",
     frontendUrl: process.env.FRONTEND_URL,
   },
+
+  // Enabled services configuration
+  enabledServices: parseEnabledServices(),
 });
 
 export { validateEnvironment, getConfig };

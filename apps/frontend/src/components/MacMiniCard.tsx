@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { buildHref, openHref } from "../lib/url";
+import { useEnabledServices } from "@/hooks/useEnabledServices.ts";
 
 interface MacMiniCardProps {
   serviceName?: string; // defaults to 'macmini' to match backend route
@@ -33,6 +34,9 @@ export const MacMiniCard = memo<MacMiniCardProps>(
     webUrl,
     priority = "medium",
   }) => {
+    const { isServiceEnabled } = useEnabledServices();
+    const isEnabled = isServiceEnabled(serviceName);
+
     const {
       data: health,
       isLoading: healthLoading,
@@ -41,13 +45,13 @@ export const MacMiniCard = memo<MacMiniCardProps>(
     } = useServiceHealth(serviceName, {
       refetchInterval:
         priority === "high" ? 5000 : priority === "medium" ? 10000 : 20000,
-      enabled: true,
+      enabled: isEnabled,
       staleTime: priority === "high" ? 2000 : 5000,
     });
 
     const { data: stats, isLoading: statsLoading } = useServiceStats(
       serviceName,
-      enableStats,
+      enableStats && isEnabled,
     );
 
     const statusMetrics = useMemo(() => {

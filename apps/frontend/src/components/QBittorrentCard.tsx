@@ -13,6 +13,7 @@ import {
   Upload,
 } from "lucide-react";
 import ServiceLink from "@/components/ServiceLink";
+import { useEnabledServices } from "@/hooks/useEnabledServices";
 
 // qBittorrent logo SVG component
 const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -32,6 +33,9 @@ const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
 );
 
 export const QBittorrentCard: React.FC = () => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled("qbittorrent");
+
   const [status, setStatus] = useState<
     "online" | "offline" | "warning" | "loading"
   >("loading");
@@ -39,6 +43,8 @@ export const QBittorrentCard: React.FC = () => {
   const [frontendConfig, setFrontendConfig] = useState<any | null>(null);
 
   useEffect(() => {
+    if (!isEnabled) return;
+
     let mounted = true;
     const fetchData = async () => {
       try {
@@ -68,13 +74,13 @@ export const QBittorrentCard: React.FC = () => {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 15000);
+    const interval = setInterval(fetchData, 30000);
 
     return () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [isEnabled]);
 
   useEffect(() => {
     let mounted = true;

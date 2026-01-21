@@ -13,6 +13,7 @@ import {
   Network,
   Server,
 } from "lucide-react";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 
 // Bitcoin logo SVG component
 const BitcoinIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -32,12 +33,17 @@ const BitcoinIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
 );
 
 export const BitcoinCard: React.FC = () => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled("bitcoin");
+
   const [status, setStatus] = useState<
     "online" | "offline" | "warning" | "loading"
   >("loading");
   const [stats, setStats] = useState<BitcoinStats | null>(null);
 
   useEffect(() => {
+    if (!isEnabled) return;
+
     let mounted = true;
     const fetchData = async () => {
       try {
@@ -79,7 +85,7 @@ export const BitcoinCard: React.FC = () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [isEnabled]);
 
   // Helper function to format version
   const formatVersion = (version: string) => {

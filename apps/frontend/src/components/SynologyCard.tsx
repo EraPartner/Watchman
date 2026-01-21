@@ -14,6 +14,7 @@ import { ServerStatusBadge } from "./ServerStatusBadge";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
 import { useFrontendConfig } from "../hooks/useServicesHealth";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 import { formatDisplayUrl, openHref } from "../lib/url";
 
 // Updated interfaces to match your backend's actual data structure
@@ -55,11 +56,15 @@ const clampPercentage = (v?: number) => {
 };
 
 const SynologyCard: React.FC = () => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled("synology");
+
   const statusQuery = useQuery({
     queryKey: ["synology", "status"],
     queryFn: () => apiClient.getSynologyStatus(),
     refetchInterval: 30000,
     retry: 1,
+    enabled: isEnabled,
   });
 
   const statsQuery = useQuery({
@@ -67,6 +72,7 @@ const SynologyCard: React.FC = () => {
     queryFn: () => apiClient.getSynologyStats(),
     refetchInterval: 30000,
     retry: 1,
+    enabled: isEnabled,
   });
 
   const frontendConfigQuery = useFrontendConfig();

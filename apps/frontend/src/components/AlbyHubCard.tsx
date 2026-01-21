@@ -2,12 +2,16 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { apiClient } from "../services/ApiClient";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 import { ExternalLink, Server } from "lucide-react";
 import { formatDisplayUrl, openHref } from "../lib/url";
 
 export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({
   fullHeight = false,
 }) => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled("albyhub");
+
   const [status, setStatus] = useState<
     "online" | "offline" | "warning" | "loading"
   >("loading");
@@ -15,6 +19,8 @@ export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({
   const [albyUrlRaw, setAlbyUrlRaw] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isEnabled) return;
+
     let mounted = true;
 
     const fetchHealth = async () => {
@@ -38,10 +44,12 @@ export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [isEnabled]);
 
   // Fetch frontend config once to read the ALBYHUB_URL provided by backend
   useEffect(() => {
+    if (!isEnabled) return;
+
     let mounted = true;
     (async () => {
       try {

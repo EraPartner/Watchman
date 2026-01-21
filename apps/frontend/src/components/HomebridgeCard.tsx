@@ -5,15 +5,20 @@ import { ServerStatusBadge } from "./ServerStatusBadge";
 import { UpdateBadge } from "./UpdateBadge";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 import { APP_CONFIG } from "../lib/constants";
 
 const HomebridgeCard: React.FC = () => {
+  const { isServiceEnabled } = useEnabledServices();
+  const isEnabled = isServiceEnabled("homebridge");
+
   // Fetch server-information from allowed API endpoint.
   const serverInfoQuery = useQuery({
     queryKey: ["homebridge", "server-information"],
     queryFn: () => apiClient.getHomebridgeServerInformation(),
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isEnabled,
   });
 
   // Fetch version from the allowed version endpoint (/api/status/homebridge-version)
@@ -22,6 +27,7 @@ const HomebridgeCard: React.FC = () => {
     queryFn: () => apiClient.getHomebridgeVersion(),
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isEnabled,
   });
 
   // Fetch accessories list from backend /api/accessories
@@ -30,6 +36,7 @@ const HomebridgeCard: React.FC = () => {
     queryFn: () => apiClient.getHomebridgeAccessories(),
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isEnabled,
   });
 
   const loading =

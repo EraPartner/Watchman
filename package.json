@@ -12,7 +12,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "dev:backend": "npm run dev --workspace=apps/backend",
-    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" \"open -a Safari.app http://localhost:5173\"",
     "start:frontend": "npm run start --workspace=apps/frontend",
     "start:backend": "npm run start --workspace=apps/backend",
     "build": "concurrently \"npm run build:backend\" \"npm run build:frontend\"",

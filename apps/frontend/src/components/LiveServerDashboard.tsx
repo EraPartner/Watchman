@@ -20,9 +20,12 @@ import { RaspberryPiCard } from "./RaspberryPiCard";
 import { NostrcheckCard } from "./NostrcheckCard";
 import RouterCard from "./RouterCard";
 import HomebridgeCard from "./HomebridgeCard";
+import { useEnabledServices } from "../hooks/useEnabledServices";
 
 export const LiveServerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isServiceEnabled } = useEnabledServices();
+  const adguardEnabled = isServiceEnabled("adguard");
 
   // AdGuard combined status + stats
   const adguardQuery = useQuery({
@@ -36,6 +39,7 @@ export const LiveServerDashboard = () => {
     },
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
+    enabled: adguardEnabled,
   });
 
   const torQuery = useQuery({
@@ -49,6 +53,7 @@ export const LiveServerDashboard = () => {
     },
     refetchInterval: APP_CONFIG.TOR_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isServiceEnabled("tor"),
   });
 
   const bitcoinQuery = useQuery({
@@ -56,6 +61,7 @@ export const LiveServerDashboard = () => {
     queryFn: () => apiClient.getBitcoinStatus(),
     refetchInterval: 30000,
     retry: 1,
+    enabled: isServiceEnabled("bitcoin"),
   });
 
   const qbittorrentQuery = useQuery({
@@ -63,6 +69,7 @@ export const LiveServerDashboard = () => {
     queryFn: () => apiClient.getQBittorrentStatus(),
     refetchInterval: 30000,
     retry: 1,
+    enabled: isServiceEnabled("qbittorrent"),
   });
 
   const ipfsQuery = useQuery({
@@ -70,6 +77,7 @@ export const LiveServerDashboard = () => {
     queryFn: () => apiClient.getIpfsStatus(),
     refetchInterval: 30000,
     retry: 1,
+    enabled: isServiceEnabled("ipfs"),
   });
 
   const synologyQuery = useQuery({
@@ -77,6 +85,7 @@ export const LiveServerDashboard = () => {
     queryFn: () => apiClient.getSynologyStatus(),
     refetchInterval: 60000,
     retry: 1,
+    enabled: isServiceEnabled("synology"),
   });
 
   const roonQuery = useQuery({
@@ -84,14 +93,17 @@ export const LiveServerDashboard = () => {
     queryFn: () => apiClient.getRoonStatus(),
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
+    enabled: isServiceEnabled("roon"),
   });
 
-  // Global services health summary (returns health for all registered services)
+  // Global services health summary (returns health for ALL ENABLED services only)
+  // This endpoint already filters disabled services on the backend
   const servicesHealthQuery = useQuery({
     queryKey: ["services", "health"],
     queryFn: () => apiClient.getServicesHealth(),
     refetchInterval: 30000,
     retry: 1,
+    enabled: true, // Always fetch - endpoint returns only enabled services
   });
 
   const lastUpdateTime = new Date();
@@ -241,30 +253,41 @@ export const LiveServerDashboard = () => {
     (Date.now() - lastUpdateTime.getTime()) / 1000,
   );
 
-  // Refresh helper - refetch all queries
+  // Refresh helper - refetch all enabled queries
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      adguardQuery.refetch(),
-      torQuery.refetch(),
-      bitcoinQuery.refetch(),
-      qbittorrentQuery.refetch(),
-      ipfsQuery.refetch(),
-      synologyQuery.refetch(),
-      roonQuery.refetch(),
-    ]);
+    const refreshPromises = [];
+
+    if (adguardEnabled) refreshPromises.push(adguardQuery.refetch());
+    if (isServiceEnabled("tor")) refreshPromises.push(torQuery.refetch());
+    if (isServiceEnabled("bitcoin"))
+      refreshPromises.push(bitcoinQuery.refetch());
+    if (isServiceEnabled("qbittorrent"))
+      refreshPromises.push(qbittorrentQuery.refetch());
+    if (isServiceEnabled("ipfs")) refreshPromises.push(ipfsQuery.refetch());
+    if (isServiceEnabled("synology"))
+      refreshPromises.push(synologyQuery.refetch());
+    if (isServiceEnabled("roon")) refreshPromises.push(roonQuery.refetch());
+
+    await Promise.all(refreshPromises);
     setIsRefreshing(false);
   };
 
-  // loading indicator when initial queries are loading
+  // loading indicator when initial queries are loading (only check enabled services)
+  const enabledQueriesLoading = [
+    adguardEnabled && adguardQuery.isLoading,
+    isServiceEnabled("tor") && torQuery.isLoading,
+    isServiceEnabled("bitcoin") && bitcoinQuery.isLoading,
+    isServiceEnabled("qbittorrent") && qbittorrentQuery.isLoading,
+    isServiceEnabled("ipfs") && ipfsQuery.isLoading,
+    isServiceEnabled("synology") && synologyQuery.isLoading,
+    isServiceEnabled("roon") && roonQuery.isLoading,
+  ].filter(Boolean);
+
+  // Only show loading spinner if we have enabled services and they're all loading
   if (
-    adguardQuery.isLoading &&
-    torQuery.isLoading &&
-    bitcoinQuery.isLoading &&
-    qbittorrentQuery.isLoading &&
-    ipfsQuery.isLoading &&
-    synologyQuery.isLoading &&
-    roonQuery.isLoading
+    enabledQueriesLoading.length > 0 &&
+    enabledQueriesLoading.every((loading) => loading)
   ) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -289,7 +312,7 @@ export const LiveServerDashboard = () => {
 
   // Build arrays of tile elements so we can chunk and render rows exactly 3 per row
   const softwareTiles: JSX.Element[] = [];
-  if (adguardData && adguardCardStats) {
+  if (isServiceEnabled("adguard") && adguardData && adguardCardStats) {
     softwareTiles.push(
       <AdGuardCard
         key="adguard"
@@ -299,7 +322,7 @@ export const LiveServerDashboard = () => {
       />,
     );
   }
-  if (torData && torCardStats) {
+  if (isServiceEnabled("tor") && torData && torCardStats) {
     softwareTiles.push(
       <TorCard
         key="tor"
@@ -312,19 +335,34 @@ export const LiveServerDashboard = () => {
     );
   }
   // Other software tiles
-  softwareTiles.push(<BitcoinCard key="bitcoin" />);
-  softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
+  if (isServiceEnabled("bitcoin")) {
+    softwareTiles.push(<BitcoinCard key="bitcoin" />);
+  }
+  if (isServiceEnabled("qbittorrent")) {
+    softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
+  }
+
   // Stack IPFS and Homebridge vertically so they occupy the same column similar to Nostr/Alby
-  softwareTiles.push(
-    <div key="ipfs-homebridge-stacked" className="h-full flex flex-col gap-4">
-      <div className="flex-1 min-h-0">
-        <IpfsCard />
-      </div>
-      <div className="flex-1 min-h-0">
-        <HomebridgeCard />
-      </div>
-    </div>,
-  );
+  // Only show if either service is enabled
+  const ipfsEnabled = isServiceEnabled("ipfs");
+  const homebridgeEnabled = isServiceEnabled("homebridge");
+
+  if (ipfsEnabled && homebridgeEnabled) {
+    softwareTiles.push(
+      <div key="ipfs-homebridge-stacked" className="h-full flex flex-col gap-4">
+        <div className="flex-1 min-h-0">
+          <IpfsCard />
+        </div>
+        <div className="flex-1 min-h-0">
+          <HomebridgeCard />
+        </div>
+      </div>,
+    );
+  } else if (ipfsEnabled) {
+    softwareTiles.push(<IpfsCard key="ipfs" />);
+  } else if (homebridgeEnabled) {
+    softwareTiles.push(<HomebridgeCard key="homebridge" />);
+  }
 
   // Nostrcheck / local Nostr relay tile - use the frontend config exposed by the backend
   const nostrCfg = frontendCfg?.services?.nostrcheck as any | undefined;
@@ -334,38 +372,83 @@ export const LiveServerDashboard = () => {
       : ("offline" as const);
 
   // Stack Nostrcheck and AlbyHub vertically so the combined tile matches other card heights
-  softwareTiles.push(
-    <div key="nostr-alby-stacked" className="h-full flex flex-col gap-4">
-      <div className="flex-1 min-h-0">
-        <NostrcheckCard
-          name={"Nostr Relay"}
-          status={nostrStatus}
-          url={nostrCfg?.relayUrl}
-        />
-      </div>
-      <div className="flex-1 min-h-0">
-        <AlbyHubCard />
-      </div>
-    </div>,
-  );
+  // Only show if either service is enabled
+  const nostrEnabled = isServiceEnabled("nostrcheck");
+  const albyEnabled = isServiceEnabled("albyhub");
 
-  const hardwareTiles: JSX.Element[] = [
-    <SynologyCard key="synology" />,
-    // Stack Roon and Philips Bridge vertically like Nostr/AlbyHub
-    <div key="roon-philips-stacked" className="h-full flex flex-col gap-4">
-      <div className="flex-[1.5] min-h-0">
-        <RoonCard />
-      </div>
-      <div className="flex-1 min-h-0">
-        <PhilipsBridgeCard />
-      </div>
-    </div>,
-    <MacMiniCard key="macmini" />,
-    <RaspberryPiCard key="raspberrypi" />,
-    // Router hardware tiles: Beryl and Telenet (if configured in backend services/health)
-    <RouterCard key="beryl" name={"Beryl AX"} serviceKey={"beryl"} />,
-    <RouterCard key="telenet" name={"Telenet"} serviceKey={"telenet"} />,
-  ];
+  if (nostrEnabled && albyEnabled) {
+    softwareTiles.push(
+      <div key="nostr-alby-stacked" className="h-full flex flex-col gap-4">
+        <div className="flex-1 min-h-0">
+          <NostrcheckCard
+            name={"Nostr Relay"}
+            status={nostrStatus}
+            url={nostrCfg?.relayUrl}
+          />
+        </div>
+        <div className="flex-1 min-h-0">
+          <AlbyHubCard />
+        </div>
+      </div>,
+    );
+  } else if (nostrEnabled) {
+    softwareTiles.push(
+      <NostrcheckCard
+        key="nostrcheck"
+        name={"Nostr Relay"}
+        status={nostrStatus}
+        url={nostrCfg?.relayUrl}
+      />,
+    );
+  } else if (albyEnabled) {
+    softwareTiles.push(<AlbyHubCard key="albyhub" />);
+  }
+
+  const hardwareTiles: React.ReactElement[] = [];
+
+  if (isServiceEnabled("synology")) {
+    hardwareTiles.push(<SynologyCard key="synology" />);
+  }
+
+  // Stack Roon and Philips Bridge vertically like Nostr/AlbyHub
+  const roonEnabled = isServiceEnabled("roon");
+  const philipsEnabled = isServiceEnabled("philips");
+
+  if (roonEnabled && philipsEnabled) {
+    hardwareTiles.push(
+      <div key="roon-philips-stacked" className="h-full flex flex-col gap-4">
+        <div className="flex-[1.5] min-h-0">
+          <RoonCard />
+        </div>
+        <div className="flex-1 min-h-0">
+          <PhilipsBridgeCard />
+        </div>
+      </div>,
+    );
+  } else if (roonEnabled) {
+    hardwareTiles.push(<RoonCard key="roon" />);
+  } else if (philipsEnabled) {
+    hardwareTiles.push(<PhilipsBridgeCard key="philips" />);
+  }
+
+  if (isServiceEnabled("macmini")) {
+    hardwareTiles.push(<MacMiniCard key="macmini" />);
+  }
+  if (isServiceEnabled("raspi")) {
+    hardwareTiles.push(<RaspberryPiCard key="raspberrypi" />);
+  }
+
+  // Router hardware tiles: Beryl and Telenet (if configured in backend services/health)
+  if (isServiceEnabled("beryl")) {
+    hardwareTiles.push(
+      <RouterCard key="beryl" name={"Beryl AX"} serviceKey={"beryl"} />,
+    );
+  }
+  if (isServiceEnabled("telenet")) {
+    hardwareTiles.push(
+      <RouterCard key="telenet" name={"Telenet"} serviceKey={"telenet"} />,
+    );
+  }
 
   const softwareRows = chunk(softwareTiles, 3);
   const hardwareRows = chunk(hardwareTiles, 3);
@@ -386,32 +469,133 @@ export const LiveServerDashboard = () => {
     offlineCount = statuses.filter((s) => s === "offline").length;
     warningCount = statuses.filter((s) => s === "warning").length;
   } else {
-    // fallback: derive totals from the tiles we actually render
-    totalServices = softwareTiles.length + hardwareTiles.length;
-    // If tiles are empty (very early load), use fallbackNormalizedStatuses for counts
-    if (totalServices === 0) {
-      totalServices = fallbackNormalizedStatuses.length;
-      onlineCount = fallbackNormalizedStatuses.filter(
-        (s) => s === "online",
-      ).length;
-      offlineCount = fallbackNormalizedStatuses.filter(
-        (s) => s === "offline",
-      ).length;
-      warningCount = fallbackNormalizedStatuses.filter(
-        (s) => s === "warning",
-      ).length;
-    } else {
-      // Count online/warning/offline by inspecting respective card props where available
-      // We can attempt to derive from earlier normalized statuses for the first N tiles
-      const combinedStatuses = fallbackNormalizedStatuses.slice(
-        0,
-        totalServices,
+    // fallback: count actual enabled services (not tiles, since some tiles stack multiple services)
+    // Build a comprehensive status list for all enabled services
+    const allServiceStatuses: Array<
+      "online" | "offline" | "warning" | "loading"
+    > = [];
+
+    if (adguardEnabled)
+      allServiceStatuses.push(mapServiceStatus(adguardData?.health?.status));
+    if (isServiceEnabled("tor"))
+      allServiceStatuses.push(
+        torData?.torStats?.running ? "online" : torData ? "offline" : "loading",
       );
-      onlineCount = combinedStatuses.filter((s) => s === "online").length;
-      offlineCount = combinedStatuses.filter((s) => s === "offline").length;
-      warningCount = combinedStatuses.filter((s) => s === "warning").length;
-    }
+    if (isServiceEnabled("bitcoin"))
+      allServiceStatuses.push(mapServiceStatus(bitcoinHealth?.status));
+    if (isServiceEnabled("qbittorrent"))
+      allServiceStatuses.push(mapServiceStatus(qbittorrentHealth?.status));
+    if (isServiceEnabled("ipfs"))
+      allServiceStatuses.push(mapServiceStatus(ipfsHealth?.status));
+    if (isServiceEnabled("synology"))
+      allServiceStatuses.push(mapServiceStatus(synologyHealth?.status));
+    if (isServiceEnabled("roon"))
+      allServiceStatuses.push(
+        roonHealth?.status === "error"
+          ? "warning"
+          : mapServiceStatus(roonHealth?.status),
+      );
+    if (isServiceEnabled("philips")) allServiceStatuses.push("loading"); // PhilipsBridgeCard manages its own query
+    if (isServiceEnabled("homebridge")) allServiceStatuses.push("loading"); // HomebridgeCard manages its own query
+    if (isServiceEnabled("albyhub")) allServiceStatuses.push("loading"); // AlbyHubCard manages its own query
+    if (isServiceEnabled("macmini")) allServiceStatuses.push("loading"); // MacMiniCard manages its own query
+    if (isServiceEnabled("beryl")) allServiceStatuses.push("loading"); // RouterCard manages its own query
+    if (isServiceEnabled("telenet")) allServiceStatuses.push("loading"); // RouterCard manages its own query
+    if (isServiceEnabled("raspi")) allServiceStatuses.push("loading"); // RaspberryPiCard manages its own query
+    if (isServiceEnabled("nostrcheck")) allServiceStatuses.push(nostrStatus);
+
+    totalServices = allServiceStatuses.length;
+    onlineCount = allServiceStatuses.filter((s) => s === "online").length;
+    offlineCount = allServiceStatuses.filter((s) => s === "offline").length;
+    warningCount = allServiceStatuses.filter((s) => s === "warning").length;
   }
+
+  const overviewCards: JSX.Element[] = [
+    <Card key="services-online">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">Services Online</CardTitle>
+        <CheckCircle className="h-4 w-4 text-green-500" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold text-green-600">
+          {onlineCount}/{totalServices}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {offlineCount > 0 && `${offlineCount} offline`}
+          {warningCount > 0 &&
+            `${offlineCount > 0 ? ", " : ""}${warningCount} warning`}
+        </p>
+      </CardContent>
+    </Card>,
+    <Card key="system-health">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">System Health</CardTitle>
+        <Server className="h-4 w-4 text-blue-500" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold text-blue-600">
+          {onlineCount === totalServices
+            ? "Excellent"
+            : onlineCount >= totalServices * 0.7
+              ? "Good"
+              : onlineCount > 0
+                ? "Degraded"
+                : "Critical"}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Updated {timeSinceUpdate}s ago
+        </p>
+      </CardContent>
+    </Card>,
+  ];
+
+  if (adguardEnabled) {
+    overviewCards.push(
+      <Card key="top-blocked-domain">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Top Blocked Domain
+          </CardTitle>
+          <Shield className="h-4 w-4 text-red-500" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-lg font-bold text-red-600 truncate">
+            {adguardStats?.topBlockedDomain !== "N/A"
+              ? adguardStats?.topBlockedDomain
+              : "None"}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {totalBlocked.toLocaleString()} blocked today
+          </p>
+        </CardContent>
+      </Card>,
+      <Card key="network-activity">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Network Activity
+          </CardTitle>
+          <Activity className="h-4 w-4 text-purple-500" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-purple-600">
+            {totalQueries > 0 ? `${(totalQueries / 1000).toFixed(1)}K` : "0"}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {totalQueries > 0
+              ? `${((totalBlocked / totalQueries) * 100).toFixed(1)}% blocked`
+              : "No queries"}
+          </p>
+        </CardContent>
+      </Card>,
+    );
+  }
+
+  const overviewGridCols =
+    overviewCards.length >= 4
+      ? "md:grid-cols-2 lg:grid-cols-4"
+      : overviewCards.length === 3
+        ? "md:grid-cols-2 lg:grid-cols-3"
+        : "md:grid-cols-2";
 
   return (
     <div className="space-y-6">
@@ -431,84 +615,8 @@ export const LiveServerDashboard = () => {
       </div>
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Services Online
-            </CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {onlineCount}/{totalServices}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {offlineCount > 0 && `${offlineCount} offline`}
-              {warningCount > 0 &&
-                `${offlineCount > 0 ? ", " : ""}${warningCount} warning`}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">System Health</CardTitle>
-            <Server className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {onlineCount === totalServices
-                ? "Excellent"
-                : onlineCount >= totalServices * 0.7
-                  ? "Good"
-                  : onlineCount > 0
-                    ? "Degraded"
-                    : "Critical"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Updated {timeSinceUpdate}s ago
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Top Blocked Domain
-            </CardTitle>
-            <Shield className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-bold text-red-600 truncate">
-              {adguardStats?.topBlockedDomain !== "N/A"
-                ? adguardStats?.topBlockedDomain
-                : "None"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {totalBlocked.toLocaleString()} blocked today
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Network Activity
-            </CardTitle>
-            <Activity className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
-              {totalQueries > 0 ? `${(totalQueries / 1000).toFixed(1)}K` : "0"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {totalQueries > 0
-                ? `${((totalBlocked / totalQueries) * 100).toFixed(1)}% blocked`
-                : "No queries"}
-            </p>
-          </CardContent>
-        </Card>
+      <div className={`grid grid-cols-1 gap-4 ${overviewGridCols}`}>
+        {overviewCards}
       </div>
 
       {/* Service Tiles */}
