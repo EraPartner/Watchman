@@ -41,7 +41,9 @@ export const BitcoinCard: React.FC = () => {
     let mounted = true;
     const fetchData = async () => {
       try {
+        console.log("[BitcoinCard] Fetching Bitcoin health...");
         const health = await apiClient.getBitcoinStatus();
+        console.log("[BitcoinCard] Health response:", health);
 
         if (!mounted) return;
 
@@ -51,15 +53,19 @@ export const BitcoinCard: React.FC = () => {
         setStatus(mappedStatus as "online" | "offline" | "warning" | "loading");
 
         if (health.status === "online" || health.status === "warning") {
+          console.log("[BitcoinCard] Fetching Bitcoin stats...");
           const nodeStats = await apiClient.getBitcoinStats();
+          console.log("[BitcoinCard] Stats response:", nodeStats);
 
           if (!mounted) return;
 
           setStats(nodeStats as BitcoinStats);
         } else {
+          console.log("[BitcoinCard] Not online, clearing stats");
           setStats(null);
         }
-      } catch {
+      } catch (error) {
+        console.error("[BitcoinCard] Error fetching data:", error);
         if (!mounted) return;
         setStatus("offline");
         setStats(null);
@@ -139,158 +145,168 @@ export const BitcoinCard: React.FC = () => {
           <ServerStatusBadge status={status} />
         </div>
       </CardHeader>
-      {stats && (
-        <CardContent className="space-y-3">
-          {/* Main info grid */}
-          <div className="grid grid-cols-2 gap-3">
+      <CardContent className="space-y-3">
+        {status === "loading" && (
+          <div className="text-sm text-muted-foreground">
+            Loading Bitcoin node data (this may take up to 2 minutes via Tor)...
+          </div>
+        )}
+        {(status === "offline" || status === "warning") && !stats && (
+          <div className="text-sm text-red-600">Bitcoin node is {status}</div>
+        )}
+        {stats && (
+          <>
+            {/* Main info grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                  <Server className="h-3 w-3" />
+                  Version
+                </div>
+                <div className="font-mono font-semibold text-sm">
+                  {formatVersion(stats.version)}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                  <LinkIcon className="h-3 w-3" />
+                  Chain
+                </div>
+                <div className="font-mono font-semibold text-sm capitalize">
+                  {stats.chain}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                  <Layers className="h-3 w-3" />
+                  Blocks
+                </div>
+                <div className="font-mono font-semibold text-sm">
+                  {formatNumber(stats.blocks)}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                  <Clock className="h-3 w-3" />
+                  Uptime
+                </div>
+                <div className="font-mono font-semibold text-sm">
+                  {formatUptime(stats.uptime)}
+                </div>
+              </div>
+            </div>
+
+            {/* Chain size (on-disk) */}
             <div className="space-y-1">
               <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                <Server className="h-3 w-3" />
-                Version
+                <Database className="h-3 w-3" />
+                Chain Size
               </div>
               <div className="font-mono font-semibold text-sm">
-                {formatVersion(stats.version)}
+                {formatBytes(stats.blockchainSize ?? 0)}
               </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                <LinkIcon className="h-3 w-3" />
-                Chain
-              </div>
-              <div className="font-mono font-semibold text-sm capitalize">
-                {stats.chain}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                <Layers className="h-3 w-3" />
-                Blocks
-              </div>
-              <div className="font-mono font-semibold text-sm">
-                {formatNumber(stats.blocks)}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                <Clock className="h-3 w-3" />
-                Uptime
-              </div>
-              <div className="font-mono font-semibold text-sm">
-                {formatUptime(stats.uptime)}
-              </div>
-            </div>
-          </div>
 
-          {/* Chain size (on-disk) */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 text-muted-foreground text-xs">
-              <Database className="h-3 w-3" />
-              Chain Size
-            </div>
-            <div className="font-mono font-semibold text-sm">
-              {formatBytes(stats.blockchainSize ?? 0)}
-            </div>
-          </div>
-
-          {/* Sync Progress */}
-          {stats.verificationProgress < 1 && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <DownloadCloud className="h-3 w-3" /> Sync Progress
-                </span>
-                <span>{formatPercentage(stats.verificationProgress)}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div
-                  className="bg-blue-600 h-1.5 rounded-full transition-all"
-                  style={{ width: `${stats.verificationProgress * 100}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-
-          {/* Connections */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 text-muted-foreground text-xs">
-              <Network className="h-3 w-3" />
-              Network Connections
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div className="text-center p-1 bg-gray-50 rounded">
-                <div className="font-mono font-semibold">
-                  {stats.connections}
+            {/* Sync Progress */}
+            {stats.verificationProgress < 1 && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <DownloadCloud className="h-3 w-3" /> Sync Progress
+                  </span>
+                  <span>{formatPercentage(stats.verificationProgress)}</span>
                 </div>
-                <div className="text-gray-500">Total</div>
-              </div>
-              <div className="text-center p-1 bg-green-50 rounded">
-                <div className="font-mono font-semibold text-green-600">
-                  ↓ {stats.inbound}
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="bg-blue-600 h-1.5 rounded-full transition-all"
+                    style={{ width: `${stats.verificationProgress * 100}%` }}
+                  ></div>
                 </div>
-                <div className="text-gray-500">In</div>
-              </div>
-              <div className="text-center p-1 bg-blue-50 rounded">
-                <div className="font-mono font-semibold text-blue-600">
-                  ↑ {stats.outbound}
-                </div>
-                <div className="text-gray-500">Out</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Mempool */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 text-muted-foreground text-xs">
-              <Database className="h-3 w-3" />
-              Mempool
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="space-y-0.5">
-                <div className="font-mono font-semibold">
-                  {formatNumber(stats.mempool.size)}
-                </div>
-                <div className="text-gray-500">Transactions</div>
-              </div>
-              <div className="space-y-0.5">
-                <div className="font-mono font-semibold">
-                  {formatBytes(stats.mempool.bytes)}
-                </div>
-                <div className="text-gray-500">Size</div>
-              </div>
-            </div>
-            <div className="text-xs text-gray-500">
-              Usage: {formatBytes(stats.mempool.usage)} /{" "}
-              {formatBytes(stats.mempool.maxmempool)}
-              <span className="ml-1">
-                (
-                {(
-                  (stats.mempool.usage / stats.mempool.maxmempool) *
-                  100
-                ).toFixed(1)}
-                %)
-              </span>
-            </div>
-          </div>
-
-          {/* Status indicators */}
-          <div className="flex gap-2 text-xs">
-            <div
-              className={`px-2 py-1 rounded-full ${
-                stats.initialBlockDownload
-                  ? "bg-yellow-100 text-yellow-800"
-                  : "bg-green-100 text-green-800"
-              }`}
-            >
-              {stats.initialBlockDownload ? "Syncing" : "Synced"}
-            </div>
-            {stats.verificationProgress >= 0.9999 && (
-              <div className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">
-                Full Node
               </div>
             )}
-          </div>
-        </CardContent>
-      )}
+
+            {/* Connections */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <Network className="h-3 w-3" />
+                Network Connections
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="text-center p-1 bg-gray-50 rounded">
+                  <div className="font-mono font-semibold">
+                    {stats.connections}
+                  </div>
+                  <div className="text-gray-500">Total</div>
+                </div>
+                <div className="text-center p-1 bg-green-50 rounded">
+                  <div className="font-mono font-semibold text-green-600">
+                    ↓ {stats.inbound}
+                  </div>
+                  <div className="text-gray-500">In</div>
+                </div>
+                <div className="text-center p-1 bg-blue-50 rounded">
+                  <div className="font-mono font-semibold text-blue-600">
+                    ↑ {stats.outbound}
+                  </div>
+                  <div className="text-gray-500">Out</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mempool */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                <Database className="h-3 w-3" />
+                Mempool
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="space-y-0.5">
+                  <div className="font-mono font-semibold">
+                    {formatNumber(stats.mempool.size)}
+                  </div>
+                  <div className="text-gray-500">Transactions</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="font-mono font-semibold">
+                    {formatBytes(stats.mempool.bytes)}
+                  </div>
+                  <div className="text-gray-500">Size</div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">
+                Usage: {formatBytes(stats.mempool.usage)} /{" "}
+                {formatBytes(stats.mempool.maxmempool)}
+                <span className="ml-1">
+                  (
+                  {(
+                    (stats.mempool.usage / stats.mempool.maxmempool) *
+                    100
+                  ).toFixed(1)}
+                  %)
+                </span>
+              </div>
+            </div>
+
+            {/* Status indicators */}
+            <div className="flex gap-2 text-xs">
+              <div
+                className={`px-2 py-1 rounded-full ${
+                  stats.initialBlockDownload
+                    ? "bg-yellow-100 text-yellow-800"
+                    : "bg-green-100 text-green-800"
+                }`}
+              >
+                {stats.initialBlockDownload ? "Syncing" : "Synced"}
+              </div>
+              {stats.verificationProgress >= 0.9999 && (
+                <div className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                  Full Node
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
     </Card>
   );
 };

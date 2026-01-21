@@ -7,6 +7,7 @@ export const APP_CONFIG = {
 
   // API timeouts
   API_TIMEOUT: 10000, // 10 seconds
+  BITCOIN_API_TIMEOUT: 120000, // 120 seconds (Bitcoin queries through Tor are slow)
 
   // UI constants
   ANIMATION_DURATION: 200,

@@ -239,11 +239,19 @@ class ApiClient {
 
   // Bitcoin endpoints
   async getBitcoinStatus(): Promise<ServiceHealth> {
-    return this.request("/api/bitcoin/status");
+    return this.request(
+      "/api/bitcoin/status",
+      undefined,
+      APP_CONFIG.BITCOIN_API_TIMEOUT,
+    );
   }
 
   async getBitcoinStats(): Promise<BitcoinStats> {
-    return this.request("/api/bitcoin/stats");
+    return this.request(
+      "/api/bitcoin/stats",
+      undefined,
+      APP_CONFIG.BITCOIN_API_TIMEOUT,
+    );
   }
 
   // qBittorrent endpoints
@@ -439,6 +447,7 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options?: RequestInit,
+    customTimeout?: number,
   ): Promise<T> {
     // If baseUrl is empty, use relative endpoint so requests go to same-origin
     // and benefit from the dev proxy and browser cookies.
@@ -451,7 +460,7 @@ class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeoutMs = APP_CONFIG.API_TIMEOUT || 10000;
+    const timeoutMs = customTimeout || APP_CONFIG.API_TIMEOUT || 10000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     // Merge headers safely
