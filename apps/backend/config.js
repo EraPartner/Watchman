@@ -125,6 +125,72 @@ const parseEnabledServices = () => {
   return new Set(services);
 };
 
+// Parse multi-instance service configurations
+// Looks for patterns like SERVICE_1_*, SERVICE_2_*, etc.
+const parseServiceInstances = (serviceType) => {
+  const instances = [];
+  const envVars = Object.keys(process.env);
+  const upperServiceType = serviceType.toUpperCase();
+  
+  // Check for numbered instances (e.g., QBITTORRENT_1_URL, QBITTORRENT_2_URL)
+  const instancePattern = new RegExp(`^${upperServiceType}_(\\d+)_`);
+  const instanceNumbers = new Set();
+  
+  envVars.forEach((key) => {
+    const match = key.match(instancePattern);
+    if (match) {
+      instanceNumbers.add(parseInt(match[1]));
+    }
+  });
+  
+  // Sort instance numbers
+  const sortedInstances = Array.from(instanceNumbers).sort((a, b) => a - b);
+  
+  // Build instance configurations
+  sortedInstances.forEach((instanceNum) => {
+    const prefix = `${upperServiceType}_${instanceNum}_`;
+    const instanceConfig = {
+      instanceId: `${serviceType}_${instanceNum}`,
+      instanceNumber: instanceNum,
+    };
+    
+    // Collect all env vars for this instance
+    envVars.forEach((key) => {
+      if (key.startsWith(prefix)) {
+        const configKey = key.substring(prefix.length).toLowerCase();
+        instanceConfig[configKey] = process.env[key];
+      }
+    });
+    
+    instances.push(instanceConfig);
+  });
+  
+  // If no numbered instances found, check for legacy single instance config
+  if (instances.length === 0) {
+    const legacyConfig = {};
+    const legacyPrefix = `${upperServiceType}_`;
+    let hasLegacyConfig = false;
+    
+    envVars.forEach((key) => {
+      if (key.startsWith(legacyPrefix) && !key.match(/^\w+_\d+_/)) {
+        const configKey = key.substring(legacyPrefix.length).toLowerCase();
+        legacyConfig[configKey] = process.env[key];
+        hasLegacyConfig = true;
+      }
+    });
+    
+    if (hasLegacyConfig) {
+      instances.push({
+        instanceId: serviceType,
+        instanceNumber: 1,
+        ...legacyConfig,
+      });
+    }
+  }
+  
+  return instances;
+};
+
 const getConfig = () => ({
   // Authentication
   auth: {
@@ -166,6 +232,9 @@ const getConfig = () => ({
 
   // Enabled services configuration
   enabledServices: parseEnabledServices(),
+
+  // Service instances parser
+  getServiceInstances: parseServiceInstances,
 });
 
-export { validateEnvironment, getConfig };
+export { validateEnvironment, getConfig, parseServiceInstances };

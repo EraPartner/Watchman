@@ -4,16 +4,27 @@ import { Button } from "./ui/button";
 import { AlertTriangle, Globe, Wifi } from "lucide-react";
 import { useConfig } from "../hooks/use-config";
 import { ServerStatusBadge } from "./ServerStatusBadge";
-import { buildHref, openHref } from "../lib/url";
-import ServiceLink from "@/components/ServiceLink";
+import { ServiceLink } from "@/components/ServiceLink";
 
-export const NostrcheckCard: React.FC<any> = ({
-  name,
-  status,
+interface NostrcheckCardProps {
+  name?: string;
+  status?: "online" | "offline" | "warning" | "loading" | "error";
+  url?: string;
+  fullHeight?: boolean;
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({
+  name = "Nostrcheck",
+  status = "offline",
   url,
   fullHeight = false,
+  instanceNumber,
 }) => {
   const { config } = useConfig();
+
+  const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
 
   // Read backend config values
   const nostrCfg = config?.services?.nostrcheck as
@@ -26,10 +37,10 @@ export const NostrcheckCard: React.FC<any> = ({
   const webRaw = nostrCfg?.webUrl || null;
 
   // Build hrefs and use ServiceLink for consistent display
-  const relayHref = buildHref(relayRaw, false);
-  const webHref = buildHref(webRaw, true);
-  const openRelay = () => openHref(relayHref);
-  const openWeb = () => openHref(webHref);
+  const relayHref = relayRaw;
+  const webHref = webRaw;
+  const openRelay = () => window.open(relayHref, "_blank");
+  const openWeb = () => window.open(webHref, "_blank");
 
   return (
     <Card className={`w-full ${fullHeight ? "h-full" : ""}`}>
@@ -37,7 +48,7 @@ export const NostrcheckCard: React.FC<any> = ({
         <div className="flex flex-col">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Globe className="h-4 w-4" />
-            {name}
+            {displayName}
           </CardTitle>
           {/* Clickable relay URL under the name (NOSTRCHECK_RELAY_URL) */}
           <ServiceLink

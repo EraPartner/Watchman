@@ -12,18 +12,30 @@ import {
 } from "lucide-react";
 import ServiceLink from "@/components/ServiceLink";
 
-export const IpfsCard: React.FC<{ name?: string }> = ({ name = "IPFS" }) => {
+interface IpfsCardProps {
+  name?: string;
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+export const IpfsCard: React.FC<IpfsCardProps> = ({
+  name = "IPFS",
+  instanceId = "ipfs",
+  instanceNumber,
+}) => {
   const [status, setStatus] = useState<
     "online" | "offline" | "warning" | "loading"
   >("loading");
   const [stats, setStats] = useState<any | null>(null);
   const [frontendCfg, setFrontendCfg] = useState<any | null>(null);
 
+  const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
+
   useEffect(() => {
     let mounted = true;
     const fetchData = async () => {
       try {
-        const health = await apiClient.getIpfsStatus();
+        const health = await apiClient.getServiceHealth(instanceId);
         if (!mounted) return;
         const mapped =
           health.status === "not_configured"
@@ -31,7 +43,7 @@ export const IpfsCard: React.FC<{ name?: string }> = ({ name = "IPFS" }) => {
             : (health.status as any);
         setStatus(mapped);
         if (health.status === "online" || health.status === "warning") {
-          const s = await apiClient.getIpfsStats();
+          const s = await apiClient.getServiceStats(instanceId);
           if (!mounted) return;
           setStats(s);
         } else {
@@ -50,7 +62,7 @@ export const IpfsCard: React.FC<{ name?: string }> = ({ name = "IPFS" }) => {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [instanceId]);
 
   useEffect(() => {
     let mounted = true;
@@ -147,7 +159,7 @@ export const IpfsCard: React.FC<{ name?: string }> = ({ name = "IPFS" }) => {
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex flex-col">
-          <CardTitle className="text-sm font-medium">{name}</CardTitle>
+          <CardTitle className="text-sm font-medium">{displayName}</CardTitle>
           {buildLink()}
         </div>
         <div className="flex items-center gap-2">

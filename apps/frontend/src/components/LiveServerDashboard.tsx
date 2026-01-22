@@ -1,9 +1,13 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdGuardCard } from "./AdGuardCard";
 import { TorCard } from "./TorCard";
 import { AdGuardServerStats, TorServerStats } from "../types/server";
-import { apiClient } from "../services/ApiClient";
+import {
+  apiClient,
+  FrontendConfig,
+  ServiceHealth,
+} from "../services/ApiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Activity, CheckCircle, RefreshCw, Server, Shield } from "lucide-react";
 import { Button } from "./ui/button";
@@ -11,21 +15,23 @@ import { APP_CONFIG } from "../lib/constants";
 import { BitcoinCard } from "./BitcoinCard";
 import { QBittorrentCard } from "./QBittorrentCard";
 import { IpfsCard } from "./IpfsCard";
-import SynologyCard from "./SynologyCard";
-import RoonCard from "./RoonCard";
+import { SynologyCard } from "./SynologyCard";
+import { RoonCard } from "./RoonCard";
 import PhilipsBridgeCard from "./PhilipsBridgeCard";
-import AlbyHubCard from "./AlbyHubCard";
+import { AlbyHubCard } from "./AlbyHubCard";
 import { MacMiniCard } from "./MacMiniCard";
 import { RaspberryPiCard } from "./RaspberryPiCard";
 import { NostrcheckCard } from "./NostrcheckCard";
 import RouterCard from "./RouterCard";
 import HomebridgeCard from "./HomebridgeCard";
 import { useEnabledServices } from "../hooks/useEnabledServices";
+import { useServiceInstances } from "../hooks/useServiceInstances";
 
 export const LiveServerDashboard = () => {
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const { isServiceEnabled } = useEnabledServices();
+  const { getInstances } = useServiceInstances();
   const adguardEnabled = isServiceEnabled("adguard");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // AdGuard combined status + stats
   const adguardQuery = useQuery({
@@ -111,14 +117,14 @@ export const LiveServerDashboard = () => {
   // derive adguard/tor/other statuses from queries
   const adguardData = adguardQuery.data;
   const torData = torQuery.data;
+  const frontendCfg: FrontendConfig | undefined = torData?.frontendConfig as
+    | FrontendConfig
+    | undefined;
   const bitcoinHealth = bitcoinQuery.data;
   const qbittorrentHealth = qbittorrentQuery.data;
   const ipfsHealth = ipfsQuery.data;
   const synologyHealth = synologyQuery.data;
   const roonHealth = roonQuery.data;
-
-  // We'll derive the total and counts dynamically from the services health endpoint when available.
-  // Fallback to local tile counts if the endpoint is not available yet.
 
   // helper to map API service status strings to ServerStatus used by cards
   const mapServiceStatus = (s?: string) => {
@@ -156,8 +162,9 @@ export const LiveServerDashboard = () => {
   let warningCount: number;
 
   if (servicesHealthQuery.data && servicesHealthQuery.data.services) {
-    const svcObj = servicesHealthQuery.data.services as Record<string, any>;
-    const statuses = Object.values(svcObj).map((s: any) => {
+    type ServiceMap = Record<string, Partial<ServiceHealth>>;
+    const svcObj = servicesHealthQuery.data.services as unknown as ServiceMap;
+    const statuses = Object.values(svcObj).map((s) => {
       // Normalize backend status strings (map 'error' -> 'warning', 'not_configured' -> 'offline')
       const st = s && s.status ? String(s.status) : "offline";
       if (st === "error") return "warning";
@@ -184,11 +191,10 @@ export const LiveServerDashboard = () => {
     ).length;
   }
 
-  const adguardStats = adguardData?.stats as any as
-    | AdGuardServerStats
-    | undefined;
-  const totalQueries = adguardStats?.totalQueries ?? 0;
-  const totalBlocked = adguardStats?.blockedQueries ?? 0;
+  const totalQueries =
+    (adguardData?.stats as AdGuardServerStats | undefined)?.totalQueries ?? 0;
+  const totalBlocked =
+    (adguardData?.stats as AdGuardServerStats | undefined)?.blockedQueries ?? 0;
 
   // Build card-ready AdGuard stats (map API shape to component shape)
   const adguardCardStats: AdGuardServerStats | undefined = adguardData?.stats
@@ -212,8 +218,34 @@ export const LiveServerDashboard = () => {
     : undefined;
 
   // Build card-ready Tor stats (map API shape to component shape)
-  const torRaw = torData?.torStats as any | undefined;
-  const frontendCfg = torData?.frontendConfig as any | undefined;
+  type TorRaw = {
+    version?: string;
+    nickname?: string;
+    fingerprint?: string;
+    relayType?: string;
+    bandwidth?: {
+      current?: number;
+      average?: number;
+      burst?: number;
+      observed?: number;
+    };
+    connections?: { current?: number; total?: number };
+    circuits?: { active?: number; total?: number };
+    flags?: string[];
+    consensus_weight?: number;
+    exit_policy?: string;
+    hibernating?: boolean;
+    orPort?: number;
+    or_port?: number;
+    controlPort?: number;
+    running?: boolean;
+    country?: string;
+    city?: string;
+    platform?: string;
+    contact?: string;
+  };
+  const torRaw = torData?.torStats as Partial<TorRaw> | undefined;
+  // frontendCfg already defined above
   const torCardStats: TorServerStats | undefined = torRaw
     ? {
         version: torRaw.version ?? "Unknown",
@@ -256,7 +288,7 @@ export const LiveServerDashboard = () => {
   // Refresh helper - refetch all enabled queries
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    const refreshPromises = [];
+    const refreshPromises: Array<Promise<unknown>> = [];
 
     if (adguardEnabled) refreshPromises.push(adguardQuery.refetch());
     if (isServiceEnabled("tor")) refreshPromises.push(torQuery.refetch());
@@ -311,35 +343,124 @@ export const LiveServerDashboard = () => {
   };
 
   // Build arrays of tile elements so we can chunk and render rows exactly 3 per row
-  const softwareTiles: JSX.Element[] = [];
-  if (isServiceEnabled("adguard") && adguardData && adguardCardStats) {
-    softwareTiles.push(
-      <AdGuardCard
-        key="adguard"
-        name={"AdGuard Home"}
-        status={mapServiceStatus(adguardData.health.status)}
-        stats={adguardCardStats}
-      />,
-    );
+  const softwareTiles: React.ReactElement[] = [];
+
+  // AdGuard - support multiple instances
+  if (isServiceEnabled("adguard")) {
+    const adguardInstances = getInstances("adguard");
+
+    if (adguardInstances.length > 1) {
+      // Multiple instances - render each one (will need separate data fetching)
+      adguardInstances.forEach((instance) => {
+        const instanceNumber = parseInt(instance.id.split("_")[1]) || undefined;
+        // For now, use the first adguard data if available
+        if (adguardData && adguardCardStats) {
+          softwareTiles.push(
+            <AdGuardCard
+              key={instance.id}
+              name={"AdGuard Home"}
+              status={mapServiceStatus(adguardData.health.status)}
+              stats={adguardCardStats}
+              instanceId={instance.id}
+              instanceNumber={instanceNumber}
+            />,
+          );
+        }
+      });
+    } else if (adguardData && adguardCardStats) {
+      // Single instance - legacy behavior
+      softwareTiles.push(
+        <AdGuardCard
+          key="adguard"
+          name={"AdGuard Home"}
+          status={mapServiceStatus(adguardData.health.status)}
+          stats={adguardCardStats}
+        />,
+      );
+    }
   }
-  if (isServiceEnabled("tor") && torData && torCardStats) {
-    softwareTiles.push(
-      <TorCard
-        key="tor"
-        name={torCardStats.nickname || "Tor Relay"}
-        status={torCardStats.running ? "online" : "offline"}
-        stats={torCardStats}
-        ip={torIp}
-        port={torPortValue}
-      />,
-    );
+
+  // Tor - support multiple instances
+  if (isServiceEnabled("tor")) {
+    const torInstances = getInstances("tor");
+
+    if (torInstances.length > 1) {
+      // Multiple instances - render each one
+      torInstances.forEach((instance) => {
+        const instanceNumber = parseInt(instance.id.split("_")[1]) || undefined;
+        // For now, use the first tor data if available
+        if (torData && torCardStats) {
+          softwareTiles.push(
+            <TorCard
+              key={instance.id}
+              name={torCardStats.nickname || "Tor Relay"}
+              status={torCardStats.running ? "online" : "offline"}
+              stats={torCardStats}
+              ip={torIp}
+              port={torPortValue}
+              instanceId={instance.id}
+              instanceNumber={instanceNumber}
+            />,
+          );
+        }
+      });
+    } else if (torData && torCardStats) {
+      // Single instance - legacy behavior
+      softwareTiles.push(
+        <TorCard
+          key="tor"
+          name={torCardStats.nickname || "Tor Relay"}
+          status={torCardStats.running ? "online" : "offline"}
+          stats={torCardStats}
+          ip={torIp}
+          port={torPortValue}
+        />,
+      );
+    }
   }
-  // Other software tiles
+  
+  // Bitcoin - support multiple instances
   if (isServiceEnabled("bitcoin")) {
-    softwareTiles.push(<BitcoinCard key="bitcoin" />);
+    const bitcoinInstances = getInstances("bitcoin");
+
+    if (bitcoinInstances.length > 1) {
+      // Multiple instances - render each one
+      bitcoinInstances.forEach((instance) => {
+        const instanceNumber = parseInt(instance.id.split("_")[1]) || undefined;
+        softwareTiles.push(
+          <BitcoinCard
+            key={instance.id}
+            instanceId={instance.id}
+            instanceNumber={instanceNumber}
+          />,
+        );
+      });
+    } else {
+      // Single instance - legacy behavior
+      softwareTiles.push(<BitcoinCard key="bitcoin" />);
+    }
   }
+  
+  // qBittorrent - support multiple instances
   if (isServiceEnabled("qbittorrent")) {
-    softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
+    const qbInstances = getInstances("qbittorrent");
+
+    if (qbInstances.length > 1) {
+      // Multiple instances - render each one
+      qbInstances.forEach((instance) => {
+        const instanceNumber = parseInt(instance.id.split("_")[1]) || undefined;
+        softwareTiles.push(
+          <QBittorrentCard
+            key={instance.id}
+            instanceId={instance.id}
+            instanceNumber={instanceNumber}
+          />,
+        );
+      });
+    } else {
+      // Single instance - legacy behavior
+      softwareTiles.push(<QBittorrentCard key="qbittorrent" />);
+    }
   }
 
   // Stack IPFS and Homebridge vertically so they occupy the same column similar to Nostr/Alby
@@ -365,7 +486,8 @@ export const LiveServerDashboard = () => {
   }
 
   // Nostrcheck / local Nostr relay tile - use the frontend config exposed by the backend
-  const nostrCfg = frontendCfg?.services?.nostrcheck as any | undefined;
+  const nostrCfg: FrontendConfig["services"]["nostrcheck"] | undefined =
+    frontendCfg?.services?.nostrcheck;
   const nostrStatus =
     nostrCfg && nostrCfg.configured
       ? ("online" as const)
@@ -456,8 +578,9 @@ export const LiveServerDashboard = () => {
   // Compute overview counts: prefer the backend services health endpoint. If not available,
   // fall back to the actual tiles we render so the total matches visible tiles.
   if (servicesHealthQuery.data && servicesHealthQuery.data.services) {
-    const svcObj = servicesHealthQuery.data.services as Record<string, any>;
-    const statuses = Object.values(svcObj).map((s: any) => {
+    type ServiceMap = Record<string, Partial<ServiceHealth>>;
+    const svcObj = servicesHealthQuery.data.services as unknown as ServiceMap;
+    const statuses = Object.values(svcObj).map((s) => {
       const st = s && s.status ? String(s.status) : "offline";
       if (st === "error") return "warning";
       if (st === "not_configured") return "offline";
@@ -510,7 +633,7 @@ export const LiveServerDashboard = () => {
     warningCount = allServiceStatuses.filter((s) => s === "warning").length;
   }
 
-  const overviewCards: JSX.Element[] = [
+  const overviewCards: React.ReactElement[] = [
     <Card key="services-online">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">Services Online</CardTitle>
@@ -560,8 +683,8 @@ export const LiveServerDashboard = () => {
         </CardHeader>
         <CardContent>
           <div className="text-lg font-bold text-red-600 truncate">
-            {adguardStats?.topBlockedDomain !== "N/A"
-              ? adguardStats?.topBlockedDomain
+            {adguardCardStats?.topBlockedDomain !== "N/A"
+              ? adguardCardStats?.topBlockedDomain
               : "None"}
           </div>
           <p className="text-xs text-muted-foreground">

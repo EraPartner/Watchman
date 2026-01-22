@@ -17,6 +17,7 @@ import { getConfig } from "../config.js";
 export default class ServiceManager {
   constructor() {
     this.services = new Map();
+    this.serviceInstances = new Map();
     this.torManager = null;
     this.initialized = false;
   }
@@ -72,6 +73,7 @@ export default class ServiceManager {
           },
         });
         this.services.set("bitcoin", bitcoinService);
+        this.serviceInstances.set("bitcoin", ["bitcoin"]);
       }
 
       // Initialize AdGuard service
@@ -87,6 +89,7 @@ export default class ServiceManager {
           timeout: parseInt(process.env.ADGUARD_TIMEOUT) || 5000,
         });
         this.services.set("adguard", adguardService);
+        this.serviceInstances.set("adguard", ["adguard"]);
       }
 
       // Initialize Tor service
@@ -113,12 +116,14 @@ export default class ServiceManager {
           // Note: username and password are now handled internally via environment variables
         });
         this.services.set("qbittorrent", qbittorrentService);
+        this.serviceInstances.set("qbittorrent", ["qbittorrent"]);
       }
 
       // Initialize Synology service
       if (enabledServices.has("synology")) {
         const synologyService = new SynologyService();
         this.services.set("synology", synologyService);
+        this.serviceInstances.set("synology", ["synology"]);
       }
 
       // Initialize IPFS service (optional - requires IPFS_API_URL)
@@ -238,6 +243,7 @@ export default class ServiceManager {
           authToken: process.env.ALBYHUB_TOKEN || null,
         });
         this.services.set("albyhub", albyHubService);
+        this.serviceInstances.set("albyhub", ["albyhub"]);
       }
 
       // Initialize Router services (Beryl, Telenet) from environment variables if configured
@@ -264,6 +270,7 @@ export default class ServiceManager {
               : 1,
           });
           this.services.set("beryl", berylService);
+          this.serviceInstances.set("beryl", ["beryl"]);
         }
       }
 
@@ -290,6 +297,7 @@ export default class ServiceManager {
               : 1,
           });
           this.services.set("telenet", telenetService);
+          this.serviceInstances.set("telenet", ["telenet"]);
         }
       }
 
@@ -305,6 +313,7 @@ export default class ServiceManager {
             : undefined,
         });
         this.services.set("raspi", raspiService);
+        this.serviceInstances.set("raspi", ["raspi"]);
       }
 
       this.initialized = true;
@@ -363,6 +372,14 @@ export default class ServiceManager {
 
   getAllServices() {
     return Array.from(this.services.keys());
+  }
+
+  getServiceInstances(serviceType) {
+    return this.serviceInstances.get(serviceType) || [];
+  }
+
+  getServiceTypes() {
+    return Array.from(this.serviceInstances.keys());
   }
 
   isInitialized() {

@@ -38,10 +38,19 @@ interface AdGuardCardProps {
   name: string;
   status: ServerStatus;
   stats: AdGuardServerStats;
+  instanceId?: string;
+  instanceNumber?: number;
 }
 
-export const AdGuardCard = ({ name, status, stats }: AdGuardCardProps) => {
+export const AdGuardCard = ({
+  name,
+  status,
+  stats,
+  instanceNumber,
+}: AdGuardCardProps) => {
   const { config } = useConfig();
+
+  const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) {
@@ -86,7 +95,7 @@ export const AdGuardCard = ({ name, status, stats }: AdGuardCardProps) => {
         <div className="flex flex-col">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <AdGuardIcon className="h-4 w-4" />
-            {name}
+            {displayName}
           </CardTitle>
           <button
             onClick={handleUrlClick}

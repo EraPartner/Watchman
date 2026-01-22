@@ -20,21 +20,33 @@ const formatPingDisplay = (ping?: boolean | null) => {
   return "ICMP: N/A";
 };
 
-const PhilipsBridgeCard: React.FC = () => {
+interface PhilipsBridgeCardProps {
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+const PhilipsBridgeCard: React.FC<PhilipsBridgeCardProps> = ({
+  instanceId = "philips",
+  instanceNumber,
+}) => {
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("philips");
 
+  const displayName = instanceNumber
+    ? `Philips Bridge #${instanceNumber}`
+    : "Philips Bridge";
+
   const statusQuery = useQuery({
-    queryKey: ["philips", "status"],
-    queryFn: () => apiClient.getPhilipsStatus(),
+    queryKey: ["philips", "status", instanceId],
+    queryFn: () => apiClient.getServiceHealth(instanceId),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
     enabled: isEnabled,
   });
 
   const statsQuery = useQuery({
-    queryKey: ["philips", "stats"],
-    queryFn: () => apiClient.getPhilipsStats(),
+    queryKey: ["philips", "stats", instanceId],
+    queryFn: () => apiClient.getServiceStats(instanceId),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
     enabled: isEnabled,
@@ -94,7 +106,7 @@ const PhilipsBridgeCard: React.FC = () => {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Server className="h-4 w-4" />
-          Philips Bridge
+          {displayName}
         </CardTitle>
         <ServerStatusBadge
           status={

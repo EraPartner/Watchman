@@ -99,6 +99,15 @@ Comprehensive documentation is available in the **`/docs`** directory:
 - **[docs/SECURITY.md](./docs/SECURITY.md)** - Security documentation
 - **[docs/CHANGELOG.md](./docs/CHANGELOG.md)** - Change history
 
+### Multi-Instance Support
+
+Monitor multiple instances of the same service:
+
+- **[docs/MULTI-INSTANCE-QUICKSTART.md](./docs/MULTI-INSTANCE-QUICKSTART.md)** - Quick start guide
+- **[docs/MULTI-INSTANCE-SERVICES.md](./docs/MULTI-INSTANCE-SERVICES.md)** - Full documentation
+- **[docs/MULTI-INSTANCE-EXAMPLE.md](./docs/MULTI-INSTANCE-EXAMPLE.md)** - Configuration examples
+- **[docs/MULTI-INSTANCE-IMPLEMENTATION.md](./docs/MULTI-INSTANCE-IMPLEMENTATION.md)** - Implementation details
+
 ## 🔐 Security
 
 This project includes comprehensive security features:

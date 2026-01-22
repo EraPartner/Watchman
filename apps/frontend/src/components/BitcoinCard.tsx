@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { UpdateBadge } from "./UpdateBadge";
 import { BitcoinStats } from "../types/api";
-import { apiClient } from "../services/ApiClient";
+import { apiClient, ServiceHealth } from "../services/ApiClient";
 import {
   Clock,
   Database,
@@ -32,9 +32,19 @@ const BitcoinIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
-export const BitcoinCard: React.FC = () => {
+interface BitcoinCardProps {
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+export const BitcoinCard: React.FC<BitcoinCardProps> = ({
+  instanceId = "bitcoin",
+  instanceNumber,
+}) => {
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("bitcoin");
+
+  const displayName = instanceNumber ? `Bitcoin #${instanceNumber}` : "Bitcoin";
 
   const [status, setStatus] = useState<
     "online" | "offline" | "warning" | "loading"
@@ -47,31 +57,42 @@ export const BitcoinCard: React.FC = () => {
     let mounted = true;
     const fetchData = async () => {
       try {
-        console.log("[BitcoinCard] Fetching Bitcoin health...");
-        const health = await apiClient.getBitcoinStatus();
-        console.log("[BitcoinCard] Health response:", health);
+        console.log(`[BitcoinCard] Fetching ${displayName} health...`);
+        const health: ServiceHealth =
+          await apiClient.getServiceHealth(instanceId);
+        console.log(`[BitcoinCard] ${displayName} health response:`, health);
 
         if (!mounted) return;
 
         // Handle the not_configured status by treating it as offline
         const mappedStatus =
-          health.status === "not_configured" ? "offline" : health.status;
+          health.status === "not_configured"
+            ? "offline"
+            : (health.status as "online" | "offline" | "warning" | "loading");
         setStatus(mappedStatus as "online" | "offline" | "warning" | "loading");
 
         if (health.status === "online" || health.status === "warning") {
-          console.log("[BitcoinCard] Fetching Bitcoin stats...");
-          const nodeStats = await apiClient.getBitcoinStats();
-          console.log("[BitcoinCard] Stats response:", nodeStats);
+          console.log(`[BitcoinCard] Fetching ${displayName} stats...`);
+          const nodeStats = await apiClient.getServiceStats(instanceId);
+          console.log(
+            `[BitcoinCard] ${displayName} stats response:`,
+            nodeStats,
+          );
 
           if (!mounted) return;
 
           setStats(nodeStats as BitcoinStats);
         } else {
-          console.log("[BitcoinCard] Not online, clearing stats");
+          console.log(
+            `[BitcoinCard] ${displayName} not online, clearing stats`,
+          );
           setStats(null);
         }
       } catch (error) {
-        console.error("[BitcoinCard] Error fetching data:", error);
+        console.error(
+          `[BitcoinCard] Error fetching ${displayName} data:`,
+          error,
+        );
         if (!mounted) return;
         setStatus("offline");
         setStats(null);
@@ -85,7 +106,7 @@ export const BitcoinCard: React.FC = () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, [isEnabled]);
+  }, [isEnabled, instanceId, displayName]);
 
   // Helper function to format version
   const formatVersion = (version: string) => {
@@ -142,7 +163,7 @@ export const BitcoinCard: React.FC = () => {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <BitcoinIcon className="h-4 w-4 text-[#F7931A]" />
-          Bitcoin Core
+          {displayName}
         </CardTitle>
         <div className="flex items-center gap-2">
           {status !== "loading" && status !== "offline" && (
@@ -214,22 +235,25 @@ export const BitcoinCard: React.FC = () => {
             </div>
 
             {/* Sync Progress */}
-            {stats.verificationProgress < 1 && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <DownloadCloud className="h-3 w-3" /> Sync Progress
-                  </span>
-                  <span>{formatPercentage(stats.verificationProgress)}</span>
+            {typeof stats.verificationProgress === "number" &&
+              stats.verificationProgress < 1 && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <DownloadCloud className="h-3 w-3" /> Sync Progress
+                    </span>
+                    <span>{formatPercentage(stats.verificationProgress)}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className="bg-blue-600 h-1.5 rounded-full transition-all"
+                      style={{
+                        width: `${(stats.verificationProgress || 0) * 100}%`,
+                      }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div
-                    className="bg-blue-600 h-1.5 rounded-full transition-all"
-                    style={{ width: `${stats.verificationProgress * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-            )}
+              )}
 
             {/* Connections */}
             <div className="space-y-1">
@@ -304,11 +328,12 @@ export const BitcoinCard: React.FC = () => {
               >
                 {stats.initialBlockDownload ? "Syncing" : "Synced"}
               </div>
-              {stats.verificationProgress >= 0.9999 && (
-                <div className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">
-                  Full Node
-                </div>
-              )}
+              {typeof stats.verificationProgress === "number" &&
+                stats.verificationProgress >= 0.9999 && (
+                  <div className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                    Full Node
+                  </div>
+                )}
             </div>
           </>
         )}

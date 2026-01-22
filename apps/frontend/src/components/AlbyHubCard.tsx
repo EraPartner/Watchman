@@ -6,11 +6,23 @@ import { useEnabledServices } from "../hooks/useEnabledServices";
 import { ExternalLink, Server } from "lucide-react";
 import { formatDisplayUrl, openHref } from "../lib/url";
 
-export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({
+interface AlbyHubCardProps {
+  fullHeight?: boolean;
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+export const AlbyHubCard: React.FC<AlbyHubCardProps> = ({
   fullHeight = false,
+  instanceId = "albyhub",
+  instanceNumber,
 }) => {
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("albyhub");
+
+  const displayName = instanceNumber
+    ? `Alby Hub #${instanceNumber}`
+    : "Alby Hub";
 
   const [status, setStatus] = useState<
     "online" | "offline" | "warning" | "loading"
@@ -25,7 +37,7 @@ export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({
 
     const fetchHealth = async () => {
       try {
-        const health = await apiClient.getAlbyStatus();
+        const health = await apiClient.getServiceHealth(instanceId);
         if (!mounted) return;
         const mapped =
           health.status === "not_configured"
@@ -44,7 +56,7 @@ export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({
       mounted = false;
       clearInterval(interval);
     };
-  }, [isEnabled]);
+  }, [isEnabled, instanceId]);
 
   // Fetch frontend config once to read the ALBYHUB_URL provided by backend
   useEffect(() => {
@@ -88,7 +100,7 @@ export const AlbyHubCard: React.FC<{ fullHeight?: boolean }> = ({
     <Card className={`w-full ${fullHeight ? "h-full" : ""}`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          Alby Hub
+          {displayName}
         </CardTitle>
         <ServerStatusBadge status={status} />
       </CardHeader>

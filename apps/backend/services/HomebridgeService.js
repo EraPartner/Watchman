@@ -255,9 +255,11 @@ class HomebridgeService {
           "ct=",
           ct,
           "snippet=",
-          String(text).slice(0, 200)
+          String(text).slice(0, 200),
         );
-      } catch (e) {}
+      } catch (e) {
+        // Ignore any errors during debug logging - text conversion might fail
+      }
 
       // If HTML returned, treat as auth/login page (unauthenticated)
       if (ct.includes("text/html") || /<html/i.test(text)) {

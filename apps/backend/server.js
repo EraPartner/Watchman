@@ -207,18 +207,44 @@ app.use((req, res, next) => {
 });
 
 app.use(compression({ level: 6, threshold: 1024 }));
+
+// Enhanced CORS configuration with explicit origin validation
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow same-origin or explicit FRONTEND_URL; block others in production
       if (!origin) return callback(null, true);
-      const allowed = FRONTEND_URL ? [FRONTEND_URL] : [origin];
-      if (process.env.NODE_ENV === "production" && !allowed.includes(origin)) {
-        return callback(new Error("CORS: Origin not allowed"));
+      
+      // Validate that FRONTEND_URL is properly configured
+      if (!FRONTEND_URL || FRONTEND_URL === "*") {
+        if (process.env.NODE_ENV === "production") {
+          return callback(new Error("CORS: FRONTEND_URL not configured in production"));
+        }
+        // Allow any origin in development if not configured
+        return callback(null, true);
       }
+      
+      // Validate the format of the origin
+      try {
+        new URL(origin);
+      } catch (e) {
+        return callback(new Error("CORS: Invalid origin format"));
+      }
+      
+      // Check if origin matches FRONTEND_URL
+      const allowed = [FRONTEND_URL];
+      if (!allowed.includes(origin)) {
+        if (process.env.NODE_ENV === "production") {
+          return callback(new Error(`CORS: Origin ${origin} not allowed`));
+        }
+        // More permissive in development
+        return callback(null, true);
+      }
+      
       return callback(null, true);
     },
     credentials: true,
+    maxAge: 86400, // 24 hours
   }),
 );
 app.use(express.json({ limit: "10mb" }));
@@ -393,6 +419,67 @@ app.post(
   },
 );
 
+// Generic multi-instance service endpoints (handle instanceId patterns like qbittorrent_1, qbittorrent_2)
+// These routes handle dynamic service instances and must come before specific hardcoded service routes
+// They will match patterns like /api/qbittorrent_1/status, /api/qbittorrent_2/stats, etc.
+app.get(
+  "/api/:serviceId(\\w+_\\d+)/status",
+  healthLimiter,
+  healthCacheMiddleware,
+  async (req, res) => {
+    try {
+      const { serviceId } = req.params;
+      
+      // Check if this is a valid service instance
+      const service = serviceManager.getService(serviceId);
+      if (!service) {
+        return res.status(404).json({
+          error: `Service '${serviceId}' not found`,
+          status: "offline",
+        });
+      }
+
+      const health = await serviceManager.getServiceHealth(serviceId);
+      res.json(health);
+    } catch (error) {
+      console.error(`❌ Service ${req.params.serviceId} status failed:`, error.message);
+      res.status(500).json({
+        error: `Failed to fetch ${req.params.serviceId} status`,
+        status: "offline",
+        message: error.message,
+      });
+    }
+  },
+);
+
+app.get(
+  "/api/:serviceId(\\w+_\\d+)/stats",
+  statsCacheMiddleware,
+  async (req, res) => {
+    try {
+      const { serviceId } = req.params;
+      
+      // Check if this is a valid service instance
+      const service = serviceManager.getService(serviceId);
+      if (!service) {
+        return res.status(404).json({
+          error: `Service '${serviceId}' not found`,
+        });
+      }
+
+      const stats = await serviceManager.getServiceStats(serviceId);
+      res.json(stats);
+    } catch (error) {
+      console.error(`❌ Service ${req.params.serviceId} stats failed:`, error.message);
+      res.status(500).json({
+        error: `Failed to fetch ${req.params.serviceId} stats`,
+        message: error.message,
+      });
+    }
+  },
+);
+
+// Specific service endpoints (kept for backward compatibility with hardcoded service names)
 // AdGuard API endpoints - status and stats (re-added)
 app.get(
   "/api/adguard/status",
@@ -1533,6 +1620,36 @@ app.get("/api/config/frontend", (req, res) => {
       version: "1.0.0",
     },
   });
+});
+
+// Service instances endpoint - returns metadata about multi-instance services
+app.get("/api/services/instances", healthLimiter, (req, res) => {
+  try {
+    const serviceTypes = serviceManager.getServiceTypes();
+    const instancesInfo = {};
+    
+    for (const serviceType of serviceTypes) {
+      const instances = serviceManager.getServiceInstances(serviceType);
+      instancesInfo[serviceType] = {
+        count: instances.length,
+        instances: instances.map(instanceId => ({
+          id: instanceId,
+          type: serviceType,
+        })),
+      };
+    }
+    
+    res.json({
+      instances: instancesInfo,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("❌ Failed to get service instances:", error.message);
+    res.status(500).json({
+      error: "Failed to get service instances",
+      message: error.message,
+    });
+  }
 });
 
 // Route: ARP / neighbor lookup for router services

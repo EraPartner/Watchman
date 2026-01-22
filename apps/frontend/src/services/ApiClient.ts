@@ -358,6 +358,20 @@ class ApiClient {
     return this.request("/api/config/frontend");
   }
 
+  // Service instances
+  async getServiceInstances(): Promise<any> {
+    return this.request("/api/services/instances");
+  }
+
+  // Generic service health and stats (for multi-instance support)
+  async getServiceHealth(serviceKey: string): Promise<ServiceHealth> {
+    return this.request(`/api/${serviceKey}/status`);
+  }
+
+  async getServiceStats(serviceKey: string): Promise<any> {
+    return this.request(`/api/${serviceKey}/stats`);
+  }
+
   // Router ARP lookup
   async getRouterArp(serviceName: string): Promise<{
     count: number;
@@ -450,6 +464,45 @@ class ApiClient {
     options?: RequestInit,
     customTimeout?: number,
   ): Promise<T> {
+    // Retry configuration
+    const MAX_RETRIES = 3;
+    const BASE_DELAY_MS = 500;
+    const RETRYABLE_STATUSES = [408, 429, 500, 502, 503, 504]; // Timeout, TooManyRequests, Server errors
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await this.fetchWithDedup<T>(endpoint, options, customTimeout);
+      } catch (error: any) {
+        lastError = error;
+
+        // Check if error is retryable
+        const isRetryable =
+          (error.status && RETRYABLE_STATUSES.includes(error.status)) ||
+          error.name === "AbortError" ||
+          (error instanceof TypeError && error.message?.includes("fetch"));
+
+        // Don't retry on non-retryable errors or if we've exhausted retries
+        if (!isRetryable || attempt === MAX_RETRIES) {
+          throw error;
+        }
+
+        // Calculate exponential backoff delay with jitter
+        const delayMs =
+          BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 100;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError || new Error("Unknown error after retries");
+  }
+
+  private async fetchWithDedup<T>(
+    endpoint: string,
+    options?: RequestInit,
+    customTimeout?: number,
+  ): Promise<T> {
     // If baseUrl is empty, use relative endpoint so requests go to same-origin
     // and benefit from the dev proxy and browser cookies.
     const url = this.baseUrl ? `${this.baseUrl}${endpoint}` : endpoint;
@@ -493,19 +546,23 @@ class ApiClient {
           const errorData = await response
             .json()
             .catch(() => ({ error: "Unknown error" }));
-          throw new Error(
+          const error: any = new Error(
             (errorData && (errorData.error || JSON.stringify(errorData))) ||
               `API request failed: ${response.status} ${response.statusText}`,
           );
+          error.status = response.status;
+          throw error;
         }
 
         return response.json();
       } catch (error: any) {
         clearTimeout(timeout);
         if (error && error.name === "AbortError") {
-          throw new Error(
+          const timeoutError: any = new Error(
             `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`,
           );
+          timeoutError.name = "AbortError";
+          throw timeoutError;
         }
         if (
           error instanceof TypeError &&

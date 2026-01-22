@@ -24,6 +24,8 @@ interface MacMiniCardProps {
   enableStats?: boolean;
   webUrl?: string;
   priority?: "high" | "medium" | "low";
+  instanceId?: string;
+  instanceNumber?: number;
 }
 
 export const MacMiniCard = memo<MacMiniCardProps>(
@@ -33,16 +35,22 @@ export const MacMiniCard = memo<MacMiniCardProps>(
     enableStats = true,
     webUrl,
     priority = "medium",
+    instanceId = "macmini",
+    instanceNumber,
   }) => {
     const { isServiceEnabled } = useEnabledServices();
     const isEnabled = isServiceEnabled(serviceName);
+
+    const finalDisplayName = instanceNumber
+      ? `${displayName} #${instanceNumber}`
+      : displayName;
 
     const {
       data: health,
       isLoading: healthLoading,
       error: healthError,
       refetch: refetchHealth,
-    } = useServiceHealth(serviceName, {
+    } = useServiceHealth(instanceId, {
       refetchInterval:
         priority === "high" ? 5000 : priority === "medium" ? 10000 : 20000,
       enabled: isEnabled,
@@ -142,7 +150,7 @@ export const MacMiniCard = memo<MacMiniCardProps>(
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <CardTitle className="text-lg font-semibold">
-                {displayName}
+                {finalDisplayName}
               </CardTitle>
             </div>
             {statusMetrics && (

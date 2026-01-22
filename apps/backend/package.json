@@ -44,6 +44,7 @@
     "node-ssh": "^13.2.0",
     "pigpio-client": "^1.5.2",
     "ping": "^1.0.0",
+    "qs": "^6.14.1",
     "socks-proxy-agent": "^8.0.5",
     "swagger-ui-express": "^5.0.1",
     "terser": "^5.19.2",

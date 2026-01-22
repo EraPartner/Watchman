@@ -32,7 +32,15 @@ const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
-export const QBittorrentCard: React.FC = () => {
+interface QBittorrentCardProps {
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+export const QBittorrentCard: React.FC<QBittorrentCardProps> = ({
+  instanceId = "qbittorrent",
+  instanceNumber,
+}) => {
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("qbittorrent");
 
@@ -42,13 +50,20 @@ export const QBittorrentCard: React.FC = () => {
   const [stats, setStats] = useState<QBittorrentStats | null>(null);
   const [frontendConfig, setFrontendConfig] = useState<any | null>(null);
 
+  // Determine the API endpoint based on instanceId
+  const serviceKey = instanceId;
+  const displayName = instanceNumber
+    ? `qBittorrent #${instanceNumber}`
+    : "qBittorrent";
+
   useEffect(() => {
     if (!isEnabled) return;
 
     let mounted = true;
     const fetchData = async () => {
       try {
-        const health = await apiClient.getQBittorrentStatus();
+        // For multi-instance, we need to fetch from the specific instance endpoint
+        const health = await apiClient.getServiceHealth(serviceKey);
 
         if (!mounted) return;
 
@@ -58,7 +73,7 @@ export const QBittorrentCard: React.FC = () => {
         setStatus(mappedStatus as "online" | "offline" | "warning" | "loading");
 
         if (health.status === "online" || health.status === "warning") {
-          const qbtStats = await apiClient.getQBittorrentStats();
+          const qbtStats = await apiClient.getServiceStats(serviceKey);
 
           if (!mounted) return;
 
@@ -129,7 +144,7 @@ export const QBittorrentCard: React.FC = () => {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <QBittorrentIcon className="h-4 w-4 text-[#2f5bea]" />
-          qBittorrent
+          {displayName}
         </CardTitle>
         <ServerStatusBadge status={status} />
       </CardHeader>
@@ -359,6 +374,6 @@ export const QBittorrentCard: React.FC = () => {
       )}
     </Card>
   );
-};
+};;
 
 // Use named export only (no default export)

@@ -8,13 +8,25 @@ import { apiClient } from "../services/ApiClient";
 import { useEnabledServices } from "../hooks/useEnabledServices";
 import { APP_CONFIG } from "../lib/constants";
 
-const HomebridgeCard: React.FC = () => {
+interface HomebridgeCardProps {
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
+  instanceId = "homebridge",
+  instanceNumber,
+}) => {
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("homebridge");
 
+  const displayName = instanceNumber
+    ? `Homebridge #${instanceNumber}`
+    : "Homebridge";
+
   // Fetch server-information from allowed API endpoint.
   const serverInfoQuery = useQuery({
-    queryKey: ["homebridge", "server-information"],
+    queryKey: ["homebridge", "server-information", instanceId],
     queryFn: () => apiClient.getHomebridgeServerInformation(),
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
@@ -23,7 +35,7 @@ const HomebridgeCard: React.FC = () => {
 
   // Fetch version from the allowed version endpoint (/api/status/homebridge-version)
   const versionQuery = useQuery({
-    queryKey: ["homebridge", "homebridge-version"],
+    queryKey: ["homebridge", "homebridge-version", instanceId],
     queryFn: () => apiClient.getHomebridgeVersion(),
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
@@ -32,7 +44,7 @@ const HomebridgeCard: React.FC = () => {
 
   // Fetch accessories list from backend /api/accessories
   const accessoriesQuery = useQuery({
-    queryKey: ["homebridge", "accessories"],
+    queryKey: ["homebridge", "accessories", instanceId],
     queryFn: () => apiClient.getHomebridgeAccessories(),
     refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
     retry: 1,
@@ -212,7 +224,7 @@ const HomebridgeCard: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">Homebridge</CardTitle>
+        <CardTitle className="text-sm font-medium">{displayName}</CardTitle>
         <div className="flex items-center gap-2">
           {isOnline && <UpdateBadge service="homebridge" />}
           <ServerStatusBadge

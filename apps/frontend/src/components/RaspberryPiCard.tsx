@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { buildHref, openHref } from "../lib/url";
-import { useEnabledServices } from "@/hooks/useEnabledServices.ts";
+import { useEnabledServices } from "@/hooks/useEnabledServices";
 
 interface RaspberryPiCardProps {
   serviceName?: string;
@@ -24,15 +24,8 @@ interface RaspberryPiCardProps {
   enableStats?: boolean;
   webUrl?: string;
   priority?: "high" | "medium" | "low";
-}
-
-// Helper to format bytes into human-readable format
-function humanBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  instanceId?: string;
+  instanceNumber?: number;
 }
 
 // Helper to format uptime in seconds to human-readable format
@@ -53,16 +46,22 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
     enableStats = true,
     webUrl,
     priority = "medium",
+    instanceId = "raspi",
+    instanceNumber,
   }) => {
     const { isServiceEnabled } = useEnabledServices();
     const isEnabled = isServiceEnabled(serviceName);
+
+    const finalDisplayName = instanceNumber
+      ? `${displayName} #${instanceNumber}`
+      : displayName;
 
     const {
       data: health,
       isLoading: healthLoading,
       error: healthError,
       refetch: refetchHealth,
-    } = useServiceHealth(serviceName, {
+    } = useServiceHealth(instanceId, {
       refetchInterval:
         priority === "high" ? 5000 : priority === "medium" ? 10000 : 20000,
       enabled: isEnabled,
@@ -70,7 +69,7 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
     });
 
     const { data: stats, isLoading: statsLoading } = useServiceStats(
-      serviceName,
+      instanceId,
       enableStats && isEnabled,
     );
 
@@ -91,7 +90,7 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
       };
 
       return {
-        statusColor: getStatusColor(health.status as any),
+        statusColor: getStatusColor(String(health.status || "offline")),
         isHealthy: health.status === "online",
       };
     }, [health]);
@@ -191,14 +190,12 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <CardTitle className="text-lg font-semibold">
-                {displayName}
+                {finalDisplayName}
               </CardTitle>
             </div>
             {statusMetrics && (
               <ServerStatusBadge
-                status={
-                  (health?.status as any) || (health ? "offline" : "loading")
-                }
+                status={health?.status || (health ? "offline" : "loading")}
               />
             )}
           </div>
@@ -248,7 +245,7 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
               <AlertTriangle className="h-4 w-4" />
               <span className="text-sm">
                 Failed to load:{" "}
-                {String((healthError as any)?.message || "Unknown error")}
+                {String((healthError as Error)?.message || "Unknown error")}
               </span>
             </div>
           ) : (
@@ -259,9 +256,13 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
                   <Server className="h-3 w-3" /> Status:
                 </span>
                 <span className="text-sm">{health?.status || "Unknown"}</span>
-                {((health as any)?.data?.host || (stats as any)?.host) && (
+                {((health as unknown as { data?: { host?: string } })?.data
+                  ?.host ||
+                  (stats as unknown as { host?: string })?.host) && (
                   <span className="text-xs text-muted-foreground ml-2">
-                    IP: {(health as any)?.data?.host || (stats as any)?.host}
+                    IP:{" "}
+                    {(health as unknown as { data?: { host?: string } })?.data
+                      ?.host || (stats as unknown as { host?: string })?.host}
                   </span>
                 )}
                 {health?.lastCheck && (
@@ -313,7 +314,8 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
               {!formattedStats && health?.status === "online" && (
                 <div className="text-sm text-muted-foreground text-center py-4">
                   Connected to pigpiod on port{" "}
-                  {(health as any)?.data?.port || 8888}
+                  {(health as unknown as { data?: { port?: number } })?.data
+                    ?.port || 8888}
                 </div>
               )}
             </div>

@@ -5,6 +5,14 @@ class PerformanceMonitor {
     this.responseTimes = new Map();
     this.errorCounts = new Map();
     this.startTime = Date.now();
+    
+    // Maximum number of response time samples to keep per endpoint
+    // Prevents unbounded memory growth with many endpoints
+    this.MAX_SAMPLES_PER_ENDPOINT = 100;
+    
+    // Maximum number of endpoints to track
+    // If exceeded, oldest endpoints are pruned
+    this.MAX_ENDPOINTS = 500;
 
     // Keep reference to interval so it can be cleared on shutdown
     this._hourlyResetInterval = setInterval(
@@ -49,9 +57,17 @@ class PerformanceMonitor {
     const times = this.responseTimes.get(endpoint);
     times.push(duration);
 
-    // Keep only last 100 measurements per endpoint
-    if (times.length > 100) {
+    // Keep only last N measurements per endpoint to prevent memory leaks
+    if (times.length > this.MAX_SAMPLES_PER_ENDPOINT) {
       times.shift();
+    }
+    
+    // Prune old endpoints if we exceed max tracked endpoints
+    if (this.responseTimes.size > this.MAX_ENDPOINTS) {
+      const firstKey = this.responseTimes.keys().next().value;
+      this.responseTimes.delete(firstKey);
+      this.requestCounts.delete(firstKey);
+      this.errorCounts.delete(firstKey);
     }
   }
 

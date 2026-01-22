@@ -46,9 +46,19 @@ interface TorCardProps {
   stats: TorServerStats;
   ip: string;
   port?: number;
+  instanceId?: string;
+  instanceNumber?: number;
 }
 
-export const TorCard = ({ name, status, stats, ip, port }: TorCardProps) => {
+export const TorCard = ({
+  name,
+  status,
+  stats,
+  ip,
+  port,
+  instanceNumber,
+}: TorCardProps) => {
+  const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
   const getRelayTypeColor = (relayType: string) => {
     return (
       RELAY_TYPE_COLORS[relayType as keyof typeof RELAY_TYPE_COLORS] ||
@@ -79,7 +89,7 @@ export const TorCard = ({ name, status, stats, ip, port }: TorCardProps) => {
         <div className="flex flex-col">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <TorIcon className="h-4 w-4 text-[#7D4698]" />
-            {name}
+            {displayName}
             {stats.nickname && (
               <span className="text-xs text-muted-foreground">
                 ({stats.nickname})
@@ -101,9 +111,7 @@ export const TorCard = ({ name, status, stats, ip, port }: TorCardProps) => {
           </button>
         </div>
         <div className="flex items-center gap-2">
-          {status !== "loading" && status !== "offline" && (
-            <UpdateBadge service="tor" />
-          )}
+          {status !== "offline" && <UpdateBadge service="tor" />}
           <ServerStatusBadge status={status} />
           {stats.hibernating && (
             <div title="Relay is hibernating">

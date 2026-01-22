@@ -44,7 +44,9 @@ export default class RouterService {
         done = true;
         try {
           socket.destroy();
-        } catch (e) {}
+        } catch {
+          // Socket may already be destroyed; safe to ignore
+        }
         resolve(ok);
       };
       socket.setTimeout(this.timeout);

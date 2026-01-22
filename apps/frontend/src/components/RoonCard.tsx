@@ -20,29 +20,50 @@ const formatPingDisplay = (ping?: boolean | null) => {
   return "ICMP: N/A";
 };
 
-const RoonCard: React.FC = () => {
+interface RoonCardProps {
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+export const RoonCard: React.FC<RoonCardProps> = ({
+  instanceId = "roon",
+  instanceNumber,
+}) => {
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("roon");
 
+  const displayName = instanceNumber ? `Roon #${instanceNumber}` : "Roon";
+
   const statusQuery = useQuery({
-    queryKey: ["roon", "status"],
-    queryFn: () => apiClient.getRoonStatus(),
+    queryKey: ["roon", "status", instanceId],
+    queryFn: () => apiClient.getServiceHealth(instanceId),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
     enabled: isEnabled,
   });
 
   const statsQuery = useQuery({
-    queryKey: ["roon", "stats"],
-    queryFn: () => apiClient.getRoonStats(),
+    queryKey: ["roon", "stats", instanceId],
+    queryFn: () => apiClient.getServiceStats(instanceId),
     refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
     retry: 1,
     enabled: isEnabled,
   });
 
   const loading = statusQuery.isLoading && statsQuery.isLoading;
-  const status = statusQuery.data;
-  const stats = statsQuery.data;
+  type RoonData =
+    | {
+        status?: string;
+        data?: {
+          host?: string;
+          ping?: boolean | null;
+          ports?: Array<{ port: number; open: boolean }>;
+        };
+        error?: string;
+      }
+    | undefined;
+  const status = statusQuery.data as RoonData;
+  const stats = statsQuery.data as RoonData;
 
   const isOnline = status?.status === "online" || stats?.status === "online";
   const hasError = status?.status === "error" || stats?.status === "error";
@@ -57,7 +78,7 @@ const RoonCard: React.FC = () => {
       const u = new URL(base);
       if (!u.port) u.port = String(DEFAULT_HTTP_PORT);
       hostHref = u.toString();
-    } catch (err) {
+    } catch {
       const candidate = `${hostValue}:${DEFAULT_HTTP_PORT}`;
       hostHref = /^https?:\/\//i.test(candidate)
         ? candidate
@@ -99,7 +120,7 @@ const RoonCard: React.FC = () => {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Server className="h-4 w-4" />
-          Roon (ROCK)
+          {displayName}
         </CardTitle>
         <ServerStatusBadge
           status={
@@ -162,21 +183,23 @@ const RoonCard: React.FC = () => {
                   Ports
                 </div>
                 <div className="grid grid-cols-1 gap-2">
-                  {(stats?.data?.ports || status?.data?.ports).map((p: any) => (
-                    <div
-                      key={p.port}
-                      className={`rounded-md p-2 ${
-                        p.open ? "bg-green-50" : "bg-muted"
-                      }`}
-                    >
-                      <div className="text-xs text-muted-foreground">
-                        Port {p.port} (Roon ARC)
+                  {(stats?.data?.ports || status?.data?.ports || []).map(
+                    (p) => (
+                      <div
+                        key={p.port}
+                        className={`rounded-md p-2 ${
+                          p.open ? "bg-green-50" : "bg-muted"
+                        }`}
+                      >
+                        <div className="text-xs text-muted-foreground">
+                          Port {p.port} (Roon ARC)
+                        </div>
+                        <div className="text-sm font-medium">
+                          {p.open ? "Open" : "Closed"}
+                        </div>
                       </div>
-                      <div className="text-sm font-medium">
-                        {p.open ? "Open" : "Closed"}
-                      </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               </div>
             )}
@@ -200,5 +223,3 @@ const RoonCard: React.FC = () => {
     </Card>
   );
 };
-
-export default RoonCard;

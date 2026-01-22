@@ -55,21 +55,33 @@ const clampPercentage = (v?: number) => {
   return Math.max(0, Math.min(100, v));
 };
 
-const SynologyCard: React.FC = () => {
+interface SynologyCardProps {
+  instanceId?: string;
+  instanceNumber?: number;
+}
+
+export const SynologyCard: React.FC<SynologyCardProps> = ({
+  instanceId = "synology",
+  instanceNumber,
+}) => {
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("synology");
 
+  const displayName = instanceNumber
+    ? `Synology #${instanceNumber}`
+    : "Synology";
+
   const statusQuery = useQuery({
-    queryKey: ["synology", "status"],
-    queryFn: () => apiClient.getSynologyStatus(),
+    queryKey: ["synology", "status", instanceId],
+    queryFn: () => apiClient.getServiceHealth(instanceId),
     refetchInterval: 30000,
     retry: 1,
     enabled: isEnabled,
   });
 
   const statsQuery = useQuery({
-    queryKey: ["synology", "stats"],
-    queryFn: () => apiClient.getSynologyStats(),
+    queryKey: ["synology", "stats", instanceId],
+    queryFn: () => apiClient.getServiceStats(instanceId),
     refetchInterval: 30000,
     retry: 1,
     enabled: isEnabled,
@@ -77,9 +89,17 @@ const SynologyCard: React.FC = () => {
 
   const frontendConfigQuery = useFrontendConfig();
 
-  const status = statusQuery.data as any;
+  type SynStatus =
+    | { status?: string; lastCheck?: string; error?: string }
+    | undefined;
+  const status = statusQuery.data as SynStatus;
   const stats = statsQuery.data as SynologyStats | undefined;
-  const cfg = (frontendConfigQuery.data as any)?.services?.synology ?? null;
+  const cfg =
+    (
+      frontendConfigQuery.data as unknown as {
+        services?: { synology?: { host?: string; webPort?: number } };
+      }
+    )?.services?.synology ?? null;
 
   // Show loading if either query is loading (previously used && which required both)
   const loading = statusQuery.isLoading || statsQuery.isLoading;
@@ -90,11 +110,7 @@ const SynologyCard: React.FC = () => {
     status?.status === "not_configured" ||
     stats?.status === "error";
 
-  // prefer stats.timestamp for detailed timestamp; fallback to status.lastCheck or now
-  const lastUpdate = useMemo(
-    () => new Date(stats?.timestamp || status?.lastCheck || Date.now()),
-    [stats?.timestamp, status?.lastCheck],
-  );
+  // Timestamp available via stats.timestamp or status.lastCheck if needed
 
   // Compute host + href from frontend config (if available) and memoize to avoid recomputing each render
   const { synDisplay, synologyHref } = useMemo(() => {
@@ -132,7 +148,7 @@ const SynologyCard: React.FC = () => {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Server className="h-4 w-4" />
-          Synology NAS
+          {displayName}
         </CardTitle>
         <ServerStatusBadge
           status={
@@ -283,5 +299,3 @@ const SynologyCard: React.FC = () => {
     </Card>
   );
 };
-
-export default SynologyCard;

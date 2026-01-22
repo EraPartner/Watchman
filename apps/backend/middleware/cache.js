@@ -1,21 +1,26 @@
 import NodeCache from "node-cache";
 
+// Cache TTL values (in seconds) - configurable via environment variables
+const CACHE_HEALTH_TTL = parseInt(process.env.CACHE_HEALTH_TTL) || 10;
+const CACHE_STATS_TTL = parseInt(process.env.CACHE_STATS_TTL) || 30;
+const CACHE_LONGTERM_TTL = parseInt(process.env.CACHE_LONGTERM_TTL) || 300;
+
 // Cache instances with different TTL strategies
 const healthCache = new NodeCache({
-  stdTTL: 10, // 10 seconds for health checks
-  checkperiod: 15,
+  stdTTL: CACHE_HEALTH_TTL, // Configurable, default 10 seconds for health checks
+  checkperiod: Math.ceil(CACHE_HEALTH_TTL * 1.5),
   useClones: false, // Better performance for simple objects
 });
 
 const statsCache = new NodeCache({
-  stdTTL: 30, // 30 seconds for stats
-  checkperiod: 45,
+  stdTTL: CACHE_STATS_TTL, // Configurable, default 30 seconds for stats
+  checkperiod: Math.ceil(CACHE_STATS_TTL * 1.5),
   useClones: false,
 });
 
 const longTermCache = new NodeCache({
-  stdTTL: 300, // 5 minutes for less frequently changing data
-  checkperiod: 360,
+  stdTTL: CACHE_LONGTERM_TTL, // Configurable, default 5 minutes for less frequently changing data
+  checkperiod: Math.ceil(CACHE_LONGTERM_TTL * 1.2),
   useClones: false,
 });
 
@@ -60,12 +65,12 @@ export const cacheMiddleware = (cache, keyGenerator = (req) => req.url) => {
             console.warn(
               "⚠️ Failed to set cache for",
               key,
-              e && e.message ? e.message : e
+              e && e.message ? e.message : e,
             );
           }
         }
-      } catch (e) {
-        // ignore
+      } catch (_e) {
+        // Cache error ignored to prevent request blocking
       }
       return originalJson(data);
     };
@@ -98,9 +103,3 @@ export const clearCache = (type = "all") => {
   }
   console.info(`🗑️ Cleared ${type} cache`);
 };
-
-export const getCacheStats = () => ({
-  health: healthCache.getStats(),
-  stats: statsCache.getStats(),
-  longterm: longTermCache.getStats(),
-});
