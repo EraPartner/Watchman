@@ -57,15 +57,9 @@ const validateEnvironment = () => {
     missingRecommended.forEach((envVar) => console.warn(`  - ${envVar}`));
   }
 
-  // Validate JWT_SECRET strength in production
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.JWT_SECRET &&
-    process.env.JWT_SECRET.length < 32
-  ) {
-    console.error(
-      "❌ JWT_SECRET must be at least 32 characters long in production",
-    );
+  // Validate JWT_SECRET strength in all environments to avoid weak local setups
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+    console.error("❌ JWT_SECRET must be at least 32 characters long");
     process.exit(1);
   }
 
@@ -131,21 +125,21 @@ const parseServiceInstances = (serviceType) => {
   const instances = [];
   const envVars = Object.keys(process.env);
   const upperServiceType = serviceType.toUpperCase();
-  
+
   // Check for numbered instances (e.g., QBITTORRENT_1_URL, QBITTORRENT_2_URL)
   const instancePattern = new RegExp(`^${upperServiceType}_(\\d+)_`);
   const instanceNumbers = new Set();
-  
+
   envVars.forEach((key) => {
     const match = key.match(instancePattern);
     if (match) {
       instanceNumbers.add(parseInt(match[1]));
     }
   });
-  
+
   // Sort instance numbers
   const sortedInstances = Array.from(instanceNumbers).sort((a, b) => a - b);
-  
+
   // Build instance configurations
   sortedInstances.forEach((instanceNum) => {
     const prefix = `${upperServiceType}_${instanceNum}_`;
@@ -153,7 +147,7 @@ const parseServiceInstances = (serviceType) => {
       instanceId: `${serviceType}_${instanceNum}`,
       instanceNumber: instanceNum,
     };
-    
+
     // Collect all env vars for this instance
     envVars.forEach((key) => {
       if (key.startsWith(prefix)) {
@@ -161,16 +155,16 @@ const parseServiceInstances = (serviceType) => {
         instanceConfig[configKey] = process.env[key];
       }
     });
-    
+
     instances.push(instanceConfig);
   });
-  
+
   // If no numbered instances found, check for legacy single instance config
   if (instances.length === 0) {
     const legacyConfig = {};
     const legacyPrefix = `${upperServiceType}_`;
     let hasLegacyConfig = false;
-    
+
     envVars.forEach((key) => {
       if (key.startsWith(legacyPrefix) && !key.match(/^\w+_\d+_/)) {
         const configKey = key.substring(legacyPrefix.length).toLowerCase();
@@ -178,7 +172,7 @@ const parseServiceInstances = (serviceType) => {
         hasLegacyConfig = true;
       }
     });
-    
+
     if (hasLegacyConfig) {
       instances.push({
         instanceId: serviceType,
@@ -187,7 +181,7 @@ const parseServiceInstances = (serviceType) => {
       });
     }
   }
-  
+
   return instances;
 };
 

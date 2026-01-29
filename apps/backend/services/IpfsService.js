@@ -31,28 +31,24 @@ export default class IpfsService {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     const doRequest = async (reqMethod = "GET") => {
-      try {
-        let opts;
-        if (reqMethod === "GET") {
-          opts = {
-            signal: controller.signal,
-            agent: url.startsWith("https:") ? httpsAgent : httpAgent,
-          };
-        } else {
-          // Some proxies / setups require POST requests to have a Content-Type and a body
-          opts = {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: "",
-            signal: controller.signal,
-            agent: url.startsWith("https:") ? httpsAgent : httpAgent,
-          };
-        }
-        const res = await fetch(url, opts);
-        return res;
-      } catch (err) {
-        throw err;
+      let opts;
+      if (reqMethod === "GET") {
+        opts = {
+          signal: controller.signal,
+          agent: url.startsWith("https:") ? httpsAgent : httpAgent,
+        };
+      } else {
+        // Some proxies / setups require POST requests to have a Content-Type and a body
+        opts = {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "",
+          signal: controller.signal,
+          agent: url.startsWith("https:") ? httpsAgent : httpAgent,
+        };
       }
+      const res = await fetch(url, opts);
+      return res;
     };
 
     try {

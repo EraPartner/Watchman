@@ -52,7 +52,9 @@ export function requireString(field, options = {}) {
 export function sanitizeString(str) {
   if (typeof str !== "string") return "";
   // Remove control characters and null bytes
-  return str.replace(/[\x00-\x1F\x7F]/g, "").trim();
+  // eslint-disable-next-line no-control-regex
+  const CONTROL_CHARS_REGEX = new RegExp("[\\u0000-\\u001F\\u007F]", "g");
+  return str.replace(CONTROL_CHARS_REGEX, "").trim();
 }
 
 /**

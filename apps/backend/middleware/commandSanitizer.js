@@ -23,7 +23,7 @@ const ALLOWED_COMMANDS = new Set([
 ]);
 
 // Dangerous characters that could be used for command injection
-const DANGEROUS_CHARS = /[;&|`$(){}[\]<>\\'\"\n\r]/;
+const DANGEROUS_CHARS = new RegExp("[;&|`$(){}\\[\\]<>\\'\"\\n\\r]");
 
 // Whitelist approach - only allow specific safe patterns
 const SAFE_ARGUMENT_PATTERN = /^[a-zA-Z0-9_\-./=:@]+$/;

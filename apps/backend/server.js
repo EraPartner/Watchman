@@ -77,22 +77,62 @@ const app = express();
 app.set("trust proxy", 1);
 const server = createServer(app);
 const PORT = config.server.port;
-const FRONTEND_URL = config.server.frontendUrl;
+const FRONTEND_URLS = (config.server.frontendUrl || "")
+  .split(/[ ,]+/)
+  .map((o) => o.trim())
+  .filter(Boolean);
+const FRONTEND_URL = FRONTEND_URLS[0] || config.server.frontendUrl;
+const COOKIE_DOMAIN_OVERRIDE = process.env.COOKIE_DOMAIN || null;
+const DISABLE_COOKIE_DOMAIN =
+  (process.env.COOKIE_STRICT_DOMAIN || "").toLowerCase() === "false" ||
+  FRONTEND_URLS.length > 1;
+const COOKIE_DOMAIN =
+  DISABLE_COOKIE_DOMAIN && !COOKIE_DOMAIN_OVERRIDE
+    ? null
+    : COOKIE_DOMAIN_OVERRIDE ||
+      (() => {
+        try {
+          return FRONTEND_URL ? new URL(FRONTEND_URL).hostname : null;
+        } catch (_err) {
+          return null;
+        }
+      })();
+const FRONTEND_HTTPS = FRONTEND_URLS.some((url) => url?.startsWith("https://"));
+const APP_VERSION = (() => {
+  const candidates = [
+    join(__dirname, "package.json"),
+    join(__dirname, "..", "package.json"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(p, "utf8"));
+        if (pkg && pkg.version) return pkg.version;
+      } catch (_err) {
+        // ignore parse errors
+      }
+    }
+  }
+  return "1.0.0";
+})();
 
 // Production security checks
 if (process.env.NODE_ENV === "production") {
   // Enforce FRONTEND_URL in production to avoid open CORS
-  if (!FRONTEND_URL || FRONTEND_URL === "*") {
+  if (FRONTEND_URLS.length === 0) {
     console.error(
-      "❌ FRONTEND_URL must be set to your frontend origin in production to avoid open CORS.",
+      "❌ FRONTEND_URL must be set to your frontend origin(s) in production to avoid open CORS.",
     );
     process.exit(1);
   }
 
   // Ensure HTTPS in production
-  if (!FRONTEND_URL.startsWith("https://")) {
+  const nonHttpsOrigins = FRONTEND_URLS.filter(
+    (url) => !url.startsWith("https://"),
+  );
+  if (nonHttpsOrigins.length > 0) {
     console.warn(
-      "⚠️  WARNING: FRONTEND_URL should use HTTPS in production for security",
+      "⚠️  WARNING: All FRONTEND_URL origins should use HTTPS in production for security",
     );
   }
 
@@ -108,16 +148,10 @@ if (process.env.NODE_ENV === "production") {
 // Cookie defaults with improved security
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure:
-    process.env.NODE_ENV === "production" &&
-    FRONTEND_URL?.startsWith("https://"),
+  secure: process.env.NODE_ENV === "production" ? FRONTEND_HTTPS : false,
   sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
   path: "/",
-  // Add domain for production
-  ...(process.env.NODE_ENV === "production" &&
-    FRONTEND_URL && {
-      domain: new URL(FRONTEND_URL).hostname,
-    }),
+  ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
 };
 
 // Initialize service manager and WebSocket
@@ -214,23 +248,25 @@ app.use(
     origin: (origin, callback) => {
       // Allow same-origin or explicit FRONTEND_URL; block others in production
       if (!origin) return callback(null, true);
-      
+
       // Validate that FRONTEND_URL is properly configured
       if (!FRONTEND_URL || FRONTEND_URL === "*") {
         if (process.env.NODE_ENV === "production") {
-          return callback(new Error("CORS: FRONTEND_URL not configured in production"));
+          return callback(
+            new Error("CORS: FRONTEND_URL not configured in production"),
+          );
         }
         // Allow any origin in development if not configured
         return callback(null, true);
       }
-      
+
       // Validate the format of the origin
       try {
         new URL(origin);
       } catch (e) {
         return callback(new Error("CORS: Invalid origin format"));
       }
-      
+
       // Check if origin matches FRONTEND_URL
       const allowed = [FRONTEND_URL];
       if (!allowed.includes(origin)) {
@@ -240,7 +276,7 @@ app.use(
         // More permissive in development
         return callback(null, true);
       }
-      
+
       return callback(null, true);
     },
     credentials: true,
@@ -429,7 +465,7 @@ app.get(
   async (req, res) => {
     try {
       const { serviceId } = req.params;
-      
+
       // Check if this is a valid service instance
       const service = serviceManager.getService(serviceId);
       if (!service) {
@@ -442,7 +478,10 @@ app.get(
       const health = await serviceManager.getServiceHealth(serviceId);
       res.json(health);
     } catch (error) {
-      console.error(`❌ Service ${req.params.serviceId} status failed:`, error.message);
+      console.error(
+        `❌ Service ${req.params.serviceId} status failed:`,
+        error.message,
+      );
       res.status(500).json({
         error: `Failed to fetch ${req.params.serviceId} status`,
         status: "offline",
@@ -458,7 +497,7 @@ app.get(
   async (req, res) => {
     try {
       const { serviceId } = req.params;
-      
+
       // Check if this is a valid service instance
       const service = serviceManager.getService(serviceId);
       if (!service) {
@@ -470,7 +509,10 @@ app.get(
       const stats = await serviceManager.getServiceStats(serviceId);
       res.json(stats);
     } catch (error) {
-      console.error(`❌ Service ${req.params.serviceId} stats failed:`, error.message);
+      console.error(
+        `❌ Service ${req.params.serviceId} stats failed:`,
+        error.message,
+      );
       res.status(500).json({
         error: `Failed to fetch ${req.params.serviceId} stats`,
         message: error.message,
@@ -1627,18 +1669,18 @@ app.get("/api/services/instances", healthLimiter, (req, res) => {
   try {
     const serviceTypes = serviceManager.getServiceTypes();
     const instancesInfo = {};
-    
+
     for (const serviceType of serviceTypes) {
       const instances = serviceManager.getServiceInstances(serviceType);
       instancesInfo[serviceType] = {
         count: instances.length,
-        instances: instances.map(instanceId => ({
+        instances: instances.map((instanceId) => ({
           id: instanceId,
           type: serviceType,
         })),
       };
     }
-    
+
     res.json({
       instances: instancesInfo,
       timestamp: new Date().toISOString(),
