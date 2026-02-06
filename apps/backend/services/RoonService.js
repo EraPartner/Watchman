@@ -13,8 +13,8 @@ class RoonService {
     const portsSource = Array.isArray(portsEnv)
       ? portsEnv
       : typeof portsEnv === "number"
-      ? String(portsEnv)
-      : String(portsEnv || "");
+        ? String(portsEnv)
+        : String(portsEnv || "");
     this.ports = Array.isArray(portsSource)
       ? portsSource.map((p) => parseInt(p, 10)).filter(Boolean)
       : String(portsSource)
@@ -193,8 +193,8 @@ class RoonService {
             pingResultRaw.stdout && pingResultRaw.stdout.trim()
               ? pingResultRaw.stdout.trim()
               : pingResultRaw.stderr && pingResultRaw.stderr.trim()
-              ? pingResultRaw.stderr.trim()
-              : "No ping output";
+                ? pingResultRaw.stderr.trim()
+                : "No ping output";
         } else if (typeof pingResultRaw === "boolean") {
           pingResult = pingResultRaw;
           pingOutput = null;

@@ -2,6 +2,7 @@ import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
+import { logger } from "../middleware/logger.js";
 
 const execAsync = promisify(exec);
 
@@ -17,28 +18,33 @@ class TorManager {
   }
 
   async initialize() {
-    console.log("🔧 Initializing Tor Manager...");
+    logger.service("tor", "Initializing Tor Manager");
 
     try {
       // Check if Tor is installed
       const installed = await this.isInstalled();
       if (!installed) {
-        console.log("⚠️  Tor is not installed, but manager is ready");
+        logger.warning("Tor is not installed, but manager is ready");
         return true;
       }
 
       // Check if Tor is already running
       const running = await this.isRunning();
       if (running) {
-        console.log("✅ Tor is already running on port", this.socksPort);
+        logger.service(
+          "tor",
+          `Tor is already running on port ${this.socksPort}`
+        );
       } else {
-        console.log("ℹ️  Tor is installed but not running");
+        logger.service("tor", "Tor is installed but not running");
       }
 
-      console.log("✅ Tor Manager initialized successfully");
+      logger.service("tor", "Tor Manager initialized successfully");
       return true;
     } catch (error) {
-      console.error("❌ Failed to initialize Tor Manager:", error.message);
+      logger.error("Failed to initialize Tor Manager", {
+        error: error.message,
+      });
       return false;
     }
   }
@@ -58,13 +64,13 @@ class TorManager {
   }
 
   async installTor() {
-    console.log("📦 Installing Tor via Homebrew...");
+    logger.progress("Installing Tor via Homebrew");
     try {
       await execAsync("brew install tor");
-      console.log("✅ Tor installed successfully");
+      logger.success("Tor installed successfully");
       return true;
     } catch (error) {
-      console.error("❌ Failed to install Tor:", error.message);
+      logger.error("Failed to install Tor", { error: error.message });
       return false;
     }
   }
@@ -98,12 +104,12 @@ Log notice stdout
 
   async startTor() {
     if (this.isStarting) {
-      console.log("⏳ Tor is already starting...");
+      logger.progress("Tor is already starting");
       return;
     }
 
     if (await this.isRunning()) {
-      console.log("✅ Tor is already running on port", this.socksPort);
+      logger.service("tor", `Tor is already running on port ${this.socksPort}`);
       return true;
     }
 
@@ -112,7 +118,7 @@ Log notice stdout
     try {
       // Check if Tor is installed
       if (!(await this.isInstalled())) {
-        console.log("🔧 Tor not found, attempting to install...");
+        logger.progress("Tor not found, attempting to install");
         const installed = await this.installTor();
         if (!installed) {
           throw new Error("Failed to install Tor");
@@ -121,7 +127,10 @@ Log notice stdout
 
       // Create Tor config
       const configPath = await this.createTorConfig();
-      console.log("🚀 Starting Tor with SOCKS proxy on port", this.socksPort);
+      logger.service(
+        "tor",
+        `Starting Tor with SOCKS proxy on port ${this.socksPort}`
+      );
 
       // Start Tor process
       this.torProcess = spawn("tor", ["-f", configPath], {
@@ -131,13 +140,14 @@ Log notice stdout
 
       // Handle process events
       this.torProcess.on("error", (error) => {
-        console.error("❌ Tor process error:", error.message);
+        logger.error("Tor process error", { error: error.message });
         this.isStarting = false;
       });
 
       this.torProcess.on("exit", (code, signal) => {
-        console.log(
-          `🛑 Tor process exited with code ${code}, signal ${signal}`
+        logger.service(
+          "tor",
+          `Tor process exited with code ${code}, signal ${signal}`
         );
         this.torProcess = null;
         this.isStarting = false;
@@ -147,19 +157,17 @@ Log notice stdout
       this.torProcess.stdout.on("data", (data) => {
         const output = data.toString();
         if (output.includes("Bootstrapped 100%") || output.includes("Done")) {
-          console.log("✅ Tor is ready and running");
+          logger.service("tor", "Tor is ready and running");
         } else if (output.includes("Bootstrapped")) {
-          console.log(
-            "⏳ Tor bootstrapping...",
-            output.match(/Bootstrapped \d+%/)?.[0] || ""
-          );
+          const progress = output.match(/Bootstrapped \d+%/)?.[0] || "";
+          logger.progress(`Tor bootstrapping... ${progress}`);
         }
       });
 
       this.torProcess.stderr.on("data", (data) => {
         const error = data.toString();
         if (!error.includes("Bootstrapped") && !error.includes("notice")) {
-          console.error("🔧 Tor:", error.trim());
+          logger.debug(`Tor: ${error.trim()}`);
         }
       });
 
@@ -167,7 +175,7 @@ Log notice stdout
       const startTime = Date.now();
       while (Date.now() - startTime < this.startupTimeout) {
         if (await this.isRunning()) {
-          console.log("✅ Tor proxy is ready on port", this.socksPort);
+          logger.service("tor", `Tor proxy is ready on port ${this.socksPort}`);
           this.isStarting = false;
           return true;
         }
@@ -176,7 +184,7 @@ Log notice stdout
 
       throw new Error("Tor startup timeout");
     } catch (error) {
-      console.error("❌ Failed to start Tor:", error.message);
+      logger.error("Failed to start Tor", { error: error.message });
       this.isStarting = false;
       await this.stopTor();
       return false;
@@ -185,7 +193,7 @@ Log notice stdout
 
   async stopTor() {
     if (this.torProcess) {
-      console.log("🛑 Stopping Tor process...");
+      logger.progress("Stopping Tor process");
       this.torProcess.kill("SIGTERM");
 
       // Wait for graceful shutdown
@@ -211,9 +219,9 @@ Log notice stdout
     await this.stopTor();
     try {
       await fs.rm(this.dataDir, { recursive: true, force: true });
-      console.log("🧹 Cleaned up Tor data directory");
+      logger.success("Cleaned up Tor data directory");
     } catch (error) {
-      console.warn("⚠️  Could not clean up Tor data directory:", error.message);
+      logger.warning(`Could not clean up Tor data directory: ${error.message}`);
     }
   }
 

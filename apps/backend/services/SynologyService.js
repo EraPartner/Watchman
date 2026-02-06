@@ -1,5 +1,6 @@
 import { exec } from "child_process";
 import { promisify } from "util";
+import { logger } from "../middleware/logger.js";
 
 const execAsync = promisify(exec);
 
@@ -69,17 +70,19 @@ class SynologyService {
 
       await Promise.race([execAsync("which snmpget"), timeoutPromise]);
 
-      console.log(
-        `✅ System SNMP tools available for Synology NAS (${process.env.SYNOLOGY_HOST})`
+      logger.service(
+        "synology",
+        `System SNMP tools available for Synology NAS (${process.env.SYNOLOGY_HOST})`
       );
-      console.log(
+      logger.service(
+        "synology",
         `Using SNMPv3 with user: ${process.env.SYNOLOGY_SNMP_USERNAME}`
       );
 
       this.isConnected = true;
     } catch (error) {
-      console.error("❌ System SNMP tools not available:", error.message);
-      console.error(
+      logger.error("System SNMP tools not available", { error: error.message });
+      logger.error(
         "Please install net-snmp tools: brew install net-snmp (macOS) or apt-get install snmp (Linux)"
       );
       this.isConnected = false;

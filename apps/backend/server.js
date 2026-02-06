@@ -54,6 +54,9 @@ const exec = promisify(execCb);
 
 // Load environment variables
 // Support both dev (server.js) and production (dist/server.js) paths
+// Suppress verbose dotenv output
+process.env.DOTENV_QUIET = "true";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const envPath = join(__dirname, ".env.local");
@@ -120,26 +123,26 @@ const APP_VERSION = (() => {
 if (process.env.NODE_ENV === "production") {
   // Enforce FRONTEND_URL in production to avoid open CORS
   if (FRONTEND_URLS.length === 0) {
-    console.error(
-      "❌ FRONTEND_URL must be set to your frontend origin(s) in production to avoid open CORS.",
+    logger.error(
+      "FRONTEND_URL must be set to your frontend origin(s) in production to avoid open CORS."
     );
     process.exit(1);
   }
 
   // Ensure HTTPS in production
   const nonHttpsOrigins = FRONTEND_URLS.filter(
-    (url) => !url.startsWith("https://"),
+    (url) => !url.startsWith("https://")
   );
   if (nonHttpsOrigins.length > 0) {
-    console.warn(
-      "⚠️  WARNING: All FRONTEND_URL origins should use HTTPS in production for security",
+    logger.warning(
+      "All FRONTEND_URL origins should use HTTPS in production for security"
     );
   }
 
   // Validate JWT secret is set and strong
   if (!config.auth.jwtSecret || config.auth.jwtSecret.length < 32) {
-    console.error(
-      "❌ JWT_SECRET must be at least 32 characters long in production",
+    logger.error(
+      "JWT_SECRET must be at least 32 characters long in production"
     );
     process.exit(1);
   }
@@ -158,28 +161,63 @@ const COOKIE_OPTIONS = {
 let serviceManager;
 let httpServerInstance = null;
 
-// Global error handlers for production
-process.on("uncaughtException", (err) => {
-  console.error("💥 Uncaught Exception:", err);
+/**
+ * Global error handlers for production-ready error management
+ * Ensures graceful handling of unexpected errors and proper logging
+ */
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught Exception - Critical Error", {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+  });
+
   if (process.env.NODE_ENV === "production") {
-    // Graceful shutdown
+    // Perform graceful shutdown in production
+    handleGracefulShutdown("uncaughtException");
+  } else {
+    // In development, still exit but with more visible error
+    console.error("💥 Uncaught Exception:", error);
     process.exit(1);
   }
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("💥 Unhandled Rejection at:", promise, "reason:", reason);
+  logger.error("Unhandled Promise Rejection", {
+    reason: reason?.toString() || "Unknown reason",
+    promise: promise.toString(),
+    timestamp: new Date().toISOString(),
+  });
+
   if (process.env.NODE_ENV === "production") {
-    // Graceful shutdown
+    // Perform graceful shutdown in production
+    handleGracefulShutdown("unhandledRejection");
+  } else {
+    // In development, still exit but with more visible error
+    console.error("💥 Unhandled Rejection:", reason);
     process.exit(1);
   }
 });
 
+/**
+ * Process signal handlers for graceful shutdown
+ * Handles SIGINT (Ctrl+C) and SIGTERM signals
+ */
+process.on("SIGINT", () => {
+  logger.info("Received SIGINT signal, initiating graceful shutdown");
+  handleGracefulShutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  logger.info("Received SIGTERM signal, initiating graceful shutdown");
+  handleGracefulShutdown("SIGTERM");
+});
+
 async function initializeServer() {
-  logger.info("Initializing Watchman Backend Server...");
-  logger.info(`Environment: ${process.env.NODE_ENV || "development"}`);
-  logger.info(`Frontend URL: ${FRONTEND_URL}`);
-  logger.info(`Port: ${PORT}`);
+  logger.startup("Initializing Watchman Backend Server");
+  logger.startup(`Environment: ${process.env.NODE_ENV || "development"}`);
+  logger.startup(`Frontend URL: ${FRONTEND_URL}`);
+  logger.startup(`Port: ${PORT}`);
 
   try {
     serviceManager = new ServiceManager();
@@ -188,7 +226,7 @@ async function initializeServer() {
     // Initialize WebSocket server
     WebSocketManager.initialize(server);
 
-    logger.info("Service initialization complete");
+    logger.success("Service initialization complete");
   } catch (error) {
     logger.error("Failed to initialize services", { error });
     process.exit(1);
@@ -228,15 +266,31 @@ app.use(
     hidePoweredBy: true,
     frameguard: { action: "deny" },
     permittedCrossDomainPolicies: { permittedPolicies: "none" },
-  }),
+  })
 );
 
-// Add Permissions-Policy header
+// Add Permissions-Policy header and enhanced security headers
 app.use((req, res, next) => {
   res.setHeader(
     "Permissions-Policy",
-    "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()",
+    "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
   );
+
+  // Add additional security headers for production-ready deployment
+  res.setHeader("X-Request-ID", req.id || "unknown");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Download-Options", "noopen");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate"
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  // Remove server information
+  res.removeHeader("X-Powered-By");
+
   next();
 });
 
@@ -253,7 +307,7 @@ app.use(
       if (!FRONTEND_URL || FRONTEND_URL === "*") {
         if (process.env.NODE_ENV === "production") {
           return callback(
-            new Error("CORS: FRONTEND_URL not configured in production"),
+            new Error("CORS: FRONTEND_URL not configured in production")
           );
         }
         // Allow any origin in development if not configured
@@ -281,20 +335,20 @@ app.use(
     },
     credentials: true,
     maxAge: 86400, // 24 hours
-  }),
+  })
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
 // Serve Swagger API documentation
 const swaggerDocument = YAML.load(
-  fs.readFileSync(join(__dirname, "api-docs.yaml"), "utf8"),
+  fs.readFileSync(join(__dirname, "api-docs.yaml"), "utf8")
 );
 
 app.use(
   "/api/docs",
   swaggerUi.serve,
-  swaggerUi.setup(swaggerDocument, { explorer: true }),
+  swaggerUi.setup(swaggerDocument, { explorer: true })
 );
 
 // Apply rate limiting
@@ -344,7 +398,7 @@ app.post(
       logger.error("Login error", { error: error.message });
       res.status(500).json({ message: "Internal server error" });
     }
-  },
+  }
 );
 
 app.post("/api/auth/logout", requireAuth, async (req, res) => {
@@ -408,7 +462,7 @@ app.post(
 
     clearCache(type);
     res.json({ success: true, message: `Cache cleared: ${type || "all"}` });
-  },
+  }
 );
 
 // AdGuard protection endpoint - require boolean 'enabled' and optional numeric 'duration'
@@ -438,7 +492,10 @@ app.post(
       }
 
       await adguardService.setProtection(enabled, duration);
-      console.log(`✅ AdGuard protection ${enabled ? "enabled" : "disabled"}`);
+      logger.service(
+        "adguard",
+        `Protection ${enabled ? "enabled" : "disabled"}`
+      );
 
       // Clear cache after control actions
       clearCache("health");
@@ -446,13 +503,15 @@ app.post(
 
       res.json({ success: true });
     } catch (error) {
-      console.error("❌ AdGuard protection toggle failed:", error.message);
+      logger.error("AdGuard protection toggle failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to toggle AdGuard protection",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Generic multi-instance service endpoints (handle instanceId patterns like qbittorrent_1, qbittorrent_2)
@@ -480,7 +539,7 @@ app.get(
     } catch (error) {
       console.error(
         `❌ Service ${req.params.serviceId} status failed:`,
-        error.message,
+        error.message
       );
       res.status(500).json({
         error: `Failed to fetch ${req.params.serviceId} status`,
@@ -488,11 +547,12 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
   "/api/:serviceId(\\w+_\\d+)/stats",
+  requireAuth, // Add authentication requirement
   statsCacheMiddleware,
   async (req, res) => {
     try {
@@ -511,14 +571,14 @@ app.get(
     } catch (error) {
       console.error(
         `❌ Service ${req.params.serviceId} stats failed:`,
-        error.message,
+        error.message
       );
       res.status(500).json({
         error: `Failed to fetch ${req.params.serviceId} stats`,
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Specific service endpoints (kept for backward compatibility with hardcoded service names)
@@ -539,21 +599,24 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("adguard");
-      console.log(`✅ AdGuard status connection successful`);
+      logger.debug("AdGuard status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ AdGuard status connection failed:", error.message);
+      logger.error("AdGuard status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch AdGuard status",
         status: "offline",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
   "/api/adguard/stats",
+  requireAuth, // Add authentication requirement
   requireServiceEnabled("adguard"),
   statsCacheMiddleware,
   async (req, res) => {
@@ -566,16 +629,16 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("adguard");
-      console.log(`✅ AdGuard stats connection successful`);
+      logger.info("[SUCCESS] AdGuard stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ AdGuard stats connection failed:", error.message);
+      logger.error("AdGuard stats connection failed", { error: error.message });
       res.status(500).json({
         error: "Failed to fetch AdGuard stats",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // AdGuard update check endpoint
@@ -593,16 +656,15 @@ app.get(
       }
 
       const updateInfo = await adguardService.checkForUpdates();
-      console.log(`✅ AdGuard update check successful`);
       res.json(updateInfo);
     } catch (error) {
-      console.error("❌ AdGuard update check failed:", error.message);
+      logger.error("AdGuard update check failed", { error: error.message });
       res.status(500).json({
         error: "Failed to check for AdGuard updates",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Bitcoin API endpoints
@@ -622,17 +684,19 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("bitcoin");
-      console.log(`✅ Bitcoin health connection successful`);
+      logger.info("[SUCCESS] Bitcoin health connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Bitcoin health connection failed:", error.message);
+      logger.error("Bitcoin health connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Bitcoin health",
         status: "offline",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -651,17 +715,19 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("bitcoin");
-      console.log(`✅ Bitcoin status connection successful`);
+      logger.info("[SUCCESS] Bitcoin status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Bitcoin status connection failed:", error.message);
+      logger.error("Bitcoin status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Bitcoin status",
         status: "offline",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -678,16 +744,16 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("bitcoin");
-      console.log(`✅ Bitcoin stats connection successful`);
+      logger.debug("Bitcoin stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Bitcoin stats connection failed:", error.message);
+      logger.error("Bitcoin stats connection failed", { error: error.message });
       res.status(500).json({
         error: "Failed to fetch Bitcoin stats",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Bitcoin update check endpoint
@@ -705,7 +771,6 @@ app.get(
       }
 
       const updateInfo = await bitcoinService.checkForUpdates();
-      console.log(`✅ Bitcoin update check successful`);
       res.json(updateInfo);
     } catch (error) {
       console.error("❌ Bitcoin update check failed:", error.message);
@@ -714,7 +779,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // qBittorrent API endpoints
@@ -734,17 +799,19 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("qbittorrent");
-      console.log(`✅ qBittorrent status connection successful`);
+      logger.info("[SUCCESS] qBittorrent status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ qBittorrent status connection failed:", error.message);
+      logger.error("qBittorrent status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch qBittorrent status",
         status: "offline",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -761,16 +828,18 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("qbittorrent");
-      console.log(`✅ qBittorrent stats connection successful`);
+      logger.info("[SUCCESS] qBittorrent stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ qBittorrent stats connection failed:", error.message);
+      logger.error("qBittorrent stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch qBittorrent stats",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // IPFS API endpoints
@@ -789,17 +858,17 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("ipfs");
-      console.log(`✅ IPFS status connection successful`);
+      logger.info("[SUCCESS] IPFS status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ IPFS status connection failed:", error.message);
+      logger.error("IPFS status connection failed", { error: error.message });
       res.status(500).json({
         error: "Failed to fetch IPFS status",
         status: "offline",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -814,21 +883,22 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("ipfs");
-      console.log(`✅ IPFS stats connection successful`);
+      logger.info("[SUCCESS] IPFS stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ IPFS stats connection failed:", error.message);
+      logger.error("IPFS stats connection failed", { error: error.message });
       res.status(500).json({
         error: "Failed to fetch IPFS stats",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // IPFS update check endpoint
 app.get(
   "/api/ipfs/updates",
+  requireAuth,
   requireServiceEnabled("ipfs"),
   statsCacheMiddleware,
   async (req, res) => {
@@ -839,7 +909,6 @@ app.get(
       }
 
       const updateInfo = await ipfsService.checkForUpdates();
-      console.log(`✅ IPFS update check successful`);
       res.json(updateInfo);
     } catch (error) {
       console.error("❌ IPFS update check failed:", error.message);
@@ -848,7 +917,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Roon (ROCK) API endpoints
@@ -875,7 +944,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -899,7 +968,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Tor API endpoints
@@ -915,16 +984,16 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("tor");
-      console.log(`✅ Tor relay connection successful`);
+      logger.info("Tor relay connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Tor relay connection failed:", error.message);
+      logger.error("Tor relay connection failed", { error: error.message });
       res.status(500).json({
         error: "Failed to fetch Tor relay data",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -949,7 +1018,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Tor update check endpoint
@@ -965,7 +1034,6 @@ app.get(
       }
 
       const updateInfo = await torService.checkForUpdates();
-      console.log(`✅ Tor update check successful`);
       res.json(updateInfo);
     } catch (error) {
       console.error("❌ Tor update check failed:", error.message);
@@ -974,7 +1042,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Synology NAS API endpoints
@@ -1004,7 +1072,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -1042,7 +1110,7 @@ app.get(
         timestamp: new Date().toISOString(),
       });
     }
-  },
+  }
 );
 
 // Philips Bridge endpoints
@@ -1067,7 +1135,7 @@ app.get(
     } catch (error) {
       console.error(
         "❌ Philips Bridge status connection failed:",
-        error.message,
+        error.message
       );
       res.status(500).json({
         error: "Failed to fetch Philips Bridge status",
@@ -1075,7 +1143,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -1097,14 +1165,14 @@ app.get(
     } catch (error) {
       console.error(
         "❌ Philips Bridge stats connection failed:",
-        error.message,
+        error.message
       );
       res.status(500).json({
         error: "Failed to fetch Philips Bridge stats",
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // New status endpoints under /api/status/* to match requested API shape (only allowed endpoints)
@@ -1141,7 +1209,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -1176,7 +1244,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Homebridge endpoints
@@ -1206,7 +1274,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -1232,7 +1300,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Homebridge update check endpoint
@@ -1250,7 +1318,6 @@ app.get(
       }
 
       const updateInfo = await hbService.checkForUpdates();
-      console.log(`✅ Homebridge update check successful`);
       res.json(updateInfo);
     } catch (error) {
       console.error("❌ Homebridge update check failed:", error.message);
@@ -1259,7 +1326,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // New: expose accessories endpoint
@@ -1293,7 +1360,7 @@ app.get(
         .status(500)
         .json({ error: "Failed to fetch accessories", message: error.message });
     }
-  },
+  }
 );
 
 // Alby Hub endpoints
@@ -1323,7 +1390,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -1349,7 +1416,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Mac Mini endpoints: status and stats
@@ -1379,7 +1446,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -1405,7 +1472,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 // Raspberry Pi endpoints
@@ -1435,7 +1502,7 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
 app.get(
@@ -1461,52 +1528,59 @@ app.get(
         message: error.message,
       });
     }
-  },
+  }
 );
 
-// Get health of all enabled services
-app.get("/api/services/health", healthLimiter, async (req, res) => {
-  try {
-    const config = getConfig();
-    const enabledServices = config.enabledServices;
+// Get health of all enabled services - REQUIRES AUTHENTICATION
+app.get(
+  "/api/services/health",
+  healthLimiter,
+  requireAuth,
+  async (req, res) => {
+    try {
+      const config = getConfig();
+      const enabledServices = config.enabledServices;
 
-    // Only check health for enabled services
-    const healthResults = {};
+      // Only check health for enabled services
+      const healthResults = {};
 
-    for (const serviceName of enabledServices) {
-      try {
-        healthResults[serviceName] =
-          await serviceManager.getServiceHealth(serviceName);
-      } catch (error) {
-        healthResults[serviceName] = {
-          status: "offline",
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        };
+      for (const serviceName of enabledServices) {
+        try {
+          healthResults[serviceName] =
+            await serviceManager.getServiceHealth(serviceName);
+        } catch (error) {
+          healthResults[serviceName] = {
+            status: "offline",
+            error: error.message,
+            timestamp: new Date().toISOString(),
+          };
+        }
       }
-    }
 
-    res.json({
-      services: healthResults,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("❌ Services health check failed:", error.message);
-    res.status(500).json({
-      error: "Failed to check services health",
-      message: error.message,
-    });
+      res.json({
+        services: healthResults,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("❌ Services health check failed:", error.message);
+      res.status(500).json({
+        error: "Failed to check services health",
+        message: error.message,
+      });
+    }
   }
-});
+);
 
 // Frontend configuration endpoint
 app.get("/api/config/frontend", (req, res) => {
   const enabledServices = config.enabledServices;
 
   // Debug logging
-  console.log("🔍 Frontend config requested");
-  console.log("📋 Enabled services:", enabledServices);
-  console.log("📋 ENABLED_SERVICES env:", process.env.ENABLED_SERVICES);
+  logger.debug("Frontend config requested");
+  logger.debug("Enabled services", {
+    enabledServices: Array.from(enabledServices),
+  });
+  logger.debug("ENABLED_SERVICES env", { value: process.env.ENABLED_SERVICES });
 
   res.json({
     enabledServices: Array.from(enabledServices),
@@ -1665,7 +1739,7 @@ app.get("/api/config/frontend", (req, res) => {
 });
 
 // Service instances endpoint - returns metadata about multi-instance services
-app.get("/api/services/instances", healthLimiter, (req, res) => {
+app.get("/api/services/instances", healthLimiter, requireAuth, (req, res) => {
   try {
     const serviceTypes = serviceManager.getServiceTypes();
     const instancesInfo = {};
@@ -1746,7 +1820,7 @@ app.get(
           // ignore failed/incomplete entries
           if (/\b(INCOMPLETE|FAILED)\b/i.test(line)) continue;
           const m = line.match(
-            /^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+)(?:.*lladdr\s+([0-9a-f:]{5,}))?(?:.*\b(REACHABLE|STALE|DELAY|PERMANENT)\b)?/i,
+            /^(\d+\.\d+\.\d+\.\d+)\s+dev\s+(\S+)(?:.*lladdr\s+([0-9a-f:]{5,}))?(?:.*\b(REACHABLE|STALE|DELAY|PERMANENT)\b)?/i
           );
           if (m) {
             const ip = m[1];
@@ -1766,7 +1840,7 @@ app.get(
           // skip incomplete entries
           if (/incomplete/i.test(line)) continue;
           const m = line.match(
-            /\(?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)?\s+at\s+([0-9a-f:]{5,})\s+on\s+(\S+)/i,
+            /\(?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)?\s+at\s+([0-9a-f:]{5,})\s+on\s+(\S+)/i
           );
           if (m) {
             const ip = m[1];
@@ -1776,7 +1850,7 @@ app.get(
           } else {
             // Fallback: try to extract e.g. "hostname (192.168.1.2) at ..."
             const alt = line.match(
-              /\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-f:]{5,})/i,
+              /\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-f:]{5,})/i
             );
             if (alt) {
               const ip = alt[1];
@@ -1816,7 +1890,7 @@ app.get(
         const svcEntry = hosts.find((h) => h.ip === svcIp);
         if (svcEntry && svcEntry.iface) {
           lanHosts = hosts.filter(
-            (h) => h.iface === svcEntry.iface && isUnicast(h.ip),
+            (h) => h.iface === svcEntry.iface && isUnicast(h.ip)
           );
         } else {
           // Fallback: try /24 prefix
@@ -1824,13 +1898,13 @@ app.get(
           if (octets.length === 4) {
             const p24 = `${octets[0]}.${octets[1]}.${octets[2]}.`;
             lanHosts = hosts.filter(
-              (h) => String(h.ip).startsWith(p24) && isUnicast(h.ip),
+              (h) => String(h.ip).startsWith(p24) && isUnicast(h.ip)
             );
             if (lanHosts.length === 0) {
               // Try /16
               const p16 = `${octets[0]}.${octets[1]}.`;
               lanHosts = hosts.filter(
-                (h) => String(h.ip).startsWith(p16) && isUnicast(h.ip),
+                (h) => String(h.ip).startsWith(p16) && isUnicast(h.ip)
               );
             }
           }
@@ -1858,14 +1932,14 @@ app.get(
     } catch (error) {
       console.error(
         "❌ ARP lookup failed:",
-        error && error.message ? error.message : error,
+        error && error.message ? error.message : error
       );
       res.status(500).json({
         error: "Failed to run ARP lookup",
         message: error && error.message ? error.message : String(error),
       });
     }
-  },
+  }
 );
 
 // Security administration endpoints (require auth + whitelist)
@@ -1886,7 +1960,7 @@ app.get(
       });
       res.status(500).json({ error: "Failed to retrieve alerts" });
     }
-  },
+  }
 );
 
 app.get(
@@ -1906,7 +1980,7 @@ app.get(
       });
       res.status(500).json({ error: "Failed to retrieve stats" });
     }
-  },
+  }
 );
 
 // 404 handler
@@ -1925,15 +1999,13 @@ app.use((err, req, res, next) => {
 });
 
 // Graceful shutdown helper
-async function gracefulShutdown(signal) {
-  console.info(
-    `\n🛑 Received ${signal || "shutdown"}, shutting down gracefully...`,
-  );
+async function handleGracefulShutdown(signal) {
+  logger.progress(`Received ${signal || "shutdown"}, shutting down gracefully`);
 
   // Stop accepting new connections
   try {
     if (httpServerInstance) {
-      console.info("🛑 Closing HTTP server to new connections...");
+      logger.progress("Closing HTTP server to new connections");
       await new Promise((resolve, reject) => {
         httpServerInstance.close((err) => (err ? reject(err) : resolve()));
         // Force resolve after 10s to avoid hanging
@@ -1941,9 +2013,8 @@ async function gracefulShutdown(signal) {
       });
     }
   } catch (err) {
-    console.warn(
-      "⚠️ Error closing HTTP server:",
-      err && err.message ? err.message : err,
+    logger.warning(
+      `Error closing HTTP server: ${err && err.message ? err.message : err}`
     );
   }
 
@@ -1951,9 +2022,8 @@ async function gracefulShutdown(signal) {
   try {
     WebSocketManager.shutdown();
   } catch (err) {
-    console.warn(
-      "⚠️ Error shutting down WebSocket manager:",
-      err && err.message ? err.message : err,
+    logger.warning(
+      `Error shutting down WebSocket manager: ${err && err.message ? err.message : err}`
     );
   }
 
@@ -1963,9 +2033,8 @@ async function gracefulShutdown(signal) {
       await serviceManager.shutdown();
     }
   } catch (err) {
-    console.warn(
-      "⚠️ Error shutting down service manager:",
-      err && err.message ? err.message : err,
+    logger.warning(
+      `Error shutting down service manager: ${err && err.message ? err.message : err}`
     );
   }
 
@@ -1976,31 +2045,15 @@ async function gracefulShutdown(signal) {
       typeof performanceMonitor.shutdown === "function"
     ) {
       performanceMonitor.shutdown();
+      logger.success("Performance monitor shutdown complete");
     }
   } catch (err) {
     // ignore
   }
 
-  console.info("🛑 Shutdown complete, exiting.");
+  logger.success("Shutdown complete, exiting");
   process.exit(0);
 }
-
-// Handle signals
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-
-// Unhandled exceptions/rejections
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
-  // Attempt graceful shutdown
-  gracefulShutdown("unhandledRejection");
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("❌ Uncaught Exception:", err);
-  // Attempt graceful shutdown
-  gracefulShutdown("uncaughtException");
-});
 
 // Start server
 async function startServer() {
@@ -2008,18 +2061,18 @@ async function startServer() {
     await initializeServer();
 
     httpServerInstance = server.listen(PORT, () => {
-      console.info(`🚀 Watchman Backend Server running on port ${PORT}`);
-      console.info(`📊 Health check: http://localhost:${PORT}/health`);
-      console.info(`📖 API Documentation: http://localhost:${PORT}/api/docs`);
-      console.info(
-        `🧅 Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`,
+      logger.success(`Watchman Backend Server running on port ${PORT}`);
+      logger.startup(`Health check: http://localhost:${PORT}/health`);
+      logger.startup(`API Documentation: http://localhost:${PORT}/api/docs`);
+      logger.startup(
+        `Tor Proxy Health: http://localhost:${PORT}/api/tor/proxy/health`
       );
-      console.info(
-        `🔍 Services Health: http://localhost:${PORT}/api/services/health`,
+      logger.startup(
+        `Services Health: http://localhost:${PORT}/api/services/health`
       );
     });
   } catch (error) {
-    console.error("❌ Failed to start server:", error);
+    logger.error("Failed to start server", { error });
     process.exit(1);
   }
 }

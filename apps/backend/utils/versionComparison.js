@@ -1,28 +1,50 @@
 /**
- * Utility functions for robust version comparison
+ * Version Comparison Utilities
+ *
+ * Provides robust version string parsing, comparison, and normalisation
+ * for various software version formats. Supports semantic versioning,
+ * Bitcoin Core format, Tor format, and other common version schemes.
+ * Implements proper version ordering and comparison logic.
+ *
+ * @fileoverview Version comparison and parsing utilities
+ * @author Watchman Team
+ * @version 1.0.0
  */
 
 /**
- * Clean and normalize a version string
- * Handles various formats: v1.2.3, 1.2.3, /Satoshi:27.0.0/, Tor 0.4.8.10, etc.
+ * Clean and normalise a version string
+ *
+ * Handles various formats including:
+ * - Semantic versions: v1.2.3, 1.2.3
+ * - Bitcoin format: /Satoshi:27.0.0/
+ * - Tor format: Tor 0.4.8.10
+ * - Custom formats with build numbers
+ *
  * @param {string} versionString - Raw version string
- * @returns {string} Cleaned version string
+ * @returns {string} Cleaned and normalised version string
+ *
+ * @example
+ * cleanVersionString("v1.2.3") // returns "1.2.3"
+ * cleanVersionString("/Satoshi:27.0.0/") // returns "27.0.0"
+ * cleanVersionString("Tor 0.4.8.10") // returns "0.4.8.10"
  */
 export function cleanVersionString(versionString) {
   if (!versionString || typeof versionString !== "string") {
     return "";
   }
 
-  // Remove common prefixes and wrappers
+  // Remove common prefixes and wrappers with improved patterns
   let cleaned = versionString
-    .replace(/^v/i, "") // Remove leading 'v' or 'V'
-    .replace(/^\/Satoshi:/, "") // Bitcoin format
+    .replace(/^[vV]\s*/, "") // Remove leading 'v' or 'V' with optional space
+    .replace(/^\/Satoshi:\s*/, "") // Bitcoin format
     .replace(/\/$/, "") // Trailing slash
-    .replace(/^Tor\s+/i, "") // Tor prefix
-    .replace(/\s*\(.*?\)\s*/g, "") // Remove parenthetical info
+    .replace(/^Tor\s+/i, "") // Tor prefix (case-insensitive)
+    .replace(/^version[:\s]+/i, "") // "Version:" prefix
+    .replace(/\s*\(.*?\)\s*/g, "") // Remove parenthetical information
+    .replace(/[-_]?(alpha|beta|rc|release|final)\d*/gi, "") // Remove pre-release markers
     .trim();
 
-  // Extract just the version number (major.minor.patch.build)
+  // Extract semantic version number (supports 4-part versions)
   const match = cleaned.match(/(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?/);
   if (match) {
     const parts = [match[1], match[2], match[3]];
@@ -30,7 +52,8 @@ export function cleanVersionString(versionString) {
     return parts.join(".");
   }
 
-  return cleaned;
+  // If no semantic version found, return truncated original
+  return cleaned.substring(0, 32);
 }
 
 /**

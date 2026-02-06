@@ -2,7 +2,13 @@
  * Test Bitcoin update check specifically
  */
 
-console.log("🧪 Testing Bitcoin Update Check\n");
+console.log(
+  JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: "INFO",
+    message: "[TEST] Testing Bitcoin Update Check",
+  })
+);
 
 // Test version string cleaning for Bitcoin
 const testBitcoinVersions = [

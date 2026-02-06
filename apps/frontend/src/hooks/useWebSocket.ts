@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { logger } from "../lib/logger";
 
 interface WebSocketMessage {
   type: "connection" | "service_update" | "alert" | "metrics";
@@ -218,12 +219,12 @@ export const useWebSocket = (url?: string) => {
     notifyStateChange();
 
     try {
-      console.log("📡 Creating WebSocket connection:", websocketUrl);
+      logger.websocket("Creating WebSocket connection", { websocketUrl });
 
       globalWebSocket = new WebSocket(websocketUrl);
 
       globalWebSocket.onopen = () => {
-        console.log("📡 WebSocket connection established");
+        logger.websocket("WebSocket connection established");
         globalConnectionState.isConnected = true;
         globalConnectionState.isConnecting = false;
         globalConnectionState.reconnectAttempts = 0;
@@ -233,11 +234,10 @@ export const useWebSocket = (url?: string) => {
       globalWebSocket.onmessage = handleMessage;
 
       globalWebSocket.onclose = (event) => {
-        console.log(
-          "📡 WebSocket connection closed:",
-          event.code,
-          event.reason,
-        );
+        logger.websocket("WebSocket connection closed", {
+          code: event.code,
+          reason: event.reason,
+        });
         globalConnectionState.isConnected = false;
         globalConnectionState.isConnecting = false;
         globalWebSocket = null;
@@ -255,7 +255,7 @@ export const useWebSocket = (url?: string) => {
       };
 
       globalWebSocket.onerror = (error) => {
-        console.error("📡 WebSocket error:", error);
+        logger.error("WebSocket error", error);
         globalConnectionState.isConnecting = false;
         notifyStateChange();
 
@@ -267,7 +267,7 @@ export const useWebSocket = (url?: string) => {
         }
       };
     } catch (error) {
-      console.error("📡 Error creating WebSocket:", error);
+      logger.error("Error creating WebSocket", error);
       globalConnectionState.isConnecting = false;
       globalConnectionState.reconnectAttempts++;
       notifyStateChange();

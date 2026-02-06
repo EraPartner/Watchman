@@ -5,11 +5,11 @@ class PerformanceMonitor {
     this.responseTimes = new Map();
     this.errorCounts = new Map();
     this.startTime = Date.now();
-    
+
     // Maximum number of response time samples to keep per endpoint
     // Prevents unbounded memory growth with many endpoints
     this.MAX_SAMPLES_PER_ENDPOINT = 100;
-    
+
     // Maximum number of endpoints to track
     // If exceeded, oldest endpoints are pruned
     this.MAX_ENDPOINTS = 500;
@@ -21,27 +21,120 @@ class PerformanceMonitor {
     );
   }
 
-  // Middleware to track request performance
+  /**
+   * Middleware to track request performance and generate alerts
+   *
+   * Measures response times, tracks request counts, and monitors
+   * error rates with automatic alerting for performance issues.
+   *
+   * @returns {Function} Express middleware function
+   */
   trackRequest() {
     return (req, res, next) => {
       const startTime = process.hrtime.bigint();
-      const endpoint = `${req.method} ${req.route?.path || req.path}`;
+      const endpoint = this.normalizeEndpoint(req);
+      const requestId = req.id || this.generateRequestId();
 
       // Track request count
       this.incrementCounter("requests", endpoint);
 
       // Track response when finished
       res.on("finish", () => {
-        const duration = Number(process.hrtime.bigint() - startTime) / 1000000; // Convert to ms
-        this.recordResponseTime(endpoint, duration);
+        try {
+          const durationMs =
+            Number(process.hrtime.bigint() - startTime) / 1000000;
+          this.recordResponseTime(endpoint, durationMs);
 
-        if (res.statusCode >= 400) {
-          this.incrementCounter("errors", endpoint);
+          // Track errors
+          if (res.statusCode >= 400) {
+            this.incrementCounter("errors", endpoint);
+          }
+
+          // Check for performance issues and log warnings
+          this.checkPerformanceThresholds(
+            endpoint,
+            durationMs,
+            res.statusCode,
+            requestId
+          );
+        } catch (error) {
+          console.warn("Performance tracking error:", error.message);
         }
       });
 
       next();
     };
+  }
+
+  /**
+   * Normalize endpoint path for consistent tracking
+   *
+   * @param {Object} req - Express request object
+   * @returns {string} Normalized endpoint identifier
+   * @private
+   */
+  normalizeEndpoint(req) {
+    const method = req.method;
+    const path = req.route?.path || req.path;
+
+    // Normalize dynamic segments for consistent tracking
+    const normalizedPath = path
+      .replace(/\/\d+/g, "/:id") // Replace numeric IDs
+      .replace(/\/[a-f0-9-]{36}/g, "/:uuid") // Replace UUIDs
+      .replace(/\/[a-zA-Z0-9_-]+_\d+/g, "/:instance"); // Replace service instances
+
+    return `${method} ${normalizedPath}`;
+  }
+
+  /**
+   * Generate unique request ID for tracking
+   *
+   * @returns {string} Request identifier
+   * @private
+   */
+  generateRequestId() {
+    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Check performance thresholds and emit warnings
+   *
+   * @param {string} endpoint - Endpoint identifier
+   * @param {number} duration - Request duration in milliseconds
+   * @param {number} statusCode - HTTP status code
+   * @param {string} requestId - Request identifier
+   * @private
+   */
+  checkPerformanceThresholds(endpoint, duration, statusCode, requestId) {
+    // Check for slow requests
+    if (duration > this.SLOW_REQUEST_THRESHOLD) {
+      console.warn(`🐌 Slow request detected`, {
+        endpoint,
+        duration: `${duration.toFixed(2)}ms`,
+        threshold: `${this.SLOW_REQUEST_THRESHOLD}ms`,
+        requestId,
+        statusCode,
+      });
+    }
+
+    // Check error rate (if we have enough samples)
+    const totalRequests = this.requestCounts.get(endpoint) || 0;
+    const totalErrors = this.errorCounts.get(endpoint) || 0;
+
+    if (totalRequests >= 10) {
+      // Only check after sufficient requests
+      const errorRate = (totalErrors / totalRequests) * 100;
+
+      if (errorRate > this.HIGH_ERROR_RATE_THRESHOLD) {
+        console.warn(`⚠️  High error rate detected`, {
+          endpoint,
+          errorRate: `${errorRate.toFixed(1)}%`,
+          threshold: `${this.HIGH_ERROR_RATE_THRESHOLD}%`,
+          totalRequests,
+          totalErrors,
+        });
+      }
+    }
   }
 
   incrementCounter(type, key) {
@@ -61,7 +154,7 @@ class PerformanceMonitor {
     if (times.length > this.MAX_SAMPLES_PER_ENDPOINT) {
       times.shift();
     }
-    
+
     // Prune old endpoints if we exceed max tracked endpoints
     if (this.responseTimes.size > this.MAX_ENDPOINTS) {
       const firstKey = this.responseTimes.keys().next().value;
@@ -175,7 +268,7 @@ class PerformanceMonitor {
   }
 
   resetHourlyMetrics() {
-    console.info("📊 Resetting hourly performance metrics");
+    logger.info("Performance metrics hourly reset initiated");
     this.requestCounts.clear();
     this.errorCounts.clear();
     this.responseTimes.clear();
@@ -208,8 +301,8 @@ class PerformanceMonitor {
         issues.length === 0
           ? "healthy"
           : issues.length < 3
-          ? "warning"
-          : "critical",
+            ? "warning"
+            : "critical",
       issues,
       metrics: {
         uptime: stats.uptime.human,
@@ -225,7 +318,7 @@ class PerformanceMonitor {
     if (this._hourlyResetInterval) {
       clearInterval(this._hourlyResetInterval);
       this._hourlyResetInterval = null;
-      console.info("📊 Performance monitor shutdown complete");
+      logger.success("Performance monitor shutdown complete");
     }
   }
 }

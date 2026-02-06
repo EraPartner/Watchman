@@ -2,6 +2,7 @@ import fetch from "node-fetch";
 import http from "http";
 import https from "https";
 import { isUpdateAvailable } from "../utils/versionComparison.js";
+import logger from "../middleware/logger.js";
 
 // Create agents with keepAlive to fix connection issues
 const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
@@ -208,9 +209,8 @@ class HomebridgeService {
         this.loggedIn = false;
         return false;
       } catch (err) {
-        console.debug(
-          "[HomebridgeService] login exception:",
-          String(err).slice(0, 300)
+        logger.debug(
+          `[homebridge] login exception: ${String(err).slice(0, 300)}`
         );
         this.authToken = null;
         this.cookie = null;
@@ -246,16 +246,9 @@ class HomebridgeService {
 
       // Debug: short snippet
       try {
-        console.debug(
-          "[HomebridgeService] GET",
-          url,
-          "->",
-          res.status,
-          res.statusText,
-          "ct=",
-          ct,
-          "snippet=",
-          String(text).slice(0, 200),
+        const snippet = String(text).slice(0, 200);
+        logger.debug(
+          `[homebridge] GET ${url} -> ${res.status} ${res.statusText} ct=${ct} snippet=${snippet}`
         );
       } catch (e) {
         // Ignore any errors during debug logging - text conversion might fail
@@ -445,8 +438,8 @@ class HomebridgeService {
       const arr = Array.isArray(data)
         ? data
         : data && data.accessories && Array.isArray(data.accessories)
-        ? data.accessories
-        : [];
+          ? data.accessories
+          : [];
       const out = {
         data: arr,
         raw: data,

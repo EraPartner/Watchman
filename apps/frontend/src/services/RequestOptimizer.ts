@@ -1,3 +1,5 @@
+import { logger } from "../lib/logger";
+
 type HealthResult = { status: string; [key: string]: any };
 
 type BatchPromise = {
@@ -135,11 +137,7 @@ class RequestBatcher {
           resolve(result);
         } catch (e) {
           // Ignore individual resolver errors to allow the rest to proceed
-
-          console.error(
-            "Resolver threw when resolving batched health check",
-            e,
-          );
+          logger.error("Resolver threw when resolving batched health check", e);
         }
       });
     } catch (error) {

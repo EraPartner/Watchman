@@ -1,6 +1,12 @@
 import { BitcoinService } from "./services/BitcoinService.js";
 
-console.log("🧪 Testing Bitcoin Update Check\n");
+console.log(
+  JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: "INFO",
+    message: "[TEST] Testing Bitcoin Update Check",
+  })
+);
 
 const service = new BitcoinService({
   rpcUrl: process.env.BITCOIN_RPC_URL || "http://127.0.0.1:8332",

@@ -98,8 +98,8 @@ class PhilipsBridgeService {
             pingRaw.stdout && pingRaw.stdout.trim()
               ? pingRaw.stdout.trim()
               : pingRaw.stderr && pingRaw.stderr.trim()
-              ? pingRaw.stderr.trim()
-              : "No ping output";
+                ? pingRaw.stderr.trim()
+                : "No ping output";
         } else {
           pingResult = false;
           pingOutput = "Ping check unavailable";

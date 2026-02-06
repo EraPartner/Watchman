@@ -124,7 +124,7 @@ export class QBittorrentService {
         const retryController = new AbortController();
         const retryTimeoutId = setTimeout(
           () => retryController.abort(),
-          this.timeout,
+          this.timeout
         );
 
         const retryResponse = await fetch(url, {
@@ -139,7 +139,7 @@ export class QBittorrentService {
 
         if (!retryResponse.ok) {
           throw new Error(
-            `Request failed after retry: ${retryResponse.status}`,
+            `Request failed after retry: ${retryResponse.status}`
           );
         }
 
@@ -240,16 +240,16 @@ export class QBittorrentService {
         torrents: {
           total: Object.keys(mainData.torrents || {}).length,
           downloading: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "downloading",
+            (t) => t.state === "downloading"
           ).length,
           seeding: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "uploading",
+            (t) => t.state === "uploading"
           ).length,
           paused: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "pausedDL" || t.state === "pausedUP",
+            (t) => t.state === "pausedDL" || t.state === "pausedUP"
           ).length,
           completed: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "uploading" || t.state === "stalledUP",
+            (t) => t.state === "uploading" || t.state === "stalledUP"
           ).length,
         },
         transfer: {

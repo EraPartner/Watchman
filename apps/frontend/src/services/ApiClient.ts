@@ -1,5 +1,6 @@
 import { env } from "../lib/env";
 import { APP_CONFIG } from "../lib/constants";
+import { csrfManager } from "../lib/csrf";
 
 // Smart backend URL detection
 const getBackendUrl = (): string => {
@@ -522,6 +523,12 @@ class ApiClient {
       { "Content-Type": "application/json" },
       (options && options.headers) || {},
     );
+
+    // Add CSRF token for state-changing methods (POST, PUT, PATCH, DELETE)
+    const method = (options?.method || 'GET').toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      csrfManager.addTokenToHeaders(headers as Record<string, string>);
+    }
 
     // If we have an in-memory auth token (returned by login), attach it as a Bearer
     // Authorization header. This is a fallback for dev environments where cookies

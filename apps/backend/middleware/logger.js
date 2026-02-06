@@ -1,4 +1,15 @@
-// Structured logging middleware with security-focused redaction
+/**
+ * Structured Logging Middleware
+ *
+ * Provides comprehensive logging functionality with security-focused redaction,
+ * request tracking, and structured output. Implements data sanitisation
+ * to prevent sensitive information leakage in logs.
+ *
+ * @fileoverview Structured logging with security redaction
+ * @author Watchman Team
+ * @version 1.0.0
+ */
+
 import { join } from "path";
 
 // Check if logging is enabled (default: true)
@@ -6,12 +17,29 @@ const LOG_ENABLED = process.env.LOG_ENABLED !== "false";
 // Check if request logging is enabled (default: true, but respects LOG_ENABLED)
 const LOG_REQUESTS = process.env.LOG_REQUESTS !== "false" && LOG_ENABLED;
 
-// Simple structured logger that redacts sensitive data
+/**
+ * Structured Logger Class
+ *
+ * Provides secure, structured logging with automatic redaction of sensitive data.
+ * Supports multiple log levels and formats output as JSON for easy parsing.
+ */
 class Logger {
+  /**
+   * Create a Logger instance
+   *
+   * @param {Object} options - Logger configuration options
+   * @param {string} [options.level="info"] - Minimum log level
+   * @param {string} [options.logFile] - Path to log file
+   */
   constructor(options = {}) {
     this.enabled = LOG_ENABLED;
     this.level = options.level || process.env.LOG_LEVEL || "info";
     this.logFile = options.logFile || join(process.cwd(), "logs", "app.log");
+
+    /**
+     * Patterns for redacting sensitive information from logs
+     * Covers passwords, tokens, secrets, authorization headers, and email addresses
+     */
     this.redactPatterns = [
       /password[=:]\s*["']?([^"'\s]+)["']?/gi,
       /token[=:]\s*["']?([^"'\s]+)["']?/gi,
@@ -19,7 +47,13 @@ class Logger {
       /authorization:\s*["']?([^"'\s]+)["']?/gi,
       /Bearer\s+([A-Za-z0-9\-._~+/]+=*)/gi,
       /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi, // emails
+      /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/gi, // Credit card numbers
+      /\b\d{3}-\d{2}-\d{4}\b/gi, // SSN patterns
     ];
+
+    /**
+     * Log level hierarchy for filtering
+     */
     this.levels = {
       error: 0,
       warn: 1,
@@ -28,8 +62,19 @@ class Logger {
     };
   }
 
+  /**
+   * Redact sensitive information from log messages
+   *
+   * @param {string} message - Raw log message
+   * @returns {string} Redacted message with sensitive data masked
+   * @private
+   */
   redact(message) {
-    let redacted = String(message);
+    if (typeof message !== "string") {
+      message = String(message);
+    }
+
+    let redacted = message;
     this.redactPatterns.forEach((pattern) => {
       redacted = redacted.replace(pattern, (match, group) => {
         return match.replace(group, "[REDACTED]");
@@ -38,6 +83,15 @@ class Logger {
     return redacted;
   }
 
+  /**
+   * Format log entry as structured JSON
+   *
+   * @param {string} level - Log level
+   * @param {string} message - Log message
+   * @param {Object} meta - Additional metadata
+   * @returns {string} Formatted JSON log entry
+   * @private
+   */
   format(level, message, meta = {}) {
     const timestamp = new Date().toISOString();
     const logEntry = {
@@ -69,21 +123,7 @@ class Logger {
     if (!this.enabled || !this.shouldLog(level)) return;
 
     const formatted = this.format(level, message, meta);
-
-    // Write to console in development
-    if (process.env.NODE_ENV !== "production") {
-      const colors = {
-        error: "\x1b[31m",
-        warn: "\x1b[33m",
-        info: "\x1b[36m",
-        debug: "\x1b[90m",
-      };
-      const reset = "\x1b[0m";
-      console.log(`${colors[level] || ""}${formatted}${reset}`);
-    } else {
-      // In production, write to file/stdout
-      console.log(formatted);
-    }
+    console.log(formatted);
   }
 
   error(message, meta = {}) {
@@ -100,6 +140,31 @@ class Logger {
 
   debug(message, meta = {}) {
     this.write("debug", message, meta);
+  }
+
+  // Startup-specific logging methods for consistent formatting
+  startup(message, meta = {}) {
+    this.info(`[STARTUP] ${message}`, meta);
+  }
+
+  success(message, meta = {}) {
+    this.info(`[SUCCESS] ${message}`, meta);
+  }
+
+  warning(message, meta = {}) {
+    this.warn(`[WARNING] ${message}`, meta);
+  }
+
+  progress(message, meta = {}) {
+    this.info(`[PROGRESS] ${message}`, meta);
+  }
+
+  service(serviceName, message, meta = {}) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[${serviceName.toUpperCase()}] ${message}`);
+    } else {
+      this.info(`[SERVICE:${serviceName.toUpperCase()}] ${message}`, meta);
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { validateSecurityConfig } from "./config/security.js";
 
 // Get current directory for proper path resolution
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,44 @@ if (fs.existsSync(envLocalPath)) {
   dotenv.config();
 }
 
+// Simple logger for config validation (before full logger is available)
+const configLogger = {
+  info: (msg) =>
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: "INFO",
+        message: `[CONFIG] ${msg}`,
+      })
+    ),
+  warn: (msg) =>
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: "WARN",
+        message: `[CONFIG] WARNING: ${msg}`,
+      })
+    ),
+  error: (msg) =>
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: "ERROR",
+        message: `[CONFIG] ERROR: ${msg}`,
+      })
+    ),
+};
+
+// URL validation helper
+const isValidUrl = (urlString) => {
+  try {
+    const url = new URL(urlString);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
 // Environment variable validation
 const requiredEnvVars = [
   "AUTH_USERNAME",
@@ -34,56 +73,91 @@ const requiredEnvVars = [
 // Optional but recommended for production (align names to .env.local)
 const recommendedEnvVars = ["ADGUARD_MAIN_URL", "ADGUARD_MAIN_AUTH"];
 
+/**
+ * Validate environment variables and security configuration
+ *
+ * Performs comprehensive validation of required environment variables,
+ * security settings, and configuration consistency. Exits process
+ * with detailed error messages if validation fails.
+ *
+ * @throws {SystemExit} Exits process with code 1 if validation fails
+ */
 const validateEnvironment = () => {
   const missing = requiredEnvVars.filter((envVar) => !process.env[envVar]);
   const missingRecommended = recommendedEnvVars.filter(
-    (envVar) => !process.env[envVar],
+    (envVar) => !process.env[envVar]
   );
 
+  // Validate security configuration
+  const securityErrors = validateSecurityConfig();
+  if (securityErrors.length > 0) {
+    configLogger.error("Security configuration validation failed:");
+    securityErrors.forEach((error) => configLogger.error(`  - ${error}`));
+    process.exit(1);
+  }
+
   if (missing.length > 0) {
-    console.error("❌ Missing required environment variables:");
-    missing.forEach((envVar) => console.error(`  - ${envVar}`));
-    console.error(
-      "\n📝 Please check your .env.local file and ensure all required variables are set.",
+    configLogger.error("Missing required environment variables:");
+    missing.forEach((envVar) => configLogger.error(`  - ${envVar}`));
+    configLogger.error(
+      "\n📝 Please check your .env.local file and ensure all required variables are set."
     );
-    console.error("💡 Use backend/.env.example as a template.");
+    configLogger.error("💡 Use backend/.env.example as a template.");
     process.exit(1);
   }
 
   if (process.env.NODE_ENV === "production" && missingRecommended.length > 0) {
-    console.warn(
-      "⚠️  Missing recommended environment variables for production:",
+    configLogger.warn(
+      "Missing recommended environment variables for production:"
     );
-    missingRecommended.forEach((envVar) => console.warn(`  - ${envVar}`));
+    missingRecommended.forEach((envVar) => configLogger.warn(`  - ${envVar}`));
   }
 
   // Validate JWT_SECRET strength in all environments to avoid weak local setups
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
-    console.error("❌ JWT_SECRET must be at least 32 characters long");
+    configLogger.error("JWT_SECRET must be at least 32 characters long");
     process.exit(1);
   }
 
-  // Validate FRONTEND_URL format
-  if (
-    process.env.FRONTEND_URL &&
-    !process.env.FRONTEND_URL.match(/^https?:\/\/.+/)
-  ) {
-    console.error("❌ FRONTEND_URL must be a valid URL (http:// or https://)");
+  // Enhanced FRONTEND_URL validation
+  if (process.env.FRONTEND_URL && !isValidUrl(process.env.FRONTEND_URL)) {
+    configLogger.error(
+      "FRONTEND_URL must be a valid URL (http:// or https://)"
+    );
     process.exit(1);
   }
-  // Warn if production without HTTPS
+
+  // Warn if production without HTTPS (except for localhost/local networks)
   if (
     process.env.NODE_ENV === "production" &&
     process.env.FRONTEND_URL &&
     !process.env.FRONTEND_URL.startsWith("https://")
   ) {
-    console.warn(
-      "⚠️  FRONTEND_URL should use HTTPS in production for security (cookies, HSTS)",
-    );
+    const url = process.env.FRONTEND_URL;
+    const isLocalhost =
+      url.includes("localhost") ||
+      url.includes("127.0.0.1") ||
+      url.includes("0.0.0.0");
+    const isLocalNetwork = url.match(/https?:\/\/(192\.168\.|10\.|172\.)/);
+
+    if (!isLocalhost && !isLocalNetwork) {
+      configLogger.warn(
+        "FRONTEND_URL should use HTTPS in production for security (cookies, HSTS)"
+      );
+    }
   }
 
-  console.log("✅ Environment validation passed");
-};
+  // Validate critical service configurations if present
+  if (
+    process.env.ADGUARD_MAIN_URL &&
+    !isValidUrl(process.env.ADGUARD_MAIN_URL)
+  ) {
+    configLogger.error("ADGUARD_MAIN_URL must be a valid URL");
+    process.exit(1);
+  }
+
+  configLogger.info("Environment validation passed");
+};;;
 
 // Parse enabled services from environment variable
 const parseEnabledServices = () => {

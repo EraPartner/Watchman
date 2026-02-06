@@ -7,10 +7,22 @@ import https from "https";
 const httpsAgent = new https.Agent({ keepAlive: true });
 
 async function testUpdates() {
-  console.log("🧪 Testing Update Check Functionality\n");
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: "INFO",
+      message: "[TEST] Testing Update Check Functionality",
+    })
+  );
 
   // Test 1: Homebridge NPM check
-  console.log("1️⃣  Testing Homebridge (npm registry)...");
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: "INFO",
+      message: "[TEST] Testing Homebridge (npm registry)",
+    })
+  );
   try {
     const response = await fetch(
       "https://registry.npmjs.org/homebridge/latest",

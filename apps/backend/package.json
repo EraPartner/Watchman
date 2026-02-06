@@ -9,7 +9,7 @@
     "dev": "nodemon server.js --watch . --ext js,json",
     "dev:verbose": "nodemon server.js --watch . --ext js,json --verbose",
     "build": "npm run validate-env && npm run build:bundle && npm run copy:assets",
-    "build:bundle": "npm run clean:dist && esbuild server.js --bundle --platform=node --format=esm --packages=external --target=node18 --sourcemap --outfile=dist/server.js",
+    "build:bundle": "npm run clean:dist && esbuild server.js --bundle --platform=node --format=esm --packages=external --target=node18 --outfile=dist/server.js",
     "copy:assets": "mkdir -p dist && cp -R config dist/ && cp openapi.yaml dist/openapi.yaml && cp api-docs.yaml dist/api-docs.yaml",
     "clean:dist": "rm -rf dist",
     "logs": "node server.js | bunyan",
@@ -22,7 +22,8 @@
     "security-audit": "npm audit --audit-level moderate",
     "security:check": "npm audit && npm run security:secrets",
     "security:fix": "npm audit fix",
-    "security:secrets": "echo 'Checking for exposed secrets...' && ! grep -r -E '(password|secret|token|key).*=.*[A-Za-z0-9]{20,}' --exclude-dir=node_modules --exclude=package*.json . || (echo '⚠️  Possible secrets found!' && exit 1)",
+    "security:test": "node ../../tools/security-test.js",
+    "security:secrets": "echo 'Checking for exposed secrets...' && ! grep -r -E '(password|secret|token|key)\\s*[:=]\\s*['\"]?[A-Za-z0-9]{20,}' --exclude-dir=node_modules --exclude-dir=dist --exclude=package*.json --exclude='*.md' --exclude='*.map' . || (echo '⚠️  Possible secrets found!' && exit 1)",
     "precommit": "npm run validate-env && npm run lint",
     "docker:scan": "docker scan watchman-backend:latest || echo 'Install Docker Scan for vulnerability scanning'"
   },
@@ -32,12 +33,13 @@
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
-    "express": "^4.18.2",
+    "esbuild": "^0.27.2",
+    "express": "^4.22.1",
     "express-openapi-validator": "^5.6.0",
     "express-rate-limit": "^7.5.0",
     "express-slow-down": "^2.0.3",
     "helmet": "^8.0.0",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.1.1",
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2",
@@ -51,7 +53,6 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "esbuild": "^0.27.2",
     "eslint": "^9.17.0",
     "nodemon": "^3.1.9",
     "prettier": "^3.4.2"

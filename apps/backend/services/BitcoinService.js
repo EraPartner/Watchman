@@ -1,18 +1,52 @@
+/**
+ * Bitcoin Service
+ *
+ * Provides comprehensive monitoring and interaction with Bitcoin Core node.
+ * Implements secure RPC communication, health monitoring, version tracking,
+ * and Tor proxy support for enhanced privacy. Features robust error handling
+ * and connection management for reliable Bitcoin node integration.
+ *
+ * @fileoverview Bitcoin Core RPC integration and monitoring
+ * @author Watchman Team
+ * @version 1.0.0
+ */
+
 import { execSync } from "child_process";
 import fetch from "node-fetch";
 import http from "http";
 import https from "https";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Buffer } from "buffer";
+import { logger } from "../middleware/logger.js";
 
-// Create agents with keepAlive to fix connection issues
-const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
-const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+// Create agents with keepAlive to fix connection issues and improve performance
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  timeout: 60000,
+});
 
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  timeout: 60000,
+});
+
+/**
+ * Clean and normalise Bitcoin version strings
+ *
+ * Handles various Bitcoin Core version formats including Satoshi client format.
+ * Extracts semantic version numbers from complex version strings.
+ *
+ * @param {string} version - Raw version string from Bitcoin Core
+ * @returns {string} Cleaned version string (e.g., "27.0.0")
+ */
 function cleanVersionString(version) {
-  if (typeof version !== "string") return "";
+  if (typeof version !== "string") {
+    return "";
+  }
 
-  // Handle /Satoshi:X.Y.Z/ format
+  // Handle /Satoshi:X.Y.Z/ format commonly used by Bitcoin Core
   const satoshiMatch = version.match(/\/Satoshi:(\d+\.\d+\.\d+)/);
   if (satoshiMatch) {
     return satoshiMatch[1];
@@ -25,23 +59,31 @@ function cleanVersionString(version) {
     .replace(/\/$/, "") // Remove trailing slash
     .replace(/^[vV]ersion:\s*/, ""); // Remove "version:" prefix
 
-  // Extract version number if present
+  // Extract semantic version number if present
   const versionMatch = cleaned.match(/(\d+\.\d+\.\d+)/);
   if (versionMatch) {
     return versionMatch[1];
   }
 
+  // Return truncated string to prevent extremely long version strings
   return cleaned.substring(0, 32);
 }
 
+/**
+ * Parse numeric version format to semantic version
+ *
+ * Bitcoin Core uses numeric version format: Major * 10000 + Minor * 100 + Revision
+ * Example: 270000 represents version 27.0.0
+ *
+ * @param {number} version - Numeric version from Bitcoin Core
+ * @returns {string|null} Semantic version string or null if invalid
+ */
 function parseNumericVersion(version) {
-  if (typeof version !== "number") {
+  if (typeof version !== "number" || version < 0) {
     return null;
   }
 
-  // Bitcoin Core version number format:
-  // Major version * 10000 + Minor version * 100 + Revision
-  // Example: 270000 = 27 * 10000 + 0 * 100 + 0 = v27.0.0
+  // Bitcoin Core version number format calculation
   const major = Math.floor(version / 10000);
   const minor = Math.floor((version % 10000) / 100);
   const patch = version % 100;
@@ -49,6 +91,13 @@ function parseNumericVersion(version) {
   return `${major}.${minor}.${patch}`;
 }
 
+/**
+ * Extract Bitcoin version from network info
+ *
+ * @param {Object} networkInfo - Network info from Bitcoin RPC
+ * @returns {string} Version string
+ * @private
+ */
 function getBitcoinVersion(networkInfo) {
   if (!networkInfo) return "unknown";
 
@@ -127,7 +176,9 @@ export class BitcoinService {
       } catch (err) {
         // Fail gracefully; proxyAgent will be undefined and code will handle it later
         this.proxyAgent = undefined;
-        console.warn("⚠️  Failed to create SocksProxyAgent:", err.message);
+        logger.warning("Failed to create SocksProxyAgent", {
+          error: err.message,
+        });
       }
     }
   }
@@ -222,7 +273,7 @@ export class BitcoinService {
       const proxyAvailable = await this.checkProxyConnection();
       if (!proxyAvailable) {
         throw new Error(
-          `Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`,
+          `Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`
         );
       }
     }
@@ -239,7 +290,7 @@ export class BitcoinService {
     // Add basic auth header if credentials are provided
     if (this.config.rpcUser && this.config.rpcPassword) {
       const token = Buffer.from(
-        `${this.config.rpcUser}:${this.config.rpcPassword}`,
+        `${this.config.rpcUser}:${this.config.rpcPassword}`
       ).toString("base64");
       headers["authorization"] = `Basic ${token}`;
     }
@@ -248,7 +299,7 @@ export class BitcoinService {
     const controller = new AbortController();
     const timeoutHandle = setTimeout(
       () => controller.abort(),
-      this.config.timeout,
+      this.config.timeout
     );
 
     const fetchOptions = {
@@ -281,7 +332,7 @@ export class BitcoinService {
         const text = await response.text().catch(() => "");
         if (status === 401 || text.includes("Unauthorized")) {
           throw new Error(
-            "Bitcoin RPC authentication failed - check credentials",
+            "Bitcoin RPC authentication failed - check credentials"
           );
         }
         throw new Error(`Bitcoin RPC returned HTTP ${status} ${text}`);
@@ -303,22 +354,22 @@ export class BitcoinService {
         msg.includes("aborted")
       ) {
         throw new Error(
-          "Bitcoin RPC request timed out - node may be slow or unreachable",
+          "Bitcoin RPC request timed out - node may be slow or unreachable"
         );
       } else if (msg.includes("ECONNREFUSED")) {
         throw new Error(
-          "Bitcoin node not reachable - check if Bitcoin Core is running",
+          "Bitcoin node not reachable - check if Bitcoin Core is running"
         );
       } else if (msg.includes("401") || msg.includes("Unauthorized")) {
         throw new Error(
-          "Bitcoin RPC authentication failed - check credentials",
+          "Bitcoin RPC authentication failed - check credentials"
         );
       } else if (
         msg.includes("ENOTFOUND") ||
         msg.includes("Could not resolve host")
       ) {
         throw new Error(
-          "Cannot resolve Bitcoin node hostname - check network or Tor proxy",
+          "Cannot resolve Bitcoin node hostname - check network or Tor proxy"
         );
       } else if (
         msg.includes("SOCKS") ||
@@ -326,7 +377,7 @@ export class BitcoinService {
         msg.includes("Proxy")
       ) {
         throw new Error(
-          "SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port",
+          "SOCKS proxy connection failed - check if Tor is running with SOCKS proxy on the configured port"
         );
       } else {
         throw new Error(`Bitcoin RPC call failed: ${msg}`);
@@ -336,14 +387,48 @@ export class BitcoinService {
 
   async checkProxyConnection() {
     try {
-      const result = execSync(
-        `nc -z ${this.config.torProxy.host} ${this.config.torProxy.port}`,
-        {
+      // Use spawn instead of execSync to prevent command injection
+      const { spawn } = await import("child_process");
+
+      // Validate inputs to prevent injection
+      if (!this.config.torProxy.host || !this.config.torProxy.port) {
+        throw new Error("Invalid proxy configuration");
+      }
+
+      const host = String(this.config.torProxy.host).trim();
+      const port = String(this.config.torProxy.port).trim();
+
+      // Validate host format (basic validation)
+      if (!/^[a-zA-Z0-9.-]+$/.test(host)) {
+        throw new Error("Invalid host format");
+      }
+
+      // Validate port range
+      const portNum = parseInt(port);
+      if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+        throw new Error("Invalid port number");
+      }
+
+      return new Promise((resolve) => {
+        const child = spawn("nc", ["-z", host, port], {
           timeout: 5000,
           stdio: ["pipe", "pipe", "pipe"],
-        },
-      );
-      return true;
+        });
+
+        child.on("close", (code) => {
+          resolve(code === 0);
+        });
+
+        child.on("error", () => {
+          resolve(false);
+        });
+
+        // Timeout fallback
+        setTimeout(() => {
+          child.kill();
+          resolve(false);
+        }, 5000);
+      });
     } catch {
       return false;
     }
@@ -367,7 +452,7 @@ export class BitcoinService {
           },
           signal: AbortSignal.timeout(10000),
           agent: httpsAgent, // Use HTTPS agent for GitHub API
-        },
+        }
       );
 
       if (!response.ok) {
@@ -376,7 +461,7 @@ export class BitcoinService {
 
       const releaseData = await response.json();
       const latestVersion = getVersionFromGitHubTag(
-        releaseData.tag_name || releaseData.name || "",
+        releaseData.tag_name || releaseData.name || ""
       );
 
       return {

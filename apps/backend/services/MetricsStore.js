@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { logger } from "../middleware/logger.js";
 
 class MetricsStore {
   constructor() {
@@ -14,9 +15,11 @@ class MetricsStore {
   async initializeStorage() {
     try {
       await fs.mkdir(this.dataDir, { recursive: true });
-      console.log("📊 Metrics storage initialized");
+      logger.info("Metrics storage initialized");
     } catch (error) {
-      console.error("Failed to initialize metrics storage:", error);
+      logger.error("Failed to initialize metrics storage", {
+        error: error.message,
+      });
     }
   }
 

@@ -12,10 +12,22 @@ import {
   parseVersion,
 } from "./utils/versionComparison.js";
 
-console.log("🧪 Testing Version Comparison Utility\n");
+console.log(
+  JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: "INFO",
+    message: "[TEST] Testing Version Comparison Utility",
+  })
+);
 
 // Test 1: Clean version strings
-console.log("📝 Test 1: Clean version strings");
+console.log(
+  JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: "INFO",
+    message: "[TEST] Test 1: Clean version strings",
+  })
+);
 const testVersions = [
   "/Satoshi:27.0.0/",
   "v1.2.3",

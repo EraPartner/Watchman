@@ -15,7 +15,7 @@ if (fs.existsSync(envPath)) {
 } else {
   console.log(`❌ No ${envPath} file found`);
   console.log(
-    `   Create it with: echo 'ENABLED_SERVICES=bitcoin,tor' > ${envPath}`,
+    `   Create it with: echo 'ENABLED_SERVICES=bitcoin,tor' > ${envPath}`
   );
   process.exit(1);
 }
@@ -23,7 +23,7 @@ if (fs.existsSync(envPath)) {
 // Check raw environment variable
 console.log("\n📋 Raw environment variable:");
 console.log(
-  `   ENABLED_SERVICES="${process.env.ENABLED_SERVICES || "(not set)"}"`,
+  `   ENABLED_SERVICES="${process.env.ENABLED_SERVICES || "(not set)"}"`
 );
 
 // Check parsed config

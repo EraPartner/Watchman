@@ -13,6 +13,7 @@ import IpfsService from "./IpfsService.js";
 import HomebridgeService from "./HomebridgeService.js";
 import RaspberryPiService from "./RaspberryPiService.js";
 import { getConfig } from "../config.js";
+import { logger } from "../middleware/logger.js";
 
 export default class ServiceManager {
   constructor() {
@@ -22,13 +23,26 @@ export default class ServiceManager {
     this.initialized = false;
   }
 
+  /**
+   * Initialize all enabled services
+   *
+   * Reads configuration, initializes Tor if needed, and sets up all enabled services
+   * with their respective configurations. Handles multi-instance services and
+   * provides comprehensive error handling and logging.
+   *
+   * @returns {Promise<void>}
+   * @throws {Error} If critical service initialization fails
+   */
   async initializeServices() {
-    console.log("🔧 Initializing services...");
+    logger.progress("Initializing services");
 
     const config = getConfig();
     const enabledServices = config.enabledServices;
 
-    console.log("📋 Enabled services:", Array.from(enabledServices).join(", "));
+    logger.service(
+      "system",
+      `Enabled services: ${Array.from(enabledServices).join(", ")}`
+    );
 
     try {
       // Initialize Tor Manager and start Tor (only if tor service is enabled)
@@ -37,7 +51,7 @@ export default class ServiceManager {
         await this.torManager.initialize();
 
         // Start Tor if it's not already running
-        console.log("🚀 Starting Tor proxy...");
+        logger.progress("Starting Tor proxy");
         await this.torManager.startTor();
       }
 
@@ -199,16 +213,16 @@ export default class ServiceManager {
           (async () => {
             try {
               const ok = await homebridgeService.login();
-              if (ok) console.log("✅ Homebridge background login successful");
+              if (ok)
+                logger.service("homebridge", "Background login successful");
               else
-                console.log(
-                  "⚠️ Homebridge background login failed or returned non-OK",
+                logger.warning(
+                  "Homebridge background login failed or returned non-OK"
                 );
             } catch (e) {
-              console.warn(
-                "⚠️ Homebridge background login error:",
-                e && e.message ? e.message : e,
-              );
+              logger.warning("Homebridge background login error", {
+                error: e && e.message ? e.message : e,
+              });
             }
           })();
         }
@@ -317,9 +331,9 @@ export default class ServiceManager {
       }
 
       this.initialized = true;
-      console.log("✅ All services initialized successfully");
+      logger.success("All services initialized successfully");
     } catch (error) {
-      console.error("❌ Failed to initialize services:", error.message);
+      logger.error("Failed to initialize services", { error: error.message });
       throw error;
     }
   }
@@ -419,7 +433,7 @@ export default class ServiceManager {
   }
 
   async cleanup() {
-    console.log("🧹 Cleaning up services...");
+    logger.progress("Cleaning up services");
 
     if (this.torManager) {
       await this.torManager.cleanup();
@@ -427,12 +441,12 @@ export default class ServiceManager {
 
     this.services.clear();
     this.initialized = false;
-    console.log("✅ Service cleanup complete");
+    logger.success("Service cleanup complete");
   }
 
   async shutdown() {
-    console.log("🛑 Shutting down ServiceManager...");
+    logger.progress("Shutting down ServiceManager");
     await this.cleanup();
-    console.log("✅ ServiceManager shutdown complete");
+    logger.success("ServiceManager shutdown complete");
   }
 }

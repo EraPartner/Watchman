@@ -36,7 +36,13 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  console.log("🚀 Service Worker activating...");
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: "INFO",
+      message: "[SERVICE_WORKER] Service Worker activating",
+    })
+  );
 
   event.waitUntil(
     caches
@@ -52,7 +58,13 @@ self.addEventListener("activate", (event) => {
         );
       })
       .then(() => {
-        console.log("✅ Service Worker activated");
+        console.log(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: "INFO",
+            message: "[SERVICE_WORKER] Service Worker activated",
+          })
+        );
         self.clients.claim();
       }),
   );

@@ -33,7 +33,7 @@ class MacMiniService {
 
     this.timeout = parseInt(
       options.timeout || process.env.MACMINI_TIMEOUT || "5000",
-      10,
+      10
     );
 
     // If we have sshUser and host, we'll attempt SSH-based stats
@@ -69,7 +69,7 @@ class MacMiniService {
         const out = stdout || "";
         const success =
           /0% packet loss|0\.0% packet loss|0 packets lost|0 received/.test(
-            out,
+            out
           ) && !/100% packet loss/.test(out);
         if (success) {
           return {
@@ -98,7 +98,7 @@ class MacMiniService {
     if (this.sshKey) parts.push("-i", this.sshKey);
     parts.push(
       `${this.sshUser}@${this.host}`,
-      '"' + cmd.replace(/"/g, '\\"') + '"',
+      '"' + cmd.replace(/"/g, '\\"') + '"'
     );
     return parts.join(" ");
   }
@@ -138,8 +138,8 @@ class MacMiniService {
           if (!hasAgent)
             return reject(
               new Error(
-                "Failed to read private key for ssh2: " + (err.message || err),
-              ),
+                "Failed to read private key for ssh2: " + (err.message || err)
+              )
             );
         }
       }
@@ -324,7 +324,7 @@ class MacMiniService {
       }
 
       const uptimeSeconds = parseUptimeSeconds(
-        uptimeOut ? uptimeOut.trim() : null,
+        uptimeOut ? uptimeOut.trim() : null
       );
 
       const stats = {
@@ -365,7 +365,7 @@ class MacMiniService {
 
     if (!this.sshUser || !this.sshKey) {
       throw new Error(
-        "SSH credentials not configured (MACMINI_SSH_USER and MACMINI_SSH_KEY_PATH required)",
+        "SSH credentials not configured (MACMINI_SSH_USER and MACMINI_SSH_KEY_PATH required)"
       );
     }
 
@@ -437,7 +437,7 @@ class MacMiniService {
                 .stderr.on("data", (data) => {
                   stderr += data.toString();
                 });
-            },
+            }
           );
         })
         .on("error", (err) => {

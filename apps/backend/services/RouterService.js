@@ -8,11 +8,11 @@ export default class RouterService {
     this.ports = Array.isArray(opts.ports)
       ? opts.ports
       : opts.ports
-      ? String(opts.ports)
-          .split(/[,\s]+/)
-          .map((p) => Number(p))
-          .filter(Boolean)
-      : [];
+        ? String(opts.ports)
+            .split(/[,\s]+/)
+            .map((p) => Number(p))
+            .filter(Boolean)
+        : [];
     this.timeout =
       typeof opts.timeout === "number" ? opts.timeout : opts.timeoutMs || 3000;
     this.pingCount = typeof opts.pingCount === "number" ? opts.pingCount : 1;

@@ -61,7 +61,7 @@ export default class IpfsService {
       if (res && res.status === 405) {
         const fallback = firstMethod === "GET" ? "POST" : "GET";
         console.warn(
-          `IPFS API ${path} returned 405 on ${firstMethod}, retrying with ${fallback}`,
+          `IPFS API ${path} returned 405 on ${firstMethod}, retrying with ${fallback}`
         );
         res = await doRequest(fallback);
       }
@@ -202,7 +202,7 @@ export default class IpfsService {
           },
           signal: AbortSignal.timeout(10000),
           agent: httpsAgent, // Use HTTPS agent for GitHub API
-        },
+        }
       );
 
       if (!response.ok) {

@@ -3,6 +3,7 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+import { logger } from "../lib/logger";
 
 const Index = () => {
   const { isConnected, reconnectAttempts } = useWebSocket();
@@ -20,10 +21,10 @@ const Index = () => {
       navigator.serviceWorker
         .register("/sw.js")
         .then((registration) => {
-          console.log("✅ Service Worker registered:", registration);
+          logger.serviceWorker("Service Worker registered", registration);
         })
         .catch((error) => {
-          console.error("❌ Service Worker registration failed:", error);
+          logger.error("Service Worker registration failed", error);
         });
     }
   }, []);

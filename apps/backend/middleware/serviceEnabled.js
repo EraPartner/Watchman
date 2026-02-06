@@ -36,7 +36,7 @@ export function requireAnyServiceEnabled(...serviceNames) {
     const enabledServices = config.enabledServices;
 
     const anyEnabled = serviceNames.some((name) =>
-      enabledServices.has(name.toLowerCase()),
+      enabledServices.has(name.toLowerCase())
     );
 
     if (!anyEnabled) {

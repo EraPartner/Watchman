@@ -15,7 +15,7 @@ const DUMMY_HASH =
 
 if (!JWT_SECRET) {
   console.warn(
-    "⚠️ JWT_SECRET not set in environment. Auth will not function correctly.",
+    "⚠️ JWT_SECRET not set in environment. Auth will not function correctly."
   );
 }
 
@@ -60,33 +60,61 @@ export async function authenticateCredentials(username, password) {
   }
 }
 
-// Express middleware to require auth. Supports token in Authorization header (Bearer) or in cookie 'token'
+/**
+ * Express middleware to require authentication
+ *
+ * Supports token in Authorization header (Bearer) or in HTTP-only cookie 'token'.
+ * Implements proper token validation and user context attachment.
+ *
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {void}
+ */
 export function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   let token = null;
 
+  // Extract token from Authorization header
   if (
     authHeader &&
     typeof authHeader === "string" &&
     authHeader.startsWith("Bearer ")
   ) {
-    token = authHeader.slice(7);
+    const headerToken = authHeader.slice(7);
+    if (headerToken.length > 0) {
+      token = headerToken;
+    }
   }
 
-  if (!token && req.cookies && req.cookies.token) {
+  // Fallback to cookie token if header token not found
+  if (!token && req.cookies?.token) {
     token = req.cookies.token;
   }
 
   if (!token) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "Authentication token required",
+    });
   }
 
+  // Verify token and decode payload
   const decoded = verifyToken(token);
   if (!decoded) {
-    return res.status(401).json({ error: "Invalid or expired token" });
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "Invalid or expired token",
+    });
   }
 
-  // attach user info to request
-  req.user = decoded;
+  // Attach user information to request for use in subsequent middleware
+  req.user = {
+    ...decoded,
+    tokenIssuedAt: decoded.iat
+      ? new Date(decoded.iat * 1000).toISOString()
+      : null,
+  };
+
   next();
 }
