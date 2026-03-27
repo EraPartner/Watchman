@@ -137,7 +137,7 @@ export const TorCard = ({
             <Badge
               variant="outline"
               className={`${getRelayTypeColor(
-                stats.relayType
+                stats.relayType,
               )} capitalize border-current`}
             >
               {stats.relayType}
@@ -172,13 +172,13 @@ export const TorCard = ({
             <Progress
               value={Math.min(
                 (stats.bandwidth.current / stats.bandwidth.burst) * 100,
-                100
+                100,
               )}
               className="h-2"
             />
             <div className="text-xs text-center text-muted-foreground">
               {Math.round(
-                (stats.bandwidth.current / stats.bandwidth.burst) * 100
+                (stats.bandwidth.current / stats.bandwidth.burst) * 100,
               )}
               % of burst capacity
             </div>
