@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Badge } from "./ui/badge";
+import { extractApiError, unwrapApiResponse } from "../lib/apiResponse";
 
 interface UpdateInfo {
   currentVersion: string;
@@ -36,9 +37,13 @@ export const UpdateBadge = ({ service, className = "" }: UpdateBadgeProps) => {
           },
         });
 
+        const body = await response
+          .json()
+          .catch(() => ({ error: `Failed to check ${service} updates` }));
+
         console.log(
           `[UpdateBadge] ${service} response status:`,
-          response.status,
+          response.status
         );
 
         if (!response.ok) {
@@ -48,16 +53,17 @@ export const UpdateBadge = ({ service, className = "" }: UpdateBadgeProps) => {
             setUpdateInfo(null);
             return;
           }
-          const errorText = await response.text().catch(() => "Unknown error");
           console.error(
             `[UpdateBadge] ${service} error:`,
             response.status,
-            errorText,
+            body
           );
-          throw new Error(`Failed to check updates: ${response.status}`);
+          throw new Error(
+            extractApiError(body, `Failed to check updates: ${response.status}`)
+          );
         }
 
-        const data = await response.json();
+        const data = unwrapApiResponse<UpdateInfo>(body);
         console.log(`[UpdateBadge] ${service} update info:`, data);
         setUpdateInfo(data);
       } catch (err) {
@@ -97,7 +103,7 @@ export const UpdateBadge = ({ service, className = "" }: UpdateBadgeProps) => {
   // Hide if no update available
   if (!updateInfo.updateAvailable) {
     console.log(
-      `[UpdateBadge] ${service} is up to date: ${updateInfo.currentVersion}`,
+      `[UpdateBadge] ${service} is up to date: ${updateInfo.currentVersion}`
     );
     return null;
   }

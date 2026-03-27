@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import ServiceLink from "@/components/ServiceLink";
 import { useEnabledServices } from "@/hooks/useEnabledServices";
+import { formatBytes, formatSpeed } from "../lib/utils";
 
 // qBittorrent logo SVG component
 const QBittorrentIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -111,20 +112,6 @@ export const QBittorrentCard: React.FC<QBittorrentCardProps> = ({
       mounted = false;
     };
   }, []);
-
-  // Helper function to format bytes
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  };
-
-  // Helper function to format speed
-  const formatSpeed = (bytesPerSecond: number) => {
-    return formatBytes(bytesPerSecond) + "/s";
-  };
 
   // Helper function to get connection status color
   const getConnectionStatusColor = (status: string) => {
@@ -342,7 +329,7 @@ export const QBittorrentCard: React.FC<QBittorrentCardProps> = ({
                 </div>
                 <div
                   className={`font-mono font-semibold text-sm capitalize ${getConnectionStatusColor(
-                    stats.connection.status,
+                    stats.connection.status
                   )}`}
                 >
                   {stats.connection.status}
@@ -374,6 +361,6 @@ export const QBittorrentCard: React.FC<QBittorrentCardProps> = ({
       )}
     </Card>
   );
-};;
+};
 
 // Use named export only (no default export)

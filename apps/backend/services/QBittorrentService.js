@@ -1,18 +1,13 @@
-import fetch from "node-fetch";
-import http from "http";
-import https from "https";
 import logger from "../middleware/logger.js";
+import { formatBytes, formatSpeed } from "../utils/serviceUtils.js";
+import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
 
-// Create agents with keepAlive to fix connection issues
-const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
-const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+// Use shared HTTP agents from pool
 
 export class QBittorrentService {
   constructor(config = {}) {
     this.baseUrl =
-      config.baseUrl ||
-      process.env.QBITTORRENT_URL ||
-      "http://192.168.0.143:8069";
+      config.baseUrl || process.env.QBITTORRENT_URL || "http://127.0.0.1:8069";
     this.username =
       config.username || process.env.QBITTORRENT_USERNAME || "admin";
     this.password = config.password || process.env.QBITTORRENT_PASSWORD || "";
@@ -22,20 +17,6 @@ export class QBittorrentService {
     this.lastCheck = null;
     this.checkInterval = 30000; // 30 seconds
     this.cookieExpiry = null; // Track cookie expiration
-  }
-
-  // Helper method to format bytes
-  static formatBytes(bytes) {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  }
-
-  // Helper method to format speed
-  static formatSpeed(bytesPerSecond) {
-    return QBittorrentService.formatBytes(bytesPerSecond) + "/s";
   }
 
   async authenticate() {

@@ -12,25 +12,13 @@
  */
 
 import { execSync } from "child_process";
-import fetch from "node-fetch";
-import http from "http";
-import https from "https";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Buffer } from "buffer";
 import { logger } from "../middleware/logger.js";
+import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
+import { DEFAULT_TIMEOUTS } from "../config/serviceDefaults.js";
 
-// Create agents with keepAlive to fix connection issues and improve performance
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  keepAliveMsecs: 30000,
-  timeout: 60000,
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  keepAliveMsecs: 30000,
-  timeout: 60000,
-});
+// Use shared HTTP agents from pool (Bitcoin uses custom timeout in requests)
 
 /**
  * Clean and normalise Bitcoin version strings

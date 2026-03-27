@@ -14,6 +14,7 @@ import { AdGuardServerStats, ServerStatus } from "../types/server";
 import { useConfig } from "../hooks/use-config";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { UpdateBadge } from "./UpdateBadge";
+import { formatNumber } from "../lib/utils";
 
 // AdGuard Home logo SVG component
 const AdGuardIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -51,16 +52,6 @@ export const AdGuardCard = ({
   const { config } = useConfig();
 
   const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    }
-    if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
-    }
-    return num.toString();
-  };
 
   const formatPercentage = (rate: number) => {
     return `${rate.toFixed(1)}%`;
@@ -217,7 +208,7 @@ export const AdGuardCard = ({
               <Zap className="h-3 w-3 text-yellow-500" />
               {formatProcessingTime(
                 stats.avgProcessingTime,
-                stats.timeUnits || "ms",
+                stats.timeUnits || "ms"
               )}
             </div>
           </div>

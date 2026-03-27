@@ -74,7 +74,7 @@ export class WebSocketManager extends EventEmitter {
       server,
       path: "/ws",
       clientTracking: true,
-      maxPayload: 1024 * 1024, // 1MB max payload
+      maxPayload: 64 * 1024, // 64KB max payload - reduced from 1MB for DoS protection
     });
 
     this.wss.on("connection", (ws, req) => {

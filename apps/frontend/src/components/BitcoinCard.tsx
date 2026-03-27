@@ -14,6 +14,7 @@ import {
   Server,
 } from "lucide-react";
 import { useEnabledServices } from "../hooks/useEnabledServices";
+import { formatNumber, formatBytes, formatUptime } from "../lib/utils";
 
 // Bitcoin logo SVG component
 const BitcoinIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -76,7 +77,7 @@ export const BitcoinCard: React.FC<BitcoinCardProps> = ({
           const nodeStats = await apiClient.getServiceStats(instanceId);
           console.log(
             `[BitcoinCard] ${displayName} stats response:`,
-            nodeStats,
+            nodeStats
           );
 
           if (!mounted) return;
@@ -84,14 +85,14 @@ export const BitcoinCard: React.FC<BitcoinCardProps> = ({
           setStats(nodeStats as BitcoinStats);
         } else {
           console.log(
-            `[BitcoinCard] ${displayName} not online, clearing stats`,
+            `[BitcoinCard] ${displayName} not online, clearing stats`
           );
           setStats(null);
         }
       } catch (error) {
         console.error(
           `[BitcoinCard] Error fetching ${displayName} data:`,
-          error,
+          error
         );
         if (!mounted) return;
         setStatus("offline");
@@ -113,44 +114,6 @@ export const BitcoinCard: React.FC<BitcoinCardProps> = ({
     // Extract version number from "/Satoshi:29.1.0/" format
     const match = version.match(/\/Satoshi:([^/]+)\//);
     return match ? match[1] : version;
-  };
-
-  // Helper function to format large numbers
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    }
-    if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
-    }
-    return num.toLocaleString();
-  };
-
-  // Helper function to format bytes
-  const formatBytes = (bytes: number) => {
-    if (bytes >= 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-    }
-    if (bytes >= 1024 * 1024) {
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    }
-    if (bytes >= 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB`;
-    }
-    return `${bytes} B`;
-  };
-
-  // Helper function to format uptime
-  const formatUptime = (seconds: number) => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    if (days > 0) {
-      return `${days}d ${hours}h`;
-    }
-    if (hours > 0) {
-      return `${hours}h ${Math.floor((seconds % 3600) / 60)}m`;
-    }
-    return `${Math.floor(seconds / 60)}m`;
   };
 
   // Helper function to format percentage

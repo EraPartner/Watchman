@@ -83,7 +83,11 @@ export const cacheMiddleware = (
 
       // Validate cache key
       if (!cacheKey || typeof cacheKey !== "string") {
-        console.warn("Invalid cache key generated, skipping cache");
+        logger.warn("Invalid cache key generated, skipping cache", {
+          path: req.path,
+          method: req.method,
+          requestId: req.requestId,
+        });
         next();
         return;
       }
@@ -91,7 +95,11 @@ export const cacheMiddleware = (
       // Check for cached response
       const cachedResponse = cache.get(cacheKey);
       if (cachedResponse !== undefined && cachedResponse !== null) {
-        console.debug(`🎯 Cache hit for ${cacheKey}`);
+        logger.debug(`Cache hit for ${cacheKey}`, {
+          path: req.path,
+          method: req.method,
+          requestId: req.requestId,
+        });
 
         // Add cache headers
         res.setHeader("X-Cache", "HIT");
@@ -100,14 +108,20 @@ export const cacheMiddleware = (
         return res.status(200).json(cachedResponse);
       }
 
-      console.debug(`🔍 Cache miss for ${cacheKey}`);
+      logger.debug(`Cache miss for ${cacheKey}`, {
+        path: req.path,
+        method: req.method,
+        requestId: req.requestId,
+      });
       res.setHeader("X-Cache", "MISS");
     } catch (error) {
       // If cache lookup fails, don't block the request
-      console.warn(
-        "⚠️  Cache middleware error (continuing):",
-        error?.message || error
-      );
+      logger.warn("Cache middleware error (continuing)", {
+        error: error?.message || error,
+        path: req.path,
+        method: req.method,
+        requestId: req.requestId,
+      });
     }
 
     // Override res.json to cache successful responses
@@ -118,11 +132,20 @@ export const cacheMiddleware = (
         if (cacheOnlyStatusCodes.includes(res.statusCode)) {
           if (!skipCacheOnError || !body?.error) {
             cache.set(cacheKey, body);
-            console.debug(`💾 Cached response for ${cacheKey}`);
+            logger.debug(`Cached response for ${cacheKey}`, {
+              path: req.path,
+              method: req.method,
+              requestId: req.requestId,
+            });
           }
         }
       } catch (error) {
-        console.warn("⚠️  Failed to cache response:", error?.message || error);
+        logger.warn("Failed to cache response", {
+          error: error?.message || error,
+          path: req.path,
+          method: req.method,
+          requestId: req.requestId,
+        });
       }
 
       return originalJson(body);

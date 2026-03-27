@@ -23,7 +23,7 @@ Watchman/
 ├── 📄 package.json         # Workspace config
 ├── 📄 package-lock.json    # Lock file
 ├── 📄 README.md            # Project overview
-├── 📄 LICENSE              # MIT License
+├── 📄 LICENSE              # AGPL-3.0 License
 ├── 📄 .env.local           # Environment variables
 ├── 📄 .gitignore           # Git ignore rules
 ├── 📄 .editorconfig        # Editor config (all apps)

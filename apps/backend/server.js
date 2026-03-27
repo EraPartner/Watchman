@@ -49,6 +49,18 @@ import {
   requireAnyServiceEnabled,
   requireServiceEnabled,
 } from "./middleware/serviceEnabled.js";
+import { getFrontendConfig } from "./services/FrontendConfigService.js";
+import requestTimeout from "./middleware/requestTimeout.js";
+import responseSizeLimit from "./middleware/responseSizeLimit.js";
+import apiResponseStandardizer from "./middleware/apiResponse.js";
+import { paginate, parsePagination } from "./utils/pagination.js";
+import {
+  sanitizeString,
+  isValidIPv4,
+  isValidServiceId,
+  validateParams,
+  validateQuery,
+} from "./utils/validation.js";
 
 const exec = promisify(execCb);
 
@@ -177,7 +189,10 @@ process.on("uncaughtException", (error) => {
     handleGracefulShutdown("uncaughtException");
   } else {
     // In development, still exit but with more visible error
-    console.error("💥 Uncaught Exception:", error);
+    logger.error("Uncaught Exception - Critical Error", {
+      error: error.message,
+      stack: error.stack,
+    });
     process.exit(1);
   }
 });
@@ -194,7 +209,9 @@ process.on("unhandledRejection", (reason, promise) => {
     handleGracefulShutdown("unhandledRejection");
   } else {
     // In development, still exit but with more visible error
-    console.error("💥 Unhandled Rejection:", reason);
+    logger.error("Unhandled Promise Rejection - Critical Error", {
+      reason: reason?.toString() || "Unknown reason",
+    });
     process.exit(1);
   }
 });
@@ -237,6 +254,13 @@ async function initializeServer() {
 app.use(requestIdMiddleware); // Add request ID tracking
 app.use(requestLogger); // Add structured logging
 app.use(performanceMonitor.trackRequest());
+app.use(requestTimeout); // Global request timeout to prevent hanging requests
+app.use(responseSizeLimit()); // Prevent large response DoS attacks
+app.use(
+  apiResponseStandardizer({
+    autoWrap: true,
+  })
+);
 
 // Enhanced Helmet configuration for production
 app.use(
@@ -277,7 +301,7 @@ app.use((req, res, next) => {
   );
 
   // Add additional security headers for production-ready deployment
-  res.setHeader("X-Request-ID", req.id || "unknown");
+  res.setHeader("X-Request-ID", req.requestId || req.id || "unknown");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Download-Options", "noopen");
   res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
@@ -520,6 +544,11 @@ app.post(
 app.get(
   "/api/:serviceId(\\w+_\\d+)/status",
   healthLimiter,
+  validateParams({
+    serviceId: {
+      validator: isValidServiceId,
+    },
+  }),
   healthCacheMiddleware,
   async (req, res) => {
     try {
@@ -537,10 +566,10 @@ app.get(
       const health = await serviceManager.getServiceHealth(serviceId);
       res.json(health);
     } catch (error) {
-      console.error(
-        `❌ Service ${req.params.serviceId} status failed:`,
-        error.message
-      );
+      logger.error(`Service ${req.params.serviceId} status failed`, {
+        error: error.message,
+        serviceId: req.params.serviceId,
+      });
       res.status(500).json({
         error: `Failed to fetch ${req.params.serviceId} status`,
         status: "offline",
@@ -553,6 +582,11 @@ app.get(
 app.get(
   "/api/:serviceId(\\w+_\\d+)/stats",
   requireAuth, // Add authentication requirement
+  validateParams({
+    serviceId: {
+      validator: isValidServiceId,
+    },
+  }),
   statsCacheMiddleware,
   async (req, res) => {
     try {
@@ -569,10 +603,10 @@ app.get(
       const stats = await serviceManager.getServiceStats(serviceId);
       res.json(stats);
     } catch (error) {
-      console.error(
-        `❌ Service ${req.params.serviceId} stats failed:`,
-        error.message
-      );
+      logger.error(`Service ${req.params.serviceId} stats failed`, {
+        error: error.message,
+        serviceId: req.params.serviceId,
+      });
       res.status(500).json({
         error: `Failed to fetch ${req.params.serviceId} stats`,
         message: error.message,
@@ -629,7 +663,7 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("adguard");
-      logger.info("[SUCCESS] AdGuard stats connection successful");
+      logger.debug("AdGuard stats connection successful");
       res.json(stats);
     } catch (error) {
       logger.error("AdGuard stats connection failed", { error: error.message });
@@ -684,7 +718,7 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("bitcoin");
-      logger.info("[SUCCESS] Bitcoin health connection successful");
+      logger.debug("Bitcoin health connection successful");
       res.json(health);
     } catch (error) {
       logger.error("Bitcoin health connection failed", {
@@ -715,7 +749,7 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("bitcoin");
-      logger.info("[SUCCESS] Bitcoin status connection successful");
+      logger.debug("Bitcoin status connection successful");
       res.json(health);
     } catch (error) {
       logger.error("Bitcoin status connection failed", {
@@ -773,7 +807,9 @@ app.get(
       const updateInfo = await bitcoinService.checkForUpdates();
       res.json(updateInfo);
     } catch (error) {
-      console.error("❌ Bitcoin update check failed:", error.message);
+      logger.error("Bitcoin update check failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to check for Bitcoin updates",
         message: error.message,
@@ -799,7 +835,7 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("qbittorrent");
-      logger.info("[SUCCESS] qBittorrent status connection successful");
+      logger.debug("qBittorrent status connection successful");
       res.json(health);
     } catch (error) {
       logger.error("qBittorrent status connection failed", {
@@ -828,7 +864,7 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("qbittorrent");
-      logger.info("[SUCCESS] qBittorrent stats connection successful");
+      logger.debug("qBittorrent stats connection successful");
       res.json(stats);
     } catch (error) {
       logger.error("qBittorrent stats connection failed", {
@@ -858,7 +894,7 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("ipfs");
-      logger.info("[SUCCESS] IPFS status connection successful");
+      logger.debug("IPFS status connection successful");
       res.json(health);
     } catch (error) {
       logger.error("IPFS status connection failed", { error: error.message });
@@ -883,7 +919,7 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("ipfs");
-      logger.info("[SUCCESS] IPFS stats connection successful");
+      logger.debug("IPFS stats connection successful");
       res.json(stats);
     } catch (error) {
       logger.error("IPFS stats connection failed", { error: error.message });
@@ -911,7 +947,9 @@ app.get(
       const updateInfo = await ipfsService.checkForUpdates();
       res.json(updateInfo);
     } catch (error) {
-      console.error("❌ IPFS update check failed:", error.message);
+      logger.error("IPFS update check failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to check for IPFS updates",
         message: error.message,
@@ -934,10 +972,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("roon");
-      console.log(`✅ Roon status connection successful`);
+      logger.service("roon", "Status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Roon status connection failed:", error.message);
+      logger.error("Roon status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Roon status",
         status: "offline",
@@ -959,10 +999,12 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("roon");
-      console.log(`✅ Roon stats connection successful`);
+      logger.service("roon", "Stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Roon stats connection failed:", error.message);
+      logger.error("Roon stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Roon stats",
         message: error.message,
@@ -984,7 +1026,7 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("tor");
-      logger.info("Tor relay connection successful");
+      logger.debug("Tor relay connection successful");
       res.json(stats);
     } catch (error) {
       logger.error("Tor relay connection failed", { error: error.message });
@@ -1009,10 +1051,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("tor");
-      console.log(`✅ Tor health check connection successful`);
+      logger.service("tor", "Health check connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Tor health check connection failed:", error.message);
+      logger.error("Tor health check connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to check Tor health",
         message: error.message,
@@ -1036,7 +1080,9 @@ app.get(
       const updateInfo = await torService.checkForUpdates();
       res.json(updateInfo);
     } catch (error) {
-      console.error("❌ Tor update check failed:", error.message);
+      logger.error("Tor update check failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to check for Tor updates",
         message: error.message,
@@ -1062,10 +1108,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("synology");
-      console.log(`✅ Synology status connection successful`);
+      logger.service("synology", "Status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Synology status connection failed:", error.message);
+      logger.error("Synology status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Synology status",
         status: "offline",
@@ -1099,10 +1147,12 @@ app.get(
         });
       }
 
-      console.log(`✅ Synology stats connection successful`);
+      logger.service("synology", "Stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Synology stats connection failed:", error.message);
+      logger.error("Synology stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Synology stats",
         message: error.message,
@@ -1130,13 +1180,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("philips");
-      console.log(`✅ Philips Bridge status connection successful`);
+      logger.service("philips", "Status connection successful");
       res.json(health);
     } catch (error) {
-      console.error(
-        "❌ Philips Bridge status connection failed:",
-        error.message
-      );
+      logger.error("Philips Bridge status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Philips Bridge status",
         status: "offline",
@@ -1160,13 +1209,12 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("philips");
-      console.log(`✅ Philips Bridge stats connection successful`);
+      logger.service("philips", "Stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error(
-        "❌ Philips Bridge stats connection failed:",
-        error.message
-      );
+      logger.error("Philips Bridge stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Philips Bridge stats",
         message: error.message,
@@ -1203,7 +1251,9 @@ app.get(
         raw: stats,
       });
     } catch (error) {
-      console.error("❌ /api/status/homebridge-version failed:", error.message);
+      logger.error("/api/status/homebridge-version failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Homebridge version",
         message: error.message,
@@ -1238,7 +1288,9 @@ app.get(
         raw: health,
       });
     } catch (error) {
-      console.error("❌ /api/status/server-information failed:", error.message);
+      logger.error("/api/status/server-information failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch server information",
         message: error.message,
@@ -1264,10 +1316,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("homebridge");
-      console.log("✅ Homebridge status connection successful");
+      logger.service("homebridge", "Status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Homebridge status connection failed:", error.message);
+      logger.error("Homebridge status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Homebridge status",
         status: "offline",
@@ -1291,10 +1345,12 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("homebridge");
-      console.log("✅ Homebridge stats connection successful");
+      logger.service("homebridge", "Stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Homebridge stats connection failed:", error.message);
+      logger.error("Homebridge stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Homebridge stats",
         message: error.message,
@@ -1320,7 +1376,9 @@ app.get(
       const updateInfo = await hbService.checkForUpdates();
       res.json(updateInfo);
     } catch (error) {
-      console.error("❌ Homebridge update check failed:", error.message);
+      logger.error("Homebridge update check failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to check for Homebridge updates",
         message: error.message,
@@ -1329,12 +1387,18 @@ app.get(
   }
 );
 
-// New: expose accessories endpoint
+// New: expose accessories endpoint with pagination
 app.get(
   "/api/accessories",
   requireServiceEnabled("homebridge"),
   statsCacheMiddleware,
   requireAuth,
+  parsePagination({
+    pageParam: "page",
+    limitParam: "limit",
+    defaultLimit: 50,
+    maxLimit: 100,
+  }),
   async (req, res) => {
     try {
       const hbService = serviceManager.getService("homebridge");
@@ -1346,7 +1410,10 @@ app.get(
 
       if (typeof hbService.getAccessories === "function") {
         const accessories = await hbService.getAccessories();
-        return res.json(accessories);
+
+        // Apply pagination to the accessories array
+        const paginatedResult = paginate(accessories, req.pagination);
+        return res.json(paginatedResult);
       }
 
       // Fallback: try to use getStats or getServerInformation if accessories not available
@@ -1355,7 +1422,9 @@ app.get(
           "Accessories endpoint not implemented for this Homebridge service",
       });
     } catch (error) {
-      console.error("❌ /api/accessories failed:", error.message);
+      logger.error("/api/accessories failed", {
+        error: error.message,
+      });
       res
         .status(500)
         .json({ error: "Failed to fetch accessories", message: error.message });
@@ -1380,10 +1449,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("albyhub");
-      console.log(`✅ Alby Hub status connection successful`);
+      logger.service("albyhub", "Status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Alby Hub status connection failed:", error.message);
+      logger.error("Alby Hub status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Alby Hub status",
         status: "offline",
@@ -1407,10 +1478,12 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("albyhub");
-      console.log(`✅ Alby Hub stats connection successful`);
+      logger.service("albyhub", "Stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Alby Hub stats connection failed:", error.message);
+      logger.error("Alby Hub stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Alby Hub stats",
         message: error.message,
@@ -1436,10 +1509,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("macmini");
-      console.log("✅ Mac Mini status connection successful");
+      logger.service("macmini", "Status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Mac Mini status connection failed:", error.message);
+      logger.error("Mac Mini status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Mac Mini status",
         status: "offline",
@@ -1463,10 +1538,12 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("macmini");
-      console.log("✅ Mac Mini stats connection successful");
+      logger.service("macmini", "Stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Mac Mini stats connection failed:", error.message);
+      logger.error("Mac Mini stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Mac Mini stats",
         message: error.message,
@@ -1492,10 +1569,12 @@ app.get(
       }
 
       const health = await serviceManager.getServiceHealth("raspi");
-      console.log("✅ Raspberry Pi status connection successful");
+      logger.service("raspi", "Status connection successful");
       res.json(health);
     } catch (error) {
-      console.error("❌ Raspberry Pi status connection failed:", error.message);
+      logger.error("Raspberry Pi status connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Raspberry Pi status",
         status: "offline",
@@ -1519,10 +1598,12 @@ app.get(
       }
 
       const stats = await serviceManager.getServiceStats("raspi");
-      console.log("✅ Raspberry Pi stats connection successful");
+      logger.service("raspi", "Stats connection successful");
       res.json(stats);
     } catch (error) {
-      console.error("❌ Raspberry Pi stats connection failed:", error.message);
+      logger.error("Raspberry Pi stats connection failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to fetch Raspberry Pi stats",
         message: error.message,
@@ -1541,20 +1622,38 @@ app.get(
       const config = getConfig();
       const enabledServices = config.enabledServices;
 
-      // Only check health for enabled services
-      const healthResults = {};
-
-      for (const serviceName of enabledServices) {
-        try {
-          healthResults[serviceName] =
-            await serviceManager.getServiceHealth(serviceName);
-        } catch (error) {
-          healthResults[serviceName] = {
-            status: "offline",
-            error: error.message,
-            timestamp: new Date().toISOString(),
-          };
+      // Check all services in PARALLEL with timeout protection
+      const healthPromises = Array.from(enabledServices).map(
+        async (serviceName) => {
+          try {
+            const health = await Promise.race([
+              serviceManager.getServiceHealth(serviceName),
+              new Promise((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("Health check timeout")),
+                  5000
+                )
+              ),
+            ]);
+            return [serviceName, health];
+          } catch (error) {
+            return [
+              serviceName,
+              {
+                status: "offline",
+                error: error.message,
+                timestamp: new Date().toISOString(),
+              },
+            ];
+          }
         }
+      );
+
+      // Execute all health checks in parallel
+      const results = await Promise.all(healthPromises);
+      const healthResults = {};
+      for (const [serviceName, health] of results) {
+        healthResults[serviceName] = health;
       }
 
       res.json({
@@ -1562,7 +1661,9 @@ app.get(
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      console.error("❌ Services health check failed:", error.message);
+      logger.error("Services health check failed", {
+        error: error.message,
+      });
       res.status(500).json({
         error: "Failed to check services health",
         message: error.message,
@@ -1571,172 +1672,94 @@ app.get(
   }
 );
 
+// Get health of a batch/subset of services - REQUIRES AUTHENTICATION
+app.post(
+  "/api/services/health-batch",
+  healthLimiter,
+  requireAuth,
+  async (req, res) => {
+    try {
+      const MAX_BATCH_SIZE = 25;
+      const rawServices = Array.isArray(req.body?.services)
+        ? req.body.services
+        : null;
+
+      if (!rawServices) {
+        return res.status(400).json({
+          error: "Invalid request body. Expected { services: string[] }",
+        });
+      }
+
+      if (rawServices.length > MAX_BATCH_SIZE) {
+        return res.status(400).json({
+          error: `Too many services requested. Maximum ${MAX_BATCH_SIZE}`,
+        });
+      }
+
+      const services = [];
+      const seen = new Set();
+
+      for (const rawServiceName of rawServices) {
+        const serviceName = sanitizeString(rawServiceName, 64);
+        if (!serviceName || !isValidServiceId(serviceName)) {
+          return res.status(400).json({
+            error: `Invalid service id: ${String(rawServiceName)}`,
+          });
+        }
+
+        if (!seen.has(serviceName)) {
+          seen.add(serviceName);
+          services.push(serviceName);
+        }
+      }
+
+      if (services.length === 0) {
+        return res.json({});
+      }
+
+      // Check requested services in PARALLEL with timeout protection
+      const healthPromises = services.map(async (serviceName) => {
+        try {
+          const health = await Promise.race([
+            serviceManager.getServiceHealth(serviceName),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Health check timeout")), 5000)
+            ),
+          ]);
+          return [serviceName, health];
+        } catch (error) {
+          return [
+            serviceName,
+            {
+              status: "offline",
+              error: error.message,
+              timestamp: new Date().toISOString(),
+            },
+          ];
+        }
+      });
+
+      const results = await Promise.all(healthPromises);
+      const healthResults = {};
+      for (const [serviceName, health] of results) {
+        healthResults[serviceName] = health;
+      }
+
+      return res.json(healthResults);
+    } catch (error) {
+      logger.error("Batch services health check failed", {
+        error: error?.message || String(error),
+      });
+      return res.status(500).json({
+        error: "Failed to check batch services health",
+        message: error?.message || String(error),
+      });
+    }
+  }
+);
+
 // Frontend configuration endpoint
-app.get("/api/config/frontend", (req, res) => {
-  const enabledServices = config.enabledServices;
-
-  // Debug logging
-  logger.debug("Frontend config requested");
-  logger.debug("Enabled services", {
-    enabledServices: Array.from(enabledServices),
-  });
-  logger.debug("ENABLED_SERVICES env", { value: process.env.ENABLED_SERVICES });
-
-  res.json({
-    enabledServices: Array.from(enabledServices),
-    services: {
-      adguard: {
-        webUrl: process.env.ADGUARD_MAIN_URL || "http://127.0.0.1:5213",
-      },
-      ipfs: (() => {
-        const url = process.env.IPFS_API_URL || "";
-        let host = null;
-        let port = null;
-        try {
-          if (url && url.trim()) {
-            const parsed = new URL(url);
-            host = parsed.hostname || null;
-            port = parsed.port || null;
-          }
-        } catch (e) {
-          // ignore parse errors
-        }
-
-        host = host || process.env.IPFS_HOST || null;
-        port = port || process.env.IPFS_PORT || null;
-
-        // If the user runs an IPFS web UI, expose a clickable webUrl env var
-        const webUiUrl = process.env.IPFS_WEB_UI_URL || null;
-
-        return {
-          host,
-          port,
-          webUrl: webUiUrl,
-          configured: !!(host || webUiUrl || process.env.IPFS_API_URL),
-        };
-      })(),
-      tor: {
-        nickname: process.env.TOR_RELAY_NICKNAME,
-        ip: process.env.TOR_RELAY_IP || process.env.DEFAULT_IP || "127.0.0.1",
-        port: process.env.TOR_DEFAULT_PORT || 27801,
-        metricsUrl:
-          process.env.TOR_METRICS_URL || "https://metrics.torproject.org",
-      },
-      bitcoin: {
-        onionUrl: process.env.BITCOIN_ONION_URL,
-        rpcPort: process.env.BITCOIN_RPC_PORT || 8332,
-        configured: !!(
-          process.env.BITCOIN_ONION_URL &&
-          process.env.BITCOIN_RPC_USER &&
-          process.env.BITCOIN_RPC_AUTH
-        ),
-      },
-      roon: {
-        host: process.env.ROON_HOST || null,
-        ports: process.env.ROON_PORTS || process.env.ROON_DEFAULT_PORT || null,
-        configured: !!process.env.ROON_HOST,
-      },
-      qbittorrent: (() => {
-        // Try to parse host/port from QBITTORRENT_URL if present
-        const url = process.env.QBITTORRENT_URL || "";
-        let host = null;
-        let port =
-          process.env.QBITTORRENT_PORT ||
-          process.env.QBITTORRENT_WEB_PORT ||
-          null;
-        try {
-          if (url && url.trim()) {
-            const parsed = new URL(url);
-            host = parsed.hostname || null;
-            if (parsed.port) port = parsed.port;
-          }
-        } catch (e) {
-          // ignore parse errors
-        }
-
-        // Fallback to individual host env var if provided
-        host = host || process.env.QBITTORRENT_HOST || null;
-        port = port || null;
-
-        return {
-          host,
-          webPort: port,
-          configured: !!host,
-        };
-      })(),
-      synology: {
-        host: process.env.SYNOLOGY_HOST || null,
-        webPort:
-          process.env.SYNOLOGY_WEB_PORT ||
-          process.env.SYNOLOGY_HTTP_PORT ||
-          process.env.SYNOLOGY_PORT ||
-          5000,
-        configured: !!process.env.SYNOLOGY_HOST,
-      },
-      albyhub: {
-        // Provide the raw ALBYHUB_URL so the frontend can construct a clickable host:port link
-        url: process.env.ALBYHUB_URL || null,
-        configured: !!process.env.ALBYHUB_URL,
-      },
-      nostrcheck: {
-        relayUrl: process.env.NOSTRCHECK_RELAY_URL || null,
-        // Expose an optional clickable web UI URL (http(s)://...) for the relay
-        webUrl: process.env.NOSTRCHECK_WEB_URL || null,
-        enabled:
-          (process.env.NOSTRCHECK_ENABLED || "false").toLowerCase() === "true",
-        configured: !!process.env.NOSTRCHECK_RELAY_URL,
-      },
-      // Expose configured routers (BERYL/TELENET) so frontend can show host/ports
-      beryl: {
-        host: process.env.BERYL_HOST || null,
-        ports: process.env.BERYL_PORTS
-          ? String(process.env.BERYL_PORTS)
-              .split(/[ ,]+/)
-              .map((p) => Number(p))
-              .filter(Boolean)
-          : [],
-        configured: !!process.env.BERYL_HOST,
-        // If a non-default web port is configured, expose a clickable webUrl so frontend links include the port
-        webUrl: (() => {
-          const h = process.env.BERYL_HOST;
-          const portsRaw = process.env.BERYL_PORTS || "";
-          if (!h) return null;
-          const ports = portsRaw
-            .split(/[ ,]+/)
-            .map((p) => Number(p))
-            .filter(Boolean);
-          // prefer a single explicit web port if provided; fallback to port 80
-          const webPort = ports.length > 0 ? ports[0] : null;
-          // Prefer https first. If webPort is present and non-standard, include it.
-          const preferHttps =
-            (process.env.BERYL_PREFER_HTTPS || "true").toLowerCase() !==
-            "false";
-          if (preferHttps) {
-            if (webPort && webPort !== 443) return `https://${h}:${webPort}`;
-            return `https://${h}`;
-          }
-          // Fallback to http
-          if (webPort && webPort !== 80) return `http://${h}:${webPort}`;
-          return `http://${h}`;
-        })(),
-      },
-      telenet: {
-        host: process.env.TELENET_HOST || null,
-        ports: process.env.TELENET_PORTS
-          ? String(process.env.TELENET_PORTS)
-              .split(/[ ,]+/)
-              .map((p) => Number(p))
-              .filter(Boolean)
-          : [],
-        configured: !!process.env.TELENET_HOST,
-      },
-    },
-    app: {
-      name: "Watchman Dashboard",
-      version: "1.0.0",
-    },
-  });
-});
+app.get("/api/config/frontend", getFrontendConfig);
 
 // Service instances endpoint - returns metadata about multi-instance services
 app.get("/api/services/instances", healthLimiter, requireAuth, (req, res) => {
@@ -1760,7 +1783,9 @@ app.get("/api/services/instances", healthLimiter, requireAuth, (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("❌ Failed to get service instances:", error.message);
+    logger.error("Failed to get service instances", {
+      error: error.message,
+    });
     res.status(500).json({
       error: "Failed to get service instances",
       message: error.message,
@@ -1770,18 +1795,41 @@ app.get("/api/services/instances", healthLimiter, requireAuth, (req, res) => {
 
 // Route: ARP / neighbor lookup for router services
 // Returns: { count: number, hosts: Array<{ ip: string, mac?: string, iface?: string }> , raw?: string }
+// SECURITY: Requires auth + CSRF + strict service validation to prevent command injection
+const ALLOWED_ROUTER_SERVICES = new Set(["beryl", "telenet"]);
+
 app.get(
   "/api/router/arp",
-  healthLimiter,
+  controlLimiter,
+  requireAuth,
+  verifyCsrf,
   requireAnyServiceEnabled("beryl", "telenet"),
+  validateQuery({
+    service: {
+      required: true,
+      validator: (value) =>
+        typeof value === "string" &&
+        ALLOWED_ROUTER_SERVICES.has(sanitizeString(value, 32)),
+      sanitizer: (value) => sanitizeString(value, 32),
+    },
+  }),
+  parsePagination({
+    pageParam: "page",
+    limitParam: "limit",
+    defaultLimit: 50,
+    maxLimit: 100,
+  }),
   async (req, res) => {
     try {
       const serviceName =
         typeof req.query.service === "string" ? req.query.service : null;
-      if (!serviceName)
+
+      // STRICT validation: only allow predefined router services
+      if (!serviceName || !ALLOWED_ROUTER_SERVICES.has(serviceName)) {
         return res
           .status(400)
-          .json({ error: "Missing service query param (e.g. ?service=beryl)" });
+          .json({ error: "Invalid service. Allowed: beryl, telenet" });
+      }
 
       const svc =
         serviceManager && typeof serviceManager.getService === "function"
@@ -1797,6 +1845,14 @@ app.get(
         return res.status(400).json({
           error: `Service '${serviceName}' does not have a configured host`,
         });
+
+      // Validate host is a proper IP address (prevent command injection)
+      if (!isValidIPv4(host)) {
+        logger.error("Router ARP: invalid host IP", { host, serviceName });
+        return res
+          .status(500)
+          .json({ error: "Invalid router host configuration" });
+      }
 
       // Choose platform-appropriate command
       const platform = process.platform;
@@ -1914,10 +1970,14 @@ app.get(
       // Final fallback: if still empty, return empty LAN list (avoid including multicast/remote nets)
       if (!lanHosts || lanHosts.length === 0) lanHosts = [];
 
+      // Apply pagination to the hosts array
+      const paginatedHosts = paginate(hosts, req.pagination);
+
       // Return both full hosts and lan-specific subset plus a small note about filtering
       res.json({
         count: hosts.length,
-        hosts,
+        hosts: paginatedHosts.data,
+        pagination: paginatedHosts.pagination,
         lan: {
           count: lanHosts.length,
           hosts: lanHosts,
@@ -1930,10 +1990,9 @@ app.get(
         raw: out.substring(0, 10000),
       });
     } catch (error) {
-      console.error(
-        "❌ ARP lookup failed:",
-        error && error.message ? error.message : error
-      );
+      logger.error("ARP lookup failed", {
+        error: error && error.message ? error.message : String(error),
+      });
       res.status(500).json({
         error: "Failed to run ARP lookup",
         message: error && error.message ? error.message : String(error),

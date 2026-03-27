@@ -1,3 +1,5 @@
+import { getAgentForUrl } from "../utils/httpAgentPool.js";
+
 class AdGuardService {
   constructor(config) {
     this.baseUrl = config.baseUrl;
@@ -38,6 +40,7 @@ class AdGuardService {
       const response = await fetch(`${this.baseUrl}/control/status`, {
         method: "GET",
         headers,
+        agent: getAgentForUrl(this.baseUrl),
         signal: AbortSignal.timeout(this.timeout),
       });
 
@@ -128,11 +131,13 @@ class AdGuardService {
         fetch(`${this.baseUrl}/control/status`, {
           method: "GET",
           headers,
+          agent: getAgentForUrl(this.baseUrl),
           signal: AbortSignal.timeout(this.timeout),
         }),
         fetch(`${this.baseUrl}/control/stats`, {
           method: "GET",
           headers,
+          agent: getAgentForUrl(this.baseUrl),
           signal: AbortSignal.timeout(this.timeout),
         }),
       ]);
@@ -220,6 +225,7 @@ class AdGuardService {
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        agent: getAgentForUrl(this.baseUrl),
         signal: AbortSignal.timeout(this.timeout),
       });
 
@@ -251,6 +257,7 @@ class AdGuardService {
       const response = await fetch(`${this.baseUrl}/control/status`, {
         method: "GET",
         headers,
+        agent: getAgentForUrl(this.baseUrl),
         signal: AbortSignal.timeout(this.timeout),
       });
 
@@ -274,32 +281,6 @@ class AdGuardService {
       throw new Error(`Failed to check for updates: ${errorMessage}`);
     }
   }
-}
-
-/**
- * Extract the top entry from AdGuard statistics arrays
- *
- * @param {Array} topList - Array of top items from AdGuard stats
- * @returns {string|null} Top entry or null if no data
- * @private
- */
-function extractTopEntry(topList) {
-  if (!Array.isArray(topList) || topList.length === 0) {
-    return null;
-  }
-
-  const topItem = topList[0];
-
-  // Handle different formats that AdGuard might return
-  if (typeof topItem === "string") {
-    return topItem;
-  }
-
-  if (typeof topItem === "object" && topItem !== null) {
-    return topItem.name || topItem.domain || topItem.client || null;
-  }
-
-  return null;
 }
 
 export { AdGuardService };

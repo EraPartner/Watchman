@@ -16,6 +16,7 @@ import { apiClient } from "../services/ApiClient";
 import { useFrontendConfig } from "../hooks/useServicesHealth";
 import { useEnabledServices } from "../hooks/useEnabledServices";
 import { formatDisplayUrl, openHref } from "../lib/url";
+import { formatBytes } from "../lib/utils";
 
 // Updated interfaces to match your backend's actual data structure
 interface SynologyStats {
@@ -40,15 +41,6 @@ interface SynologyStats {
   errors?: Array<{ component: string; error: string }>;
   error?: string;
 }
-
-const formatBytes = (bytes?: number | null): string => {
-  if (!Number.isFinite(bytes) || (bytes ?? 0) === 0) return "0 B";
-  const b = Math.max(0, bytes || 0);
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(Math.floor(Math.log(b) / Math.log(k)), sizes.length - 1);
-  return `${(b / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-};
 
 const clampPercentage = (v?: number) => {
   if (!Number.isFinite(v)) return 0;

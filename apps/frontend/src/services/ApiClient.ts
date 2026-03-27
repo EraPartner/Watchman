@@ -1,32 +1,10 @@
-import { env } from "../lib/env";
 import { APP_CONFIG } from "../lib/constants";
 import { csrfManager } from "../lib/csrf";
+import { getBackendUrl } from "../lib/backendUrl";
+import { extractApiError, unwrapApiResponse } from "../lib/apiResponse";
 
-// Smart backend URL detection
-const getBackendUrl = (): string => {
-  const envUrl = env.get("VITE_BACKEND_URL");
-
-  // If explicitly set, use it
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // In development mode, use relative URLs (Vite proxy will handle it)
-  if (import.meta.env.DEV) {
-    return "";
-  }
-
-  // In production, construct URL from current window location
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname;
-    // Use port 3001 for production backend
-    return `${protocol}//${hostname}:3001`;
-  }
-
-  // Fallback
-  return "http://localhost:3001";
-};
+// Re-export for backward compatibility
+const backendUrl = getBackendUrl();
 
 // Simple API client that only talks to our backend
 export interface ServiceHealth {
@@ -206,7 +184,7 @@ class ApiClient {
 
   constructor() {
     // Use smart URL detection
-    this.baseUrl = getBackendUrl();
+    this.baseUrl = backendUrl;
 
     // Restore persisted fallback auth token (if any) so Authorization header
     // continues to be sent across page reloads in dev scenarios where cookies
@@ -244,7 +222,7 @@ class ApiClient {
     return this.request(
       "/api/bitcoin/status",
       undefined,
-      APP_CONFIG.BITCOIN_API_TIMEOUT,
+      APP_CONFIG.BITCOIN_API_TIMEOUT
     );
   }
 
@@ -252,7 +230,7 @@ class ApiClient {
     return this.request(
       "/api/bitcoin/stats",
       undefined,
-      APP_CONFIG.BITCOIN_API_TIMEOUT,
+      APP_CONFIG.BITCOIN_API_TIMEOUT
     );
   }
 
@@ -345,6 +323,25 @@ class ApiClient {
     return this.request("/api/services/health");
   }
 
+  async setAdGuardProtection(
+    enabled: boolean,
+    duration?: number
+  ): Promise<any> {
+    return this.request("/api/adguard/protection", {
+      method: "POST",
+      body: JSON.stringify({ enabled, duration }),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  async clearBackendCache(type = "all"): Promise<any> {
+    return this.request("/api/cache/clear", {
+      method: "POST",
+      body: JSON.stringify({ type }),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   async getBackendHealth(): Promise<{
     status: string;
     timestamp: string;
@@ -385,7 +382,7 @@ class ApiClient {
     raw?: string;
   }> {
     const endpoint = `/api/router/arp?service=${encodeURIComponent(
-      String(serviceName),
+      String(serviceName)
     )}`;
     return this.request(endpoint);
   }
@@ -394,7 +391,7 @@ class ApiClient {
   async login(
     username: string,
     password: string,
-    remember = false,
+    remember = false
   ): Promise<any> {
     const res = await this.request("/api/auth/login", {
       method: "POST",
@@ -463,7 +460,7 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options?: RequestInit,
-    customTimeout?: number,
+    customTimeout?: number
   ): Promise<T> {
     // Retry configuration
     const MAX_RETRIES = 3;
@@ -502,7 +499,7 @@ class ApiClient {
   private async fetchWithDedup<T>(
     endpoint: string,
     options?: RequestInit,
-    customTimeout?: number,
+    customTimeout?: number
   ): Promise<T> {
     // If baseUrl is empty, use relative endpoint so requests go to same-origin
     // and benefit from the dev proxy and browser cookies.
@@ -521,12 +518,12 @@ class ApiClient {
     // Merge headers safely
     const headers = Object.assign(
       { "Content-Type": "application/json" },
-      (options && options.headers) || {},
+      (options && options.headers) || {}
     );
 
     // Add CSRF token for state-changing methods (POST, PUT, PATCH, DELETE)
-    const method = (options?.method || 'GET').toUpperCase();
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const method = (options?.method || "GET").toUpperCase();
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
       csrfManager.addTokenToHeaders(headers as Record<string, string>);
     }
 
@@ -549,24 +546,27 @@ class ApiClient {
         const response = await fetch(url, fetchOptions);
         clearTimeout(timeout);
 
+        const responseBody = await response
+          .json()
+          .catch(() => ({ error: "Unknown error" }));
+
         if (!response.ok) {
-          const errorData = await response
-            .json()
-            .catch(() => ({ error: "Unknown error" }));
           const error: any = new Error(
-            (errorData && (errorData.error || JSON.stringify(errorData))) ||
-              `API request failed: ${response.status} ${response.statusText}`,
+            extractApiError(
+              responseBody,
+              `API request failed: ${response.status} ${response.statusText}`
+            )
           );
           error.status = response.status;
           throw error;
         }
 
-        return response.json();
+        return unwrapApiResponse<T>(responseBody);
       } catch (error: any) {
         clearTimeout(timeout);
         if (error && error.name === "AbortError") {
           const timeoutError: any = new Error(
-            `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`,
+            `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`
           );
           timeoutError.name = "AbortError";
           throw timeoutError;
@@ -577,7 +577,7 @@ class ApiClient {
           error.message.includes("fetch")
         ) {
           throw new Error(
-            `Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`,
+            `Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`
           );
         }
         throw error;

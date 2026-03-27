@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import ServiceLink from "@/components/ServiceLink";
+import { formatBytes } from "../lib/utils";
 
 interface IpfsCardProps {
   name?: string;
@@ -108,16 +109,6 @@ export const IpfsCard: React.FC<IpfsCardProps> = ({
     }
 
     return "Unknown";
-  };
-
-  // helpers
-  const formatBytes = (bytes: number | null | undefined) => {
-    if (bytes === null || bytes === undefined) return "N/A";
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(Math.max(bytes, 1)) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
   const formatRate = (bytesPerSec: number | null | undefined) => {

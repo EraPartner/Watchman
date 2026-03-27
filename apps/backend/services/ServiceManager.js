@@ -1,19 +1,11 @@
-import { BitcoinService } from "./BitcoinService.js";
-import { AdGuardService } from "./AdGuardService.js";
-import { TorService } from "./TorService.js";
 import { TorManager } from "./TorManager.js";
-import { QBittorrentService } from "./QBittorrentService.js";
-import SynologyService from "./SynologyService.js";
-import RoonService from "./RoonService.js";
-import PhilipsBridgeService from "./PhilipsBridgeService.js";
-import { AlbyHubService } from "./AlbyHubService.js";
-import MacMiniService from "./MacMiniService.js";
-import RouterService from "./RouterService.js";
-import IpfsService from "./IpfsService.js";
-import HomebridgeService from "./HomebridgeService.js";
-import RaspberryPiService from "./RaspberryPiService.js";
 import { getConfig } from "../config.js";
 import { logger } from "../middleware/logger.js";
+import {
+  serviceFactoryConfigs,
+  multiInstanceServices,
+} from "./serviceFactoryConfig.js";
+import circuitBreakerManager from "../utils/circuitBreaker.js";
 
 export default class ServiceManager {
   constructor() {
@@ -24,11 +16,10 @@ export default class ServiceManager {
   }
 
   /**
-   * Initialize all enabled services
+   * Initialize all enabled services using factory pattern
    *
-   * Reads configuration, initializes Tor if needed, and sets up all enabled services
-   * with their respective configurations. Handles multi-instance services and
-   * provides comprehensive error handling and logging.
+   * Reads configuration and uses the service factory to initialize
+   * all enabled services with their respective configurations.
    *
    * @returns {Promise<void>}
    * @throws {Error} If critical service initialization fails
@@ -50,284 +41,53 @@ export default class ServiceManager {
         this.torManager = new TorManager();
         await this.torManager.initialize();
 
-        // Start Tor if it's not already running
         logger.progress("Starting Tor proxy");
         await this.torManager.startTor();
       }
 
-      // Initialize Bitcoin service
-      if (enabledServices.has("bitcoin")) {
-        // Build rpcUrl safely: prefer BITCOIN_ONION_URL + BITCOIN_RPC_PORT when both are present,
-        // else fallback to BITCOIN_RPC_URL env var, else default to localhost.
-        const rpcUrlFromOnion =
-          process.env.BITCOIN_ONION_URL && process.env.BITCOIN_RPC_PORT
-            ? `http://${process.env.BITCOIN_ONION_URL}:${process.env.BITCOIN_RPC_PORT}`
-            : null;
-        const rpcUrl =
-          rpcUrlFromOnion ||
-          process.env.BITCOIN_RPC_URL ||
-          "http://127.0.0.1:8332";
-
-        const bitcoinService = new BitcoinService({
-          rpcUrl,
-          rpcUser: process.env.BITCOIN_RPC_USER,
-          rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
-          timeout: parseInt(process.env.BITCOIN_TIMEOUT) || 120000, // 120 seconds for Bitcoin RPC
-          // allow overriding curl timeouts via env vars (seconds)
-          connectTimeout: process.env.BITCOIN_CONNECT_TIMEOUT
-            ? parseInt(process.env.BITCOIN_CONNECT_TIMEOUT)
-            : undefined,
-          maxTime: process.env.BITCOIN_MAX_TIME
-            ? parseInt(process.env.BITCOIN_MAX_TIME)
-            : undefined,
-          useProxy: process.env.TOR_USE_PROXY === "true",
-          torProxy: {
-            host: process.env.TOR_PROXY_HOST || "127.0.0.1",
-            port: parseInt(process.env.TOR_PROXY_PORT) || 9050,
-          },
-        });
-        this.services.set("bitcoin", bitcoinService);
-        this.serviceInstances.set("bitcoin", ["bitcoin"]);
-      }
-
-      // Initialize AdGuard service
-      if (enabledServices.has("adguard")) {
-        const adguardService = new AdGuardService({
-          baseUrl:
-            process.env.ADGUARD_MAIN_URL ||
-            process.env.ADGUARD_URL ||
-            "http://localhost:3000",
-          authToken: process.env.ADGUARD_MAIN_AUTH,
-          username: process.env.ADGUARD_USERNAME,
-          password: process.env.ADGUARD_PASSWORD,
-          timeout: parseInt(process.env.ADGUARD_TIMEOUT) || 5000,
-        });
-        this.services.set("adguard", adguardService);
-        this.serviceInstances.set("adguard", ["adguard"]);
-      }
-
-      // Initialize Tor service
-      if (enabledServices.has("tor")) {
-        const torService = new TorService({
-          relayNickname: process.env.TOR_RELAY_NICKNAME || "default-relay",
-          onionooBaseUrl:
-            process.env.TOR_ONIONOO_URL || "https://onionoo.torproject.org",
-          timeout: parseInt(process.env.TOR_TIMEOUT) || 10000,
-          useProxy: process.env.TOR_USE_PROXY === "true" || false,
-          torProxy: {
-            host: process.env.TOR_PROXY_HOST || "127.0.0.1",
-            port: parseInt(process.env.TOR_PROXY_PORT) || 9050,
-          },
-        });
-        this.services.set("tor", torService);
-      }
-
-      // Initialize qBittorrent service
-      if (enabledServices.has("qbittorrent")) {
-        const qbittorrentService = new QBittorrentService({
-          baseUrl: process.env.QBITTORRENT_URL || "http://192.168.0.143:8069",
-          timeout: parseInt(process.env.QBITTORRENT_TIMEOUT) || 10000,
-          // Note: username and password are now handled internally via environment variables
-        });
-        this.services.set("qbittorrent", qbittorrentService);
-        this.serviceInstances.set("qbittorrent", ["qbittorrent"]);
-      }
-
-      // Initialize Synology service
-      if (enabledServices.has("synology")) {
-        const synologyService = new SynologyService();
-        this.services.set("synology", synologyService);
-        this.serviceInstances.set("synology", ["synology"]);
-      }
-
-      // Initialize IPFS service (optional - requires IPFS_API_URL)
-      if (enabledServices.has("ipfs")) {
-        const ipfsApiUrl = process.env.IPFS_API_URL || null;
-        if (ipfsApiUrl) {
-          const ipfsService = new IpfsService({
-            apiUrl: ipfsApiUrl,
-            timeout: process.env.IPFS_TIMEOUT
-              ? parseInt(process.env.IPFS_TIMEOUT)
-              : 5000,
-          });
-          this.services.set("ipfs", ipfsService);
+      // Initialize services using factory pattern
+      for (const [serviceName, serviceConfig] of Object.entries(
+        serviceFactoryConfigs
+      )) {
+        if (!enabledServices.has(serviceName)) {
+          continue;
         }
-      }
 
-      // Initialize Roon service (optional - requires ROON_HOST)
-      if (enabledServices.has("roon")) {
-        const roonService = new RoonService({
-          host: process.env.ROON_HOST,
-          ports: process.env.ROON_PORTS || process.env.ROON_DEFAULT_PORT,
-          timeout: parseInt(process.env.ROON_TIMEOUT) || 3000,
-          pingCount: parseInt(process.env.ROON_PING_COUNT) || 2,
-          usePing: process.env.ROON_USE_PING === "false" ? false : true,
-        });
-        this.services.set("roon", roonService);
-      }
+        try {
+          const serviceOptions = serviceConfig.getConfig();
 
-      // Initialize Philips Hue Bridge / Philips Bridge service (optional - requires PHILIPS_BRIDGE_HOST)
-      if (enabledServices.has("philips")) {
-        const philipsService = new PhilipsBridgeService({
-          host: process.env.PHILIPS_BRIDGE_HOST,
-          pingCount: process.env.PHILIPS_PING_COUNT
-            ? parseInt(process.env.PHILIPS_PING_COUNT)
-            : undefined,
-          timeout: process.env.PHILIPS_TIMEOUT
-            ? parseInt(process.env.PHILIPS_TIMEOUT)
-            : undefined,
-          usePing: process.env.PHILIPS_USE_PING === "false" ? false : true,
-        });
-        this.services.set("philips", philipsService);
-      }
+          // Skip if config returns null (optional service not configured)
+          if (serviceOptions === null) {
+            logger.warning(
+              `${serviceName} service requested but not configured`
+            );
+            continue;
+          }
 
-      // Initialize Homebridge service (optional - requires HOMEBRIDGE_URL)
-      if (enabledServices.has("homebridge")) {
-        const homebridgeUrl =
-          process.env.HOMEBRIDGE_URL || process.env.HOMEBRIDGE_API_URL || null;
-        if (homebridgeUrl) {
-          const homebridgeService = new HomebridgeService({
-            baseUrl: homebridgeUrl,
-            // Force allowed endpoints for Homebridge
-            statusPath:
-              process.env.HOMEBRIDGE_STATUS_PATH ||
-              "/api/status/server-information",
-            versionPath:
-              process.env.HOMEBRIDGE_VERSION_PATH ||
-              "/api/status/homebridge-version",
-            timeout: process.env.HOMEBRIDGE_TIMEOUT
-              ? parseInt(process.env.HOMEBRIDGE_TIMEOUT)
-              : undefined,
-            authToken:
-              process.env.HOMEBRIDGE_AUTH_TOKEN ||
-              process.env.HOMEBRIDGE_TOKEN ||
-              null,
-            username:
-              process.env.HOMEBRIDGE_USERNAME ||
-              process.env.HOMEBRIDGE_USER ||
-              null,
-            password: process.env.HOMEBRIDGE_PASSWORD || null,
+          // Create service instance
+          const serviceInstance = new serviceConfig.ServiceClass(
+            serviceOptions
+          );
+          this.services.set(serviceName, serviceInstance);
+
+          // Set default instance
+          const instanceId = multiInstanceServices.has(serviceName)
+            ? serviceName
+            : serviceName;
+          this.serviceInstances.set(serviceName, [instanceId]);
+
+          // Handle post-initialization (e.g., Homebridge login)
+          if (serviceConfig.postInit === "homebridgeLogin") {
+            this._startHomebridgeBackgroundLogin(serviceInstance);
+          }
+
+          logger.service(serviceName, `${serviceName} service initialized`);
+        } catch (error) {
+          logger.error(`Failed to initialize ${serviceName} service`, {
+            error: error.message,
           });
-          this.services.set("homebridge", homebridgeService);
-          // Try a background login now so the session/cookie is available for initial health checks
-          (async () => {
-            try {
-              const ok = await homebridgeService.login();
-              if (ok)
-                logger.service("homebridge", "Background login successful");
-              else
-                logger.warning(
-                  "Homebridge background login failed or returned non-OK"
-                );
-            } catch (e) {
-              logger.warning("Homebridge background login error", {
-                error: e && e.message ? e.message : e,
-              });
-            }
-          })();
+          // Continue with other services
         }
-      }
-
-      // Initialize Mac Mini service (optional - requires MACMINI_HOST)
-      if (enabledServices.has("macmini")) {
-        const macminiService = new MacMiniService({
-          host: process.env.MACMINI_HOST,
-          sshUser: process.env.MACMINI_SSH_USER,
-          sshPort: process.env.MACMINI_SSH_PORT
-            ? parseInt(process.env.MACMINI_SSH_PORT)
-            : undefined,
-          // Use explicit key path variable used in .env.local
-          sshKey:
-            process.env.MACMINI_SSH_KEY_PATH || process.env.MACMINI_SSH_KEY,
-          timeout: process.env.MACMINI_TIMEOUT
-            ? parseInt(process.env.MACMINI_TIMEOUT)
-            : undefined,
-        });
-        this.services.set("macmini", macminiService);
-      }
-
-      // Initialize Alby Hub service (optional - requires ALBYHUB_URL)
-      if (enabledServices.has("albyhub")) {
-        const albyHubService = new AlbyHubService({
-          baseUrl: process.env.ALBYHUB_URL,
-          timeout: process.env.ALBYHUB_TIMEOUT
-            ? parseInt(process.env.ALBYHUB_TIMEOUT)
-            : undefined,
-          // Pass optional auth token (JWT) from environment to allow access to protected Alby Hub endpoints
-          authToken: process.env.ALBYHUB_TOKEN || null,
-        });
-        this.services.set("albyhub", albyHubService);
-        this.serviceInstances.set("albyhub", ["albyhub"]);
-      }
-
-      // Initialize Router services (Beryl, Telenet) from environment variables if configured
-      if (enabledServices.has("beryl")) {
-        const berylHost =
-          process.env.BERYL_HOST || process.env.ROUTER_BERYL_HOST || null;
-        const berylPorts =
-          process.env.BERYL_PORTS || process.env.ROUTER_BERYL_PORTS || null;
-        if (berylHost) {
-          const berylService = new RouterService({
-            name: "beryl",
-            host: berylHost,
-            ports: berylPorts
-              ? String(berylPorts)
-                  .split(/[ ,]+/)
-                  .map((p) => Number(p))
-                  .filter(Boolean)
-              : [],
-            timeout: process.env.BERYL_TIMEOUT_MS
-              ? parseInt(process.env.BERYL_TIMEOUT_MS)
-              : 3000,
-            pingCount: process.env.BERYL_PING_COUNT
-              ? parseInt(process.env.BERYL_PING_COUNT)
-              : 1,
-          });
-          this.services.set("beryl", berylService);
-          this.serviceInstances.set("beryl", ["beryl"]);
-        }
-      }
-
-      if (enabledServices.has("telenet")) {
-        const telenetHost =
-          process.env.TELENET_HOST || process.env.ROUTER_TELENET_HOST || null;
-        const telenetPorts =
-          process.env.TELENET_PORTS || process.env.ROUTER_TELENET_PORTS || null;
-        if (telenetHost) {
-          const telenetService = new RouterService({
-            name: "telenet",
-            host: telenetHost,
-            ports: telenetPorts
-              ? String(telenetPorts)
-                  .split(/[ ,]+/)
-                  .map((p) => Number(p))
-                  .filter(Boolean)
-              : [],
-            timeout: process.env.TELENET_TIMEOUT_MS
-              ? parseInt(process.env.TELENET_TIMEOUT_MS)
-              : 3000,
-            pingCount: process.env.TELENET_PING_COUNT
-              ? parseInt(process.env.TELENET_PING_COUNT)
-              : 1,
-          });
-          this.services.set("telenet", telenetService);
-          this.serviceInstances.set("telenet", ["telenet"]);
-        }
-      }
-
-      // Initialize Raspberry Pi service (optional - requires RASPI_HOST)
-      if (enabledServices.has("raspi")) {
-        const raspiService = new RaspberryPiService({
-          host: process.env.RASPI_HOST,
-          port: process.env.RASPI_PORT
-            ? parseInt(process.env.RASPI_PORT)
-            : undefined,
-          timeout: process.env.RASPI_TIMEOUT
-            ? parseInt(process.env.RASPI_TIMEOUT)
-            : undefined,
-        });
-        this.services.set("raspi", raspiService);
-        this.serviceInstances.set("raspi", ["raspi"]);
       }
 
       this.initialized = true;
@@ -336,6 +96,29 @@ export default class ServiceManager {
       logger.error("Failed to initialize services", { error: error.message });
       throw error;
     }
+  }
+
+  /**
+   * Start background login for Homebridge service
+   * @param {Object} serviceInstance - The Homebridge service instance
+   */
+  _startHomebridgeBackgroundLogin(serviceInstance) {
+    (async () => {
+      try {
+        const ok = await serviceInstance.login();
+        if (ok) {
+          logger.service("homebridge", "Background login successful");
+        } else {
+          logger.warning(
+            "Homebridge background login failed or returned non-OK"
+          );
+        }
+      } catch (e) {
+        logger.warning("Homebridge background login error", {
+          error: e && e.message ? e.message : e,
+        });
+      }
+    })();
   }
 
   getService(serviceName) {
@@ -352,9 +135,29 @@ export default class ServiceManager {
       };
     }
 
+    // Get or create circuit breaker for this service
+    const breaker = circuitBreakerManager.getOrCreate(serviceName, {
+      timeout: 5000,
+      failureThreshold: 5,
+      resetTimeout: 30000,
+    });
+
     try {
-      return await service.checkHealth();
+      return await breaker.execute(() => service.checkHealth());
     } catch (error) {
+      // If circuit is open, return cached state or offline
+      if (breaker.state === "open") {
+        logger.warn(`Circuit breaker open for service: ${serviceName}`, {
+          serviceName,
+          lastFailure: breaker.lastFailureTime,
+        });
+        return {
+          status: "offline",
+          error: `Service temporarily unavailable (circuit open)`,
+          timestamp: new Date().toISOString(),
+          circuitOpen: true,
+        };
+      }
       return {
         status: "offline",
         error: error.message,
@@ -403,23 +206,48 @@ export default class ServiceManager {
   async checkAllServicesHealth() {
     const healthResults = {};
 
-    // Check all registered services
-    for (const serviceName of this.services.keys()) {
-      try {
-        healthResults[serviceName] = await this.getServiceHealth(serviceName);
-      } catch (error) {
-        healthResults[serviceName] = {
-          status: "offline",
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        };
+    // Check all registered services in PARALLEL for better performance
+    const healthPromises = Array.from(this.services.keys()).map(
+      async (serviceName) => {
+        try {
+          const health = await Promise.race([
+            this.getServiceHealth(serviceName),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Health check timeout")), 5000)
+            ),
+          ]);
+          return [serviceName, health];
+        } catch (error) {
+          return [
+            serviceName,
+            {
+              status: "offline",
+              error: error.message,
+              timestamp: new Date().toISOString(),
+            },
+          ];
+        }
       }
+    );
+
+    // Execute all health checks in parallel
+    const results = await Promise.all(healthPromises);
+    for (const [serviceName, health] of results) {
+      healthResults[serviceName] = health;
     }
 
-    // Also check Tor manager if available
+    // Also check Tor manager if available (in parallel)
     if (this.torManager) {
       try {
-        healthResults["tor-proxy"] = await this.getTorManagerHealth();
+        healthResults["tor-proxy"] = await Promise.race([
+          this.getTorManagerHealth(),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error("Tor health check timeout")),
+              5000
+            )
+          ),
+        ]);
       } catch (error) {
         healthResults["tor-proxy"] = {
           status: "offline",

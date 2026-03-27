@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger";
+import { extractApiError, unwrapApiResponse } from "../lib/apiResponse";
 
 type HealthResult = { status: string; [key: string]: any };
 
@@ -50,7 +51,7 @@ class RequestBatcher {
   batchHealthCheck(
     serviceName: string,
     resolve?: (r: HealthResult) => void,
-    reject?: (e: any) => void,
+    reject?: (e: any) => void
   ): Promise<HealthResult> | void {
     const batchKey = "health-check";
 
@@ -74,7 +75,7 @@ class RequestBatcher {
     if (!this.timers.has(batchKey)) {
       const id = window.setTimeout(
         () => this.processBatch(batchKey),
-        this.batchTimeout,
+        this.batchTimeout
       );
       this.timers.set(batchKey, id);
     }
@@ -122,14 +123,22 @@ class RequestBatcher {
 
       clear();
 
+      const body = await response
+        .json()
+        .catch(() => ({
+          error: `Batch health request failed: ${response.status}`,
+        }));
+
       if (!response.ok) {
-        const text = await response.text().catch(() => String(response.status));
         throw new Error(
-          `Batch health request failed: ${response.status} - ${text}`,
+          extractApiError(
+            body,
+            `Batch health request failed: ${response.status}`
+          )
         );
       }
 
-      const results: Record<string, HealthResult> = await response.json();
+      const results = unwrapApiResponse<Record<string, HealthResult>>(body);
 
       batch.promises.forEach(({ serviceName, resolve }) => {
         const result = results[serviceName] || { status: "offline" };

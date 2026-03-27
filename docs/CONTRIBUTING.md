@@ -101,11 +101,10 @@ Mockups, examples, or other context.
    ```
 
 3. **Make your changes**
-
-    - Write clean, documented code
-    - Follow existing code style
-    - Add tests if applicable
-    - Update documentation
+   - Write clean, documented code
+   - Follow existing code style
+   - Add tests if applicable
+   - Update documentation
 
 4. **Test your changes**
 
@@ -129,14 +128,13 @@ Mockups, examples, or other context.
    ```
 
    Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-    - `feat:` - New feature
-    - `fix:` - Bug fix
-    - `docs:` - Documentation changes
-    - `style:` - Code style changes (formatting)
-    - `refactor:` - Code refactoring
-    - `test:` - Adding tests
-    - `chore:` - Maintenance tasks
+   - `feat:` - New feature
+   - `fix:` - Bug fix
+   - `docs:` - Documentation changes
+   - `style:` - Code style changes (formatting)
+   - `refactor:` - Code refactoring
+   - `test:` - Adding tests
+   - `chore:` - Maintenance tasks
 
 6. **Push to your fork**
 
@@ -145,11 +143,11 @@ Mockups, examples, or other context.
    ```
 
 7. **Open a Pull Request**
-    - Go to the original repository
-    - Click "New Pull Request"
-    - Select your fork and branch
-    - Fill out the PR template
-    - Link related issues
+   - Go to the original repository
+   - Click "New Pull Request"
+   - Select your fork and branch
+   - Fill out the PR template
+   - Link related issues
 
 ### Pull Request Guidelines
 
@@ -520,21 +518,19 @@ Maintainers follow this process for releases:
    ```
 
 2. **Update Changelog**
-
-    - Document all changes
-    - Credit contributors
+   - Document all changes
+   - Credit contributors
 
 3. **Create Release**
-
-    - Tag in git
-    - Create GitHub release
-    - Include release notes
+   - Tag in git
+   - Create GitHub release
+   - Include release notes
 
 4. **Deploy**
-    - Deploy to staging
-    - Run smoke tests
-    - Deploy to production
-    - Monitor for issues
+   - Deploy to staging
+   - Run smoke tests
+   - Deploy to production
+   - Monitor for issues
 
 ## Getting Help
 
@@ -553,7 +549,7 @@ Contributors will be:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 
 ---
 

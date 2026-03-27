@@ -1,8 +1,10 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { Client } from "ssh2";
+import fs from "fs";
 import { validateCommand } from "../middleware/commandSanitizer.js";
 import logger from "../middleware/logger.js";
+import { isSafePath } from "../utils/validation.js";
 
 const execAsync = promisify(exec);
 
@@ -95,7 +97,16 @@ class MacMiniService {
   // Build an ssh command wrapper
   buildSshCommand(cmd) {
     const parts = ["ssh", "-o", "BatchMode=yes", "-p", String(this.sshPort)];
-    if (this.sshKey) parts.push("-i", this.sshKey);
+    if (this.sshKey) {
+      // SECURITY: Validate SSH key path to prevent path traversal attacks
+      if (!isSafePath(this.sshKey)) {
+        logger.error("Invalid SSH key path in buildSshCommand", {
+          path: this.sshKey,
+        });
+        throw new Error("Invalid SSH key path: path traversal not allowed");
+      }
+      parts.push("-i", this.sshKey);
+    }
     parts.push(
       `${this.sshUser}@${this.host}`,
       '"' + cmd.replace(/"/g, '\\"') + '"'
@@ -127,6 +138,13 @@ class MacMiniService {
       }
 
       if (this.sshKey) {
+        // SECURITY: Validate SSH key path to prevent path traversal attacks
+        if (!isSafePath(this.sshKey)) {
+          return reject(
+            new Error("Invalid SSH key path: path traversal not allowed")
+          );
+        }
+
         try {
           // read key and provide passphrase (if available) so ssh2 can unlock it non-interactively
           connectionOpts.privateKey = fs.readFileSync(this.sshKey, "utf8");

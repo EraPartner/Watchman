@@ -1,11 +1,8 @@
-import fetch from "node-fetch";
-import http from "http";
-import https from "https";
 import { isUpdateAvailable } from "../utils/versionComparison.js";
+import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
+import logger from "../middleware/logger.js";
 
-// Create agents with keepAlive to fix connection issues
-const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
-const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+// Use shared HTTP agents from pool
 
 export default class IpfsService {
   constructor(config = {}) {
@@ -60,7 +57,7 @@ export default class IpfsService {
       // If the server rejects the first method with 405, retry with the other method
       if (res && res.status === 405) {
         const fallback = firstMethod === "GET" ? "POST" : "GET";
-        console.warn(
+        logger.warn(
           `IPFS API ${path} returned 405 on ${firstMethod}, retrying with ${fallback}`
         );
         res = await doRequest(fallback);

@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { logger } from "../middleware/logger.js";
+import { formatBytes as formatBytesUtil } from "../utils/serviceUtils.js";
 
 const execAsync = promisify(exec);
 
@@ -47,8 +48,8 @@ class SynologyService {
     try {
       // Check if required environment variables are present
       if (!process.env.SYNOLOGY_HOST) {
-        console.warn(
-          "SYNOLOGY_HOST not configured, Synology service will be unavailable"
+        logger.warning(
+          "Synology service unavailable - SYNOLOGY_HOST not configured"
         );
         return;
       }
@@ -57,8 +58,8 @@ class SynologyService {
         !process.env.SYNOLOGY_SNMP_USERNAME ||
         !process.env.SYNOLOGY_SNMP_AUTH_KEY
       ) {
-        console.warn(
-          "SNMP credentials not configured, Synology service will be unavailable"
+        logger.warning(
+          "Synology service unavailable - SNMP credentials not configured"
         );
         return;
       }
@@ -113,7 +114,7 @@ class SynologyService {
       const { stdout, stderr } = await execAsync(snmpCmd);
       if (stderr && !stderr.includes("Warning:")) {
         // Ignore harmless warnings
-        console.warn("SNMP warning:", stderr);
+        logger.warning("SNMP warning", { stderr });
       }
 
       // Parse the output - each line is a value
@@ -324,13 +325,15 @@ class SynologyService {
 
       // Log any partial failures
       if (data.errors.length > 0) {
-        console.warn("Synology partial data collection failures:", data.errors);
+        logger.warning("Synology partial data collection failures", {
+          errors: data.errors,
+        });
       }
 
       this.lastData = data;
       return data;
     } catch (error) {
-      console.error("Failed to get Synology data:", error);
+      logger.error("Failed to get Synology data", { error: error.message });
       return {
         status: "error",
         error: error.message,
@@ -338,14 +341,6 @@ class SynologyService {
         timestamp: new Date().toISOString(),
       };
     }
-  }
-
-  formatBytes(bytes) {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   }
 
   formatUptime(seconds) {
@@ -362,9 +357,16 @@ class SynologyService {
     }
   }
 
+  /**
+   * Format bytes for display (wrapper using serviceUtils)
+   */
+  formatBytes(bytes) {
+    return formatBytesUtil(bytes, 2);
+  }
+
   disconnect() {
     // No session to disconnect from with system commands
-    console.log("Synology SNMP service disconnected");
+    logger.info("Synology SNMP service disconnected");
   }
 }
 

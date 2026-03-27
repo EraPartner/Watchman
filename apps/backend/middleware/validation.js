@@ -185,3 +185,22 @@ export function isValidServiceName(name) {
   // Only alphanumeric, hyphens, underscores
   return /^[a-zA-Z0-9_-]{1,64}$/.test(name);
 }
+
+/**
+ * Validate query parameters to prevent injection attacks
+ * @param {Object} query - Express query object
+ * @param {string[]} allowedParams - List of allowed query parameter names
+ * @returns {boolean} True if all params are allowed
+ */
+export function validateQueryParams(query, allowedParams) {
+  if (!query || typeof query !== "object") return true;
+
+  const allowedSet = new Set(allowedParams.map((p) => p.toLowerCase()));
+
+  for (const key of Object.keys(query)) {
+    if (!allowedSet.has(key.toLowerCase())) {
+      return false;
+    }
+  }
+  return true;
+}

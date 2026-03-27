@@ -37,14 +37,12 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const body = await apiClient
-        .login(username, password, remember)
-        .catch((e) => ({ error: String(e) }));
-      if (!body || body.error) {
-        setError(body?.error || "Login failed");
+      const body = await apiClient.login(username, password, remember);
+      if (!body || !body.user) {
+        setError("Login failed");
         setUser(null);
         setLoading(false);
-        return { success: false, error: body?.error || "Login failed" };
+        return { success: false, error: "Login failed" };
       }
 
       // Use apiClient.getAuthMe to refresh state (this will use cookie or fallback token)
@@ -52,9 +50,10 @@ export function useAuth() {
       return { success: true, user: body?.user || null };
     } catch (err: any) {
       console.error("Login request failed", err);
-      setError("Network error");
+      const message = err instanceof Error ? err.message : "Network error";
+      setError(message);
       setLoading(false);
-      return { success: false, error: "Network error" };
+      return { success: false, error: message };
     } finally {
       setLoading(false);
     }
@@ -65,17 +64,14 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.logout();
-      if (res && res.error) {
-        setError(res.error || "Logout failed");
-        return { success: false };
-      }
+      await apiClient.logout();
       setUser(null);
       return { success: true };
     } catch (err: any) {
       console.error("Logout failed", err);
-      setError("Network error");
-      return { success: false };
+      const message = err instanceof Error ? err.message : "Network error";
+      setError(message);
+      return { success: false, error: message };
     } finally {
       setLoading(false);
     }

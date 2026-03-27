@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import net from "net";
+import logger from "../middleware/logger.js";
 
 const execAsync = promisify(exec);
 
@@ -63,9 +64,9 @@ class RoonService {
       }
     } catch (e) {
       // If the check fails, log and continue to attempt ping; we'll capture any error below
-      console.warn(
-        "RoonService.pingHost: failed to verify ping binary availability:",
-        e.message || e
+      logger.warn(
+        "RoonService.pingHost: failed to verify ping binary availability",
+        { error: e.message }
       );
     }
 
@@ -119,8 +120,9 @@ class RoonService {
         "No ping output captured; ping may be unavailable or blocked";
     }
 
-    console.error(
-      `RoonService.pingHost: all ping attempts failed for ${this.host}`
+    logger.error(
+      `RoonService.pingHost: all ping attempts failed for ${this.host}`,
+      { host: this.host }
     );
     return {
       success: false,

@@ -5,7 +5,6 @@
  * Tests authentication, authorization, and security headers
  */
 
-import fetch from "node-fetch";
 import { performance } from "perf_hooks";
 
 const BASE_URL = process.env.TEST_URL || "http://localhost:3001";

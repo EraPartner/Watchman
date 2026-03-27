@@ -1,12 +1,9 @@
-import fetch from "node-fetch";
-import http from "http";
-import https from "https";
 import { isUpdateAvailable } from "../utils/versionComparison.js";
+import { parseResponseCookies } from "../utils/serviceUtils.js";
+import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
 import logger from "../middleware/logger.js";
 
-// Create agents with keepAlive to fix connection issues
-const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
-const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+// Use shared HTTP agents from pool
 
 // HomebridgeService: interacts with Homebridge UI/API using only the allowed endpoints.
 // Allowed endpoints used by this service:
@@ -143,21 +140,12 @@ class HomebridgeService {
 
         // Capture cookies (robustly)
         try {
-          const raw =
-            typeof res.headers.raw === "function" ? res.headers.raw() : null;
-          let cookies = [];
-          if (raw && raw["set-cookie"]) cookies = raw["set-cookie"];
-          else {
-            const sc =
-              res.headers.get("set-cookie") || res.headers.get("Set-Cookie");
-            if (sc) cookies = sc.split(/,\s*(?=[^ ;]+=)/);
-          }
+          // Use centralized cookie parsing utility
+          const cookies = parseResponseCookies(res.headers);
           if (cookies.length > 0) {
             // Keep only name=value pairs
-            this.cookie = cookies
-              .map((c) => String(c).split(";")[0])
-              .join("; ");
-            console.debug("[HomebridgeService] captured cookie(s)");
+            this.cookie = cookies.join("; ");
+            logger.debug("HomebridgeService captured cookie(s)");
           }
         } catch (e) {
           // ignore
@@ -266,17 +254,9 @@ class HomebridgeService {
 
       // Capture Set-Cookie if present
       try {
-        const raw =
-          typeof res.headers.raw === "function" ? res.headers.raw() : null;
-        let cookies = [];
-        if (raw && raw["set-cookie"]) cookies = raw["set-cookie"];
-        else {
-          const sc =
-            res.headers.get("set-cookie") || res.headers.get("Set-Cookie");
-          if (sc) cookies = sc.split(/,\s*(?=[^ ;]+=)/);
-        }
-        if (cookies.length > 0)
-          this.cookie = cookies.map((c) => String(c).split(";")[0]).join("; ");
+        // Use centralized cookie parsing utility
+        const cookies = parseResponseCookies(res.headers);
+        if (cookies.length > 0) this.cookie = cookies.join("; ");
       } catch (e) {
         // ignore
       }

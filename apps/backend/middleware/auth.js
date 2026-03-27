@@ -21,13 +21,16 @@ if (!JWT_SECRET) {
 
 // Issue a signed JWT (short-lived access token)
 export function signToken(payload, opts = {}) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: opts.expiresIn || "15m" });
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: opts.expiresIn || "15m",
+    algorithm: "HS256", // Explicitly specify algorithm to prevent algorithm confusion attacks
+  });
 }
 
 // Verify a token and return decoded payload or null
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] });
   } catch (err) {
     return null;
   }

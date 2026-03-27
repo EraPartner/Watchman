@@ -1,9 +1,7 @@
 import { SocksProxyAgent } from "socks-proxy-agent";
-import https from "https";
-import fetch from "node-fetch";
+import { httpsAgent } from "../utils/httpAgentPool.js";
 
-// Create HTTPS agent with keepAlive for external API requests
-const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+// Use shared HTTPS agent from pool
 
 class TorService {
   constructor(config) {

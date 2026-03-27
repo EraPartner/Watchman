@@ -16,6 +16,7 @@ import { APP_CONFIG, RELAY_TYPE_COLORS } from "../lib/constants";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { UpdateBadge } from "./UpdateBadge";
 import { formatDisplayUrl, openHref } from "../lib/url";
+import { formatNumber } from "../lib/utils";
 
 // Tor Project logo SVG component
 const TorIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -71,16 +72,6 @@ export const TorCard = ({
       return `${(kbps / 1024).toFixed(1)} MB/s`;
     }
     return `${kbps.toFixed(1)} KB/s`;
-  };
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    }
-    if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
-    }
-    return num.toString();
   };
 
   return (
@@ -146,7 +137,7 @@ export const TorCard = ({
             <Badge
               variant="outline"
               className={`${getRelayTypeColor(
-                stats.relayType,
+                stats.relayType
               )} capitalize border-current`}
             >
               {stats.relayType}
@@ -181,13 +172,13 @@ export const TorCard = ({
             <Progress
               value={Math.min(
                 (stats.bandwidth.current / stats.bandwidth.burst) * 100,
-                100,
+                100
               )}
               className="h-2"
             />
             <div className="text-xs text-center text-muted-foreground">
               {Math.round(
-                (stats.bandwidth.current / stats.bandwidth.burst) * 100,
+                (stats.bandwidth.current / stats.bandwidth.burst) * 100
               )}
               % of burst capacity
             </div>

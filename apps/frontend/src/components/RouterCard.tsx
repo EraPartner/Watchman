@@ -7,6 +7,7 @@ import { apiClient } from "../services/ApiClient";
 import { useEnabledServices } from "../hooks/useEnabledServices";
 import { Button } from "./ui/button";
 import { buildHref, formatDisplayUrl, openHref } from "../lib/url";
+import { extractApiError, unwrapApiResponse } from "../lib/apiResponse";
 
 interface RouterCardProps {
   name: string; // display name
@@ -101,16 +102,21 @@ const RouterCard: React.FC<RouterCardProps> = ({
 
       // Fallback: directly fetch the backend endpoint so the UI stays functional
       const url = `/api/router/arp?service=${encodeURIComponent(
-        String(serviceKey),
+        String(serviceKey)
       )}`;
       const resp = await fetch(url, { credentials: "include" });
+      const body = await resp
+        .json()
+        .catch(() => ({ error: `ARP fetch failed: ${resp.status}` }));
       if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
         throw new Error(
-          `ARP fetch failed: ${resp.status} ${resp.statusText} ${text}`,
+          extractApiError(
+            body,
+            `ARP fetch failed: ${resp.status} ${resp.statusText}`
+          )
         );
       }
-      return (await resp.json()) as ArpResp;
+      return unwrapApiResponse<ArpResp>(body);
     },
     refetchInterval: 30000,
     retry: 1,

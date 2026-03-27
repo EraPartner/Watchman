@@ -97,7 +97,7 @@ Watchman/
 ├── package.json                 # Root workspace config
 ├── package-lock.json            # Dependency lock file
 ├── README.md                    # Project overview
-├── LICENSE                      # MIT License
+├── LICENSE                      # AGPL-3.0 License
 └── PROJECT-STRUCTURE.md         # This file
 
 ```

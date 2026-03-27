@@ -1,16 +1,12 @@
-import fetch from "node-fetch";
-import http from "http";
-import https from "https";
+import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
 
-// Create agents with keepAlive to fix connection issues
-const httpAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
-const httpsAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 });
+// Use shared HTTP agents from pool
 
 export class AlbyHubService {
   constructor(config = {}) {
-    // Assumption: ALBYHUB_URL points to the LAN IP or hostname of the Alby Hub (e.g. http://192.168.1.50:3000)
+    // Assumption: ALBYHUB_URL points to the hostname of the Alby Hub
     this.baseUrl =
-      config.baseUrl || process.env.ALBYHUB_URL || "http://192.168.0.100:3000";
+      config.baseUrl || process.env.ALBYHUB_URL || "http://127.0.0.1:3000";
     this.timeout =
       config.timeout ||
       (process.env.ALBYHUB_TIMEOUT

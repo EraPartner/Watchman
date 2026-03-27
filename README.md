@@ -1,141 +1,150 @@
 # Watchman
 
-A centralized dashboard to monitor and control self-hosted services (AdGuard Home, Synology, Tor, Bitcoin, qBittorrent,
-and more).
+Watchman is a full-stack dashboard for monitoring and controlling self-hosted services from one place.
+It combines a React + Vite frontend with a Node.js + Express backend and supports both status monitoring and service-level actions.
 
-## 📁 Project Structure
+## What This Project Is
 
-This is a modern monorepo structure using npm workspaces:
+Watchman helps homelab and self-hosting users keep operational visibility across multiple services without jumping between separate admin panels.
 
-```
+- Centralized status view for critical services
+- Extensible service integration model
+- API-first backend with documented endpoints
+- Security-focused defaults for local and production deployments
+
+## Key Features
+
+- Service monitoring and health checks for integrations like AdGuard Home, Synology, Tor, Bitcoin, qBittorrent, and more
+- Multi-instance support for running multiple nodes of the same service type
+- Real-time updates with WebSocket-based status broadcasting
+- Control and action endpoints for supported services
+- Structured logging and auditability
+- OpenAPI documentation with Swagger UI
+
+## Compatibility
+
+- Node.js 18+
+- npm workspaces (monorepo)
+- Frontend: modern Chromium, Firefox, Safari, and Edge browsers
+- Backend: Linux/macOS environments (works well behind Nginx reverse proxy in production)
+
+## Tech Stack
+
+- Frontend: React 18, TypeScript, Vite, TailwindCSS, TanStack Query
+- Backend: Node.js, Express, JWT auth, OpenAPI, WebSocket
+- Tooling: ESLint, Prettier, Vitest
+
+## Project Structure
+
+```text
 Watchman/
-├── apps/                    # Application packages
-│   ├── frontend/           # React + TypeScript + Vite frontend
-│   └── backend/            # Node.js + Express backend
-├── docs/                   # All documentation
-├── tools/                  # Development tools & scripts
-├── packages/               # Shared packages (future use)
-└── tests/                  # Integration & E2E tests
+|- apps/
+|  |- frontend/            # React + TypeScript + Vite app
+|  `- backend/             # Node.js + Express API
+|- docs/                   # Project docs and guides
+|- tools/                  # Dev and maintenance scripts
+|- packages/               # Shared packages (workspace-ready)
+`- tests/                  # Integration and E2E tests
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ and npm
 - Git
+- Node.js 18+
+- npm
 
-### Installation
+### Install and Run
 
 ```bash
-# Clone the repository
 git clone <YOUR_REPO_URL>
 cd Watchman
-
-# Install all dependencies (uses npm workspaces)
 npm install
-
-# Start both frontend and backend in development mode
 npm run dev
 ```
 
-### Development Commands
+Default development ports:
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3001`
+
+## Scripts
+
+From repository root:
 
 ```bash
-# Start both frontend and backend
-npm run dev
+# Development
+npm run dev                # Start frontend + backend
+npm run dev:frontend       # Frontend only
+npm run dev:backend        # Backend only
 
-# Start frontend only (port 5173)
-npm run dev:frontend
+# Build
+npm run build              # Build all workspaces
 
-# Start backend only (port 3001)
-npm run dev:backend
+# Quality
+npm run lint               # Lint all workspaces
+npm run format             # Format code
+npm run test               # Run tests
 
-# Build frontend for production
-npm run build
-
-# Run linters
-npm run lint
-
-# Format code with Prettier
-npm run format
-
-# Run tests
-npm run test
-
-# Clean all node_modules
-npm run clean
+# Maintenance
+npm run clean              # Remove node_modules in workspaces
 ```
 
-## 📦 Workspace Structure
+## Configuration
 
-This project uses **npm workspaces** to manage multiple packages in a monorepo:
+- Root env file: `.env.local`
+- Backend config: `apps/backend/config.js`
+- Frontend config: `apps/frontend/vite.config.ts`
 
-- **apps/frontend**: React application with Vite
-- **apps/backend**: Express.js API server
-- **packages/shared**: Shared utilities (future use)
+Service-specific credentials and host settings should be provided through environment variables and never committed.
 
-Each workspace has its own `package.json` and can be developed independently.
+## Security
 
-## 🔧 Configuration
+Watchman includes:
 
-- **Frontend config**: `apps/frontend/` (vite.config.ts, tailwind.config.ts, etc.)
-- **Backend config**: `apps/backend/config.js`
-- **Environment variables**: `.env.local` (root level)
-- **Editor config**: `.editorconfig`, `.prettierrc` (root level, applies to all)
-
-## 📚 Documentation
-
-Comprehensive documentation is available in the **`/docs`** directory:
-
-- **[docs/INDEX.md](./docs/INDEX.md)** - Documentation index
-- **[docs/PROJECT-STRUCTURE.md](./docs/PROJECT-STRUCTURE.md)** - Detailed structure guide
-- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Architecture overview
-- **[docs/API-DOCUMENTATION.md](./docs/API-DOCUMENTATION.md)** - API documentation
-- **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** - Development guide
-- **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** - Deployment guide
-- **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Troubleshooting
-- **[docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)** - Contributing guidelines
-- **[docs/SECURITY.md](./docs/SECURITY.md)** - Security documentation
-- **[docs/CHANGELOG.md](./docs/CHANGELOG.md)** - Change history
-
-### Multi-Instance Support
-
-Monitor multiple instances of the same service:
-
-- **[docs/MULTI-INSTANCE-QUICKSTART.md](./docs/MULTI-INSTANCE-QUICKSTART.md)** - Quick start guide
-- **[docs/MULTI-INSTANCE-SERVICES.md](./docs/MULTI-INSTANCE-SERVICES.md)** - Full documentation
-- **[docs/MULTI-INSTANCE-EXAMPLE.md](./docs/MULTI-INSTANCE-EXAMPLE.md)** - Configuration examples
-- **[docs/MULTI-INSTANCE-IMPLEMENTATION.md](./docs/MULTI-INSTANCE-IMPLEMENTATION.md)** - Implementation details
-
-## 🔐 Security
-
-This project includes comprehensive security features:
-
-- JWT authentication
-- Rate limiting
+- JWT-based authentication
 - CSRF protection
-- Input sanitization
-- Security headers (Helmet)
-- Audit logging
-- Account lockout protection
+- Tiered rate limiting
+- Security headers via Helmet
+- Input validation and sanitization
+- Structured logs with security monitoring support
 
-See [docs/SECURITY.md](./docs/SECURITY.md) for more details.
+Read `docs/SECURITY.md` for operational recommendations and production hardening checks.
 
-## 🧪 Testing
+## Documentation
 
-```bash
-# Run all tests
-npm run test
+Main docs index: `docs/INDEX.md`
 
-# Run tests in watch mode (frontend)
-npm run test --workspace=apps/frontend -- --watch
-```
+Useful starting points:
 
-## 📝 License
+- Architecture: `docs/ARCHITECTURE.md`
+- API docs: `docs/API-DOCUMENTATION.md`
+- Development guide: `docs/DEVELOPMENT.md`
+- Deployment guide: `docs/DEPLOYMENT.md`
+- Multi-instance docs: `docs/MULTI-INSTANCE-QUICKSTART.md`
 
-MIT
+## Contributing
 
-## 🤝 Contributing
+Contributions are welcome.
 
-See [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md) for contribution guidelines.
+1. Fork the repository
+2. Create a feature/fix branch
+3. Make changes with tests/docs where applicable
+4. Run lint/build/test locally
+5. Open a pull request with clear context
+
+Full guidelines: `docs/CONTRIBUTING.md`
+
+## GitHub Best Practices for This Repo
+
+- Use descriptive PR titles and link related issues
+- Keep PRs focused and small when possible
+- Add screenshots/GIFs for UI changes
+- Document any new configuration flags or environment variables
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+See `LICENSE` for the full text.

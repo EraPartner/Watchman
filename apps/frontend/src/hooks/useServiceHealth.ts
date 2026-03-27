@@ -1,45 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { env } from "../lib/env";
-
-// Smart backend URL detection
-const getBackendUrl = (): string => {
-  const envUrl = env.get("VITE_BACKEND_URL");
-
-  // If explicitly set, use it
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // In development mode, use relative URLs (Vite proxy will handle it)
-  if (import.meta.env.DEV) {
-    return "";
-  }
-
-  // In production, construct URL from current window location
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname;
-    // Use port 3001 for production backend
-    return `${protocol}//${hostname}:3001`;
-  }
-
-  // Fallback
-  return "http://localhost:3001";
-};
-
-const API_BASE_URL = getBackendUrl();
+import { apiClient } from "../services/ApiClient";
 
 // Service health hook with React Query
 export const useServiceHealth = (serviceName: string, options = {}) => {
   return useQuery({
     queryKey: ["service-health", serviceName],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/api/${serviceName}/status`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${serviceName} status`);
-      }
-      return response.json();
-    },
+    queryFn: async () => apiClient.getServiceHealth(serviceName),
     refetchInterval: 10000, // 10 seconds
     staleTime: 5000, // 5 seconds
     retry: 2,
@@ -52,13 +18,7 @@ export const useServiceHealth = (serviceName: string, options = {}) => {
 export const useServiceStats = (serviceName: string, enabled = true) => {
   return useQuery({
     queryKey: ["service-stats", serviceName],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/api/${serviceName}/stats`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${serviceName} stats`);
-      }
-      return response.json();
-    },
+    queryFn: async () => apiClient.getServiceStats(serviceName),
     refetchInterval: 30000, // 30 seconds for stats
     staleTime: 15000, // 15 seconds
     enabled,
@@ -70,13 +30,7 @@ export const useServiceStats = (serviceName: string, enabled = true) => {
 export const useAllServicesHealth = () => {
   return useQuery({
     queryKey: ["all-services-health"],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/api/services/health`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch services health");
-      }
-      return response.json();
-    },
+    queryFn: async () => apiClient.getServicesHealth(),
     refetchInterval: 15000, // 15 seconds
     staleTime: 7500, // 7.5 seconds
     retry: 2,
@@ -95,19 +49,7 @@ export const useAdGuardProtectionToggle = () => {
       enabled: boolean;
       duration?: number;
     }) => {
-      const response = await fetch(`${API_BASE_URL}/api/adguard/protection`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ enabled, duration }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle AdGuard protection");
-      }
-
-      return response.json();
+      return apiClient.setAdGuardProtection(enabled, duration);
     },
     onSuccess: () => {
       // Invalidate related queries
@@ -126,19 +68,7 @@ export const useClearCache = () => {
 
   return useMutation<any, Error, void>({
     mutationFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/api/cache/clear`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ type: "all" }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to clear cache");
-      }
-
-      return response.json();
+      return apiClient.clearBackendCache("all");
     },
     onSuccess: () => {
       // Refetch all queries after cache clear

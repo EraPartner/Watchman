@@ -1,5 +1,6 @@
 import { exec } from "child_process";
 import { promisify } from "util";
+import net from "net";
 import pigpio from "pigpio-client";
 import logger from "../middleware/logger.js";
 
@@ -10,7 +11,7 @@ class RaspberryPiService {
     this.host = options.host || process.env.RASPI_HOST || null;
     this.port = options.port || parseInt(process.env.RASPI_PORT || "8888", 10);
     this.macMiniHost =
-      options.macMiniHost || process.env.MACMINI_HOST || "192.168.0.143";
+      options.macMiniHost || process.env.MACMINI_HOST || "127.0.0.1";
     this.macMiniSSHPort =
       options.macMiniSSHPort ||
       parseInt(process.env.MACMINI_SSH_PORT || "22583", 10);
@@ -19,7 +20,7 @@ class RaspberryPiService {
     this.macMiniSSHKey =
       options.macMiniSSHKey ||
       process.env.MACMINI_SSH_KEY_PATH ||
-      "/Users/computer/.ssh/watchman_macmini";
+      process.env.MACMINI_SSH_KEY;
     this.timeout = parseInt(
       options.timeout || process.env.RASPI_TIMEOUT || "10000",
       10

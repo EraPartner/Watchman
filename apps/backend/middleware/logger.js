@@ -160,11 +160,10 @@ class Logger {
   }
 
   service(serviceName, message, meta = {}) {
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[${serviceName.toUpperCase()}] ${message}`);
-    } else {
-      this.info(`[SERVICE:${serviceName.toUpperCase()}] ${message}`, meta);
-    }
+    // Service health/stats logs are high-frequency in hot paths.
+    // Route them to debug level so they can be enabled when needed
+    // (LOG_LEVEL=debug) without flooding default production logs.
+    this.debug(`[SERVICE:${serviceName.toUpperCase()}] ${message}`, meta);
   }
 }
 
@@ -189,8 +188,8 @@ export function requestLogger(req, res, next) {
 
   const startTime = Date.now();
 
-  // Log request
-  logger.info("Incoming request", {
+  // Log request (debug to reduce hot-path verbosity)
+  logger.debug("Incoming request", {
     requestId: req.requestId,
     method: req.method,
     path: req.path,
@@ -202,7 +201,11 @@ export function requestLogger(req, res, next) {
   res.on("finish", () => {
     const duration = Date.now() - startTime;
     const level =
-      res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+      res.statusCode >= 500
+        ? "error"
+        : res.statusCode >= 400
+          ? "warn"
+          : "debug";
 
     logger[level]("Request completed", {
       requestId: req.requestId,

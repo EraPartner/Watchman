@@ -6,6 +6,7 @@ class AccountLockoutManager {
     this.maxAttempts = options.maxAttempts || 5;
     this.lockoutDuration = options.lockoutDuration || 15 * 60 * 1000; // 15 minutes
     this.cleanupInterval = options.cleanupInterval || 60 * 1000; // 1 minute
+    this.maxEntries = options.maxEntries || 1000; // Prevent memory exhaustion
 
     // Store failed attempts: Map<username, { count, firstAttempt, lockedUntil }>
     this.attempts = new Map();
@@ -21,6 +22,17 @@ class AccountLockoutManager {
    * @returns {Object} { locked: boolean, attemptsRemaining: number, lockedUntil: Date|null }
    */
   recordFailedAttempt(username, ip) {
+    // Prevent memory exhaustion by limiting entries
+    if (
+      this.attempts.size >= this.maxAttempts &&
+      !this.attempts.has(this.getKey(username, ip))
+    ) {
+      logger.warn("Account lockout map full, clearing oldest entries");
+      // Remove oldest entry
+      const oldestKey = this.attempts.keys().next().value;
+      if (oldestKey) this.attempts.delete(oldestKey);
+    }
+
     const key = this.getKey(username, ip);
     const now = Date.now();
 

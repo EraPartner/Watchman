@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Quick test script for update endpoints
 
-import fetch from "node-fetch";
 import https from "https";
 
 const httpsAgent = new https.Agent({ keepAlive: true });
