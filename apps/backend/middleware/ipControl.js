@@ -9,12 +9,20 @@ class IPControlManager {
     this.whitelist = new Set();
     this.blacklist = new Set();
     this.tempBlacklist = new Map(); // IP -> expiry timestamp
+    this._hasNonLocalhost = false;
     this.configPath = path.join(process.cwd(), "config", "ip-control.json");
 
     this.loadConfig();
 
     // Cleanup expired temp blocks every minute
-    setInterval(() => this.cleanupTempBlocks(), 60000);
+    this._cleanupInterval = setInterval(() => this.cleanupTempBlocks(), 60000);
+    this._cleanupInterval.unref();
+  }
+
+  _updateHasNonLocalhost() {
+    this._hasNonLocalhost = Array.from(this.whitelist).some(
+      (ip) => ip !== "127.0.0.1" && ip !== "::1"
+    );
   }
 
   async loadConfig() {
@@ -25,6 +33,7 @@ class IPControlManager {
 
         this.whitelist = new Set(config.whitelist || []);
         this.blacklist = new Set(config.blacklist || []);
+        this._updateHasNonLocalhost();
 
         logger.info("IP control config loaded", {
           whitelistCount: this.whitelist.size,
@@ -34,6 +43,7 @@ class IPControlManager {
         // Create default config with localhost whitelisted
         this.whitelist.add("127.0.0.1");
         this.whitelist.add("::1");
+        this._updateHasNonLocalhost();
         await this.saveConfig();
       }
     } catch (error) {
@@ -43,6 +53,7 @@ class IPControlManager {
       // Default to localhost only
       this.whitelist.add("127.0.0.1");
       this.whitelist.add("::1");
+      this._updateHasNonLocalhost();
     }
   }
 
@@ -64,17 +75,20 @@ class IPControlManager {
 
   addToWhitelist(ip) {
     this.whitelist.add(ip);
+    this._updateHasNonLocalhost();
     this.blacklist.delete(ip); // Remove from blacklist if present
     return this.saveConfig();
   }
 
   removeFromWhitelist(ip) {
     this.whitelist.delete(ip);
+    this._updateHasNonLocalhost();
     return this.saveConfig();
   }
 
   addToBlacklist(ip) {
     this.blacklist.add(ip);
+    this._updateHasNonLocalhost();
     this.whitelist.delete(ip); // Remove from whitelist if present
     return this.saveConfig();
   }
@@ -122,11 +136,7 @@ class IPControlManager {
     }
 
     // If whitelist is empty or only has localhost, allow all
-    const hasNonLocalhost = Array.from(this.whitelist).some(
-      (ip) => ip !== "127.0.0.1" && ip !== "::1"
-    );
-
-    if (!hasNonLocalhost) {
+    if (!this._hasNonLocalhost) {
       return true;
     }
 

@@ -1,10 +1,7 @@
-import { exec, spawn } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 import { logger } from "../middleware/logger.js";
-
-const execAsync = promisify(exec);
 
 class TorManager {
   constructor(config = {}) {
@@ -51,24 +48,46 @@ class TorManager {
 
   async isInstalled() {
     try {
-      await execAsync("which tor");
-      return true;
+      const { spawn } = await import("child_process");
+      return new Promise((resolve) => {
+        const child = spawn("which", ["tor"], {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        child.on("close", (code) => {
+          if (code === 0) return resolve(true);
+          // Fallback: check via brew
+          const brew = spawn("brew", ["list", "tor"], {
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+          brew.on("close", (brewCode) => resolve(brewCode === 0));
+        });
+        child.on("error", () => resolve(false));
+      });
     } catch {
-      try {
-        await execAsync("brew list tor");
-        return true;
-      } catch {
-        return false;
-      }
+      return false;
     }
   }
 
   async installTor() {
     logger.progress("Installing Tor via Homebrew");
     try {
-      await execAsync("brew install tor");
-      logger.success("Tor installed successfully");
-      return true;
+      const { spawn } = await import("child_process");
+      return new Promise((resolve) => {
+        const child = spawn("brew", ["install", "tor"], { stdio: "inherit" });
+        child.on("close", (code) => {
+          if (code === 0) {
+            logger.success("Tor installed successfully");
+            resolve(true);
+          } else {
+            logger.error("Failed to install Tor");
+            resolve(false);
+          }
+        });
+        child.on("error", () => {
+          logger.error("Failed to install Tor");
+          resolve(false);
+        });
+      });
     } catch (error) {
       logger.error("Failed to install Tor", { error: error.message });
       return false;
@@ -77,14 +96,45 @@ class TorManager {
 
   async isRunning() {
     try {
-      // Check if something is listening on the SOCKS port
-      const { stdout } = await execAsync(
-        `lsof -i :${this.socksPort} | grep LISTEN`
-      );
-      return stdout.trim().length > 0;
+      // Check if something is listening on the SOCKS port using spawn
+      const { stdout } = await this._runSpawn("lsof", [
+        "-i",
+        `:${this.socksPort}`,
+      ]);
+      return stdout.includes("LISTEN");
     } catch {
       return false;
     }
+  }
+
+  // Helper to run a spawn command and collect output
+  _runSpawn(cmd, args) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(cmd, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 5000,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code) => {
+        if (code !== 0) {
+          reject(new Error(`${cmd} exited with code ${code}`));
+        } else {
+          resolve({ stdout, stderr });
+        }
+      });
+
+      child.on("error", reject);
+    });
   }
 
   async createTorConfig() {
@@ -194,32 +244,39 @@ Log notice stdout
   async stopTor() {
     if (this.torProcess) {
       logger.progress("Stopping Tor process");
-      this.torProcess.kill("SIGTERM");
+      const proc = this.torProcess;
+      this.torProcess = null;
+      proc.kill("SIGTERM");
 
       // Wait for graceful shutdown
       await new Promise((resolve) => {
-        if (this.torProcess) {
-          this.torProcess.on("exit", resolve);
-          setTimeout(() => {
-            if (this.torProcess) {
-              this.torProcess.kill("SIGKILL");
-              resolve();
-            }
-          }, 5000);
-        } else {
-          resolve();
-        }
+        let settled = false;
+        proc.once("exit", () => {
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        });
+        setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            try {
+              proc.kill("SIGKILL");
+            } catch (_) {}
+            resolve();
+          }
+        }, 5000);
       });
-
-      this.torProcess = null;
     }
   }
 
   async cleanup() {
     await this.stopTor();
     try {
-      await fs.rm(this.dataDir, { recursive: true, force: true });
-      logger.success("Cleaned up Tor data directory");
+      // Only remove the config file, preserve cached consensus/certs for faster restarts
+      const torrcPath = path.join(this.dataDir, "torrc");
+      await fs.unlink(torrcPath).catch(() => {});
+      logger.success("Cleaned up Tor configuration");
     } catch (error) {
       logger.warning(`Could not clean up Tor data directory: ${error.message}`);
     }

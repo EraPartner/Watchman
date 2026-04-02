@@ -9,7 +9,7 @@ export function issueCsrfToken(res) {
   const cookieOpts = {
     httpOnly: false, // must be accessible to JS for double-submit
     secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.COOKIE_SAMESITE || "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
     // keep token accessible to subpaths
     path: "/",
     maxAge: 24 * 60 * 60 * 1000, // 1 day

@@ -11,6 +11,7 @@
  */
 
 import rateLimit from "express-rate-limit";
+import logger from "./logger.js";
 
 /**
  * Enhanced IP validation for rate limit bypass
@@ -81,7 +82,7 @@ export const generalLimiter = rateLimit({
   // Custom handler for when rate limit is exceeded
   handler: (req, res, next, options) => {
     // Log the rate limit hit
-    console.warn("Rate limit reached", {
+    logger.warn("Rate limit reached", {
       ip: req.ip,
       path: req.path,
       method: req.method,
@@ -112,7 +113,7 @@ export const controlLimiter = rateLimit({
   // Custom handler for control endpoint rate limit exceeded
   handler: (req, res, next, options) => {
     // Enhanced logging for control endpoint abuse
-    console.warn("Control endpoint rate limit reached - potential abuse", {
+    logger.warn("Control endpoint rate limit reached - potential abuse", {
       ip: req.ip,
       path: req.path,
       method: req.method,
@@ -146,7 +147,7 @@ export const authLimiter = rateLimit({
   // Custom handler for authentication rate limit exceeded
   handler: (req, res, next, options) => {
     // Enhanced security logging for auth attempts
-    console.warn("Authentication rate limit reached - possible brute force", {
+    logger.warn("Authentication rate limit reached - possible brute force", {
       ip: req.ip,
       path: req.path,
       method: req.method,
@@ -175,18 +176,9 @@ export const healthLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 
-  // Allow bypass for legitimate monitoring
+  // Allow bypass for legitimate localhost monitoring
   skip: (req) => {
     const isLocalhost = isLocalhostIP(req.ip);
-    const userAgent = req.get("User-Agent")?.toLowerCase() || "";
-
-    const isMonitoringAgent =
-      userAgent.includes("health") ||
-      userAgent.includes("monitoring") ||
-      userAgent.includes("nagios") ||
-      userAgent.includes("zabbix") ||
-      userAgent.includes("prometheus");
-
-    return isLocalhost || isMonitoringAgent;
+    return isLocalhost;
   },
 });

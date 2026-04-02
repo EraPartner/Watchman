@@ -22,14 +22,8 @@ export function sanitizeString(input, maxLength = 255) {
   if (typeof input !== "string") return null;
 
   // Remove control characters except tab/newline/carriage return
-  const sanitized = Array.from(input)
-    .filter((char) => {
-      const code = char.charCodeAt(0);
-      const isControl = code < 32 || code === 127;
-      const isAllowedWhitespace = code === 9 || code === 10 || code === 13;
-      return !isControl || isAllowedWhitespace;
-    })
-    .join("")
+  const sanitized = input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     .trim();
 
   // Enforce max length

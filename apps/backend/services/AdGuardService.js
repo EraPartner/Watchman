@@ -119,13 +119,7 @@ class AdGuardService {
 
   async getStats() {
     try {
-      const headers = {
-        "Content-Type": "application/json",
-      };
-
-      if (this.authToken) {
-        headers["Authorization"] = `Basic ${this.authToken}`;
-      }
+      const headers = this.buildRequestHeaders();
 
       const [statusResponse, statsResponse] = await Promise.all([
         fetch(`${this.baseUrl}/control/status`, {

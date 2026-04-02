@@ -163,19 +163,6 @@ export function requireString(field, options = {}) {
 }
 
 /**
- * Sanitize a string by removing potentially dangerous characters
- * @param {string} str - String to sanitize
- * @returns {string} Sanitized string
- */
-export function sanitizeString(str) {
-  if (typeof str !== "string") return "";
-  // Remove control characters and null bytes
-  // eslint-disable-next-line no-control-regex
-  const CONTROL_CHARS_REGEX = new RegExp("[\\u0000-\\u001F\\u007F]", "g");
-  return str.replace(CONTROL_CHARS_REGEX, "").trim();
-}
-
-/**
  * Validate and sanitize a service name/key
  * @param {string} name - Service name to validate
  * @returns {boolean} True if valid

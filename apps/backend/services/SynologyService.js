@@ -1,9 +1,5 @@
-import { exec } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import { logger } from "../middleware/logger.js";
-import { formatBytes as formatBytesUtil } from "../utils/serviceUtils.js";
-
-const execAsync = promisify(exec);
 
 class SynologyService {
   constructor() {
@@ -69,7 +65,14 @@ class SynologyService {
         setTimeout(() => reject(new Error("Command timeout")), 3000)
       );
 
-      await Promise.race([execAsync("which snmpget"), timeoutPromise]);
+      const whichPromise = new Promise((resolve, reject) => {
+        const child = spawn("which", ["snmpget"], { timeout: 3000 });
+        child.on("close", (code) =>
+          code === 0 ? resolve() : reject(new Error("snmpget not found"))
+        );
+        child.on("error", reject);
+      });
+      await Promise.race([whichPromise, timeoutPromise]);
 
       logger.service(
         "synology",
@@ -90,28 +93,65 @@ class SynologyService {
     }
   }
 
+  // System SNMP command execution using spawn (no shell interpolation)
+  async _runSnmpGet(oids) {
+    if (!Array.isArray(oids)) {
+      oids = [oids];
+    }
+
+    const args = [
+      "-v3",
+      "-u",
+      process.env.SYNOLOGY_SNMP_USERNAME,
+      "-A",
+      process.env.SYNOLOGY_SNMP_AUTH_KEY,
+      "-a",
+      "SHA",
+      "-X",
+      process.env.SYNOLOGY_SNMP_PRIV_KEY,
+      "-l",
+      "authPriv",
+      "-x",
+      "AES",
+      "-Oqv",
+      process.env.SYNOLOGY_HOST,
+      ...oids,
+    ];
+
+    return new Promise((resolve, reject) => {
+      const child = spawn("snmpget", args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 10000,
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (d) => {
+        stdout += d.toString();
+      });
+      child.stderr.on("data", (d) => {
+        stderr += d.toString();
+      });
+      child.on("close", (code) => {
+        if (code !== 0) {
+          reject(
+            new Error(stderr.trim() || `snmpget exited with code ${code}`)
+          );
+          return;
+        }
+        resolve(stdout);
+      });
+      child.on("error", reject);
+    });
+  }
+
   // System SNMP command execution
   async getSystemSnmp(oids) {
     if (!Array.isArray(oids)) {
       oids = [oids];
     }
 
-    const snmpCmd = [
-      "snmpget",
-      "-v3",
-      `-u ${process.env.SYNOLOGY_SNMP_USERNAME}`,
-      `-A ${process.env.SYNOLOGY_SNMP_AUTH_KEY}`,
-      "-a SHA",
-      `-X ${process.env.SYNOLOGY_SNMP_PRIV_KEY}`,
-      "-l authPriv",
-      "-x AES",
-      "-Oqv", // Quiet output, values only
-      process.env.SYNOLOGY_HOST,
-      ...oids,
-    ].join(" ");
-
     try {
-      const { stdout, stderr } = await execAsync(snmpCmd);
+      const stdout = await this._runSnmpGet(oids);
       if (stderr && !stderr.includes("Warning:")) {
         // Ignore harmless warnings
         logger.warning("SNMP warning", { stderr });
@@ -355,13 +395,6 @@ class SynologyService {
     } else {
       return `${minutes}m`;
     }
-  }
-
-  /**
-   * Format bytes for display (wrapper using serviceUtils)
-   */
-  formatBytes(bytes) {
-    return formatBytesUtil(bytes, 2);
   }
 
   disconnect() {

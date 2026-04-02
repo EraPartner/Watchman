@@ -60,22 +60,6 @@ export function getAgentForUrl(url) {
 }
 
 /**
- * Get the HTTP agent
- * @returns {http.Agent} The shared HTTP agent
- */
-export function getHttpAgent() {
-  return httpAgent;
-}
-
-/**
- * Get the HTTPS agent
- * @returns {https.Agent} The shared HTTPS agent
- */
-export function getHttpsAgent() {
-  return httpsAgent;
-}
-
-/**
  * Destroy all agents (call on shutdown)
  */
 export function destroyAgents() {

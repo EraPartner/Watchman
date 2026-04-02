@@ -1,21 +1,17 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-
-// Load env (server already loads dotenv in server.js but this keeps the file standalone for tests)
-import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
+import logger from "./logger.js";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const AUTH_USERNAME = process.env.AUTH_USERNAME;
 const AUTH_PASSWORD_HASH = process.env.AUTH_PASSWORD_HASH; // bcrypt hash
 
-// A constant dummy bcrypt hash for timing-equalization when username/hash is missing
-const DUMMY_HASH =
-  "$2a$10$CjwK8e1GQ8r9l1wqOe1LzeqYp6uGqv0qgX6Yc8Xf2sG1zQyZlK0lG"; // hash of 'invalid'
+// Generate a constant dummy bcrypt hash at startup for timing-equalization
+const DUMMY_HASH = bcrypt.hashSync("invalid", 10);
 
 if (!JWT_SECRET) {
-  console.warn(
-    "⚠️ JWT_SECRET not set in environment. Auth will not function correctly."
+  logger.warn(
+    "JWT_SECRET not set in environment. Auth will not function correctly."
   );
 }
 
@@ -58,7 +54,7 @@ export async function authenticateCredentials(username, password) {
     }
     return null;
   } catch (err) {
-    console.error("Error comparing password hash", err);
+    logger.error("Error comparing password hash", { error: err.message });
     return null;
   }
 }

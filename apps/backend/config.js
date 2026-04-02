@@ -1,4 +1,3 @@
-import dotenv from "dotenv";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -8,21 +7,8 @@ import { validateSecurityConfig } from "./config/security.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Prefer .env.local for backend configuration; fall back to .env
-// Support both dev (config.js) and production (dist/config.js) paths
-const envLocalPath = join(__dirname, ".env.local");
-const envLocalPathParent = join(__dirname, "..", ".env.local");
-const envPath = join(__dirname, ".env");
-
-if (fs.existsSync(envLocalPath)) {
-  dotenv.config({ path: envLocalPath });
-} else if (fs.existsSync(envLocalPathParent)) {
-  dotenv.config({ path: envLocalPathParent });
-} else if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-} else {
-  dotenv.config();
-}
+// NOTE: dotenv is loaded by server.js before this module is imported.
+// This file only reads from process.env.
 
 // Simple logger for config validation (before full logger is available)
 const configLogger = {
@@ -157,7 +143,7 @@ const validateEnvironment = () => {
   }
 
   configLogger.info("Environment validation passed");
-};;;
+};
 
 // Parse enabled services from environment variable
 const parseEnabledServices = () => {
@@ -180,7 +166,6 @@ const parseEnabledServices = () => {
       "beryl",
       "telenet",
       "raspi",
-      "nostrcheck",
     ]);
   }
 
@@ -305,4 +290,7 @@ const getConfig = () => ({
   getServiceInstances: parseServiceInstances,
 });
 
-export { validateEnvironment, getConfig, parseServiceInstances };
+// Cached config for use across the application (avoids re-parsing process.env)
+const cachedConfig = getConfig();
+
+export { validateEnvironment, getConfig, cachedConfig };

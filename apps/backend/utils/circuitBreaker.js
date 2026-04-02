@@ -14,7 +14,7 @@
  * @version 1.0.0
  */
 
-import logger from "./logger.js";
+import logger from "../middleware/logger.js";
 
 /**
  * Circuit Breaker states
@@ -156,7 +156,7 @@ export class CircuitBreakerManager {
    * @param {Object} options - Circuit breaker options
    * @returns {CircuitBreaker}
    */
-  getBreaker(name, options = {}) {
+  getOrCreate(name, options = {}) {
     if (!this.breakers.has(name)) {
       this.breakers.set(name, new CircuitBreaker({ name, ...options }));
     }
@@ -171,7 +171,7 @@ export class CircuitBreakerManager {
    * @returns {Promise<any>}
    */
   async execute(serviceName, fn, options = {}) {
-    const breaker = this.getBreaker(serviceName, options);
+    const breaker = this.getOrCreate(serviceName, options);
     return breaker.execute(fn);
   }
 

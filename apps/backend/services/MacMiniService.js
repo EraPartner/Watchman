@@ -1,12 +1,11 @@
-import { exec } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import { Client } from "ssh2";
 import fs from "fs";
-import { validateCommand } from "../middleware/commandSanitizer.js";
 import logger from "../middleware/logger.js";
 import { isSafePath } from "../utils/validation.js";
+import { pingHost as sharedPingHost } from "../utils/ping.js";
 
-const execAsync = promisify(exec);
+const ALLOWED_COMMANDS = new Set(["uptime", "df", "osx-cpu-temp", "which"]);
 
 class MacMiniService {
   constructor(options = {}) {
@@ -45,73 +44,82 @@ class MacMiniService {
     this.usePassword = !!(this.sshUsePassword && this.sshPassword);
 
     this.lastData = null;
+
+    // Cache SSH key at startup
+    if (this.sshKey) {
+      try {
+        this._cachedSshKey = fs.readFileSync(this.sshKey, "utf8");
+      } catch (err) {
+        this._cachedSshKey = null;
+      }
+    }
   }
 
-  // Try multiple ping strategies similar to RoonService
+  #isCommandAllowed(cmd) {
+    const base = cmd.split(/\s+/)[0];
+    return ALLOWED_COMMANDS.has(base);
+  }
+
+  // Try multiple ping strategies via shared utility
   async pingHost() {
     if (!this.host) throw new Error("MACMINI_HOST not configured");
-
-    const attempts = [
-      `ping -c 2 -4 ${this.host}`,
-      `ping -c 2 ${this.host}`,
-      `ping6 -c 2 ${this.host}`,
-    ];
-
-    let combinedStdout = "";
-    let combinedStderr = "";
-
-    for (const cmd of attempts) {
-      try {
-        const { stdout, stderr } = await execAsync(cmd, {
-          timeout: this.timeout + 2000,
-        });
-        combinedStdout += `\n--- cmd: ${cmd} ---\n` + (stdout || "");
-        combinedStderr += `\n--- cmd: ${cmd} ---\n` + (stderr || "");
-
-        const out = stdout || "";
-        const success =
-          /0% packet loss|0\.0% packet loss|0 packets lost|0 received/.test(
-            out
-          ) && !/100% packet loss/.test(out);
-        if (success) {
-          return {
-            success: true,
-            stdout: combinedStdout,
-            stderr: combinedStderr,
-          };
-        }
-      } catch (err) {
-        const stdout = err.stdout || "";
-        const stderr = err.stderr || err.message || "";
-        combinedStdout += `\n--- cmd error: ${cmd} ---\n` + stdout;
-        combinedStderr += `\n--- cmd error: ${cmd} ---\n` + stderr;
-      }
-    }
-
-    if (!combinedStdout && !combinedStderr)
-      combinedStderr =
-        "No ping output captured; ping may be unavailable or blocked";
-    return { success: false, stdout: combinedStdout, stderr: combinedStderr };
+    return sharedPingHost(this.host, { timeout: this.timeout });
   }
 
-  // Build an ssh command wrapper
-  buildSshCommand(cmd) {
-    const parts = ["ssh", "-o", "BatchMode=yes", "-p", String(this.sshPort)];
-    if (this.sshKey) {
-      // SECURITY: Validate SSH key path to prevent path traversal attacks
-      if (!isSafePath(this.sshKey)) {
-        logger.error("Invalid SSH key path in buildSshCommand", {
-          path: this.sshKey,
-        });
-        throw new Error("Invalid SSH key path: path traversal not allowed");
-      }
-      parts.push("-i", this.sshKey);
+  // Run command via system SSH using spawn (no shell interpolation)
+  async _runSshViaSpawn(cmd) {
+    if (!this.useSSH) throw new Error("SSH not configured for Mac Mini");
+
+    // Validate host before building SSH args
+    if (!isValidIPv4(this.macMiniHost) && !isValidHostname(this.macMiniHost)) {
+      throw new Error(`Invalid MACMINI_HOST: ${this.macMiniHost}`);
     }
-    parts.push(
-      `${this.sshUser}@${this.host}`,
-      '"' + cmd.replace(/"/g, '\\"') + '"'
-    );
-    return parts.join(" ");
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const sshArgs = [
+        "-o",
+        "BatchMode=yes",
+        "-p",
+        String(this.sshPort),
+        ...(this.sshKey ? ["-i", this.sshKey] : []),
+        `${this.sshUser}@${this.host}`,
+        cmd,
+      ];
+
+      const child = spawn("ssh", sshArgs, {
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: this.timeout + 3000,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code) => {
+        if (!settled) {
+          settled = true;
+          if (code !== 0) {
+            reject(new Error(`ssh exited with code ${code}: ${stderr.trim()}`));
+          } else {
+            resolve({ stdout, stderr });
+          }
+        }
+      });
+
+      child.on("error", (err) => {
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+      });
+    });
   }
 
   // New helper: run a command using ssh2 (password or key supported)
@@ -147,7 +155,8 @@ class MacMiniService {
 
         try {
           // read key and provide passphrase (if available) so ssh2 can unlock it non-interactively
-          connectionOpts.privateKey = fs.readFileSync(this.sshKey, "utf8");
+          connectionOpts.privateKey =
+            this._cachedSshKey || fs.readFileSync(this.sshKey, "utf8");
           if (this.sshPassword && !this.sshUsePassword) {
             // treat sshPassword as key passphrase
             connectionOpts.passphrase = this.sshPassword;
@@ -182,6 +191,13 @@ class MacMiniService {
               .on("close", (code, signal) => {
                 finished = true;
                 conn.end();
+                if (code !== 0) {
+                  return reject(
+                    new Error(
+                      `Command exited with code ${code}: ${stderr.trim()}`
+                    )
+                  );
+                }
                 resolve({ stdout, stderr, code, signal });
               })
               .on("data", (data) => {
@@ -264,11 +280,8 @@ class MacMiniService {
       }
     }
 
-    // Final fallback: system ssh (this may prompt for passphrase interactively if not unlocked)
-    const sshCmd = this.buildSshCommand(cmd);
-    const { stdout, stderr } = await execAsync(sshCmd, {
-      timeout: this.timeout + 3000,
-    });
+    // Final fallback: system ssh via spawn
+    const { stdout, stderr } = await this._runSshViaSpawn(cmd);
     return { stdout: stdout || "", stderr: stderr || "" };
   }
 
@@ -366,109 +379,6 @@ class MacMiniService {
     }
   }
 
-  async executeSSHCommand(cmd) {
-    // Validate command for security
-    const validation = validateCommand(cmd);
-    if (!validation.valid) {
-      const error = new Error(`Command validation failed: ${validation.error}`);
-      logger.error("SSH command validation failed", {
-        command: cmd,
-        error: validation.error,
-      });
-      throw error;
-    }
-
-    // Use the sanitized version
-    const safeCmd = validation.sanitized;
-
-    if (!this.sshUser || !this.sshKey) {
-      throw new Error(
-        "SSH credentials not configured (MACMINI_SSH_USER and MACMINI_SSH_KEY_PATH required)"
-      );
-    }
-
-    const connectionOpts = {
-      host: this.host,
-      port: this.sshPort,
-      username: this.sshUser,
-      privateKey: this.sshKey,
-      readyTimeout: this.timeout,
-      // Additional security settings
-      algorithms: {
-        // Only use secure algorithms
-        kex: [
-          "curve25519-sha256",
-          "curve25519-sha256@libssh.org",
-          "ecdh-sha2-nistp256",
-          "ecdh-sha2-nistp384",
-          "ecdh-sha2-nistp521",
-          "diffie-hellman-group-exchange-sha256",
-        ],
-        cipher: [
-          "aes128-gcm@openssh.com",
-          "aes256-gcm@openssh.com",
-          "aes128-ctr",
-          "aes192-ctr",
-          "aes256-ctr",
-        ],
-      },
-    };
-
-    return new Promise((resolve, reject) => {
-      const conn = new Client();
-      let stdout = "";
-      let stderr = "";
-      let finished = false;
-
-      const cleanup = () => {
-        if (!finished) {
-          finished = true;
-          conn.end();
-        }
-      };
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error("SSH command execution timeout"));
-      }, this.timeout + 3000);
-
-      conn
-        .on("ready", () => {
-          conn.exec(
-            safeCmd,
-            { timeout: this.timeout + 3000 },
-            (err, stream) => {
-              if (err) {
-                clearTimeout(timeout);
-                cleanup();
-                return reject(err);
-              }
-              stream
-                .on("close", (code, signal) => {
-                  clearTimeout(timeout);
-                  cleanup();
-                  resolve({ stdout, stderr, code, signal });
-                })
-                .on("data", (data) => {
-                  stdout += data.toString();
-                })
-                .stderr.on("data", (data) => {
-                  stderr += data.toString();
-                });
-            }
-          );
-        })
-        .on("error", (err) => {
-          clearTimeout(timeout);
-          if (!finished) {
-            cleanup();
-            reject(err);
-          }
-        })
-        .connect(connectionOpts);
-    });
-  }
-
   disconnect() {
     // nothing to cleanup
   }
@@ -483,10 +393,12 @@ function parseUptimeSeconds(uptime) {
   //  15:04  up 1 day,  3:12, 3 users, load averages: 1.23 0.87 0.65
   //  15:04:31 up 10 days,  5:03,  2 users,  load average: 0.00, 0.01, 0.05
   //  up 5 minutes
+  //  up 3 hours
 
   const daysMatch = uptime.match(/up\s+(\d+)\s+day/i);
   const hoursMatch = uptime.match(/up\s+(\d+):(\d+)(?::(\d+))?\s+/);
   const minutesMatch = uptime.match(/up\s+(\d+)\s+minutes?/i);
+  const hoursTextMatch = uptime.match(/up\s+(\d+)\s+hours?/i);
 
   let seconds = 0;
 
@@ -497,6 +409,10 @@ function parseUptimeSeconds(uptime) {
   if (hoursMatch) {
     seconds += parseInt(hoursMatch[1], 10) * 3600; // 60 * 60
     seconds += parseInt(hoursMatch[2] || "0", 10) * 60;
+  }
+
+  if (hoursTextMatch) {
+    seconds += parseInt(hoursTextMatch[1], 10) * 3600;
   }
 
   if (minutesMatch) {

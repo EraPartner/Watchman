@@ -36,7 +36,7 @@ export class AlbyHubService {
         signal: controller.signal,
         headers: this.defaultHeaders,
         // Add agent support based on URL protocol
-        agent: url.startsWith("https") ? httpsAgent : httpAgent,
+        agent: url.startsWith("https:") ? httpsAgent : httpAgent,
       });
       clearTimeout(timeoutId);
       return res;

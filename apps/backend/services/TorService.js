@@ -120,6 +120,7 @@ class TorService {
   }
 
   extractORPort(addresses) {
+    if (!addresses || !Array.isArray(addresses)) return 9001;
     for (const address of addresses) {
       const match = address.match(/:(\d+)$/);
       if (match) {
@@ -230,8 +231,19 @@ class TorService {
         throw new Error("No stable Tor versions found in GitLab");
       }
 
+      // Sort stable tags by semver descending
+      const sortedTags = [...stableTags].sort((a, b) => {
+        const verA = a.name.replace("tor-", "").split(".").map(Number);
+        const verB = b.name.replace("tor-", "").split(".").map(Number);
+        for (let i = 0; i < 4; i++) {
+          const diff = (verB[i] || 0) - (verA[i] || 0);
+          if (diff !== 0) return diff;
+        }
+        return 0;
+      });
+
       // Extract version number from tag name (format: tor-0.4.8.19)
-      const latestTag = stableTags[0].name;
+      const latestTag = sortedTags[0].name;
       const latestVersion = latestTag.replace("tor-", "");
 
       // Extract version numbers for comparison

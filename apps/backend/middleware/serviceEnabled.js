@@ -1,4 +1,4 @@
-import { getConfig } from "../config.js";
+import { cachedConfig } from "../config.js";
 
 /**
  * Middleware to check if a service is enabled before processing the request.
@@ -9,8 +9,7 @@ import { getConfig } from "../config.js";
  */
 export function requireServiceEnabled(serviceName) {
   return (req, res, next) => {
-    const config = getConfig();
-    const enabledServices = config.enabledServices;
+    const enabledServices = cachedConfig.enabledServices;
 
     if (!enabledServices.has(serviceName.toLowerCase())) {
       return res.status(404).json({
@@ -32,8 +31,7 @@ export function requireServiceEnabled(serviceName) {
  */
 export function requireAnyServiceEnabled(...serviceNames) {
   return (req, res, next) => {
-    const config = getConfig();
-    const enabledServices = config.enabledServices;
+    const enabledServices = cachedConfig.enabledServices;
 
     const anyEnabled = serviceNames.some((name) =>
       enabledServices.has(name.toLowerCase())

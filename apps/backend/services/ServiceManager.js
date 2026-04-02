@@ -203,63 +203,6 @@ export default class ServiceManager {
     return this.initialized;
   }
 
-  async checkAllServicesHealth() {
-    const healthResults = {};
-
-    // Check all registered services in PARALLEL for better performance
-    const healthPromises = Array.from(this.services.keys()).map(
-      async (serviceName) => {
-        try {
-          const health = await Promise.race([
-            this.getServiceHealth(serviceName),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Health check timeout")), 5000)
-            ),
-          ]);
-          return [serviceName, health];
-        } catch (error) {
-          return [
-            serviceName,
-            {
-              status: "offline",
-              error: error.message,
-              timestamp: new Date().toISOString(),
-            },
-          ];
-        }
-      }
-    );
-
-    // Execute all health checks in parallel
-    const results = await Promise.all(healthPromises);
-    for (const [serviceName, health] of results) {
-      healthResults[serviceName] = health;
-    }
-
-    // Also check Tor manager if available (in parallel)
-    if (this.torManager) {
-      try {
-        healthResults["tor-proxy"] = await Promise.race([
-          this.getTorManagerHealth(),
-          new Promise((_, reject) =>
-            setTimeout(
-              () => reject(new Error("Tor health check timeout")),
-              5000
-            )
-          ),
-        ]);
-      } catch (error) {
-        healthResults["tor-proxy"] = {
-          status: "offline",
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        };
-      }
-    }
-
-    return healthResults;
-  }
-
   async cleanup() {
     logger.progress("Cleaning up services");
 

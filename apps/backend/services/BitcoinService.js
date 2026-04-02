@@ -11,51 +11,17 @@
  * @version 1.0.0
  */
 
-import { execSync } from "child_process";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Buffer } from "buffer";
 import { logger } from "../middleware/logger.js";
 import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
 import { DEFAULT_TIMEOUTS } from "../config/serviceDefaults.js";
+import {
+  cleanVersionString,
+  isUpdateAvailable,
+} from "../utils/versionComparison.js";
 
 // Use shared HTTP agents from pool (Bitcoin uses custom timeout in requests)
-
-/**
- * Clean and normalise Bitcoin version strings
- *
- * Handles various Bitcoin Core version formats including Satoshi client format.
- * Extracts semantic version numbers from complex version strings.
- *
- * @param {string} version - Raw version string from Bitcoin Core
- * @returns {string} Cleaned version string (e.g., "27.0.0")
- */
-function cleanVersionString(version) {
-  if (typeof version !== "string") {
-    return "";
-  }
-
-  // Handle /Satoshi:X.Y.Z/ format commonly used by Bitcoin Core
-  const satoshiMatch = version.match(/\/Satoshi:(\d+\.\d+\.\d+)/);
-  if (satoshiMatch) {
-    return satoshiMatch[1];
-  }
-
-  // Handle other formats - remove slashes and extra text
-  let cleaned = version
-    .trim()
-    .replace(/^\//, "") // Remove leading slash
-    .replace(/\/$/, "") // Remove trailing slash
-    .replace(/^[vV]ersion:\s*/, ""); // Remove "version:" prefix
-
-  // Extract semantic version number if present
-  const versionMatch = cleaned.match(/(\d+\.\d+\.\d+)/);
-  if (versionMatch) {
-    return versionMatch[1];
-  }
-
-  // Return truncated string to prevent extremely long version strings
-  return cleaned.substring(0, 32);
-}
 
 /**
  * Parse numeric version format to semantic version
@@ -117,23 +83,6 @@ function getVersionFromGitHubTag(tag) {
   return match ? match[1] : "";
 }
 
-function isUpdateAvailable(current, latest) {
-  if (!current || !latest || current === "unknown" || latest === "unknown") {
-    return false;
-  }
-
-  const currentParts = current.split(".").map(Number);
-  const latestParts = latest.split(".").map(Number);
-
-  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-    const currentVer = currentParts[i] || 0;
-    const latestVer = latestParts[i] || 0;
-    if (latestVer > currentVer) return true;
-    if (latestVer < currentVer) return false;
-  }
-  return false;
-}
-
 export class BitcoinService {
   constructor(config = {}) {
     // Determine timeout values (ms) and corresponding curl timeouts (s)
@@ -153,6 +102,11 @@ export class BitcoinService {
       maxTime: maxTimeSec,
       ...config,
     };
+
+    // Proxy availability cache
+    this._proxyAvailable = null;
+    this._proxyCheckTime = 0;
+    this._proxyCheckTTL = 30000;
 
     // If configured to use a SOCKS proxy, create and cache the agent here
     if (this.config.useProxy && this.config.torProxy) {
@@ -256,10 +210,17 @@ export class BitcoinService {
       throw new Error("Bitcoin RPC credentials not configured");
     }
 
-    // If using proxy, first check if it's available
+    // If using proxy, first check if it's available (cached)
     if (this.config.useProxy) {
-      const proxyAvailable = await this.checkProxyConnection();
-      if (!proxyAvailable) {
+      const now = Date.now();
+      if (
+        this._proxyAvailable === null ||
+        now - this._proxyCheckTime > this._proxyCheckTTL
+      ) {
+        this._proxyAvailable = await this.checkProxyConnection();
+        this._proxyCheckTime = now;
+      }
+      if (!this._proxyAvailable) {
         throw new Error(
           `Tor proxy not available at ${this.config.torProxy.host}:${this.config.torProxy.port} - check if Tor is running with SOCKS proxy enabled`
         );

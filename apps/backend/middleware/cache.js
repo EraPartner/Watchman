@@ -29,7 +29,7 @@ const CACHE_LONGTERM_TTL = parseInt(process.env.CACHE_LONGTERM_TTL) || 300;
 const healthCache = new NodeCache({
   stdTTL: CACHE_HEALTH_TTL, // Default 10 seconds for health checks
   checkperiod: Math.ceil(CACHE_HEALTH_TTL * 1.5),
-  useClones: false, // Better performance for simple objects
+  useClones: true, // Safer cloning
   maxKeys: 1000, // Limit memory usage
 });
 
@@ -40,7 +40,7 @@ const healthCache = new NodeCache({
 const statsCache = new NodeCache({
   stdTTL: CACHE_STATS_TTL, // Default 30 seconds for stats
   checkperiod: Math.ceil(CACHE_STATS_TTL * 1.5),
-  useClones: false,
+  useClones: true,
   maxKeys: 500, // Limit memory usage
 });
 
@@ -51,7 +51,7 @@ const statsCache = new NodeCache({
 const longTermCache = new NodeCache({
   stdTTL: CACHE_LONGTERM_TTL, // Default 5 minutes for less frequently changing data
   checkperiod: Math.ceil(CACHE_LONGTERM_TTL * 1.2),
-  useClones: false,
+  useClones: true,
   maxKeys: 200, // Limit memory usage
 });
 

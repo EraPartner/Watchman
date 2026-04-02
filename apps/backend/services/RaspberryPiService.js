@@ -1,10 +1,12 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-import net from "net";
+import { spawn } from "child_process";
 import pigpio from "pigpio-client";
 import logger from "../middleware/logger.js";
-
-const execAsync = promisify(exec);
+import {
+  isValidIPv4,
+  isValidHostname,
+  isSafePath,
+} from "../utils/validation.js";
+import { pingHost as sharedPingHost } from "../utils/ping.js";
 
 class RaspberryPiService {
   constructor(options = {}) {
@@ -28,6 +30,13 @@ class RaspberryPiService {
     this.lastData = null;
     this.pi = null;
     this.connected = false;
+
+    // Validate path env vars
+    this.nodePath =
+      process.env.MACMINI_NODE_PATH || "/usr/local/opt/node@22/bin/node";
+    this.rpiCliPath =
+      process.env.MACMINI_RPI_CLI_PATH ||
+      "/usr/local/lib/node_modules/homebridge-rpi/cli/rpi.js";
   }
 
   // Connect to pigpiod daemon
@@ -92,28 +101,7 @@ class RaspberryPiService {
 
   async pingHost() {
     if (!this.host) throw new Error("RASPI_HOST not configured");
-
-    const attempts = [`ping -c 2 -W 2 ${this.host}`, `ping -c 2 ${this.host}`];
-
-    for (const cmd of attempts) {
-      try {
-        const { stdout } = await execAsync(cmd, {
-          timeout: this.timeout,
-        });
-
-        const success =
-          /0% packet loss|0\.0% packet loss|0 received/.test(stdout) &&
-          !/100% packet loss/.test(stdout);
-
-        if (success) {
-          return { success: true, stdout };
-        }
-      } catch (err) {
-        // Continue to next attempt
-      }
-    }
-
-    return { success: false };
+    return sharedPingHost(this.host, { timeout: this.timeout });
   }
 
   async checkHealth() {
@@ -299,15 +287,33 @@ class RaspberryPiService {
       throw new Error("RASPI_HOST not configured");
     }
 
+    if (!isValidIPv4(this.host) && !isValidHostname(this.host)) {
+      throw new Error(`Invalid RASPI_HOST: ${this.host}`);
+    }
+
+    // Validate SSH key path
+    if (!this.macMiniSSHKey || !isSafePath(this.macMiniSSHKey)) {
+      throw new Error("Invalid or missing MACMINI_SSH_KEY");
+    }
+
     try {
-      const sshCommand = `ssh -i ${this.macMiniSSHKey} -p ${this.macMiniSSHPort} -o StrictHostKeyChecking=no -o ConnectTimeout=5 ${this.macMiniSSHUser}@${this.macMiniHost} "/usr/local/opt/node@22/bin/node /usr/local/lib/node_modules/homebridge-rpi/cli/rpi.js -H ${this.host}:${this.port} info"`;
+      const remoteCmd = `${this.nodePath} ${this.rpiCliPath} -H '${this.host.replace(/'/g, "'\\''")}':${this.port} info`;
+      const sshArgs = [
+        "-i",
+        this.macMiniSSHKey,
+        "-p",
+        String(this.macMiniSSHPort),
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "ConnectTimeout=5",
+        `${this.macMiniSSHUser}@${this.macMiniHost}`,
+        remoteCmd,
+      ];
 
-      logger.info(`Executing RPI info command via Mac Mini: ${sshCommand}`);
+      logger.info("Executing RPI info command via Mac Mini");
 
-      const { stdout, stderr } = await execAsync(sshCommand, {
-        timeout: this.timeout,
-        maxBuffer: 1024 * 1024, // 1MB buffer
-      });
+      const { stdout, stderr } = await this._runSpawn("ssh", sshArgs);
 
       if (stderr && !stdout) {
         throw new Error(`RPI command failed: ${stderr}`);
@@ -329,6 +335,47 @@ class RaspberryPiService {
       logger.error(`Failed to get RPI info: ${error.message}`);
       throw error;
     }
+  }
+
+  // Helper to run a spawn command and collect output
+  _runSpawn(cmd, args) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const child = spawn(cmd, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: this.timeout + 2000,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code) => {
+        if (!settled) {
+          settled = true;
+          if (code !== 0) {
+            reject(
+              new Error(`${cmd} exited with code ${code}: ${stderr.trim()}`)
+            );
+          } else {
+            resolve({ stdout, stderr });
+          }
+        }
+      });
+
+      child.on("error", (err) => {
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+      });
+    });
   }
 
   // Parse the rpi JSON output to extract useful metrics
@@ -509,36 +556,6 @@ class RaspberryPiService {
         if (parsedInfo.hwRevision !== null && !hwRevision) {
           hwRevision = parsedInfo.hwRevision;
           piModel = this.getPiModel(hwRevision);
-        }
-
-        // Parse additional metrics from rpi output if available
-        // Look for load average, memory usage, etc.
-        const lines = rpiOutput.split("\n");
-        for (const line of lines) {
-          // Load average (e.g., "Load average: 0.15, 0.18, 0.20")
-          if (line.toLowerCase().includes("load")) {
-            const match = line.match(/([\d.]+),\s*([\d.]+),\s*([\d.]+)/);
-            if (match) {
-              loadAverage = {
-                load1: parseFloat(match[1]),
-                load5: parseFloat(match[2]),
-                load15: parseFloat(match[3]),
-              };
-            }
-          }
-
-          // Memory info (e.g., "Memory: 512/1024 MB (50%)")
-          if (line.toLowerCase().includes("memory") && line.includes("/")) {
-            const match = line.match(/([\d]+)\/([\d]+)\s*MB.*\((\d+)%\)/);
-            if (match) {
-              memory = {
-                usedMB: parseInt(match[1]),
-                totalMB: parseInt(match[2]),
-                usedPercent: parseInt(match[3]),
-                availableMB: parseInt(match[2]) - parseInt(match[1]),
-              };
-            }
-          }
         }
       } catch (e) {
         logger.error(`Failed to get RPI info via Mac Mini: ${e.message}`);

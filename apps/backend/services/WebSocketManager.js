@@ -193,7 +193,11 @@ export class WebSocketManager extends EventEmitter {
       const cookies = Object.fromEntries(
         cookieHeader.split(";").map((c) => {
           const [key, ...value] = c.split("=");
-          return [key.trim(), decodeURIComponent(value.join("="))];
+          try {
+            return [key.trim(), decodeURIComponent(value.join("="))];
+          } catch (_) {
+            return [key.trim(), value.join("=")];
+          }
         })
       );
       return cookies.token || null;
@@ -210,8 +214,11 @@ export class WebSocketManager extends EventEmitter {
    * @private
    */
   getClientIp(req) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (forwarded) {
+      return String(forwarded).split(",")[0].trim();
+    }
     return (
-      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
       req.headers["x-real-ip"] ||
       req.connection.remoteAddress ||
       req.socket.remoteAddress ||
@@ -336,7 +343,7 @@ export class WebSocketManager extends EventEmitter {
           type: "connection",
           message: "Connected to Watchman WebSocket server",
           timestamp: new Date().toISOString(),
-          serverVersion: "1.0.0",
+          serverVersion: process.env.npm_package_version || "1.0.0",
         })
       );
     } catch (error) {
@@ -507,26 +514,6 @@ export class WebSocketManager extends EventEmitter {
     if (sentCount > 0) {
       logger.debug(`Broadcasted ${description} to ${sentCount} clients`);
     }
-  }
-
-  /**
-   * Get WebSocket server statistics
-   *
-   * @returns {Object} Server statistics
-   */
-  getStats() {
-    const connectionsByIp = {};
-    this.connectionsByIp.forEach((count, ip) => {
-      connectionsByIp[ip] = count;
-    });
-
-    return {
-      enabled: this.isEnabled,
-      totalConnections: this.clients.size,
-      connectionsByIp,
-      heartbeatInterval: this.heartbeatInterval,
-      maxConnectionsPerIp: this.maxConnectionsPerIp,
-    };
   }
 
   /**

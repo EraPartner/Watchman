@@ -13,6 +13,7 @@ class AccountLockoutManager {
 
     // Periodic cleanup of old entries
     this.cleanupTimer = setInterval(() => this.cleanup(), this.cleanupInterval);
+    this.cleanupTimer.unref();
   }
 
   /**
@@ -24,7 +25,7 @@ class AccountLockoutManager {
   recordFailedAttempt(username, ip) {
     // Prevent memory exhaustion by limiting entries
     if (
-      this.attempts.size >= this.maxAttempts &&
+      this.attempts.size >= this.maxEntries &&
       !this.attempts.has(this.getKey(username, ip))
     ) {
       logger.warn("Account lockout map full, clearing oldest entries");
@@ -152,7 +153,8 @@ const accountLockoutManager = new AccountLockoutManager();
  * Middleware to check if an account is locked
  */
 export const checkLockout = (req, res, next) => {
-  const { username } = req.body;
+  const username = req.body?.username;
+  if (!username) return next();
   const ip = req.ip;
   const { locked, lockedUntil } = accountLockoutManager.isLocked(username, ip);
 

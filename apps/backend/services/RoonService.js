@@ -1,9 +1,5 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-import net from "net";
+import { pingHost } from "../utils/ping.js";
 import logger from "../middleware/logger.js";
-
-const execAsync = promisify(exec);
 
 class RoonService {
   constructor(options = {}) {
@@ -24,7 +20,7 @@ class RoonService {
           .filter(Boolean);
 
     // Default to an empty array (no ports to check) unless provided
-    if (!this.ports || this.ports.length === 0) {
+    if (this.ports.length === 0) {
       this.ports = options.defaultPorts || [
         (process.env.ROON_DEFAULT_PORT &&
           parseInt(process.env.ROON_DEFAULT_PORT)) ||
@@ -52,83 +48,23 @@ class RoonService {
 
   async pingHost() {
     if (!this.host) throw new Error("ROON_HOST not configured");
-
-    // Ensure the `ping` binary is available in the environment
     try {
-      const { stdout: whichOut } = await execAsync("command -v ping");
-      if (!whichOut || !whichOut.trim()) {
-        const msg = "ping binary not found in PATH";
-        console.error(`RoonService.pingHost: ${msg}`);
-        // don't return here — we'll still attempt the commands, but note absence
-        // in the combinedStderr below if nothing else is available
-      }
-    } catch (e) {
-      // If the check fails, log and continue to attempt ping; we'll capture any error below
-      logger.warn(
-        "RoonService.pingHost: failed to verify ping binary availability",
-        { error: e.message }
-      );
+      const result = await pingHost(this.host, {
+        timeout: this.timeout,
+        pingCount: this.pingCount,
+      });
+      return {
+        success: result.success,
+        stdout: result.success ? `Ping succeeded (${result.avgMs}ms avg)` : "",
+        stderr: result.success ? "" : "Ping failed or timed out",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        stdout: "",
+        stderr: error.message || "Ping failed",
+      };
     }
-
-    // Try multiple strategies to increase reliability across environments and IP families
-    const attempts = [
-      `ping -c ${this.pingCount} -4 ${this.host}`, // force IPv4
-      `ping -c ${this.pingCount} ${this.host}`, // generic
-      `ping6 -c ${this.pingCount} ${this.host}`, // IPv6 (macOS/Linux)
-    ];
-
-    let combinedStdout = "";
-    let combinedStderr = "";
-
-    for (const cmd of attempts) {
-      try {
-        const { stdout, stderr } = await execAsync(cmd, {
-          timeout: this.timeout + 1500,
-        });
-        const out = stdout || "";
-        const errOut = stderr || "";
-        combinedStdout += `\n--- cmd: ${cmd} ---\n` + out;
-        combinedStderr += `\n--- cmd: ${cmd} ---\n` + errOut;
-
-        // Check for common 'packet loss' phrases across platforms
-        const success =
-          /0% packet loss|0\.0% packet loss|0 packets lost|0 received/.test(
-            out
-          ) && !/100% packet loss/.test(out);
-        if (success) {
-          return {
-            success: true,
-            stdout: combinedStdout,
-            stderr: combinedStderr,
-          };
-        }
-        // If ping returned but no success, continue to next strategy
-      } catch (err) {
-        // err may contain stdout/stderr; capture for diagnostics and continue
-        const stdout = err.stdout || "";
-        const stderr = err.stderr || err.message || "";
-        combinedStdout += `\n--- cmd error: ${cmd} ---\n` + stdout;
-        combinedStderr += `\n--- cmd error: ${cmd} ---\n` + stderr;
-        // keep trying other commands
-      }
-    }
-
-    // If none of the attempts succeeded, return failure with combined outputs for debugging
-    // Provide a small diagnostic message if combined outputs are empty
-    if (!combinedStdout && !combinedStderr) {
-      combinedStderr =
-        "No ping output captured; ping may be unavailable or blocked";
-    }
-
-    logger.error(
-      `RoonService.pingHost: all ping attempts failed for ${this.host}`,
-      { host: this.host }
-    );
-    return {
-      success: false,
-      stdout: combinedStdout,
-      stderr: combinedStderr || "Ping attempts failed",
-    };
   }
 
   checkPort(port) {

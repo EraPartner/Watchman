@@ -1,7 +1,4 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
+import { pingHost } from "../utils/ping.js";
 
 class PhilipsBridgeService {
   constructor(options = {}) {
@@ -25,56 +22,23 @@ class PhilipsBridgeService {
 
   async pingHost() {
     if (!this.host) throw new Error("PHILIPS_BRIDGE_HOST not configured");
-
-    // Try multiple ping commands to handle IPv4/IPv6/platform variance
-    const attempts = [
-      `ping -c ${this.pingCount} -4 ${this.host}`,
-      `ping -c ${this.pingCount} ${this.host}`,
-      `ping6 -c ${this.pingCount} ${this.host}`,
-    ];
-
-    let combinedStdout = "";
-    let combinedStderr = "";
-
-    for (const cmd of attempts) {
-      try {
-        const { stdout, stderr } = await execAsync(cmd, {
-          timeout: this.timeout + 1500,
-        });
-        const out = stdout || "";
-        const errOut = stderr || "";
-        combinedStdout += `\n--- cmd: ${cmd} ---\n` + out;
-        combinedStderr += `\n--- cmd: ${cmd} ---\n` + errOut;
-
-        const success =
-          /0% packet loss|0\.0% packet loss|0 packets lost|0 received/.test(
-            out
-          ) && !/100% packet loss/.test(out);
-        if (success) {
-          return {
-            success: true,
-            stdout: combinedStdout,
-            stderr: combinedStderr,
-          };
-        }
-      } catch (err) {
-        const stdout = err.stdout || "";
-        const stderr = err.stderr || err.message || "";
-        combinedStdout += `\n--- cmd error: ${cmd} ---\n` + stdout;
-        combinedStderr += `\n--- cmd error: ${cmd} ---\n` + stderr;
-      }
+    try {
+      const result = await pingHost(this.host, {
+        timeout: this.timeout,
+        pingCount: this.pingCount,
+      });
+      return {
+        success: result.success,
+        stdout: result.success ? `Ping succeeded (${result.avgMs}ms avg)` : "",
+        stderr: result.success ? "" : "Ping failed or timed out",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        stdout: "",
+        stderr: error.message || "Ping failed",
+      };
     }
-
-    if (!combinedStdout && !combinedStderr) {
-      combinedStderr =
-        "No ping output captured; ping may be unavailable or blocked";
-    }
-
-    return {
-      success: false,
-      stdout: combinedStdout,
-      stderr: combinedStderr || "Ping attempts failed",
-    };
   }
 
   async checkHealth() {

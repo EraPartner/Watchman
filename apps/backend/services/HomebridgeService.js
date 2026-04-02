@@ -61,6 +61,9 @@ class HomebridgeService {
       options.accessoriesPath ||
       process.env.HOMEBRIDGE_ACCESSORIES_PATH ||
       "/accessories";
+
+    // Cache agent based on URL protocol
+    this._agent = this.baseUrl.startsWith("https:") ? httpsAgent : httpAgent;
   }
 
   buildHeaders() {
@@ -92,7 +95,7 @@ class HomebridgeService {
       const url = `${this.baseUrl}${this.loginPath}`;
       // Try JSON POST first
       try {
-        console.debug("[HomebridgeService] attempting JSON login ->", url);
+        logger.debug("[HomebridgeService] attempting JSON login ->", url);
         let res = await fetch(url, {
           method: "POST",
           headers: {
@@ -104,14 +107,14 @@ class HomebridgeService {
             username: this.username,
             password: this.password,
           }),
-          agent: url.startsWith("https:") ? httpsAgent : httpAgent,
+          agent: this._agent,
         });
 
         // If JSON attempt appears to return HTML (login page), try form-encoded fallback
         let ct = res.headers.get("content-type") || "";
         let text = await res.text().catch(() => "");
         if (ct.includes("text/html") || /<html/i.test(text)) {
-          console.debug(
+          logger.debug(
             "[HomebridgeService] JSON login returned HTML, trying form-encoded fallback"
           );
           try {
@@ -126,12 +129,12 @@ class HomebridgeService {
                 "User-Agent": "watchman-homebridge-check/1.0",
               },
               body: form.toString(),
-              agent: url.startsWith("https:") ? httpsAgent : httpAgent,
+              agent: this._agent,
             });
             ct = res.headers.get("content-type") || "";
             text = await res.text().catch(() => "");
           } catch (e) {
-            console.debug(
+            logger.debug(
               "[HomebridgeService] form login attempt failed:",
               String(e).slice(0, 200)
             );
@@ -166,7 +169,7 @@ class HomebridgeService {
           }
         }
 
-        console.debug(
+        logger.debug(
           "[HomebridgeService] login response",
           res.status,
           res.statusText,
@@ -177,7 +180,7 @@ class HomebridgeService {
         if (res.ok) {
           if (body && (body.token || body.authToken || body.access_token)) {
             this.authToken = body.token || body.authToken || body.access_token;
-            console.debug(
+            logger.debug(
               "[HomebridgeService] login returned token; using as Bearer"
             );
           }
@@ -186,7 +189,7 @@ class HomebridgeService {
         }
 
         // login failed
-        console.debug(
+        logger.debug(
           "[HomebridgeService] login failed status=",
           res.status,
           "snippet=",

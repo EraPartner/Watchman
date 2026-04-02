@@ -1,5 +1,5 @@
 import logger from "../middleware/logger.js";
-import { formatBytes, formatSpeed } from "../utils/serviceUtils.js";
+import { formatBytes } from "../utils/serviceUtils.js";
 import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
 
 // Use shared HTTP agents from pool
@@ -215,23 +215,32 @@ export class QBittorrentService {
 
       const serverState = mainData.server_state || {};
 
+      // Single-pass torrent counting
+      const torrents = mainData.torrents || {};
+      let downloading = 0;
+      let seeding = 0;
+      let paused = 0;
+      let completed = 0;
+      for (const t of Object.values(torrents)) {
+        const state = t.state;
+        if (state === "downloading") downloading++;
+        if (state === "uploading") {
+          seeding++;
+          completed++;
+        }
+        if (state === "pausedDL" || state === "pausedUP") paused++;
+        if (state === "stalledUP") completed++;
+      }
+
       return {
         version: version,
         uptime: serverState.uptime || 0,
         torrents: {
-          total: Object.keys(mainData.torrents || {}).length,
-          downloading: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "downloading"
-          ).length,
-          seeding: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "uploading"
-          ).length,
-          paused: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "pausedDL" || t.state === "pausedUP"
-          ).length,
-          completed: Object.values(mainData.torrents || {}).filter(
-            (t) => t.state === "uploading" || t.state === "stalledUP"
-          ).length,
+          total: Object.keys(torrents).length,
+          downloading,
+          seeding,
+          paused,
+          completed,
         },
         transfer: {
           dlSpeed: transferInfo.dl_info_speed || 0,

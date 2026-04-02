@@ -20,8 +20,6 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-const RAW_PAYLOAD_KEY = "_payload";
-
 /**
  * Install response helpers and optional automatic wrapping.
  *
@@ -86,13 +84,6 @@ export function apiResponseStandardizer(options = {}) {
         ...payload,
       };
 
-      // Preserve the full original payload under a reserved key so clients can
-      // reliably unwrap even when payload fields collide with envelope keys
-      // (e.g. payload already has a `data` field).
-      if (!(RAW_PAYLOAD_KEY in envelope)) {
-        envelope[RAW_PAYLOAD_KEY] = payload;
-      }
-
       return envelope;
     };
 
@@ -116,6 +107,9 @@ export function apiResponseStandardizer(options = {}) {
 
     if (autoWrap) {
       res.json = (payload) => {
+        if (res.locals.skipStandardization) {
+          return originalJson.call(this, payload);
+        }
         return originalJson(toEnvelope(payload, res.statusCode || 200));
       };
     }

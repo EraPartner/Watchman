@@ -14,7 +14,6 @@
 import { BitcoinService } from "./BitcoinService.js";
 import { AdGuardService } from "./AdGuardService.js";
 import { TorService } from "./TorService.js";
-import { TorManager } from "./TorManager.js";
 import { QBittorrentService } from "./QBittorrentService.js";
 import SynologyService from "./SynologyService.js";
 import RoonService from "./RoonService.js";
@@ -25,6 +24,15 @@ import RouterService from "./RouterService.js";
 import IpfsService from "./IpfsService.js";
 import HomebridgeService from "./HomebridgeService.js";
 import RaspberryPiService from "./RaspberryPiService.js";
+
+/**
+ * Parse ports from comma/space-separated string
+ */
+const parsePorts = (portsStr) =>
+  String(portsStr)
+    .split(/[ ,]+/)
+    .map((p) => Number(p))
+    .filter(Boolean);
 
 /**
  * Service factory configurations
@@ -153,7 +161,7 @@ export const serviceFactoryConfigs = {
         timeout: process.env.PHILIPS_TIMEOUT
           ? parseInt(process.env.PHILIPS_TIMEOUT)
           : undefined,
-        usePing: process.env.PHILIPS_USE_PING === "false" ? false : true,
+        usePing: process.env.PHILIPS_USE_PING !== "false",
       };
     },
   },
@@ -236,12 +244,7 @@ export const serviceFactoryConfigs = {
       return {
         name: "beryl",
         host: berylHost,
-        ports: berylPorts
-          ? String(berylPorts)
-              .split(/[ ,]+/)
-              .map((p) => Number(p))
-              .filter(Boolean)
-          : [],
+        ports: berylPorts ? parsePorts(berylPorts) : [],
         timeout: process.env.BERYL_TIMEOUT_MS
           ? parseInt(process.env.BERYL_TIMEOUT_MS)
           : 3000,
@@ -264,12 +267,7 @@ export const serviceFactoryConfigs = {
       return {
         name: "telenet",
         host: telenetHost,
-        ports: telenetPorts
-          ? String(telenetPorts)
-              .split(/[ ,]+/)
-              .map((p) => Number(p))
-              .filter(Boolean)
-          : [],
+        ports: telenetPorts ? parsePorts(telenetPorts) : [],
         timeout: process.env.TELENET_TIMEOUT_MS
           ? parseInt(process.env.TELENET_TIMEOUT_MS)
           : 3000,
@@ -293,6 +291,13 @@ export const serviceFactoryConfigs = {
         timeout: process.env.RASPI_TIMEOUT
           ? parseInt(process.env.RASPI_TIMEOUT)
           : undefined,
+        macMiniHost: process.env.MACMINI_HOST,
+        macMiniSSHPort: process.env.MACMINI_SSH_PORT
+          ? parseInt(process.env.MACMINI_SSH_PORT)
+          : undefined,
+        macMiniSSHUser: process.env.MACMINI_SSH_USER,
+        macMiniSSHKey:
+          process.env.MACMINI_SSH_KEY_PATH || process.env.MACMINI_SSH_KEY,
       };
     },
   },
@@ -301,7 +306,7 @@ export const serviceFactoryConfigs = {
 /**
  * Get all service names that support multi-instance
  */
-export const multiInstanceServices = new Set([
+const multiInstanceServices = new Set([
   "adguard",
   "bitcoin",
   "qbittorrent",
@@ -314,8 +319,4 @@ export const multiInstanceServices = new Set([
 /**
  * Get default instance ID for a service type
  */
-export function getDefaultInstanceId(serviceType) {
-  return multiInstanceServices.has(serviceType)
-    ? `${serviceType}`
-    : serviceType;
-}
+export { multiInstanceServices };

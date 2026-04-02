@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import dotenv from "dotenv";
 import { createServer } from "http";
 import swaggerUi from "swagger-ui-express";
 import fs from "fs";
@@ -37,14 +36,16 @@ import {
   resetLoginAttempts,
 } from "./middleware/accountLockout.js";
 import { requireBoolean, requireFields } from "./middleware/validation.js";
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
-import { getConfig, validateEnvironment } from "./config.js";
+import { spawn } from "child_process";
+import { getConfig, cachedConfig, validateEnvironment } from "./config.js";
 import logger, {
   requestIdMiddleware,
   requestLogger,
 } from "./middleware/logger.js";
-import { requireWhitelistedIP } from "./middleware/ipControl.js";
+import {
+  requireWhitelistedIP,
+  enforceIPControl,
+} from "./middleware/ipControl.js";
 import {
   requireAnyServiceEnabled,
   requireServiceEnabled,
@@ -61,27 +62,57 @@ import {
   validateParams,
   validateQuery,
 } from "./utils/validation.js";
+import { destroyAgents } from "./utils/httpAgentPool.js";
+import {
+  createServiceRoutes,
+  createUpdatesRoute,
+} from "./routes/serviceFactory.js";
 
-const exec = promisify(execCb);
+// Helper to determine if an IP is unicast (not multicast or link-local)
+const isUnicast = (ip) => {
+  if (!ip || typeof ip !== "string") return false;
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) return false;
+  // Multicast 224.0.0.0/4
+  if (parts[0] >= 224 && parts[0] <= 239) return false;
+  // Link-local 169.254.0.0/16
+  if (parts[0] === 169 && parts[1] === 254) return false;
+  return true;
+};
 
-// Load environment variables
-// Support both dev (server.js) and production (dist/server.js) paths
-// Suppress verbose dotenv output
-process.env.DOTENV_QUIET = "true";
+// Helper to check services health - shared between /api/services/health and /api/services/health-batch
+async function checkServicesHealth(services) {
+  const healthPromises = services.map(async (serviceName) => {
+    try {
+      const health = await Promise.race([
+        serviceManager.getServiceHealth(serviceName),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Health check timeout")), 5000)
+        ),
+      ]);
+      return [serviceName, health];
+    } catch (error) {
+      return [
+        serviceName,
+        {
+          status: "offline",
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+    }
+  });
+
+  const results = await Promise.all(healthPromises);
+  const healthResults = {};
+  for (const [serviceName, health] of results) {
+    healthResults[serviceName] = health;
+  }
+  return healthResults;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const envPath = join(__dirname, ".env.local");
-const envPathParent = join(__dirname, "..", ".env.local");
-
-// Try current directory first, then parent directory (for dist builds)
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-} else if (fs.existsSync(envPathParent)) {
-  dotenv.config({ path: envPathParent });
-} else {
-  dotenv.config({ path: ".env.local" });
-}
 
 // Validate environment before starting server
 validateEnvironment();
@@ -107,7 +138,9 @@ const COOKIE_DOMAIN =
     : COOKIE_DOMAIN_OVERRIDE ||
       (() => {
         try {
-          return FRONTEND_URL ? new URL(FRONTEND_URL).hostname : null;
+          const hostname = FRONTEND_URL ? new URL(FRONTEND_URL).hostname : null;
+          // Only set domain if hostname includes a dot (not localhost/127.0.0.1)
+          return hostname && hostname.includes(".") ? hostname : null;
         } catch (_err) {
           return null;
         }
@@ -163,7 +196,7 @@ if (process.env.NODE_ENV === "production") {
 // Cookie defaults with improved security
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production" ? FRONTEND_HTTPS : false,
+  secure: process.env.NODE_ENV === "production" ? true : false,
   sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
   path: "/",
   ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
@@ -254,6 +287,7 @@ async function initializeServer() {
 app.use(requestIdMiddleware); // Add request ID tracking
 app.use(requestLogger); // Add structured logging
 app.use(performanceMonitor.trackRequest());
+app.use(enforceIPControl); // IP access control
 app.use(requestTimeout); // Global request timeout to prevent hanging requests
 app.use(responseSizeLimit()); // Prevent large response DoS attacks
 app.use(
@@ -459,11 +493,12 @@ app.get("/api/auth/me", (req, res) => {
 
 // Health check endpoint
 app.get("/health", healthLimiter, (req, res) => {
+  res.locals.skipStandardization = true;
   res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
     service: "watchman-backend",
-    version: "1.0.0",
+    version: APP_VERSION,
   });
 });
 
@@ -615,93 +650,38 @@ app.get(
   }
 );
 
-// Specific service endpoints (kept for backward compatibility with hardcoded service names)
-// AdGuard API endpoints - status and stats (re-added)
-app.get(
-  "/api/adguard/status",
+// ── Service routes via factory ──────────────────────────────────
+const factoryMiddleware = {
   healthLimiter,
-  requireServiceEnabled("adguard"),
+  requireServiceEnabled,
+  requireAuth,
   healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const adguardService = serviceManager.getService("adguard");
-      if (!adguardService) {
-        return res.status(503).json({
-          error: "AdGuard service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("adguard");
-      logger.debug("AdGuard status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("AdGuard status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch AdGuard status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/adguard/stats",
-  requireAuth, // Add authentication requirement
-  requireServiceEnabled("adguard"),
   statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const adguardService = serviceManager.getService("adguard");
-      if (!adguardService) {
-        return res
-          .status(503)
-          .json({ error: "AdGuard service not configured" });
-      }
+};
 
-      const stats = await serviceManager.getServiceStats("adguard");
-      logger.debug("AdGuard stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("AdGuard stats connection failed", { error: error.message });
-      res.status(500).json({
-        error: "Failed to fetch AdGuard stats",
-        message: error.message,
-      });
-    }
-  }
+// Standard services: status + stats via factory
+for (const svc of [
+  "adguard",
+  "qbittorrent",
+  "ipfs",
+  "roon",
+  "synology",
+  "philips",
+  "albyhub",
+  "macmini",
+  "raspi",
+]) {
+  app.use(
+    `/api/${svc}`,
+    createServiceRoutes(svc, serviceManager, factoryMiddleware)
+  );
+}
+
+// Bitcoin: /status + /stats via factory, plus /health alias
+app.use(
+  "/api/bitcoin",
+  createServiceRoutes("bitcoin", serviceManager, factoryMiddleware)
 );
-
-// AdGuard update check endpoint
-app.get(
-  "/api/adguard/updates",
-  requireServiceEnabled("adguard"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const adguardService = serviceManager.getService("adguard");
-      if (!adguardService) {
-        return res
-          .status(503)
-          .json({ error: "AdGuard service not configured" });
-      }
-
-      const updateInfo = await adguardService.checkForUpdates();
-      res.json(updateInfo);
-    } catch (error) {
-      logger.error("AdGuard update check failed", { error: error.message });
-      res.status(500).json({
-        error: "Failed to check for AdGuard updates",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Bitcoin API endpoints
 app.get(
   "/api/bitcoin/health",
   healthLimiter,
@@ -709,16 +689,12 @@ app.get(
   healthCacheMiddleware,
   async (req, res) => {
     try {
-      const bitcoinService = serviceManager.getService("bitcoin");
-      if (!bitcoinService) {
-        return res.status(503).json({
-          error: "Bitcoin service not configured",
-          status: "offline",
-        });
-      }
-
+      const svc = serviceManager.getService("bitcoin");
+      if (!svc)
+        return res
+          .status(503)
+          .json({ error: "Bitcoin service not configured", status: "offline" });
       const health = await serviceManager.getServiceHealth("bitcoin");
-      logger.debug("Bitcoin health connection successful");
       res.json(health);
     } catch (error) {
       logger.error("Bitcoin health connection failed", {
@@ -733,300 +709,43 @@ app.get(
   }
 );
 
+// Tor: /status + /stats via factory, plus /health alias and /relay/:nickname?
+app.use(
+  "/api/tor",
+  createServiceRoutes("tor", serviceManager, factoryMiddleware)
+);
 app.get(
-  "/api/bitcoin/status",
+  "/api/tor/health",
   healthLimiter,
-  requireServiceEnabled("bitcoin"),
+  requireServiceEnabled("tor"),
   healthCacheMiddleware,
   async (req, res) => {
     try {
-      const bitcoinService = serviceManager.getService("bitcoin");
-      if (!bitcoinService) {
-        return res.status(503).json({
-          error: "Bitcoin service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("bitcoin");
-      logger.debug("Bitcoin status connection successful");
+      const svc = serviceManager.getService("tor");
+      if (!svc)
+        return res.status(503).json({ error: "Tor service not configured" });
+      const health = await serviceManager.getServiceHealth("tor");
       res.json(health);
     } catch (error) {
-      logger.error("Bitcoin status connection failed", {
+      logger.error("Tor health check connection failed", {
         error: error.message,
       });
-      res.status(500).json({
-        error: "Failed to fetch Bitcoin status",
-        status: "offline",
-        message: error.message,
-      });
+      res
+        .status(500)
+        .json({ error: "Failed to check Tor health", message: error.message });
     }
   }
 );
-
-app.get(
-  "/api/bitcoin/stats",
-  requireServiceEnabled("bitcoin"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const bitcoinService = serviceManager.getService("bitcoin");
-      if (!bitcoinService) {
-        return res
-          .status(503)
-          .json({ error: "Bitcoin service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("bitcoin");
-      logger.debug("Bitcoin stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("Bitcoin stats connection failed", { error: error.message });
-      res.status(500).json({
-        error: "Failed to fetch Bitcoin stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Bitcoin update check endpoint
-app.get(
-  "/api/bitcoin/updates",
-  requireServiceEnabled("bitcoin"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const bitcoinService = serviceManager.getService("bitcoin");
-      if (!bitcoinService) {
-        return res
-          .status(503)
-          .json({ error: "Bitcoin service not configured" });
-      }
-
-      const updateInfo = await bitcoinService.checkForUpdates();
-      res.json(updateInfo);
-    } catch (error) {
-      logger.error("Bitcoin update check failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to check for Bitcoin updates",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// qBittorrent API endpoints
-app.get(
-  "/api/qbittorrent/status",
-  healthLimiter,
-  requireServiceEnabled("qbittorrent"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const qbittorrentService = serviceManager.getService("qbittorrent");
-      if (!qbittorrentService) {
-        return res.status(503).json({
-          error: "qBittorrent service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("qbittorrent");
-      logger.debug("qBittorrent status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("qBittorrent status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch qBittorrent status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/qbittorrent/stats",
-  requireServiceEnabled("qbittorrent"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const qbittorrentService = serviceManager.getService("qbittorrent");
-      if (!qbittorrentService) {
-        return res
-          .status(503)
-          .json({ error: "qBittorrent service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("qbittorrent");
-      logger.debug("qBittorrent stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("qBittorrent stats connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch qBittorrent stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// IPFS API endpoints
-app.get(
-  "/api/ipfs/status",
-  healthLimiter,
-  requireServiceEnabled("ipfs"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const ipfsService = serviceManager.getService("ipfs");
-      if (!ipfsService) {
-        return res
-          .status(503)
-          .json({ error: "IPFS service not configured", status: "offline" });
-      }
-
-      const health = await serviceManager.getServiceHealth("ipfs");
-      logger.debug("IPFS status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("IPFS status connection failed", { error: error.message });
-      res.status(500).json({
-        error: "Failed to fetch IPFS status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/ipfs/stats",
-  requireServiceEnabled("ipfs"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const ipfsService = serviceManager.getService("ipfs");
-      if (!ipfsService) {
-        return res.status(503).json({ error: "IPFS service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("ipfs");
-      logger.debug("IPFS stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("IPFS stats connection failed", { error: error.message });
-      res.status(500).json({
-        error: "Failed to fetch IPFS stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// IPFS update check endpoint
-app.get(
-  "/api/ipfs/updates",
-  requireAuth,
-  requireServiceEnabled("ipfs"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const ipfsService = serviceManager.getService("ipfs");
-      if (!ipfsService) {
-        return res.status(503).json({ error: "IPFS service not configured" });
-      }
-
-      const updateInfo = await ipfsService.checkForUpdates();
-      res.json(updateInfo);
-    } catch (error) {
-      logger.error("IPFS update check failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to check for IPFS updates",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Roon (ROCK) API endpoints
-app.get(
-  "/api/roon/status",
-  healthLimiter,
-  requireServiceEnabled("roon"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const roonService = serviceManager.getService("roon");
-      if (!roonService) {
-        return res.status(503).json({ error: "Roon service not configured" });
-      }
-
-      const health = await serviceManager.getServiceHealth("roon");
-      logger.service("roon", "Status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("Roon status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Roon status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/roon/stats",
-  requireServiceEnabled("roon"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const roonService = serviceManager.getService("roon");
-      if (!roonService) {
-        return res.status(503).json({ error: "Roon service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("roon");
-      logger.service("roon", "Stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("Roon stats connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Roon stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Tor API endpoints
 app.get(
   "/api/tor/relay/:nickname?",
   requireServiceEnabled("tor"),
   statsCacheMiddleware,
   async (req, res) => {
     try {
-      const torService = serviceManager.getService("tor");
-      if (!torService) {
+      const svc = serviceManager.getService("tor");
+      if (!svc)
         return res.status(503).json({ error: "Tor service not configured" });
-      }
-
       const stats = await serviceManager.getServiceStats("tor");
-      logger.debug("Tor relay connection successful");
       res.json(stats);
     } catch (error) {
       logger.error("Tor relay connection failed", { error: error.message });
@@ -1038,192 +757,11 @@ app.get(
   }
 );
 
-app.get(
-  "/api/tor/health",
-  healthLimiter,
-  requireServiceEnabled("tor"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const torService = serviceManager.getService("tor");
-      if (!torService) {
-        return res.status(503).json({ error: "Tor service not configured" });
-      }
-
-      const health = await serviceManager.getServiceHealth("tor");
-      logger.service("tor", "Health check connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("Tor health check connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to check Tor health",
-        message: error.message,
-      });
-    }
-  }
+// Homebridge: /status + /stats via factory, plus special endpoints
+app.use(
+  "/api/homebridge",
+  createServiceRoutes("homebridge", serviceManager, factoryMiddleware)
 );
-
-// Tor update check endpoint
-app.get(
-  "/api/tor/updates",
-  requireServiceEnabled("tor"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const torService = serviceManager.getService("tor");
-      if (!torService) {
-        return res.status(503).json({ error: "Tor service not configured" });
-      }
-
-      const updateInfo = await torService.checkForUpdates();
-      res.json(updateInfo);
-    } catch (error) {
-      logger.error("Tor update check failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to check for Tor updates",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Synology NAS API endpoints
-app.get(
-  "/api/synology/status",
-  healthLimiter,
-  requireServiceEnabled("synology"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const synologyService = serviceManager.getService("synology");
-      if (!synologyService) {
-        return res.status(503).json({
-          error: "Synology service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("synology");
-      logger.service("synology", "Status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("Synology status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Synology status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/synology/stats",
-  requireServiceEnabled("synology"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const synologyService = serviceManager.getService("synology");
-      if (!synologyService) {
-        return res
-          .status(503)
-          .json({ error: "Synology service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("synology");
-
-      // Ensure we always return valid JSON
-      if (stats === null || stats === undefined) {
-        return res.status(500).json({
-          error: "Synology stats returned null or undefined",
-          status: "error",
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      logger.service("synology", "Stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("Synology stats connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Synology stats",
-        message: error.message,
-        status: "error",
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
-);
-
-// Philips Bridge endpoints
-app.get(
-  "/api/philips/status",
-  healthLimiter,
-  requireServiceEnabled("philips"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const philipsService = serviceManager.getService("philips");
-      if (!philipsService) {
-        return res.status(503).json({
-          error: "Philips Bridge service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("philips");
-      logger.service("philips", "Status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("Philips Bridge status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Philips Bridge status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/philips/stats",
-  requireServiceEnabled("philips"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const philipsService = serviceManager.getService("philips");
-      if (!philipsService) {
-        return res
-          .status(503)
-          .json({ error: "Philips Bridge service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("philips");
-      logger.service("philips", "Stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("Philips Bridge stats connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Philips Bridge stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// New status endpoints under /api/status/* to match requested API shape (only allowed endpoints)
 app.get(
   "/api/status/homebridge-version",
   requireServiceEnabled("homebridge"),
@@ -1231,21 +769,16 @@ app.get(
   requireAuth,
   async (req, res) => {
     try {
-      const hbService = serviceManager.getService("homebridge");
-      if (!hbService) {
+      const svc = serviceManager.getService("homebridge");
+      if (!svc)
         return res
           .status(503)
           .json({ error: "Homebridge service not configured" });
-      }
-
-      // Directly call the service-specific method if available
-      if (typeof hbService.getVersion === "function") {
-        const ver = await hbService.getVersion();
+      if (typeof svc.getVersion === "function") {
+        const ver = await svc.getVersion();
         return res.json(ver);
       }
-
-      // Fallback to stats
-      const stats = await hbService.getStats();
+      const stats = await svc.getStats();
       res.json({
         version: stats?.data?.version || stats?.version || null,
         raw: stats,
@@ -1261,7 +794,6 @@ app.get(
     }
   }
 );
-
 app.get(
   "/api/status/server-information",
   requireServiceEnabled("homebridge"),
@@ -1269,19 +801,15 @@ app.get(
   requireAuth,
   async (req, res) => {
     try {
-      const hbService = serviceManager.getService("homebridge");
-      if (!hbService) {
+      const svc = serviceManager.getService("homebridge");
+      if (!svc)
         return res
           .status(503)
           .json({ error: "Homebridge service not configured" });
-      }
-
-      if (typeof hbService.getServerInformation === "function") {
-        const info = await hbService.getServerInformation();
+      if (typeof svc.getServerInformation === "function") {
+        const info = await svc.getServerInformation();
         return res.json(info);
       }
-
-      // Fallback to health/status
       const health = await serviceManager.getServiceHealth("homebridge");
       res.json({
         data: health && health.data ? health.data : null,
@@ -1298,96 +826,6 @@ app.get(
     }
   }
 );
-
-// Homebridge endpoints
-app.get(
-  "/api/homebridge/status",
-  healthLimiter,
-  requireServiceEnabled("homebridge"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const hbService = serviceManager.getService("homebridge");
-      if (!hbService) {
-        return res.status(503).json({
-          error: "Homebridge service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("homebridge");
-      logger.service("homebridge", "Status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("Homebridge status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Homebridge status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/homebridge/stats",
-  requireServiceEnabled("homebridge"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const hbService = serviceManager.getService("homebridge");
-      if (!hbService) {
-        return res
-          .status(503)
-          .json({ error: "Homebridge service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("homebridge");
-      logger.service("homebridge", "Stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("Homebridge stats connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Homebridge stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Homebridge update check endpoint
-app.get(
-  "/api/homebridge/updates",
-  requireServiceEnabled("homebridge"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const hbService = serviceManager.getService("homebridge");
-      if (!hbService) {
-        return res
-          .status(503)
-          .json({ error: "Homebridge service not configured" });
-      }
-
-      const updateInfo = await hbService.checkForUpdates();
-      res.json(updateInfo);
-    } catch (error) {
-      logger.error("Homebridge update check failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to check for Homebridge updates",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// New: expose accessories endpoint with pagination
 app.get(
   "/api/accessories",
   requireServiceEnabled("homebridge"),
@@ -1401,30 +839,21 @@ app.get(
   }),
   async (req, res) => {
     try {
-      const hbService = serviceManager.getService("homebridge");
-      if (!hbService) {
+      const svc = serviceManager.getService("homebridge");
+      if (!svc)
         return res
           .status(503)
           .json({ error: "Homebridge service not configured" });
+      if (typeof svc.getAccessories === "function") {
+        const accessories = await svc.getAccessories();
+        return res.json(paginate(accessories, req.pagination));
       }
-
-      if (typeof hbService.getAccessories === "function") {
-        const accessories = await hbService.getAccessories();
-
-        // Apply pagination to the accessories array
-        const paginatedResult = paginate(accessories, req.pagination);
-        return res.json(paginatedResult);
-      }
-
-      // Fallback: try to use getStats or getServerInformation if accessories not available
       res.status(501).json({
         error:
           "Accessories endpoint not implemented for this Homebridge service",
       });
     } catch (error) {
-      logger.error("/api/accessories failed", {
-        error: error.message,
-      });
+      logger.error("/api/accessories failed", { error: error.message });
       res
         .status(500)
         .json({ error: "Failed to fetch accessories", message: error.message });
@@ -1432,229 +861,82 @@ app.get(
   }
 );
 
-// Alby Hub endpoints
+// Synology stats override (extra null-check)
 app.get(
-  "/api/albyhub/status",
-  healthLimiter,
-  requireServiceEnabled("albyhub"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const albyService = serviceManager.getService("albyhub");
-      if (!albyService) {
-        return res.status(503).json({
-          error: "Alby Hub service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("albyhub");
-      logger.service("albyhub", "Status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("Alby Hub status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Alby Hub status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/albyhub/stats",
-  requireServiceEnabled("albyhub"),
+  "/api/synology/stats",
+  requireServiceEnabled("synology"),
   statsCacheMiddleware,
   async (req, res) => {
     try {
-      const albyService = serviceManager.getService("albyhub");
-      if (!albyService) {
+      const svc = serviceManager.getService("synology");
+      if (!svc)
         return res
           .status(503)
-          .json({ error: "Alby Hub service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("albyhub");
-      logger.service("albyhub", "Stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("Alby Hub stats connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Alby Hub stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Mac Mini endpoints: status and stats
-app.get(
-  "/api/macmini/status",
-  healthLimiter,
-  requireServiceEnabled("macmini"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const macService = serviceManager.getService("macmini");
-      if (!macService) {
-        return res.status(503).json({
-          error: "Mac Mini service not configured",
-          status: "offline",
+          .json({ error: "Synology service not configured" });
+      const stats = await serviceManager.getServiceStats("synology");
+      if (stats === null || stats === undefined) {
+        return res.status(500).json({
+          error: "Synology stats returned null or undefined",
+          status: "error",
+          timestamp: new Date().toISOString(),
         });
       }
-
-      const health = await serviceManager.getServiceHealth("macmini");
-      logger.service("macmini", "Status connection successful");
-      res.json(health);
+      res.json(stats);
     } catch (error) {
-      logger.error("Mac Mini status connection failed", {
+      logger.error("Synology stats connection failed", {
         error: error.message,
       });
       res.status(500).json({
-        error: "Failed to fetch Mac Mini status",
-        status: "offline",
+        error: "Failed to fetch Synology stats",
         message: error.message,
+        status: "error",
+        timestamp: new Date().toISOString(),
       });
     }
   }
 );
 
+// ── Update check routes via factory ─────────────────────────────
+for (const svc of ["adguard", "bitcoin", "tor", "homebridge"]) {
+  app.use(
+    `/api/${svc}`,
+    createUpdatesRoute(svc, serviceManager, factoryMiddleware)
+  );
+}
+
+// IPFS updates requires auth (special case)
 app.get(
-  "/api/macmini/stats",
-  requireServiceEnabled("macmini"),
+  "/api/ipfs/updates",
+  requireAuth,
+  requireServiceEnabled("ipfs"),
   statsCacheMiddleware,
   async (req, res) => {
     try {
-      const macService = serviceManager.getService("macmini");
-      if (!macService) {
-        return res
-          .status(503)
-          .json({ error: "Mac Mini service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("macmini");
-      logger.service("macmini", "Stats connection successful");
-      res.json(stats);
+      const svc = serviceManager.getService("ipfs");
+      if (!svc)
+        return res.status(503).json({ error: "IPFS service not configured" });
+      const updateInfo = await svc.checkForUpdates();
+      res.json(updateInfo);
     } catch (error) {
-      logger.error("Mac Mini stats connection failed", {
-        error: error.message,
-      });
+      logger.error("IPFS update check failed", { error: error.message });
       res.status(500).json({
-        error: "Failed to fetch Mac Mini stats",
+        error: "Failed to check for IPFS updates",
         message: error.message,
       });
     }
   }
 );
 
-// Raspberry Pi endpoints
-app.get(
-  "/api/raspi/status",
-  healthLimiter,
-  requireServiceEnabled("raspi"),
-  healthCacheMiddleware,
-  async (req, res) => {
-    try {
-      const raspiService = serviceManager.getService("raspi");
-      if (!raspiService) {
-        return res.status(503).json({
-          error: "Raspberry Pi service not configured",
-          status: "offline",
-        });
-      }
-
-      const health = await serviceManager.getServiceHealth("raspi");
-      logger.service("raspi", "Status connection successful");
-      res.json(health);
-    } catch (error) {
-      logger.error("Raspberry Pi status connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Raspberry Pi status",
-        status: "offline",
-        message: error.message,
-      });
-    }
-  }
-);
-
-app.get(
-  "/api/raspi/stats",
-  requireServiceEnabled("raspi"),
-  statsCacheMiddleware,
-  async (req, res) => {
-    try {
-      const raspiService = serviceManager.getService("raspi");
-      if (!raspiService) {
-        return res
-          .status(503)
-          .json({ error: "Raspberry Pi service not configured" });
-      }
-
-      const stats = await serviceManager.getServiceStats("raspi");
-      logger.service("raspi", "Stats connection successful");
-      res.json(stats);
-    } catch (error) {
-      logger.error("Raspberry Pi stats connection failed", {
-        error: error.message,
-      });
-      res.status(500).json({
-        error: "Failed to fetch Raspberry Pi stats",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// Get health of all enabled services - REQUIRES AUTHENTICATION
+// ── Aggregate / meta routes ─────────────────────────────────────
 app.get(
   "/api/services/health",
   healthLimiter,
   requireAuth,
   async (req, res) => {
     try {
-      const config = getConfig();
-      const enabledServices = config.enabledServices;
-
-      // Check all services in PARALLEL with timeout protection
-      const healthPromises = Array.from(enabledServices).map(
-        async (serviceName) => {
-          try {
-            const health = await Promise.race([
-              serviceManager.getServiceHealth(serviceName),
-              new Promise((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("Health check timeout")),
-                  5000
-                )
-              ),
-            ]);
-            return [serviceName, health];
-          } catch (error) {
-            return [
-              serviceName,
-              {
-                status: "offline",
-                error: error.message,
-                timestamp: new Date().toISOString(),
-              },
-            ];
-          }
-        }
-      );
-
-      // Execute all health checks in parallel
-      const results = await Promise.all(healthPromises);
-      const healthResults = {};
-      for (const [serviceName, health] of results) {
-        healthResults[serviceName] = health;
-      }
+      const enabledServices = cachedConfig.enabledServices;
+      const services = Array.from(enabledServices);
+      const healthResults = await checkServicesHealth(services);
 
       res.json({
         services: healthResults,
@@ -1717,34 +999,7 @@ app.post(
         return res.json({});
       }
 
-      // Check requested services in PARALLEL with timeout protection
-      const healthPromises = services.map(async (serviceName) => {
-        try {
-          const health = await Promise.race([
-            serviceManager.getServiceHealth(serviceName),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Health check timeout")), 5000)
-            ),
-          ]);
-          return [serviceName, health];
-        } catch (error) {
-          return [
-            serviceName,
-            {
-              status: "offline",
-              error: error.message,
-              timestamp: new Date().toISOString(),
-            },
-          ];
-        }
-      });
-
-      const results = await Promise.all(healthPromises);
-      const healthResults = {};
-      for (const [serviceName, health] of results) {
-        healthResults[serviceName] = health;
-      }
-
+      const healthResults = await checkServicesHealth(services);
       return res.json(healthResults);
     } catch (error) {
       logger.error("Batch services health check failed", {
@@ -1854,20 +1109,25 @@ app.get(
           .json({ error: "Invalid router host configuration" });
       }
 
-      // Choose platform-appropriate command
+      // Choose platform-appropriate command and execute with spawn
       const platform = process.platform;
-      const cmd = platform === "linux" ? "ip neigh" : "arp -a";
+      const cmd = platform === "linux" ? "ip" : "arp";
+      const args = platform === "linux" ? ["neigh"] : ["-a"];
 
-      // Execute with a short timeout
-      const { stdout } = await exec(cmd, { timeout: 5000 }).catch((err) => ({
-        stdout: err && err.stdout ? String(err.stdout) : "",
-      }));
-      const out = String(stdout || "");
+      const out = await new Promise((resolve) => {
+        const child = spawn(cmd, args, { timeout: 5000 });
+        let stdout = "";
+        child.stdout.on("data", (d) => {
+          stdout += d.toString();
+        });
+        child.on("close", () => resolve(stdout));
+        child.on("error", () => resolve(""));
+      });
 
       const hostsMap = new Map();
 
       if (platform === "linux") {
-        // Parse `ip neigh` lines like: "192.168.1.10 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE"
+        // Parse `ip neigh` lines like: "192.0.2.10 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE"
         const lines = out
           .split(/\r?\n/)
           .map((l) => l.trim())
@@ -1887,7 +1147,7 @@ app.get(
         }
       } else {
         // macOS / BSD-style `arp -a`, lines like:
-        // ? (192.168.1.5) at aa:bb:cc:dd:ee:ff on en0 ifscope [ethernet]
+        // ? (192.0.2.5) at aa:bb:cc:dd:ee:ff on en0 ifscope [ethernet]
         const lines = out
           .split(/\r?\n/)
           .map((l) => l.trim())
@@ -1904,7 +1164,7 @@ app.get(
             const iface = m[3] || null;
             if (ip && !hostsMap.has(ip)) hostsMap.set(ip, { ip, mac, iface });
           } else {
-            // Fallback: try to extract e.g. "hostname (192.168.1.2) at ..."
+            // Fallback: try to extract e.g. "hostname (192.0.2.2) at ..."
             const alt = line.match(
               /\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-f:]{5,})/i
             );
@@ -1919,18 +1179,6 @@ app.get(
       }
 
       const hosts = Array.from(hostsMap.values());
-
-      // Exclude multicast and link-local addresses helper
-      const isUnicast = (ip) => {
-        if (!ip || typeof ip !== "string") return false;
-        const parts = ip.split(".").map(Number);
-        if (parts.length !== 4 || parts.some(isNaN)) return false;
-        // Multicast 224.0.0.0/4
-        if (parts[0] >= 224 && parts[0] <= 239) return false;
-        // Link-local 169.254.0.0/16
-        if (parts[0] === 169 && parts[1] === 254) return false;
-        return true;
-      };
 
       // Determine LAN hosts relevant to the requested router service dynamically.
       // Strategy:
@@ -1987,7 +1235,6 @@ app.get(
             ? `Filtered by iface or prefix for ${svcIp}`
             : `No LAN hosts matched for ${svcIp}`
           : "No service host provided",
-        raw: out.substring(0, 10000),
       });
     } catch (error) {
       logger.error("ARP lookup failed", {
@@ -2007,18 +1254,11 @@ app.get(
   requireAuth,
   requireWhitelistedIP,
   (req, res) => {
-    try {
-      res.status(501).json({
-        error: "Security monitoring not implemented",
-        message:
-          "This endpoint requires security monitoring middleware to be configured",
-      });
-    } catch (error) {
-      logger.error("Failed to retrieve security alerts", {
-        error: error.message,
-      });
-      res.status(500).json({ error: "Failed to retrieve alerts" });
-    }
+    res.status(501).json({
+      error: "Security monitoring not implemented",
+      message:
+        "This endpoint requires security monitoring middleware to be configured",
+    });
   }
 );
 
@@ -2027,18 +1267,11 @@ app.get(
   requireAuth,
   requireWhitelistedIP,
   (req, res) => {
-    try {
-      res.status(501).json({
-        error: "Security monitoring not implemented",
-        message:
-          "This endpoint requires security monitoring middleware to be configured",
-      });
-    } catch (error) {
-      logger.error("Failed to retrieve security stats", {
-        error: error.message,
-      });
-      res.status(500).json({ error: "Failed to retrieve stats" });
-    }
+    res.status(501).json({
+      error: "Security monitoring not implemented",
+      message:
+        "This endpoint requires security monitoring middleware to be configured",
+    });
   }
 );
 
@@ -2095,6 +1328,13 @@ async function handleGracefulShutdown(signal) {
     logger.warning(
       `Error shutting down service manager: ${err && err.message ? err.message : err}`
     );
+  }
+
+  // Destroy HTTP/HTTPS agents
+  try {
+    destroyAgents();
+  } catch (err) {
+    // ignore
   }
 
   // Shutdown performance monitor

@@ -12,6 +12,8 @@
 
 import { getConfig } from "../config.js";
 
+let _instance = null;
+
 export class FrontendConfigService {
   constructor() {
     this.config = getConfig();
@@ -35,7 +37,7 @@ export class FrontendConfigService {
    * @returns {Array<string>} Enabled service names
    */
   getEnabledServices() {
-    return Array.from(this.config.enabledServices);
+    return Array.from(getConfig().enabledServices);
   }
 
   /**
@@ -107,7 +109,9 @@ export class FrontendConfigService {
     return {
       rpcUrl: rpcUrlFromOnion || rpcUrl,
       useTor: process.env.TOR_USE_PROXY === "true",
-      network: rpcUrl.includes("8332") ? "mainnet" : "testnet",
+      network: /:8332\b/.test(rpcUrlFromOnion || rpcUrl)
+        ? "mainnet"
+        : "testnet",
     };
   }
 
@@ -216,6 +220,6 @@ export class FrontendConfigService {
  * @returns {Object} Frontend configuration
  */
 export function getFrontendConfig(req, res) {
-  const service = new FrontendConfigService();
-  return service.build();
+  if (!_instance) _instance = new FrontendConfigService();
+  return _instance.build();
 }

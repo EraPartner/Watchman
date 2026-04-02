@@ -1,3 +1,5 @@
+import logger from "./logger.js";
+
 class PerformanceMonitor {
   constructor() {
     this.metrics = new Map();
@@ -5,6 +7,8 @@ class PerformanceMonitor {
     this.responseTimes = new Map();
     this.errorCounts = new Map();
     this.startTime = Date.now();
+    this.SLOW_REQUEST_THRESHOLD = 2000;
+    this.HIGH_ERROR_RATE_THRESHOLD = 10;
 
     // Maximum number of response time samples to keep per endpoint
     // Prevents unbounded memory growth with many endpoints
@@ -19,6 +23,7 @@ class PerformanceMonitor {
       () => this.resetHourlyMetrics(),
       60 * 60 * 1000
     );
+    this._hourlyResetInterval.unref();
   }
 
   /**
@@ -31,6 +36,9 @@ class PerformanceMonitor {
    */
   trackRequest() {
     return (req, res, next) => {
+      // Skip health endpoint to avoid noise
+      if (req.path === "/health") return next();
+
       const startTime = process.hrtime.bigint();
       const endpoint = this.normalizeEndpoint(req);
       const requestId = req.id || this.generateRequestId();
@@ -58,7 +66,7 @@ class PerformanceMonitor {
             requestId
           );
         } catch (error) {
-          console.warn("Performance tracking error:", error.message);
+          logger.warn("Performance tracking error:", error.message);
         }
       });
 
@@ -108,7 +116,7 @@ class PerformanceMonitor {
   checkPerformanceThresholds(endpoint, duration, statusCode, requestId) {
     // Check for slow requests
     if (duration > this.SLOW_REQUEST_THRESHOLD) {
-      console.warn(`🐌 Slow request detected`, {
+      logger.warn(`Slow request detected`, {
         endpoint,
         duration: `${duration.toFixed(2)}ms`,
         threshold: `${this.SLOW_REQUEST_THRESHOLD}ms`,
@@ -126,7 +134,7 @@ class PerformanceMonitor {
       const errorRate = (totalErrors / totalRequests) * 100;
 
       if (errorRate > this.HIGH_ERROR_RATE_THRESHOLD) {
-        console.warn(`⚠️  High error rate detected`, {
+        logger.warn(`High error rate detected`, {
           endpoint,
           errorRate: `${errorRate.toFixed(1)}%`,
           threshold: `${this.HIGH_ERROR_RATE_THRESHOLD}%`,
@@ -180,14 +188,23 @@ class PerformanceMonitor {
     const uptime = Date.now() - this.startTime;
     const memUsage = process.memoryUsage();
 
-    const totalRequests = Array.from(this.requestCounts.values()).reduce(
-      (a, b) => a + b,
-      0
-    );
-    const totalErrors = Array.from(this.errorCounts.values()).reduce(
-      (a, b) => a + b,
-      0
-    );
+    let totalRequests = 0;
+    for (const count of this.requestCounts.values()) {
+      totalRequests += count;
+    }
+    let totalErrors = 0;
+    for (const count of this.errorCounts.values()) {
+      totalErrors += count;
+    }
+
+    const requestCountsObj = {};
+    for (const [k, v] of this.requestCounts) {
+      requestCountsObj[k] = v;
+    }
+    const errorCountsObj = {};
+    for (const [k, v] of this.errorCounts) {
+      errorCountsObj[k] = v;
+    }
 
     return {
       uptime: {
@@ -202,12 +219,12 @@ class PerformanceMonitor {
       },
       requests: {
         total: totalRequests,
-        byEndpoint: Object.fromEntries(this.requestCounts),
+        byEndpoint: requestCountsObj,
         rps: this.calculateRPS(totalRequests, uptime),
       },
       errors: {
         total: totalErrors,
-        byEndpoint: Object.fromEntries(this.errorCounts),
+        byEndpoint: errorCountsObj,
         rate: this.calculateErrorRate(totalRequests, totalErrors),
       },
       performance: this.getPerformanceMetrics(),
@@ -242,8 +259,14 @@ class PerformanceMonitor {
         const avg = Math.round((sum / times.length) * 100) / 100;
         metrics[endpoint] = {
           avg,
-          min: Math.round(Math.min(...times) * 100) / 100,
-          max: Math.round(Math.max(...times) * 100) / 100,
+          min:
+            Math.round(
+              times.reduce((a, b) => (a < b ? a : b), Infinity) * 100
+            ) / 100,
+          max:
+            Math.round(
+              times.reduce((a, b) => (a > b ? a : b), -Infinity) * 100
+            ) / 100,
           p50: Math.round(sorted[Math.floor(sorted.length * 0.5)] * 100) / 100,
           p95: Math.round(sorted[Math.floor(sorted.length * 0.95)] * 100) / 100,
           p99: Math.round(sorted[Math.floor(sorted.length * 0.99)] * 100) / 100,

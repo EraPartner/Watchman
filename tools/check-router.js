@@ -6,7 +6,7 @@ import path from "path";
 // Load configuration from .env.local if present
 dotenv.config({ path: ".env.local" });
 
-const DEFAULT_HOST = "192.168.1.1";
+const DEFAULT_HOST = "192.0.2.1";
 const DEFAULT_PORTS = [80, 443, 22, 53];
 const PING_TIMEOUT_SEC = Number(process.env.PING_TIMEOUT_SEC ?? 2);
 const TCP_TIMEOUT_MS = Number(process.env.TCP_TIMEOUT_MS ?? 3000);
