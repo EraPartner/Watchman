@@ -1,0 +1,226 @@
+{
+  "main": {
+    "id": "8c1734880214f191",
+    "type": "split",
+    "children": [
+      {
+        "id": "c7ffd95f59c801e6",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8611cffadbba4b98",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "de8ae949aaa23ebd",
+    "type": "split",
+    "children": [
+      {
+        "id": "22759d84e2d66cc8",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c510f740de0dbdae",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "e5750ece4bb1af17",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "8fa0039e8b608758",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "right": {
+    "id": "691a90cc28a50d71",
+    "type": "split",
+    "children": [
+      {
+        "id": "7b2da335da24567a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "9809b518b9136f20",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "b6feea67e376f7ea",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "b6a4f627a4d336e4",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "efdda6e39a8b44a4",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "1f72cb5f837f279f",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          },
+          {
+            "id": "5e070ee736e80353",
+            "type": "leaf",
+            "state": {
+              "type": "footnotes",
+              "state": {},
+              "icon": "lucide-file-signature",
+              "title": "Footnotes"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false,
+      "markdown-importer:Open format converter": false,
+      "copilot:Open Copilot Chat": false
+    }
+  },
+  "active": "8611cffadbba4b98",
+  "lastOpenFiles": [
+    "apps/backend/dist/api-docs.yaml",
+    "apps/backend/dist/config/ip-control.json",
+    "apps/backend/dist/config/serviceDefaults.js",
+    "apps/backend/dist/config/security.js",
+    "apps/backend/dist/frontend/dist/assets/vendor.bit8B2x4.js",
+    "apps/backend/dist/frontend/dist/assets/ui.DQY1foJY.js",
+    "apps/backend/dist/frontend/dist/assets/query.B-ryhj2I.js",
+    "apps/backend/dist/frontend/dist/assets/index.C6iQjwhi.css",
+    "apps/backend/dist/frontend/dist/assets/index.BdpVUqBF.js",
+    "apps/backend/dist/frontend/dist/assets/NotFound.08hN3047.js",
+    "apps/backend/dist/frontend/dist/assets/Login.DxqRJ8wO.js",
+    "apps/backend/dist/frontend/dist/placeholder.svg",
+    "docs/reference/backend-utilities.md",
+    "docs/getting-started.md",
+    "docs/components/index.md",
+    "node_modules/socks/docs/examples/index.md",
+    "copilot/copilot-custom-prompts/Clip Web Page.md",
+    "copilot/copilot-custom-prompts/Clip YouTube Transcript.md",
+    "copilot/copilot-custom-prompts/Rewrite as tweet thread.md",
+    "copilot/copilot-custom-prompts/Rewrite as tweet.md",
+    "copilot/copilot-custom-prompts/Remove URLs.md",
+    "copilot/copilot-custom-prompts/Generate glossary.md",
+    "copilot/copilot-custom-prompts/Generate table of contents.md",
+    "copilot/copilot-custom-prompts/Make longer.md",
+    "copilot/copilot-custom-prompts/Make shorter.md",
+    "copilot/copilot-custom-prompts/Emojify.md",
+    "copilot/copilot-custom-prompts/Explain like I am 5.md",
+    "copilot/copilot-custom-prompts/Simplify.md",
+    "copilot/copilot-custom-prompts/Summarize.md",
+    "copilot/copilot-custom-prompts/Translate to Chinese.md",
+    "copilot/copilot-custom-prompts/Fix grammar and spelling.md"
+  ]
+}
