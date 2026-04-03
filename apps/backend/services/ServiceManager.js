@@ -37,12 +37,16 @@ export default class ServiceManager {
 
     try {
       // Initialize Tor Manager and start Tor (only if tor service is enabled)
+      // Start Tor in background so it doesn't block server startup
       if (enabledServices.has("tor")) {
         this.torManager = new TorManager();
         await this.torManager.initialize();
 
-        logger.progress("Starting Tor proxy");
-        await this.torManager.startTor();
+        logger.progress("Starting Tor proxy (background)");
+        // Don't await — let Tor start in background so server isn't blocked
+        this.torManager.startTor().catch((err) => {
+          logger.error("Tor background startup failed", { error: err.message });
+        });
       }
 
       // Initialize services using factory pattern
@@ -109,12 +113,10 @@ export default class ServiceManager {
         if (ok) {
           logger.service("homebridge", "Background login successful");
         } else {
-          logger.warning(
-            "Homebridge background login failed or returned non-OK"
-          );
+          logger.warn("Homebridge background login failed or returned non-OK");
         }
       } catch (e) {
-        logger.warning("Homebridge background login error", {
+        logger.warn("Homebridge background login error", {
           error: e && e.message ? e.message : e,
         });
       }

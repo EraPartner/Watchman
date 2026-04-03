@@ -365,7 +365,7 @@ class SynologyService {
 
       // Log any partial failures
       if (data.errors.length > 0) {
-        logger.warning("Synology partial data collection failures", {
+        logger.warn("Synology partial data collection failures", {
           errors: data.errors,
         });
       }

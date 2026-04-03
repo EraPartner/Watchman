@@ -1,6 +1,10 @@
 import { isUpdateAvailable } from "../utils/versionComparison.js";
 import { parseResponseCookies } from "../utils/serviceUtils.js";
-import { httpAgent, httpsAgent } from "../utils/httpAgentPool.js";
+import {
+  httpAgent,
+  httpsAgent,
+  createHttpsAgent,
+} from "../utils/httpAgentPool.js";
 import logger from "../middleware/logger.js";
 
 // Use shared HTTP agents from pool
@@ -63,7 +67,10 @@ class HomebridgeService {
       "/accessories";
 
     // Cache agent based on URL protocol
-    this._agent = this.baseUrl.startsWith("https:") ? httpsAgent : httpAgent;
+    // Use a permissive HTTPS agent for self-signed certificates
+    this._agent = this.baseUrl.startsWith("https:")
+      ? createHttpsAgent(true)
+      : httpAgent;
   }
 
   buildHeaders() {
@@ -227,7 +234,7 @@ class HomebridgeService {
       const res = await fetch(url, {
         method: "GET",
         headers: this.buildHeaders(),
-        agent: url.startsWith("https:") ? httpsAgent : httpAgent,
+        agent: url.startsWith("https:") ? createHttpsAgent(true) : httpAgent,
       });
       const text = await res.text().catch(() => "");
       const ct =

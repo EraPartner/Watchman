@@ -221,5 +221,9 @@ export class FrontendConfigService {
  */
 export function getFrontendConfig(req, res) {
   if (!_instance) _instance = new FrontendConfigService();
-  return _instance.build();
+  const config = _instance.build();
+  if (res && typeof res.json === "function") {
+    return res.json(config);
+  }
+  return config;
 }

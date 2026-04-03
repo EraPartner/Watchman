@@ -27,8 +27,19 @@ const defaultKeepAliveOptions = {
  */
 const defaultHttpsOptions = {
   ...defaultKeepAliveOptions,
-  rejectUnauthorized: true,
+  rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0",
 };
+
+/**
+ * Create shared HTTPS agent with optional self-signed cert support
+ * @param {boolean} allowSelfSigned - Allow self-signed certificates
+ */
+export function createHttpsAgent(allowSelfSigned = false) {
+  return new https.Agent({
+    ...defaultKeepAliveOptions,
+    rejectUnauthorized: !allowSelfSigned,
+  });
+}
 
 /**
  * Create shared HTTP agent
