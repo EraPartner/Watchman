@@ -1,97 +1,409 @@
-# Watchman Documentation Index
+---
+title: Watchman Project Knowledge Base
+type: index
+status: active
+date: 2026-04-02
+tags: [knowledge-base, index, project, overview, ai-agent-friendly]
+description: Main entry point to the Watchman project documentation - self-hosted service monitoring dashboard designed for developers, AI agents, and computer scientists
+aliases: [KB, docs, documentation, knowledge base, home, README]
+---
 
-Welcome to the Watchman documentation! All project documentation is centralized in this `/docs` directory for easy
-access and maintenance.
+# Watchman Knowledge Base
 
-## 📚 Documentation Structure
+> [!abstract] About This KB
+> Welcome to the Watchman project documentation. This knowledge base is designed for **developers**, **AI agents**, and **computer scientists**. It contains architectural decisions, API documentation, guides, code references, and all project knowledge needed to understand, contribute to, and extend Watchman.
+>
+> **For AI Agents**: Use `Ctrl/Cmd+O` to quick-open any document. Start with the [[docs/guides/ai-agent-workflow|AI Agent Workflow]] document for comprehensive instructions.
 
-### Getting Started
+## Quick Start
 
-- **[../README.md](../README.md)** - Project overview and quick start guide
-- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Development setup and guidelines
-- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Deployment instructions
+| If you're...                         | Start here                      |
+| ------------------------------------ | ------------------------------- | ------------------------------------------- | ---------------------- |
+| **New developer**                    | [[docs/getting-started          | Getting Started MOC]] → [[docs/guides/setup | Setup Guide]]          |
+| **Looking for an API**               | [[docs/api/index                | API Overview]] or [[docs/integrations/index | Service Integrations]] |
+| **Making an architectural decision** | [[docs/adr/index                | ADR Index]] → [[docs/adr/template           | ADR Template]]         |
+| **Understanding the architecture**   | [[docs/architecture/index       | Architecture Overview]]                     |
+| **Adding a service**                 | [[docs/guides/adding-services   | Adding Services Guide]]                     |
+| **An AI agent**                      | [[docs/guides/ai-agent-workflow | AI Agent Workflow]] (start here!)           |
 
-### Architecture & Design
+> [!tip] AI Agent Quick Reference
+>
+> 1. **Read before writing** - Check existing docs before adding new content
+> 2. **Use ADRs for decisions** - Document significant design choices in `docs/adr/`
+> 3. **Update relevant docs** - Keep API, features, and integration docs in sync with code
+> 4. **Use templates** - Start new documents from templates in each section
+> 5. **Use wiki-links** - Link to code with `[[apps/backend/services/ServiceName.js]]` format
+> 6. **Search first** - Use Obsidian MCP tools to search the KB before reading code
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System architecture and design decisions
-- **[PROJECT-STRUCTURE.md](./PROJECT-STRUCTURE.md)** - Detailed project structure guide
-- **[API-DOCUMENTATION.md](./API-DOCUMENTATION.md)** - API endpoints and specifications
+## Knowledge Areas
 
-### Project History & Planning
+| Area                         | Description              | Documents                            |
+| ---------------------------- | ------------------------ | ------------------------------------ | ------------------- |
+| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 12 ADRs             |
+| 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 7 endpoints         |
+| 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, and contributing  | 5 guides            |
+| ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 3 features          |
+| 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 14 integrations     |
+| 🔒 [[docs/security/index     | Security]]               | Security policies and practices      | 4 security docs     |
+| 🚀 [[docs/performance/index  | Performance]]            | Performance optimizations            | 2 docs              |
+| 🧩 [[docs/components/index   | Components]]             | Frontend React components and hooks  | 28 components/hooks |
+| 🧪 [[docs/testing/index      | Testing]]                | Testing strategies and patterns      | 2 testing docs      |
+| 📐 [[docs/architecture/index | Architecture]]           | System diagrams and architecture     | 3 architecture docs |
 
-- **[CHANGELOG.md](./CHANGELOG.md)** - Version history and changes
-- **[REORGANIZATION.md](./REORGANIZATION.md)** - Recent project restructuring details
-- **[CLEANUP-COMPLETE.md](./CLEANUP-COMPLETE.md)** - Cleanup summary
-- **[TODO.md](./TODO.md)** - Future enhancements and roadmap
+## AI Agent Workflow
 
-### Security & Best Practices
+```mermaid
+graph TD
+    A[Start Task] --> B{Search KB First}
+    B -->|Found| C[Read Relevant Docs]
+    B -->|Not Found| D[Check Code]
+    C --> E{Make Changes}
+    E --> F[Update Relevant Docs]
+    F --> G[Add Code Links]
+    G --> H[Update Frontmatter Dates]
+    D --> E
+```
 
-- **[SECURITY.md](./SECURITY.md)** - Security features and best practices
-- **[SECURITY-ENHANCEMENTS 2.md](./SECURITY-ENHANCEMENTS 2.md)** - Additional security documentation
+### Common AI Agent Tasks
 
-### Optimization & Maintenance
+| Task                   | Documentation                 |
+| ---------------------- | ----------------------------- | ------------------------------------------------- | ----------------- |
+| Add a new service      | [[docs/guides/adding-services | Adding Services Guide]]                           |
+| Add a new API endpoint | [[docs/api/index              | API Documentation]] + [[apps/backend/openapi.yaml | OpenAPI Spec]]    |
+| Fix a bug              | [[docs/guides/contributing    | Contributing Guide]] + [[docs/troubleshooting     | Troubleshooting]] |
+| Add tests              | [[docs/testing/index          | Testing Index]]                                   |
+| Security review        | [[docs/security/index         | Security Index]]                                  |
 
-- **[OPTIMIZATIONS.md](./OPTIMIZATIONS.md)** - Performance optimizations
-- **[CLEANUP-SUMMARY.md](./CLEANUP-SUMMARY.md)** - Code cleanup notes
+## Reference
 
-### Community & Support
+| Resource                                  | Description             |
+| ----------------------------------------- | ----------------------- | ---------------------------------------- |
+| 📚 [[docs/glossary                        | Glossary]]              | Key terms, aliases, and disambiguation   |
+| 🏷️ [[docs/tag-taxonomy                    | Tag Taxonomy]]          | Controlled vocabulary for KB tags        |
+| 🔧 [[docs/troubleshooting                 | Troubleshooting]]       | Common issues and solutions              |
+| 🗺️ [[docs/getting-started                 | Getting Started]]       | Map of Content for navigation            |
+| 📋 [[docs/common-tasks                    | Common Tasks]]          | Task-oriented quick reference            |
+| 🔑 [[docs/reference/environment-variables | Environment Variables]] | All env vars in one place                |
+| ⚙️ [[docs/reference/scripts               | Scripts Reference]]     | All npm commands                         |
+| 💻 [[docs/reference/code-patterns         | Code Patterns]]         | Standard code patterns for all layers    |
+| ❌ [[docs/reference/error-codes           | Error Codes]]           | All API error responses and status codes |
+| 📝 [[docs/LOGGING.md                      | Logging]]               | Structured logging configuration         |
 
-- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - How to contribute to the project
-- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
+## Recent Updates
 
-## 🗂️ Project Organization
+```dataview
+TABLE WITHOUT ID file.link AS "Document", date AS "Date", type AS "Type", tags AS "Tags"
+FROM "docs"
+WHERE date AND date >= date(today) - dur(14 days)
+SORT date DESC
+LIMIT 15
+```
 
-The Watchman project follows a modern monorepo structure:
+## Project Overview
+
+Watchman is a comprehensive **self-hosted service monitoring dashboard** supporting:
+
+- **Service Monitoring**: Health checks and statistics for 14+ service types
+- **Multi-Instance Support**: Run multiple nodes of the same service type
+- **Real-Time Updates**: WebSocket-based status broadcasting
+- **Authentication**: JWT-based auth with CSRF protection
+- **Security**: Rate limiting, IP control, account lockout, structured logging
+- **OpenAPI**: Full API documentation with Swagger UI
+
+### Tech Stack
+
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend**: Node.js + Express + JWT auth + OpenAPI/Swagger
+- **Communication**: WebSocket for real-time updates
+- **Tooling**: ESLint, Prettier, Vitest
+- **Architecture**: npm workspaces monorepo
+
+### Project Structure
 
 ```
 Watchman/
-├── apps/                    # Applications
-│   ├── frontend/           # React frontend
-│   └── backend/            # Node.js backend
-├── docs/                   # 📖 All documentation (you are here!)
-├── tools/                  # Development scripts
+├── apps/
+│   ├── frontend/          # React + TypeScript + Vite
+│   │   ├── src/
+│   │   │   ├── components/ # React components (cards, UI)
+│   │   │   ├── hooks/     # Custom React hooks
+│   │   │   ├── pages/     # Page components
+│   │   │   ├── services/  # API client
+│   │   │   └── lib/       # Utilities
+│   │   └── tests/         # Frontend tests
+│   └── backend/           # Node.js + Express
+│       ├── services/      # Service integrations
+│       ├── middleware/    # Express middleware
+│       ├── routes/       # API routes
+│       ├── utils/        # Utilities (circuit breaker, etc.)
+│       └── config.js     # Configuration
+├── docs/                   # This knowledge base
 ├── packages/               # Shared packages
-└── tests/                  # Tests
+└── tools/                 # Dev scripts
 ```
 
-## 🔍 Quick Links
+## Key Concepts
 
-### For Developers
+> [!info] Service Pattern
+> Each service follows a standard pattern: `checkHealth()` for status checks, `getStats()` for detailed metrics, and optional `performAction()` for control operations. All services extend this base and are registered in `serviceFactoryConfig.js`.
 
-- [Development Setup](./DEVELOPMENT.md)
-- [Architecture Overview](./ARCHITECTURE.md)
-- [API Documentation](./API-DOCUMENTATION.md)
-- [Contributing Guidelines](./CONTRIBUTING.md)
+> [!info] Multi-Instance Services
+> Services like qBittorrent support multiple instances via numbered env vars: `QBITTORRENT_1_URL`, `QBITTORRENT_2_URL`, etc. Legacy single-instance config is still supported. See [[docs/features/multi-instance|Multi-Instance Feature]].
 
-### For Deployers
+> [!info] Authentication
+> JWT tokens are stored in HTTP-only cookies. CSRF protection uses the double-submit cookie pattern. Most API endpoints require authentication. See [[docs/security/authentication|Authentication]].
 
-- [Deployment Guide](./DEPLOYMENT.md)
-- [Security Configuration](./SECURITY.md)
-- [Troubleshooting](./TROUBLESHOOTING.md)
+> [!info] Rate Limiting Tiers
+>
+> - **Health**: 100 req/15min per IP
+> - **Auth**: 5 req/15min per IP
+> - **Control**: 20 req/15min per IP
+> - **General API**: 100 req/15min per IP
 
-### For Project Maintainers
+## Code Search Quick Reference
 
-- [Project Structure](./PROJECT-STRUCTURE.md)
-- [Changelog](./CHANGELOG.md)
-- [TODO & Roadmap](./TODO.md)
-- [Optimizations](./OPTIMIZATIONS.md)
+| Search For          | Location                                             |
+| ------------------- | ---------------------------------------------------- |
+| Service classes     | `apps/backend/services/*.js`                         |
+| Frontend components | `apps/frontend/src/components/*.tsx`                 |
+| API routes          | `apps/backend/server.js`, `apps/backend/routes/*.js` |
+| Middleware          | `apps/backend/middleware/*.js`                       |
+| Configuration       | `apps/backend/config.js`                             |
+| Frontend hooks      | `apps/frontend/src/hooks/*.ts`                       |
+| API client          | `apps/frontend/src/services/ApiClient.ts`            |
+| Environment config  | `apps/backend/.env.example`                          |
+| Circuit breaker     | `apps/backend/utils/circuitBreaker.js`               |
 
-## 📝 Documentation Standards
+## Contributing
 
-All documentation follows these principles:
+1. Read the [[docs/guides/contributing|Contributing Guide]]
+2. Check [[docs/adr/index|ADRs]] for context on decisions
+3. Follow [[docs/reference/code-patterns|Code Patterns]]
+4. Add tests for new features
+5. Update relevant docs
+6. Run `npm run lint` before committing
 
-- **Clear and concise** - Easy to understand
-- **Up-to-date** - Reflects current state
-- **Centralized** - Everything in `/docs`
-- **Well-organized** - Logical structure
-- **Cross-referenced** - Links between docs
+## PlantUML Diagrams
 
-## 🤝 Contributing to Docs
+### System Architecture Overview
 
-Found an issue or want to improve documentation? See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on updating
-docs.
+```plantuml
+@startuml
+!theme plain
 
----
+package "Frontend (React 18)" as FE {
+    [Service Cards]
+    [Hooks]
+    [React Query]
+    [WebSocket]
+}
 
-**Last updated:** October 11, 2025  
-**Project structure:** Monorepo with npm workspaces
+package "Backend (Node.js/Express)" as BE {
+    [ServiceManager]
+    [Service Classes]
+    [WebSocketManager]
+    [Middleware Stack]
+}
+
+package "Security Layer" as SEC {
+    [JWT Auth]
+    [CSRF]
+    [Rate Limiting]
+    [IP Control]
+}
+
+database "External Services" as Ext {
+    [AdGuard]
+    [Bitcoin]
+    [Tor]
+    [qBittorrent]
+    [Homebridge]
+    [Synology]
+    [14+ Services]
+}
+
+FE <--> BE : REST API + WebSocket
+BE --> SEC : Applies security
+BE --> Ext : Health/Stats
+
+note right of FE
+  React 18 + TypeScript
+  Vite + Tailwind + shadcn/ui
+end note
+
+note right of BE
+  Express 4.x + JWT
+  ESM modules
+end note
+@enduml
+```
+
+### Request Processing Flow
+
+```plantuml
+@startuml
+!theme plain
+
+actor "User" as User
+participant "Frontend" as FE
+participant "Express" as Express
+participant "Middleware" as MW
+participant "ServiceManager" as SM
+participant "CircuitBreaker" as CB
+participant "Service" as Svc
+database "External" as Ext
+
+User -> FE : View Dashboard
+FE -> Express : GET /api/services/health
+
+Express -> MW : Apply middleware chain
+
+MW -> MW : Rate limit check
+MW -> MW : IP control check
+MW -> MW : Auth check (if required)
+
+MW -> SM : Route to service
+SM -> CB : Execute with circuit breaker
+
+alt Circuit Closed
+    CB -> Svc : call checkHealth()
+    Svc -> Ext : HTTP/SSH request
+    Ext --> Svc : Response
+    Svc --> CB : Result
+    CB --> SM : Result
+    SM --> MW : JSON response
+    MW --> Express : Response
+    Express --> FE : JSON
+    FE --> User : Updated UI
+
+else Circuit Open
+    CB --> SM : Error
+    SM --> Express : 503
+    Express --> FE : Service Unavailable
+    FE --> User : Show offline
+end
+@enduml
+```
+
+### Data Flow Summary
+
+```plantuml
+@startuml
+!theme plain
+
+skinparam backgroundColor #F0F8FF
+
+partition "Frontend" {
+    [Service Card] as Card
+    [useServiceHealth] as Hook
+    [React Query] as Query
+    [useWebSocket] as WS
+}
+
+partition "Backend" {
+    [API Endpoint] as API
+    [ServiceManager] as Mgr
+    [Service Class] as Svc
+    [WebSocketManager] as WSM
+}
+
+partition "External" {
+    [Monitored Service] as Ext
+}
+
+Card -> Hook : Render
+Hook -> Query : useQuery()
+
+Query -> API : Fetch health
+API -> Mgr : getServiceHealth()
+Mgr -> Svc : checkHealth()
+Svc -> Ext : Ping service
+Ext --> Svc : Status
+Svc --> Mgr : Result
+Mgr --> API : JSON
+API --> Query : Response
+Query --> Card : Data
+
+note over Ext, Card
+  WebSocket Real-Time Updates
+end note
+
+Ext --> WSM : Status change
+WSM --> Query : Invalidate
+Query --> Card : Auto-refresh
+@enduml
+```
+
+### Knowledge Base Structure
+
+```plantuml
+@startuml
+!theme plain
+
+folder "docs/" as KB {
+    folder "adr/" as ADRs {
+        [001-012 ADRs] as ADR
+    }
+
+    folder "api/" as API {
+        [Endpoints] as API_DOC
+    }
+
+    folder "architecture/" as ARCH {
+        [Backend, Frontend, Data Flow] as ARCH_DOC
+    }
+
+    folder "components/" as COMP {
+        [Cards, Hooks, UI] as COMP_DOC
+    }
+
+    folder "features/" as FEAT {
+        [Service Monitoring, Multi-Instance, Real-Time] as FEAT_DOC
+    }
+
+    folder "guides/" as GUIDES {
+        [Setup, Deployment, Adding Services] as GUIDE_DOC
+    }
+
+    folder "integrations/" as INT {
+        [14+ Service Docs] as INT_DOC
+    }
+
+    folder "security/" as SEC {
+        [Auth, Rate Limiting, IP Control] as SEC_DOC
+    }
+
+    folder "performance/" as PERF {
+        [Caching, Request Optimization] as PERF_DOC
+    }
+
+    folder "reference/" as REF {
+        [Environment Variables, Code Patterns] as REF_DOC
+    }
+
+    [INDEX.md] as INDEX
+    [glossary.md] as GLOSSARY
+    [getting-started.md] as GS
+}
+
+INDEX --> ADRs
+INDEX --> API
+INDEX --> ARCH
+INDEX --> COMP
+INDEX --> FEAT
+INDEX --> GUIDES
+INDEX --> INT
+INDEX --> SEC
+INDEX --> PERF
+INDEX --> REF
+INDEX --> GLOSSARY
+INDEX --> GS
+
+note right of KB
+  117+ documents
+  14 directories
+  Dataview queries
+  PlantUML diagrams
+end note
+@enduml
+```

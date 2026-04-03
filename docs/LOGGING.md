@@ -1,7 +1,17 @@
+---
+title: Logging Configuration
+type: reference
+status: active
+date: 2026-04-03
+tags: [reference, logging, backend, configuration]
+description: Structured logging configuration for the Watchman backend - environment variables, log levels, and security features
+aliases: [logging, log level, logger, structured logging, logging configuration]
+---
+
 # Logging Configuration
 
-The Watchman backend includes a structured logging system with security-focused redaction. You can easily control
-logging behavior through environment variables.
+> [!abstract] Overview
+> The Watchman backend includes a structured logging system with security-focused redaction. You can easily control logging behavior through environment variables.
 
 ## Environment Variables
 
@@ -59,6 +69,10 @@ LOG_LEVEL=debug
 ```
 
 ## Common Use Cases
+
+### Startup Severity Adjustment
+
+Startup background issues that do not block server boot (for example Homebridge background login failures) are logged at `warn` severity instead of startup/progress `info`, reducing noise while keeping degraded startup states visible.
 
 ### Development - Minimal Logging
 
@@ -123,3 +137,165 @@ LOG_REQUESTS=false
 ```
 
 Then restart your backend server. This will keep error and warning logs but remove the verbose request/response logging.
+
+## PlantUML Diagrams
+
+### Logging Architecture
+
+```plantuml
+@startuml
+!theme plain
+
+package "Logger Middleware" {
+    [requestLogger] as Logger
+    [requestIdMiddleware] as ReqID
+}
+
+package "Configuration" {
+    [LOG_ENABLED] as Enabled
+    [LOG_REQUESTS] as ReqLog
+    [LOG_LEVEL] as Level
+}
+
+package "Log Output" {
+    [Console] as Console
+    [File] as File
+}
+
+ReqID -> Logger : Attach request ID
+
+Logger -> Enabled : Check enabled
+alt LOG_ENABLED=false
+    Logger -> Logger : Skip logging
+else LOG_ENABLED=true
+    Logger -> ReqLog : Check request logging
+    alt LOG_REQUESTS=false
+        Logger -> Logger : Log errors/warnings only
+    else LOG_REQUESTS=true
+        Logger -> Logger : Log all requests
+    end
+
+    Logger -> Level : Check level
+
+    alt debug
+    case error
+    case warn
+    case info
+    end
+
+    Logger -> Console : Write log
+    Logger -> File : Write to file (if configured)
+end
+@enduml
+```
+
+### Log Level Hierarchy
+
+```plantuml
+@startuml
+!theme plain
+
+skinparam rectangleBackgroundColor #FFFACD
+
+rectangle "LOG_LEVEL" as Level {
+    rectangle "debug" as Debug {
+        rectangle "info" as Info {
+            rectangle "warn" as Warn {
+                rectangle "error" as Error {
+                }
+            }
+        }
+    }
+}
+
+note right of Debug
+  Most verbose
+  Shows everything
+end note
+
+note right of Error
+  Least verbose
+  Shows only errors
+end note
+
+Level -[hidden]-> Error
+@enduml
+```
+
+### PII Redaction Flow
+
+```plantuml
+@startuml
+!theme plain
+
+participant "Log Entry" as Entry
+participant "Redaction Filter" as Filter
+participant "PII Patterns" as Patterns
+participant "Sanitized Log" as Output
+
+Entry -> Filter : Raw log data
+
+Filter -> Patterns : Check for sensitive data
+
+alt Password Detected
+    Patterns --> Filter : Match: password
+    Filter -> Filter : Replace with [REDACTED]
+end
+
+alt Token Detected
+    Patterns --> Filter : Match: token
+    Filter -> Filter : Replace with [REDACTED]
+end
+
+alt Email Detected
+    Patterns --> Filter : Match: email
+    Filter -> Filter : Replace with [REDACTED]
+end
+
+Filter -> Output : Sanitized log
+
+note right of Output
+  Logs are always sanitized
+  regardless of LOG_LEVEL
+end note
+@enduml
+```
+
+### Request Logging Flow
+
+```plantuml
+@startuml
+!theme plain
+
+actor "Client" as Client
+participant "Express" as Express
+participant "Logger Middleware" as Logger
+participant "JSON Formatter" as Format
+
+Client -> Express : HTTP Request
+Express -> Logger : Request received
+
+Logger -> Logger : Generate request ID
+Logger -> Logger : Create log entry
+
+alt LOG_REQUESTS=true
+    Logger -> Format : Format as JSON
+    Format --> Logger : Formatted entry
+    Logger -> Logger : Output to console
+
+else LOG_REQUESTS=false
+    Logger -> Logger : Skip request log
+end
+
+note over Logger
+  Error and warning logs
+  are always output
+end note
+@enduml
+```
+
+## Related
+
+- [[docs/architecture/backend-architecture|Backend Architecture]]
+- [[docs/reference/environment-variables|Environment Variables]]
+- [[apps/backend/middleware/logger.js|Logger Middleware (Code)]]

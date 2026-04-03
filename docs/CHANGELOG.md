@@ -1,8 +1,18 @@
+---
+title: Changelog
+type: reference
+status: active
+date: 2026-04-02
+tags: [changelog, release-notes, version-history]
+description: Project changelog tracking all notable changes to Watchman
+aliases: [changelog, release notes, version history, changes]
+---
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2025-10-11
+## [Unreleased] - 2026-04-02
 
 ### 🎉 Major Restructuring - Modern Monorepo Architecture
 
@@ -18,25 +28,24 @@ All notable changes to this project will be documented in this file.
 #### Changed
 
 - **Frontend** moved from root to `apps/frontend/`
-    - `src/` → `apps/frontend/src/`
-    - `public/` → `apps/frontend/public/`
-    - `index.html` → `apps/frontend/index.html`
-    - All config files moved to `apps/frontend/`
+  - `src/` → `apps/frontend/src/`
+  - `public/` → `apps/frontend/public/`
+  - `index.html` → `apps/frontend/index.html`
+  - All config files moved to `apps/frontend/`
 - **Backend** moved from `backend/` to `apps/backend/`
-    - `backend/` → `apps/backend/`
-    - All backend services, middleware, and config preserved
+  - `backend/` → `apps/backend/`
+  - All backend services, middleware, and config preserved
 - **Scripts** consolidated to `tools/`
-    - `scripts/` → `tools/`
-    - `hardware/` → `tools/`
+  - `scripts/` → `tools/`
+  - `hardware/` → `tools/`
 - **Configuration** simplified
-
-    - Removed duplicate config files from root
-    - Each app now contains its own configuration
-    - Root `package.json` now manages workspaces only
+  - Removed duplicate config files from root
+  - Each app now contains its own configuration
+  - Root `package.json` now manages workspaces only
 
 - **Documentation** already well-organized in `docs/`
-    - Updated README.md with new structure
-    - Updated PROJECT-STRUCTURE.md with workspace details
+  - Updated README.md with new structure
+  - Updated PROJECT-STRUCTURE.md with workspace details
 
 #### Removed
 
@@ -78,7 +87,7 @@ Watchman/
 **Updated Commands:**
 
 | Old Command               | New Command                          |
-|---------------------------|--------------------------------------|
+| ------------------------- | ------------------------------------ |
 | `npm run dev`             | `npm run dev` (unchanged)            |
 | `npm run dev:frontend`    | `npm run dev:frontend`               |
 | `npm run dev:backend`     | `npm run dev:backend`                |
