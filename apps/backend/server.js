@@ -68,6 +68,9 @@ import {
   createUpdatesRoute,
 } from "./routes/serviceFactory.js";
 
+// __esmdirname equivalent for ESM
+const __esmdirname = dirname(fileURLToPath(import.meta.url));
+
 // Helper to determine if an IP is unicast (not multicast or link-local)
 const isUnicast = (ip) => {
   if (!ip || typeof ip !== "string") return false;
@@ -111,9 +114,6 @@ async function checkServicesHealth(services) {
   return healthResults;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 // Validate environment before starting server
 validateEnvironment();
 
@@ -148,8 +148,8 @@ const COOKIE_DOMAIN =
 const FRONTEND_HTTPS = FRONTEND_URLS.some((url) => url?.startsWith("https://"));
 const APP_VERSION = (() => {
   const candidates = [
-    join(__dirname, "package.json"),
-    join(__dirname, "..", "package.json"),
+    join(__esmdirname, "package.json"),
+    join(__esmdirname, "..", "package.json"),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) {
@@ -194,10 +194,17 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // Cookie defaults with improved security
+// Computed after FRONTEND_URL is known so we can handle localhost correctly
+const isLocalhostOrigin =
+  FRONTEND_URL?.includes("localhost") || FRONTEND_URL?.includes("127.0.0.1");
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production" ? true : false,
-  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+  secure: process.env.NODE_ENV === "production" && !isLocalhostOrigin,
+  sameSite: isLocalhostOrigin
+    ? "lax"
+    : process.env.NODE_ENV === "production"
+      ? "strict"
+      : "lax",
   path: "/",
   ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
 };
@@ -289,12 +296,19 @@ app.use(requestLogger); // Add structured logging
 app.use(performanceMonitor.trackRequest());
 app.use(enforceIPControl); // IP access control
 app.use(requestTimeout); // Global request timeout to prevent hanging requests
-app.use(responseSizeLimit()); // Prevent large response DoS attacks
+app.use(responseSizeLimit); // Prevent large response DoS attacks
 app.use(
   apiResponseStandardizer({
     autoWrap: true,
   })
 );
+
+// Serve frontend static files in production
+const frontendDist = join(__esmdirname, "frontend", "dist");
+if (process.env.NODE_ENV === "production" && fs.existsSync(frontendDist)) {
+  logger.info(`Serving frontend from ${frontendDist}`);
+  app.use(express.static(frontendDist, { maxAge: "1d" }));
+}
 
 // Enhanced Helmet configuration for production
 app.use(
@@ -379,8 +393,23 @@ app.use(
         return callback(new Error("CORS: Invalid origin format"));
       }
 
-      // Check if origin matches FRONTEND_URL
+      // Build allowed origins list: FRONTEND_URL + backend's own origin
       const allowed = [FRONTEND_URL];
+      const backendOrigin = `http://localhost:${PORT}`;
+      if (!allowed.includes(backendOrigin)) {
+        allowed.push(backendOrigin);
+      }
+      // Also allow the backend's own origin with any host
+      try {
+        const parsed = new URL(FRONTEND_URL);
+        const sameHostBackend = `${parsed.protocol}//${parsed.hostname}:${PORT}`;
+        if (!allowed.includes(sameHostBackend)) {
+          allowed.push(sameHostBackend);
+        }
+      } catch (_e) {
+        // ignore
+      }
+
       if (!allowed.includes(origin)) {
         if (process.env.NODE_ENV === "production") {
           return callback(new Error(`CORS: Origin ${origin} not allowed`));
@@ -399,15 +428,21 @@ app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
 // Serve Swagger API documentation
-const swaggerDocument = YAML.load(
-  fs.readFileSync(join(__dirname, "api-docs.yaml"), "utf8")
-);
+try {
+  const swaggerDocument = YAML.load(
+    fs.readFileSync(join(__esmdirname, "api-docs.yaml"), "utf8")
+  );
 
-app.use(
-  "/api/docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerDocument, { explorer: true })
-);
+  if (swaggerUi && swaggerUi.serve && swaggerUi.setup) {
+    app.use(
+      "/api/docs",
+      swaggerUi.serve,
+      swaggerUi.setup(swaggerDocument, { explorer: true })
+    );
+  }
+} catch (err) {
+  logger.warning("Swagger UI not available", { error: err.message });
+}
 
 // Apply rate limiting
 app.use("/api/", generalLimiter);
@@ -437,10 +472,14 @@ app.post(
       const accessToken = signToken({ sub: user.id }, "access");
 
       // Set secure HTTP-only cookie with CSRF protection
+      // Don't require secure flag for localhost (HTTP-only development/testing)
+      const isLocalhost =
+        FRONTEND_URL?.includes("localhost") ||
+        FRONTEND_URL?.includes("127.0.0.1");
       res.cookie("token", accessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        secure: process.env.NODE_ENV === "production" && !isLocalhost,
+        sameSite: isLocalhost ? "lax" : "strict",
         maxAge: 8 * 60 * 60 * 1000, // 8 hours
       });
 
@@ -651,6 +690,7 @@ app.get(
 );
 
 // ── Service routes via factory ──────────────────────────────────
+const getServiceManager = () => serviceManager;
 const factoryMiddleware = {
   healthLimiter,
   requireServiceEnabled,
@@ -673,14 +713,14 @@ for (const svc of [
 ]) {
   app.use(
     `/api/${svc}`,
-    createServiceRoutes(svc, serviceManager, factoryMiddleware)
+    createServiceRoutes(svc, getServiceManager, factoryMiddleware)
   );
 }
 
 // Bitcoin: /status + /stats via factory, plus /health alias
 app.use(
   "/api/bitcoin",
-  createServiceRoutes("bitcoin", serviceManager, factoryMiddleware)
+  createServiceRoutes("bitcoin", getServiceManager, factoryMiddleware)
 );
 app.get(
   "/api/bitcoin/health",
@@ -712,7 +752,7 @@ app.get(
 // Tor: /status + /stats via factory, plus /health alias and /relay/:nickname?
 app.use(
   "/api/tor",
-  createServiceRoutes("tor", serviceManager, factoryMiddleware)
+  createServiceRoutes("tor", getServiceManager, factoryMiddleware)
 );
 app.get(
   "/api/tor/health",
@@ -760,7 +800,7 @@ app.get(
 // Homebridge: /status + /stats via factory, plus special endpoints
 app.use(
   "/api/homebridge",
-  createServiceRoutes("homebridge", serviceManager, factoryMiddleware)
+  createServiceRoutes("homebridge", getServiceManager, factoryMiddleware)
 );
 app.get(
   "/api/status/homebridge-version",
@@ -845,8 +885,46 @@ app.get(
           .status(503)
           .json({ error: "Homebridge service not configured" });
       if (typeof svc.getAccessories === "function") {
-        const accessories = await svc.getAccessories();
-        return res.json(paginate(accessories, req.pagination));
+        const accessoriesResult = await svc.getAccessories();
+
+        const accessories = Array.isArray(accessoriesResult)
+          ? accessoriesResult
+          : Array.isArray(accessoriesResult?.data)
+            ? accessoriesResult.data
+            : Array.isArray(accessoriesResult?.accessories)
+              ? accessoriesResult.accessories
+              : Array.isArray(accessoriesResult?.raw)
+                ? accessoriesResult.raw
+                : Array.isArray(accessoriesResult?.raw?.accessories)
+                  ? accessoriesResult.raw.accessories
+                  : Array.isArray(accessoriesResult?.lastData?.data)
+                    ? accessoriesResult.lastData.data
+                    : Array.isArray(accessoriesResult?.lastData?.accessories)
+                      ? accessoriesResult.lastData.accessories
+                      : Array.isArray(accessoriesResult?.lastData?.raw)
+                        ? accessoriesResult.lastData.raw
+                        : Array.isArray(
+                              accessoriesResult?.lastData?.raw?.accessories
+                            )
+                          ? accessoriesResult.lastData.raw.accessories
+                          : [];
+
+        const paginatedAccessories = paginate(accessories, req.pagination);
+
+        if (
+          !Array.isArray(accessoriesResult) &&
+          accessoriesResult?.error &&
+          accessories.length === 0
+        ) {
+          return res.json({
+            ...paginatedAccessories,
+            warning: "Homebridge accessories temporarily unavailable",
+            message: accessoriesResult.error,
+            timestamp: accessoriesResult.timestamp,
+          });
+        }
+
+        return res.json(paginatedAccessories);
       }
       res.status(501).json({
         error:
@@ -900,7 +978,7 @@ app.get(
 for (const svc of ["adguard", "bitcoin", "tor", "homebridge"]) {
   app.use(
     `/api/${svc}`,
-    createUpdatesRoute(svc, serviceManager, factoryMiddleware)
+    createUpdatesRoute(svc, getServiceManager, factoryMiddleware)
   );
 }
 
@@ -1359,6 +1437,13 @@ async function startServer() {
   try {
     await initializeServer();
 
+    // SPA fallback: serve index.html for any non-API route in production
+    if (process.env.NODE_ENV === "production" && fs.existsSync(frontendDist)) {
+      app.get("*", (req, res) => {
+        res.sendFile(join(frontendDist, "index.html"));
+      });
+    }
+
     httpServerInstance = server.listen(PORT, () => {
       logger.success(`Watchman Backend Server running on port ${PORT}`);
       logger.startup(`Health check: http://localhost:${PORT}/health`);
@@ -1369,6 +1454,12 @@ async function startServer() {
       logger.startup(
         `Services Health: http://localhost:${PORT}/api/services/health`
       );
+      if (
+        process.env.NODE_ENV === "production" &&
+        fs.existsSync(frontendDist)
+      ) {
+        logger.startup(`Frontend: http://localhost:${PORT}`);
+      }
     });
   } catch (error) {
     logger.error("Failed to start server", { error });
@@ -1376,6 +1467,5 @@ async function startServer() {
   }
 }
 
-startServer();
-
+export { startServer };
 export default app;

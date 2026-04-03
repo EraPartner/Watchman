@@ -17,11 +17,11 @@ import { logger } from "../middleware/logger.js";
  * Create a standardized set of routes for a service.
  *
  * Generates:
- *   GET /status  - Health check (rate-limited, cached, no auth)
+ *   GET /status  - Health check (rate-limited, cached, no authentication required)
  *   GET /stats   - Service stats (auth required, cached)
  *
  * @param {string} serviceName - Service identifier (e.g., "adguard", "bitcoin")
- * @param {Object} serviceManager - ServiceManager instance
+ * @param {Function} getServiceManager - Function that returns the ServiceManager instance
  * @param {Object} middleware - Required middleware functions
  * @param {Function} middleware.healthLimiter - Rate limiter for health endpoints
  * @param {Function} middleware.requireServiceEnabled - Service enabled gate
@@ -30,7 +30,11 @@ import { logger } from "../middleware/logger.js";
  * @param {Function} middleware.statsCacheMiddleware - Cache for stats responses
  * @returns {express.Router} Configured router with service routes
  */
-export function createServiceRoutes(serviceName, serviceManager, middleware) {
+export function createServiceRoutes(
+  serviceName,
+  getServiceManager,
+  middleware
+) {
   const router = express.Router();
   const {
     healthLimiter,
@@ -53,7 +57,8 @@ export function createServiceRoutes(serviceName, serviceManager, middleware) {
     healthCacheMiddleware,
     async (req, res) => {
       try {
-        const svc = serviceManager.getService(serviceName);
+        const sm = getServiceManager();
+        const svc = sm?.getService(serviceName);
         if (!svc) {
           return res.status(503).json({
             error: `${displayName} service not configured`,
@@ -61,7 +66,7 @@ export function createServiceRoutes(serviceName, serviceManager, middleware) {
           });
         }
 
-        const health = await serviceManager.getServiceHealth(serviceName);
+        const health = await sm.getServiceHealth(serviceName);
         logger.service(
           serviceName,
           `${displayName} status connection successful`
@@ -89,14 +94,15 @@ export function createServiceRoutes(serviceName, serviceManager, middleware) {
     statsCacheMiddleware,
     async (req, res) => {
       try {
-        const svc = serviceManager.getService(serviceName);
+        const sm = getServiceManager();
+        const svc = sm?.getService(serviceName);
         if (!svc) {
           return res.status(503).json({
             error: `${displayName} service not configured`,
           });
         }
 
-        const stats = await serviceManager.getServiceStats(serviceName);
+        const stats = await sm.getServiceStats(serviceName);
         logger.service(
           serviceName,
           `${displayName} stats connection successful`
@@ -126,13 +132,13 @@ export function createServiceRoutes(serviceName, serviceManager, middleware) {
  * Only use for services that implement checkForUpdates().
  *
  * @param {string} serviceName - Service identifier
- * @param {Object} serviceManager - ServiceManager instance
+ * @param {Function} getServiceManager - Function that returns the ServiceManager instance
  * @param {Object} middleware - Required middleware functions
  * @param {Function} middleware.requireServiceEnabled - Service enabled gate
  * @param {Function} middleware.statsCacheMiddleware - Cache for responses
  * @returns {express.Router} Configured router with updates route
  */
-export function createUpdatesRoute(serviceName, serviceManager, middleware) {
+export function createUpdatesRoute(serviceName, getServiceManager, middleware) {
   const router = express.Router();
   const { requireServiceEnabled, statsCacheMiddleware } = middleware;
 
@@ -146,7 +152,8 @@ export function createUpdatesRoute(serviceName, serviceManager, middleware) {
     statsCacheMiddleware,
     async (req, res) => {
       try {
-        const svc = serviceManager.getService(serviceName);
+        const sm = getServiceManager();
+        const svc = sm?.getService(serviceName);
         if (!svc) {
           return res.status(503).json({
             error: `${displayName} service not configured`,
