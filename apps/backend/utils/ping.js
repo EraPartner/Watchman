@@ -71,7 +71,7 @@ export async function pingHost(host, options = {}) {
   }
 
   if (logFailure) {
-    logger.error(`pingHost: all attempts failed for ${host}`, { host });
+    logger.warn(`pingHost: all attempts failed for ${host}`, { host });
   }
 
   return { success: false, stdout: combinedStdout, stderr: combinedStderr };

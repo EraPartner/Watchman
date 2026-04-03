@@ -2,14 +2,21 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import logger from "./logger.js";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const AUTH_USERNAME = process.env.AUTH_USERNAME;
-const AUTH_PASSWORD_HASH = process.env.AUTH_PASSWORD_HASH; // bcrypt hash
-
 // Generate a constant dummy bcrypt hash at startup for timing-equalization
 const DUMMY_HASH = bcrypt.hashSync("invalid", 10);
 
-if (!JWT_SECRET) {
+// Read env vars lazily (at call time) to ensure dotenv has loaded them first
+function getJwtSecret() {
+  return process.env.JWT_SECRET;
+}
+function getAuthUsername() {
+  return process.env.AUTH_USERNAME;
+}
+function getAuthPasswordHash() {
+  return process.env.AUTH_PASSWORD_HASH;
+}
+
+if (!getJwtSecret()) {
   logger.warn(
     "JWT_SECRET not set in environment. Auth will not function correctly."
   );
@@ -17,16 +24,20 @@ if (!JWT_SECRET) {
 
 // Issue a signed JWT (short-lived access token)
 export function signToken(payload, opts = {}) {
-  return jwt.sign(payload, JWT_SECRET, {
+  const secret = getJwtSecret();
+  if (!secret) throw new Error("JWT_SECRET not configured");
+  return jwt.sign(payload, secret, {
     expiresIn: opts.expiresIn || "15m",
-    algorithm: "HS256", // Explicitly specify algorithm to prevent algorithm confusion attacks
+    algorithm: "HS256",
   });
 }
 
 // Verify a token and return decoded payload or null
 export function verifyToken(token) {
+  const secret = getJwtSecret();
+  if (!secret) return null;
   try {
-    return jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] });
+    return jwt.verify(token, secret, { algorithms: ["HS256"] });
   } catch (err) {
     return null;
   }
@@ -34,22 +45,22 @@ export function verifyToken(token) {
 
 // Authenticate credentials against env variables
 export async function authenticateCredentials(username, password) {
-  // Basic input checks to avoid abuse
   if (!username || !password) return null;
   if (typeof username !== "string" || typeof password !== "string") return null;
   if (username.length > 128 || password.length > 256) return null;
 
+  const authUsername = getAuthUsername();
+  const authPasswordHash = getAuthPasswordHash();
+
   // Always perform bcrypt compare to mitigate username enumeration via timing
-  const hashToCompare = AUTH_PASSWORD_HASH || DUMMY_HASH;
+  const hashToCompare = authPasswordHash || DUMMY_HASH;
   try {
     const passwordMatches = await bcrypt.compare(password, hashToCompare);
-    // Only succeed if username matches configured username AND password matches real hash
-    const usernameMatches = AUTH_USERNAME && username === AUTH_USERNAME;
+    const usernameMatches = authUsername && username === authUsername;
     if (usernameMatches && passwordMatches) {
-      // Return user object with username and id
       return {
-        username: AUTH_USERNAME,
-        id: AUTH_USERNAME, // Using username as ID since we only have one user
+        username: authUsername,
+        id: authUsername,
       };
     }
     return null;
