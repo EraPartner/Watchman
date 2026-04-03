@@ -70,7 +70,7 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
 
     const { data: stats, isLoading: statsLoading } = useServiceStats(
       instanceId,
-      enableStats && isEnabled,
+      enableStats && isEnabled
     );
 
     const statusMetrics = useMemo(() => {
@@ -141,10 +141,20 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
       }
 
       // Load Average
-      if (stats.loadAverage) {
+      const loadAverageValue =
+        typeof stats.loadAverage === "number"
+          ? stats.loadAverage
+          : typeof stats.loadAverage?.load1 === "number"
+            ? stats.loadAverage.load1
+            : null;
+
+      if (
+        typeof loadAverageValue === "number" &&
+        Number.isFinite(loadAverageValue)
+      ) {
         entries.push({
           key: "load avg",
-          value: `${stats.loadAverage.load1.toFixed(2)}`,
+          value: `${loadAverageValue.toFixed(2)}`,
           isImportant: false,
         });
       }
@@ -183,6 +193,10 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
 
     const isLoading = healthLoading || (enableStats && statsLoading);
     const hasError = !!healthError;
+    const badgeStatus =
+      health?.status === "not_configured"
+        ? "offline"
+        : health?.status || (health ? "offline" : "loading");
 
     return (
       <Card className={`h-full transition-all duration-300 hover:shadow-lg`}>
@@ -193,11 +207,7 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
                 {finalDisplayName}
               </CardTitle>
             </div>
-            {statusMetrics && (
-              <ServerStatusBadge
-                status={health?.status || (health ? "offline" : "loading")}
-              />
-            )}
+            {statusMetrics && <ServerStatusBadge status={badgeStatus} />}
           </div>
 
           <div className="flex items-center gap-2">
@@ -323,7 +333,7 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
         </CardContent>
       </Card>
     );
-  },
+  }
 );
 
 RaspberryPiCard.displayName = "RaspberryPiCard";

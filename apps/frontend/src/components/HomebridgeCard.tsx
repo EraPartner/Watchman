@@ -61,6 +61,8 @@ const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
   const serverInfoResp = serverInfoQuery.data as any;
   const versionResp = versionQuery.data as any;
   const accessoriesResp = accessoriesQuery.data as any;
+  const accessoriesWarning =
+    accessoriesResp?.warning || accessoriesResp?.message;
 
   // Prefer react-query statuses: success = online, error = hasError
   const isOnline =
@@ -247,6 +249,12 @@ const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
 
         {(serverInfoQuery.isSuccess || versionQuery.isSuccess) && (
           <div className="space-y-4">
+            {accessoriesWarning && (
+              <div className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
+                {String(accessoriesWarning)}
+              </div>
+            )}
+
             <div className="flex items-center justify-between text-sm">
               <div className="text-muted-foreground text-xs">Version</div>
               <div className="font-medium">{versionFinal}</div>
@@ -263,7 +271,7 @@ const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
                 {new Date(
                   serverInfoResp?.timestamp ||
                     versionResp?.timestamp ||
-                    Date.now(),
+                    Date.now()
                 ).toLocaleTimeString()}
               </div>
             </div>
