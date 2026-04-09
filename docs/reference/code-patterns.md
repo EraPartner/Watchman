@@ -2,7 +2,7 @@
 title: Code Patterns
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [reference, code-patterns, backend, frontend]
 description: Standard code patterns and conventions used across the Watchman codebase
 aliases: [patterns, conventions, code style, best practices]
@@ -75,6 +75,22 @@ app.get(
 );
 ```
 
+### Route Registration Pattern
+
+Route handlers are registered through focused route modules and wired in `server.js`:
+
+```javascript
+import { registerAuthRoutes } from "./routes/authRoutes.js";
+import { registerMetaRoutes } from "./routes/metaRoutes.js";
+
+registerAuthRoutes(app, deps);
+registerMetaRoutes(app, deps);
+```
+
+Standard per-service status/stats/update endpoints remain factory-generated via `createServiceRoutes()` and `createUpdatesRoute()`.
+
+Shared route-level helpers are centralized in `[[apps/backend/routes/routeUtils.js]]` and consumed by route modules (including `[[apps/backend/routes/serviceFactory.js]]`, `[[apps/backend/routes/serviceAliasRoutes.js]]`, `[[apps/backend/routes/routerRoutes.js]]`, `[[apps/backend/routes/metaRoutes.js]]`, `[[apps/backend/routes/controlRoutes.js]]`, `[[apps/backend/routes/homebridgeRoutes.js]]`, `[[apps/backend/routes/instanceRoutes.js]]`, and `[[apps/backend/routes/authRoutes.js]]`) to reduce duplicated service-context and error-message logic without changing route contracts.
+
 ### Error Handling Pattern
 
 ```javascript
@@ -104,6 +120,21 @@ logger.warning("Warning message");
 ```
 
 ## Frontend Patterns
+
+### Frontend Logging Pattern
+
+Prefer the frontend logger utility for diagnostics in hooks/components instead of direct `console.*` calls:
+
+```typescript
+import { logger } from "@/lib/logger";
+
+logger.warn("Recoverable frontend issue", { context: "useAuth" });
+logger.error("Unhandled UI error", { error, componentStack });
+```
+
+Use `unknown` in catch blocks and narrow before logging details where needed.
+
+Related files: `[[apps/frontend/src/lib/logger.ts]]`, `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/hooks/useAuth.tsx]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`, `[[apps/frontend/src/lib/csrf.ts]]`.
 
 ### Service Card Pattern
 

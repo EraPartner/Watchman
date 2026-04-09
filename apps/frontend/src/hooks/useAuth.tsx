@@ -1,6 +1,7 @@
 // Minimal client-side auth hook that uses the backend cookie-based auth endpoints.
 import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "../services/ApiClient";
+import { logger } from "../lib/logger";
 
 type User = { username: string } | null;
 
@@ -20,8 +21,8 @@ export function useAuth() {
       } else {
         setUser(body.user || { username: body.user?.username || "unknown" });
       }
-    } catch (err: any) {
-      console.error("Failed to fetch /api/auth/me", err);
+    } catch (err: unknown) {
+      logger.warn("[AUTH] Failed to fetch auth state", err);
       setUser(null);
     } finally {
       setLoading(false);
@@ -48,8 +49,8 @@ export function useAuth() {
       // Use apiClient.getAuthMe to refresh state (this will use cookie or fallback token)
       await fetchMe();
       return { success: true, user: body?.user || null };
-    } catch (err: any) {
-      console.error("Login request failed", err);
+    } catch (err: unknown) {
+      logger.warn("[AUTH] Login request failed", err);
       const message = err instanceof Error ? err.message : "Network error";
       setError(message);
       setLoading(false);
@@ -67,8 +68,8 @@ export function useAuth() {
       await apiClient.logout();
       setUser(null);
       return { success: true };
-    } catch (err: any) {
-      console.error("Logout failed", err);
+    } catch (err: unknown) {
+      logger.warn("[AUTH] Logout request failed", err);
       const message = err instanceof Error ? err.message : "Network error";
       setError(message);
       return { success: false, error: message };

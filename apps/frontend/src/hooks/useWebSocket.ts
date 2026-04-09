@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { logger } from "../lib/logger";
+import { queryKeys } from "../lib/queryKeys";
 
 interface WebSocketMessage {
   type: "connection" | "service_update" | "alert" | "metrics";
   service?: string;
-  data?: any;
+  data?: unknown;
   level?: "info" | "warning" | "error";
   message?: string;
   timestamp: string;
@@ -41,14 +42,14 @@ let globalReconnectFn: (() => void) | null = null;
 
 export const useWebSocket = (url?: string) => {
   const [isConnected, setIsConnected] = useState(
-    globalConnectionState.isConnected,
+    globalConnectionState.isConnected
   );
   const [reconnectAttempts, setReconnectAttempts] = useState(
-    globalConnectionState.reconnectAttempts,
+    globalConnectionState.reconnectAttempts
   );
   const queryClient = useQueryClient();
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
+    null
   );
   const websocketUrl = url || "ws://localhost:3001/ws";
 
@@ -81,32 +82,71 @@ export const useWebSocket = (url?: string) => {
       invalidateTimerRef.current = null;
     }
 
-    // Invalidate each key once
+    let shouldInvalidateServicesHealth = false;
+    const queryInvalidations = new Map<string, readonly unknown[]>();
+
+    const addInvalidation = (queryKey: readonly unknown[]) => {
+      const dedupKey = queryKey.join("|");
+      queryInvalidations.set(dedupKey, queryKey);
+    };
+
+    // Collect affected query families first to avoid duplicate invalidations
     keys.forEach((key) => {
       try {
-        queryClient.invalidateQueries({ queryKey: [key] });
+        if (key === "metrics") {
+          addInvalidation(queryKeys.metrics());
+          return;
+        }
+
+        shouldInvalidateServicesHealth = true;
+
+        const keyParts = key.split("_");
+        const baseServiceKey = keyParts.length > 1 ? keyParts[0] : key;
+
+        addInvalidation(queryKeys.servicePrefix(baseServiceKey));
+
+        if (key !== baseServiceKey) {
+          addInvalidation(queryKeys.servicePrefix(key));
+        }
+
+        if (baseServiceKey === "adguard") {
+          addInvalidation(queryKeys.adguardFull());
+        }
+
+        if (baseServiceKey === "tor") {
+          addInvalidation(queryKeys.torRelay());
+        }
+
+        // Router ARP keys are namespaced under ["router", "arp", serviceKey]
+        if (baseServiceKey === "beryl" || baseServiceKey === "telenet") {
+          addInvalidation(queryKeys.routerArp(baseServiceKey));
+        }
       } catch (e) {
-        console.warn(
-          "⚠️ Failed to invalidate query",
+        logger.warn("Failed to invalidate query", {
           key,
-          e && (e as Error).message,
-        );
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     });
 
-    // Also invalidate 'metrics' if it's part of the keys set but ensure it's handled as its own query key
-    if (keys.includes("metrics")) {
+    queryInvalidations.forEach((queryKey) => {
+      queryClient.invalidateQueries({ queryKey });
+    });
+
+    if (shouldInvalidateServicesHealth) {
       try {
-        queryClient.invalidateQueries({ queryKey: ["metrics"] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
       } catch (e) {
-        console.warn(
-          "⚠️ Failed to invalidate metrics query",
-          e && (e as Error).message,
-        );
+        logger.warn("Failed to invalidate services health query", {
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     }
 
-    console.debug("📡 Flushed invalidations for keys:", keys);
+    logger.debug("[WEBSOCKET] Flushed invalidations", {
+      keys,
+      invalidationFamilies: queryInvalidations.size,
+    });
   }, [queryClient]);
 
   const scheduleInvalidationForKey = useCallback(
@@ -119,7 +159,7 @@ export const useWebSocket = (url?: string) => {
         flushInvalidations();
       }, INVALIDATION_DEBOUNCE_MS);
     },
-    [flushInvalidations],
+    [flushInvalidations]
   );
 
   const handleMessage = useCallback(
@@ -129,12 +169,13 @@ export const useWebSocket = (url?: string) => {
 
         switch (message.type) {
           case "connection":
-            console.log("📡 WebSocket connected:", message.message);
+            logger.debug("[WEBSOCKET] Server connection message", {
+              message: message.message,
+            });
             toast.success("WebSocket connected");
             break;
 
           case "service_update":
-            console.log("📡 Service update:", message.service, message.data);
             // Batch/debounce invalidations to reduce rapid churn
             if (message.service) {
               scheduleInvalidationForKey(message.service);
@@ -142,7 +183,10 @@ export const useWebSocket = (url?: string) => {
             break;
 
           case "alert":
-            console.log("📡 Alert:", message.message);
+            logger.debug("[WEBSOCKET] Alert message received", {
+              level: message.level,
+              message: message.message,
+            });
             if (message.level === "error") {
               toast.error(message.message || "Service alert");
             } else if (message.level === "warning") {
@@ -153,24 +197,25 @@ export const useWebSocket = (url?: string) => {
             break;
 
           case "metrics":
-            console.log("📡 Metrics update:", message.data);
             // Treat metrics as a specific query key
             scheduleInvalidationForKey("metrics");
             break;
 
           default:
-            console.log("📡 Unknown message type:", message);
+            logger.warn("[WEBSOCKET] Unknown message type", { message });
         }
       } catch (error) {
-        console.error("📡 Error parsing WebSocket message:", error);
+        logger.error("[WEBSOCKET] Error parsing message", error);
       }
     },
-    [scheduleInvalidationForKey],
+    [scheduleInvalidationForKey]
   );
 
   const scheduleReconnect = useCallback(() => {
     if (globalConnectionState.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.log("📡 Max reconnection attempts reached");
+      logger.warn("[WEBSOCKET] Max reconnection attempts reached", {
+        reconnectAttempts: globalConnectionState.reconnectAttempts,
+      });
       toast.error("WebSocket connection failed after multiple attempts");
       return;
     }
@@ -178,14 +223,13 @@ export const useWebSocket = (url?: string) => {
     const delay = Math.min(
       INITIAL_RECONNECT_DELAY *
         Math.pow(2, globalConnectionState.reconnectAttempts),
-      MAX_RECONNECT_DELAY,
+      MAX_RECONNECT_DELAY
     );
 
-    console.log(
-      `📡 Scheduling reconnect attempt ${
-        globalConnectionState.reconnectAttempts + 1
-      } in ${delay}ms`,
-    );
+    logger.debug("[WEBSOCKET] Scheduling reconnect", {
+      attempt: globalConnectionState.reconnectAttempts + 1,
+      delay,
+    });
 
     reconnectTimeoutRef.current = setTimeout(() => {
       if (globalReconnectFn) {
@@ -200,7 +244,7 @@ export const useWebSocket = (url?: string) => {
       globalConnectionState.isConnected ||
       globalConnectionState.isConnecting
     ) {
-      console.log("📡 WebSocket already connected or connecting");
+      logger.debug("[WEBSOCKET] Connection skipped: already connected");
       return;
     }
 
@@ -210,7 +254,10 @@ export const useWebSocket = (url?: string) => {
       now - globalConnectionState.lastConnectionAttempt <
       CONNECTION_THROTTLE_MS
     ) {
-      console.log("📡 Connection throttled - too soon since last attempt");
+      logger.debug("[WEBSOCKET] Connection throttled", {
+        elapsedMs: now - globalConnectionState.lastConnectionAttempt,
+        minIntervalMs: CONNECTION_THROTTLE_MS,
+      });
       return;
     }
 
@@ -284,7 +331,7 @@ export const useWebSocket = (url?: string) => {
   }, [connect]);
 
   const disconnect = useCallback(() => {
-    console.log("📡 Manually disconnecting WebSocket");
+    logger.debug("[WEBSOCKET] Manual disconnect requested");
 
     // Clear reconnect timeout
     if (reconnectTimeoutRef.current) {
@@ -305,16 +352,16 @@ export const useWebSocket = (url?: string) => {
     notifyStateChange();
   }, []);
 
-  const sendMessage = useCallback((message: any) => {
+  const sendMessage = useCallback((message: unknown) => {
     if (globalWebSocket?.readyState === WebSocket.OPEN) {
       try {
         globalWebSocket.send(JSON.stringify(message));
-        console.log("📡 Message sent:", message);
+        logger.debug("[WEBSOCKET] Message sent");
       } catch (error) {
-        console.error("📡 Error sending message:", error);
+        logger.error("[WEBSOCKET] Error sending message", error);
       }
     } else {
-      console.warn("📡 Cannot send message - WebSocket not connected");
+      logger.warn("[WEBSOCKET] Cannot send message: not connected");
     }
   }, []);
 
@@ -333,9 +380,7 @@ export const useWebSocket = (url?: string) => {
         invalidateTimerRef.current = null;
       }
       // Immediately flush any remaining invalidations
-      if (pendingInvalidationsRef.current.size > 0) {
-        flushInvalidations();
-      }
+      flushInvalidations();
     };
   }, [connect, flushInvalidations]);
 

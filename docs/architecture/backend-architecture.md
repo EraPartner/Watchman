@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [architecture, backend, express, nodejs, middleware, services]
 description: Backend architecture documentation for the Watchman Node.js/Express server - includes middleware, services, routes, and configuration
 aliases:
@@ -16,7 +16,9 @@ aliases:
 
 ## Entry Point
 
-[[apps/backend/server.js|server.js]] - Express application setup, route definitions, middleware chain, and server lifecycle.
+[[apps/backend/server.js|server.js]] - Express application setup, middleware chain, server lifecycle, and delegation of API route wiring to [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]].
+
+- Startup logging is intentionally conservative: it no longer advertises `/api/tor/proxy/health` in boot output.
 
 ## Middleware Stack (in order)
 
@@ -118,17 +120,69 @@ All services extend a common pattern:
 | WebSocketManager      | [[apps/backend/services/WebSocketManager.js]]      | Real-time status broadcasting  |
 | FrontendConfigService | [[apps/backend/services/FrontendConfigService.js]] | Frontend config endpoint       |
 
+### Shared Utilities
+
+| Utility                     | File                                          | Purpose                                                                                                                                                               |
+| --------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| auth token extraction       | [[apps/backend/utils/authToken.js]]           | Shared extraction/parsing for HTTP middleware, `/api/auth/me`, and WebSocket auth handshake                                                                           |
+| environment parsing helpers | [[apps/backend/utils/env.js]]                 | Standardized parsing for ints/bools/lists/optional values used by config, service factory, and WebSocket manager                                                      |
+| router ARP extraction       | [[apps/backend/services/RouterArpService.js]] | Encapsulated ARP neighbor lookup and LAN host filtering used by router ARP route, with short-lived in-memory TTL cache (3s) and bounded max-entry pruning             |
+| route context/error helpers | [[apps/backend/routes/routeUtils.js]]         | Shared route helpers `getErrorMessage(error)` and `getServiceContext(getServiceManager, serviceName)` used by route modules to keep error/context handling consistent |
+
 ## Route Architecture
 
-Routes are defined in [[apps/backend/server.js|server.js]] with dynamic generation via [[apps/backend/routes/serviceFactory.js|serviceFactory.js]]:
+API route composition is orchestrated by [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]], which is called from [[apps/backend/server.js|server.js]].
+
+`registerApiRoutes(...)` wires dedicated registration modules plus factory-generated service routes:
+
+- [[apps/backend/routes/authRoutes.js]]
+- [[apps/backend/routes/metaRoutes.js]]
+- [[apps/backend/routes/controlRoutes.js]]
+- [[apps/backend/routes/instanceRoutes.js]]
+- [[apps/backend/routes/serviceAliasRoutes.js]]
+- [[apps/backend/routes/homebridgeRoutes.js]]
+- [[apps/backend/routes/routerRoutes.js]]
+- [[apps/backend/routes/securityRoutes.js]]
+
+`server.js` now delegates this full API registration block to `registerApiRoutes(...)`, reducing inline route composition surface without changing API contracts.
 
 1. **Auth routes**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
 2. **Health**: `/health`
 3. **Cache**: `/api/cache/clear`
-4. **Multi-instance pattern**: `/api/:serviceId(\w+_\d+)/status`, `/api/:serviceId(\w+_\d+)/stats`
-5. **Service routes**: Generated via `createServiceRoutes()` for each service
+4. **Multi-instance pattern**: `/api/:serviceId(\w+_\d+)/status`, `/api/:serviceId(\w+_\d+)/stats` via [[apps/backend/routes/instanceRoutes.js]]
+5. **Service routes**: Generated via `createServiceRoutes()` in [[apps/backend/routes/serviceFactory.js]] for each service
+   - Canonical factory routes are used for standard stats/status (including Synology); no duplicate explicit Synology stats override route is maintained in `server.js`.
+   - Factory success logs were removed as a noise-reduction refactor; error logging remains.
 6. **Update routes**: Generated via `createUpdatesRoute()` for supported services
-7. **Special routes**: Homebridge version, accessories, ARP lookup, security
+7. **Homebridge special routes**: version/server-information/accessories via [[apps/backend/routes/homebridgeRoutes.js]]
+8. **Service alias/special routes**: Bitcoin/Tor alias health and relay endpoints plus IPFS updates route are registered via `registerServiceAliasRoutes()` in [[apps/backend/routes/serviceAliasRoutes.js]]
+   - Route modules use shared helpers from [[apps/backend/routes/routeUtils.js]] for service lookup context and error message normalization, reducing duplication while preserving existing response semantics.
+9. **Router ARP route**: `/api/router/arp` via [[apps/backend/routes/routerRoutes.js]], using [[apps/backend/services/RouterArpService.js]]
+10. **Security/admin routes**: security endpoints are registered via `registerSecurityRoutes()` in [[apps/backend/routes/securityRoutes.js]] (`/api/security/alerts`, `/api/security/stats` placeholder handlers), plus IP control endpoints from existing middleware/route flow
+
+Route modules updated to consume the shared route utilities include:
+
+- [[apps/backend/routes/serviceFactory.js]]
+- [[apps/backend/routes/serviceAliasRoutes.js]]
+- [[apps/backend/routes/routerRoutes.js]]
+- [[apps/backend/routes/metaRoutes.js]]
+- [[apps/backend/routes/controlRoutes.js]]
+- [[apps/backend/routes/homebridgeRoutes.js]]
+- [[apps/backend/routes/instanceRoutes.js]]
+- [[apps/backend/routes/authRoutes.js]]
+
+### WebSocket disconnect handling
+
+- [[apps/backend/services/WebSocketManager.js]] uses an idempotency guard for disconnect handling so close/error paths do not double-process a single client disconnect.
+- Broadcast cleanup now routes stale/disconnected sockets through `handleClientDisconnect()` so `connectionsByIp` remains consistent with `clients` set cleanup.
+- On WebSocket server close, internal tracking maps are explicitly reset (`clients.clear()` and `connectionsByIp.clear()`) to keep post-shutdown state consistent.
+
+### Homebridge accessories normalization
+
+- Accessories extraction and normalization are centralized in `extractHomebridgeAccessories()` within [[apps/backend/routes/homebridgeRoutes.js]].
+- Existing warning passthrough semantics are preserved:
+  - if upstream accessories call fails and no list is available, API still returns paginated empty data with `warning` and `message` fields,
+  - cached/last-known accessories fallback behavior remains unchanged.
 
 ## Configuration
 
@@ -138,6 +192,7 @@ Routes are defined in [[apps/backend/server.js|server.js]] with dynamic generati
 - `getConfig()` - Returns parsed configuration object
 - `cachedConfig` - Cached config for cross-module access
 - `parseServiceInstances()` - Multi-instance env var parsing
+- Uses shared helper functions from [[apps/backend/utils/env.js]] for consistent parsing semantics
 
 ## Circuit Breaker
 

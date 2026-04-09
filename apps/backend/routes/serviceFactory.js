@@ -12,6 +12,11 @@
 
 import express from "express";
 import { logger } from "../middleware/logger.js";
+import { getErrorMessage, getServiceContext } from "./routeUtils.js";
+
+function toDisplayName(serviceName) {
+  return serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+}
 
 /**
  * Create a standardized set of routes for a service.
@@ -45,8 +50,7 @@ export function createServiceRoutes(
   } = middleware;
 
   const enabledGate = requireServiceEnabled(serviceName);
-  const displayName =
-    serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+  const displayName = toDisplayName(serviceName);
 
   // ── GET /status ──────────────────────────────────────────────
   // Health check: rate-limited, cached, no authentication required
@@ -57,8 +61,10 @@ export function createServiceRoutes(
     healthCacheMiddleware,
     async (req, res) => {
       try {
-        const sm = getServiceManager();
-        const svc = sm?.getService(serviceName);
+        const { serviceManager: sm, service: svc } = getServiceContext(
+          getServiceManager,
+          serviceName
+        );
         if (!svc) {
           return res.status(503).json({
             error: `${displayName} service not configured`,
@@ -67,19 +73,16 @@ export function createServiceRoutes(
         }
 
         const health = await sm.getServiceHealth(serviceName);
-        logger.service(
-          serviceName,
-          `${displayName} status connection successful`
-        );
         res.json(health);
       } catch (error) {
+        const message = getErrorMessage(error);
         logger.error(`${displayName} status connection failed`, {
-          error: error.message,
+          error: message,
         });
         res.status(500).json({
           error: `Failed to fetch ${displayName} status`,
           status: "offline",
-          message: error.message,
+          message,
         });
       }
     }
@@ -94,8 +97,10 @@ export function createServiceRoutes(
     statsCacheMiddleware,
     async (req, res) => {
       try {
-        const sm = getServiceManager();
-        const svc = sm?.getService(serviceName);
+        const { serviceManager: sm, service: svc } = getServiceContext(
+          getServiceManager,
+          serviceName
+        );
         if (!svc) {
           return res.status(503).json({
             error: `${displayName} service not configured`,
@@ -103,18 +108,15 @@ export function createServiceRoutes(
         }
 
         const stats = await sm.getServiceStats(serviceName);
-        logger.service(
-          serviceName,
-          `${displayName} stats connection successful`
-        );
         res.json(stats);
       } catch (error) {
+        const message = getErrorMessage(error);
         logger.error(`${displayName} stats connection failed`, {
-          error: error.message,
+          error: message,
         });
         res.status(500).json({
           error: `Failed to fetch ${displayName} stats`,
-          message: error.message,
+          message,
         });
       }
     }
@@ -143,8 +145,7 @@ export function createUpdatesRoute(serviceName, getServiceManager, middleware) {
   const { requireServiceEnabled, statsCacheMiddleware } = middleware;
 
   const enabledGate = requireServiceEnabled(serviceName);
-  const displayName =
-    serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+  const displayName = toDisplayName(serviceName);
 
   router.get(
     "/updates",
@@ -152,8 +153,10 @@ export function createUpdatesRoute(serviceName, getServiceManager, middleware) {
     statsCacheMiddleware,
     async (req, res) => {
       try {
-        const sm = getServiceManager();
-        const svc = sm?.getService(serviceName);
+        const { service: svc } = getServiceContext(
+          getServiceManager,
+          serviceName
+        );
         if (!svc) {
           return res.status(503).json({
             error: `${displayName} service not configured`,
@@ -163,12 +166,13 @@ export function createUpdatesRoute(serviceName, getServiceManager, middleware) {
         const updateInfo = await svc.checkForUpdates();
         res.json(updateInfo);
       } catch (error) {
+        const message = getErrorMessage(error);
         logger.error(`${displayName} update check failed`, {
-          error: error.message,
+          error: message,
         });
         res.status(500).json({
           error: `Failed to check for ${displayName} updates`,
-          message: error.message,
+          message,
         });
       }
     }

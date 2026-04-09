@@ -2,7 +2,7 @@
 title: Reference
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [reference, index]
 description: Index of all reference documentation for the Watchman project - environment variables, scripts, code patterns, and error codes
 aliases: [reference index, refs, quick reference]
@@ -41,6 +41,9 @@ SORT file.name ASC
 ## Quick Links
 
 - **Backend Entry**: [[apps/backend/server.js]]
+- **API Route Orchestrator**: [[apps/backend/routes/registerApiRoutes.js]]
+- **Route Modules**: [[apps/backend/routes/authRoutes.js]], [[apps/backend/routes/controlRoutes.js]], [[apps/backend/routes/instanceRoutes.js]], [[apps/backend/routes/homebridgeRoutes.js]], [[apps/backend/routes/serviceAliasRoutes.js]], [[apps/backend/routes/metaRoutes.js]], [[apps/backend/routes/routerRoutes.js]], [[apps/backend/routes/securityRoutes.js]]
+- **Route Utilities**: [[apps/backend/routes/routeUtils.js]]
 - **Frontend Entry**: [[apps/frontend/src/main.tsx]]
 - **OpenAPI Spec**: [[apps/backend/openapi.yaml]]
 - **Service Factory**: [[apps/backend/services/serviceFactoryConfig.js]]

@@ -119,12 +119,152 @@ interface QBittorrentStats {
   freeSpaceOnDisk: number;
 }
 
-interface ServicesHealthResponse {
+type GenericServiceStats = Record<string, unknown>;
+
+interface ServiceInstanceEntry {
+  id: string;
+  type: string;
+}
+
+export interface ServiceInstancesResponse {
+  instances: Record<
+    string,
+    {
+      count: number;
+      instances: ServiceInstanceEntry[];
+    }
+  >;
   timestamp: string;
-  services: {
-    adguard: ServiceHealth;
-    tor: ServiceHealth;
+}
+
+interface HomebridgeBaseResponse {
+  error?: string;
+  warning?: string;
+  message?: string;
+  timestamp?: string;
+}
+
+interface HomebridgeVersionResponse extends HomebridgeBaseResponse {
+  installedVersion?: string;
+  installed_version?: string;
+  installed?: string;
+  version?: string;
+  homebridgeVersion?: string;
+  homebridge_version?: string;
+  raw?: {
+    installedVersion?: string;
+    installed_version?: string;
+    installed?: string;
+    version?: string;
+    homebridgeVersion?: string;
+    homebridge_version?: string;
   };
+}
+
+interface HomebridgeServerInformationResponse extends HomebridgeBaseResponse {
+  data?: {
+    installedVersion?: string;
+    installed_version?: string;
+    installed?: string;
+    version?: string;
+    homebridgeVersion?: string;
+    homebridge_version?: string;
+    serverVersion?: string;
+    uptime?: number | string;
+    time?: { uptime?: number | string };
+    raw?: {
+      installedVersion?: string;
+      installed_version?: string;
+      installed?: string;
+      version?: string;
+      homebridgeVersion?: string;
+      homebridge_version?: string;
+      serverVersion?: string;
+      time?: { uptime?: number | string };
+    };
+  };
+  raw?: Record<string, unknown>;
+}
+
+interface HomebridgeAccessory {
+  instance?: {
+    connectionFailedCount?: number;
+  };
+  [key: string]: unknown;
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+    nextCursor?: string | null;
+  };
+}
+
+export type UpdateService =
+  | "adguard"
+  | "bitcoin"
+  | "tor"
+  | "ipfs"
+  | "homebridge";
+
+export interface UpdateInfo {
+  currentVersion: string;
+  updateAvailable: boolean;
+  latestVersion: string;
+  releaseUrl?: string;
+  recommendedUrl?: string;
+}
+
+export type HomebridgeAccessoriesResponse =
+  | HomebridgeBaseResponse
+  | (HomebridgeBaseResponse & {
+      data?: HomebridgeAccessory[];
+      lastData?: {
+        data?: HomebridgeAccessory[];
+      };
+    })
+  | (HomebridgeBaseResponse & PaginatedResponse<HomebridgeAccessory>);
+
+export interface LoginResponse {
+  message?: string;
+  token?: string;
+  user?: {
+    username?: string;
+    id?: string | number;
+  };
+  [key: string]: unknown;
+}
+
+export interface LogoutResponse {
+  success: boolean;
+  [key: string]: unknown;
+}
+
+export interface AuthMeResponse {
+  authenticated: boolean;
+  user?: {
+    username?: string;
+  };
+  [key: string]: unknown;
+}
+
+type ApiRequestOptions = {
+  method?: string;
+  headers?: unknown;
+  body?: unknown;
+  credentials?: "include" | "omit" | "same-origin";
+  signal?: unknown;
+};
+
+export interface ServicesHealthResponse {
+  timestamp: string;
+  services: Record<string, ServiceHealth & Record<string, unknown>>;
 }
 
 export interface FrontendConfig {
@@ -180,7 +320,7 @@ class ApiClient {
   private baseUrl: string;
   private authToken: string | null = null;
   // Map to deduplicate concurrent identical requests
-  private inFlightRequests: Map<string, Promise<any>> = new Map();
+  private inFlightRequests: Map<string, Promise<unknown>> = new Map();
 
   constructor() {
     // Use smart URL detection
@@ -194,7 +334,7 @@ class ApiClient {
         const saved = window.localStorage.getItem("watchman_auth_token");
         if (saved) this.authToken = saved;
       }
-    } catch (e) {
+    } catch {
       // ignore storage errors
     }
   }
@@ -213,7 +353,7 @@ class ApiClient {
     return this.request("/api/ipfs/status");
   }
 
-  async getIpfsStats(): Promise<any> {
+  async getIpfsStats(): Promise<GenericServiceStats> {
     return this.request("/api/ipfs/stats");
   }
 
@@ -258,7 +398,7 @@ class ApiClient {
     return this.request("/api/synology/status");
   }
 
-  async getSynologyStats(): Promise<any> {
+  async getSynologyStats(): Promise<GenericServiceStats> {
     return this.request("/api/synology/stats");
   }
 
@@ -272,41 +412,44 @@ class ApiClient {
   }
 
   // Philips Bridge endpoints
-  async getPhilipsStatus(): Promise<any> {
+  async getPhilipsStatus(): Promise<GenericServiceStats> {
     return this.request("/api/philips/status");
   }
 
-  async getPhilipsStats(): Promise<any> {
+  async getPhilipsStats(): Promise<GenericServiceStats> {
     return this.request("/api/philips/stats");
   }
 
   // Homebridge endpoints
-  async getHomebridgeStatus(): Promise<any> {
-    // Deprecated helper - route to allowed status endpoint
-    return this.request("/api/status/server-information");
+  /** @deprecated Use getHomebridgeServerInformation() */
+  async getHomebridgeStatus(): Promise<HomebridgeServerInformationResponse> {
+    return this.getHomebridgeServerInformation();
   }
 
-  async getHomebridgeStats(): Promise<any> {
-    // Deprecated helper - route to allowed server-information endpoint
-    return this.request("/api/status/server-information");
+  /** @deprecated Use getHomebridgeServerInformation() */
+  async getHomebridgeStats(): Promise<HomebridgeServerInformationResponse> {
+    return this.getHomebridgeServerInformation();
   }
 
-  // New /api/status/* endpoints
-  async getStatusHomebridge(): Promise<any> {
-    // Use the allowed server-information endpoint as the canonical status endpoint
-    return this.request("/api/status/server-information");
+  /** @deprecated Use getHomebridgeServerInformation() */
+  async getStatusHomebridge(): Promise<HomebridgeServerInformationResponse> {
+    return this.getHomebridgeServerInformation();
   }
 
-  async getHomebridgeVersion(): Promise<any> {
+  async getHomebridgeVersion(): Promise<HomebridgeVersionResponse> {
     return this.request("/api/status/homebridge-version");
   }
 
-  async getHomebridgeServerInformation(): Promise<any> {
+  async getHomebridgeServerInformation(): Promise<HomebridgeServerInformationResponse> {
     return this.request("/api/status/server-information");
   }
 
-  async getHomebridgeAccessories(): Promise<any> {
+  async getHomebridgeAccessories(): Promise<HomebridgeAccessoriesResponse> {
     return this.request("/api/accessories");
+  }
+
+  async getServiceUpdates(serviceKey: UpdateService): Promise<UpdateInfo> {
+    return this.request(`/api/${serviceKey}/updates`);
   }
 
   // Alby Hub endpoints
@@ -314,7 +457,7 @@ class ApiClient {
     return this.request("/api/albyhub/status");
   }
 
-  async getAlbyStats(): Promise<any> {
+  async getAlbyStats(): Promise<GenericServiceStats> {
     return this.request("/api/albyhub/stats");
   }
 
@@ -326,7 +469,7 @@ class ApiClient {
   async setAdGuardProtection(
     enabled: boolean,
     duration?: number
-  ): Promise<any> {
+  ): Promise<{ success: boolean; [key: string]: unknown }> {
     return this.request("/api/adguard/protection", {
       method: "POST",
       body: JSON.stringify({ enabled, duration }),
@@ -334,7 +477,9 @@ class ApiClient {
     });
   }
 
-  async clearBackendCache(type = "all"): Promise<any> {
+  async clearBackendCache(
+    type = "all"
+  ): Promise<{ success: boolean; message?: string; [key: string]: unknown }> {
     return this.request("/api/cache/clear", {
       method: "POST",
       body: JSON.stringify({ type }),
@@ -357,7 +502,7 @@ class ApiClient {
   }
 
   // Service instances
-  async getServiceInstances(): Promise<any> {
+  async getServiceInstances(): Promise<ServiceInstancesResponse> {
     return this.request("/api/services/instances");
   }
 
@@ -366,7 +511,7 @@ class ApiClient {
     return this.request(`/api/${serviceKey}/status`);
   }
 
-  async getServiceStats(serviceKey: string): Promise<any> {
+  async getServiceStats(serviceKey: string): Promise<GenericServiceStats> {
     return this.request(`/api/${serviceKey}/stats`);
   }
 
@@ -392,7 +537,7 @@ class ApiClient {
     username: string,
     password: string,
     remember = false
-  ): Promise<any> {
+  ): Promise<LoginResponse> {
     const res = await this.request("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password, remember }),
@@ -403,44 +548,45 @@ class ApiClient {
     // auth token so future requests include an Authorization header when cookies
     // are not available (dev/proxy scenarios).
     try {
-      const r = res as any;
       const token =
-        r && typeof r === "object" && "token" in r ? (r as any).token : null;
-      if (token) {
-        this.authToken = String(token);
+        res && typeof res === "object" && "token" in res
+          ? res.token
+          : undefined;
+      if (typeof token === "string" && token.length > 0) {
+        this.authToken = token;
         try {
           if (typeof window !== "undefined" && window.localStorage) {
-            window.localStorage.setItem("watchman_auth_token", String(token));
+            window.localStorage.setItem("watchman_auth_token", token);
           }
-        } catch (e) {
+        } catch {
           // ignore storage errors
         }
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
 
     return res;
   }
 
-  async logout(): Promise<any> {
+  async logout(): Promise<LogoutResponse> {
     // Clear in-memory token as well as calling logout endpoint to clear cookie
     this.authToken = null;
     try {
       if (typeof window !== "undefined" && window.localStorage) {
         window.localStorage.removeItem("watchman_auth_token");
       }
-    } catch (e) {
+    } catch {
       // ignore storage errors
     }
     return this.request("/api/auth/logout", { method: "POST" });
   }
 
-  async getAuthMe(): Promise<any> {
+  async getAuthMe(): Promise<AuthMeResponse> {
     return this.request("/api/auth/me");
   }
 
-  private makeRequestKey(url: string, options?: RequestInit) {
+  private makeRequestKey(url: string, options?: ApiRequestOptions) {
     const method =
       options && options.method ? String(options.method).toUpperCase() : "GET";
     let bodyKey = "";
@@ -451,15 +597,59 @@ class ApiClient {
             ? options.body
             : JSON.stringify(options.body);
       }
-    } catch (e) {
-      bodyKey = String(options && (options as any).body);
+    } catch {
+      bodyKey = String(options?.body);
     }
     return `${method} ${url} ${bodyKey}`;
   }
 
+  private normalizeHeaders(headers?: unknown): Record<string, string> {
+    const normalized: Record<string, string> = {};
+
+    if (!headers) {
+      return normalized;
+    }
+
+    if (headers instanceof Headers) {
+      headers.forEach((value, key) => {
+        normalized[key] = value;
+      });
+      return normalized;
+    }
+
+    if (Array.isArray(headers)) {
+      for (const entry of headers) {
+        if (!Array.isArray(entry) || entry.length < 2) continue;
+        const [key, value] = entry;
+        normalized[String(key)] = String(value);
+      }
+      return normalized;
+    }
+
+    if (typeof headers === "object" && headers !== null) {
+      for (const [key, value] of Object.entries(
+        headers as Record<string, unknown>
+      )) {
+        if (value !== undefined) {
+          normalized[key] = String(value);
+        }
+      }
+    }
+
+    return normalized;
+  }
+
+  private hasHeader(
+    headers: Record<string, string>,
+    headerName: string
+  ): boolean {
+    const target = headerName.toLowerCase();
+    return Object.keys(headers).some((key) => key.toLowerCase() === target);
+  }
+
   private async request<T>(
     endpoint: string,
-    options?: RequestInit,
+    options?: ApiRequestOptions,
     customTimeout?: number
   ): Promise<T> {
     // Retry configuration
@@ -467,18 +657,28 @@ class ApiClient {
     const BASE_DELAY_MS = 500;
     const RETRYABLE_STATUSES = [408, 429, 500, 502, 503, 504]; // Timeout, TooManyRequests, Server errors
 
-    let lastError: Error | null = null;
+    let lastError: unknown = null;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         return await this.fetchWithDedup<T>(endpoint, options, customTimeout);
-      } catch (error: any) {
+      } catch (error) {
         lastError = error;
+
+        const status =
+          typeof error === "object" && error !== null && "status" in error
+            ? Number((error as { status?: unknown }).status)
+            : undefined;
+
+        const name =
+          typeof error === "object" && error !== null && "name" in error
+            ? String((error as { name?: unknown }).name)
+            : undefined;
 
         // Check if error is retryable
         const isRetryable =
-          (error.status && RETRYABLE_STATUSES.includes(error.status)) ||
-          error.name === "AbortError" ||
+          (status !== undefined && RETRYABLE_STATUSES.includes(status)) ||
+          name === "AbortError" ||
           (error instanceof TypeError && error.message?.includes("fetch"));
 
         // Don't retry on non-retryable errors or if we've exhausted retries
@@ -498,7 +698,7 @@ class ApiClient {
 
   private async fetchWithDedup<T>(
     endpoint: string,
-    options?: RequestInit,
+    options?: ApiRequestOptions,
     customTimeout?: number
   ): Promise<T> {
     // If baseUrl is empty, use relative endpoint so requests go to same-origin
@@ -515,27 +715,31 @@ class ApiClient {
     const timeoutMs = customTimeout || APP_CONFIG.API_TIMEOUT || 10000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    // Merge headers safely
-    const headers = Object.assign(
-      { "Content-Type": "application/json" },
-      (options && options.headers) || {}
-    );
+    const method = (options?.method || "GET").toUpperCase();
+    const headers = this.normalizeHeaders(options?.headers);
+
+    if (
+      method !== "GET" &&
+      method !== "HEAD" &&
+      !this.hasHeader(headers, "content-type")
+    ) {
+      headers["Content-Type"] = "application/json";
+    }
 
     // Add CSRF token for state-changing methods (POST, PUT, PATCH, DELETE)
-    const method = (options?.method || "GET").toUpperCase();
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-      csrfManager.addTokenToHeaders(headers as Record<string, string>);
+      csrfManager.addTokenToHeaders(headers);
     }
 
     // If we have an in-memory auth token (returned by login), attach it as a Bearer
     // Authorization header. This is a fallback for dev environments where cookies
     // may not be persisted/sent. If the caller provided an Authorization header,
     // do not overwrite it.
-    if (this.authToken && !(headers as any).Authorization) {
-      (headers as any).Authorization = `Bearer ${this.authToken}`;
+    if (this.authToken && !this.hasHeader(headers, "authorization")) {
+      headers.Authorization = `Bearer ${this.authToken}`;
     }
 
-    const fetchOptions: RequestInit = Object.assign({}, options, {
+    const fetchOptions = Object.assign({}, options, {
       headers,
       credentials: "include",
       signal: controller.signal,
@@ -551,24 +755,24 @@ class ApiClient {
           .catch(() => ({ error: "Unknown error" }));
 
         if (!response.ok) {
-          const error: any = new Error(
+          const error = new Error(
             extractApiError(
               responseBody,
               `API request failed: ${response.status} ${response.statusText}`
             )
           );
-          error.status = response.status;
+          (error as Error & { status?: number }).status = response.status;
           throw error;
         }
 
         return unwrapApiResponse<T>(responseBody);
-      } catch (error: any) {
+      } catch (error) {
         clearTimeout(timeout);
-        if (error && error.name === "AbortError") {
-          const timeoutError: any = new Error(
+        if (error instanceof Error && error.name === "AbortError") {
+          const timeoutError = new Error(
             `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`
           );
-          timeoutError.name = "AbortError";
+          (timeoutError as Error & { name: string }).name = "AbortError";
           throw timeoutError;
         }
         if (

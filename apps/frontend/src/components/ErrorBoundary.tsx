@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { logger } from "../lib/logger";
 
 interface Props {
   children: ReactNode;
@@ -26,7 +27,11 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // In production, you might want to log this to an error reporting service
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    logger.error("[ERROR_BOUNDARY] Caught component error", {
+      error: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
     this.setState({ error, errorInfo });
   }
 

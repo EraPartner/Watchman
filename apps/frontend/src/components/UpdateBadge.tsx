@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Badge } from "./ui/badge";
-import { extractApiError, unwrapApiResponse } from "../lib/apiResponse";
+import { apiClient } from "../services/ApiClient";
+import { logger } from "../lib/logger";
+import { queryKeys } from "../lib/queryKeys";
 
 interface UpdateInfo {
   currentVersion: string;
@@ -16,77 +19,49 @@ interface UpdateBadgeProps {
   className?: string;
 }
 
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 export const UpdateBadge = ({ service, className = "" }: UpdateBadgeProps) => {
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const checkUpdates = async () => {
+  const {
+    data: updateInfo,
+    isLoading,
+    error,
+  } = useQuery<UpdateInfo | null>({
+    queryKey: queryKeys.serviceUpdates(service),
+    queryFn: async () => {
       try {
-        setLoading(true);
-        setError(null);
+        return await apiClient.getServiceUpdates(service);
+      } catch (err) {
+        const status =
+          typeof err === "object" && err !== null && "status" in err
+            ? Number((err as { status?: unknown }).status)
+            : undefined;
 
-        console.log(`[UpdateBadge] Checking updates for ${service}...`);
-
-        // Use relative URL - let the browser/proxy handle it
-        const response = await fetch(`/api/${service}/updates`, {
-          credentials: "include",
-          headers: {
-            Accept: "application/json",
-          },
-        });
-
-        const body = await response
-          .json()
-          .catch(() => ({ error: `Failed to check ${service} updates` }));
-
-        console.log(
-          `[UpdateBadge] ${service} response status:`,
-          response.status
-        );
-
-        if (!response.ok) {
-          if (response.status === 503) {
-            // Service not configured - silently hide the badge
-            console.log(`[UpdateBadge] ${service} not configured (503)`);
-            setUpdateInfo(null);
-            return;
-          }
-          console.error(
-            `[UpdateBadge] ${service} error:`,
-            response.status,
-            body
-          );
-          throw new Error(
-            extractApiError(body, `Failed to check updates: ${response.status}`)
-          );
+        if (status === 503) {
+          logger.debug("[UpdateBadge] Service not configured", { service });
+          return null;
         }
 
-        const data = unwrapApiResponse<UpdateInfo>(body);
-        console.log(`[UpdateBadge] ${service} update info:`, data);
-        setUpdateInfo(data);
-      } catch (err) {
-        const errorMsg =
-          err instanceof Error ? err.message : "Failed to check updates";
-        setError(errorMsg);
-        console.error(`[UpdateBadge] Error checking ${service} updates:`, err);
-      } finally {
-        setLoading(false);
+        throw err;
       }
-    };
+    },
+    retry: false,
+    staleTime: UPDATE_CHECK_INTERVAL_MS,
+    refetchInterval: UPDATE_CHECK_INTERVAL_MS,
+    refetchOnWindowFocus: false,
+  });
 
-    // Start checking immediately
-    checkUpdates();
+  useEffect(() => {
+    if (!error) return;
 
-    // Check for updates every 6 hours
-    const interval = setInterval(checkUpdates, 6 * 60 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, [service]);
+    logger.warn("[UpdateBadge] Failed to check updates", {
+      service,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }, [error, service]);
 
   // Show loading state briefly
-  if (loading) {
+  if (isLoading) {
     return (
       <Badge variant="outline" className={`text-xs ${className}`}>
         <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
@@ -102,9 +77,6 @@ export const UpdateBadge = ({ service, className = "" }: UpdateBadgeProps) => {
 
   // Hide if no update available
   if (!updateInfo.updateAvailable) {
-    console.log(
-      `[UpdateBadge] ${service} is up to date: ${updateInfo.currentVersion}`
-    );
     return null;
   }
 

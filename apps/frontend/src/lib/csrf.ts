@@ -3,6 +3,8 @@
  * Implements double-submit cookie pattern as required by backend
  */
 
+import { logger } from "./logger";
+
 const CSRF_COOKIE_NAME = "csrfToken";
 const CSRF_HEADER_NAME = "x-csrf-token";
 
@@ -36,7 +38,7 @@ export class CSRFManager {
 
       return cookies[CSRF_COOKIE_NAME] || null;
     } catch (error) {
-      console.warn("Failed to read CSRF token from cookies:", error);
+      logger.warn("[CSRF] Failed to read token from cookies", error);
       return null;
     }
   }
