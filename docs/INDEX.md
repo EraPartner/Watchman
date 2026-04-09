@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [knowledge-base, index, project, overview, ai-agent-friendly]
 description: Main entry point to the Watchman project documentation - self-hosted service monitoring dashboard designed for developers, AI agents, and computer scientists
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -145,7 +145,7 @@ Watchman/
 ## Key Concepts
 
 > [!info] Service Pattern
-> Each service follows a standard pattern: `checkHealth()` for status checks, `getStats()` for detailed metrics, and optional `performAction()` for control operations. All services extend this base and are registered in `serviceFactoryConfig.js`.
+> Each service follows a standard pattern: `checkHealth()` for status checks and `getStats()` for detailed metrics. Services are registered in `serviceFactoryConfig.js`.
 
 > [!info] Multi-Instance Services
 > Services like qBittorrent support multiple instances via numbered env vars: `QBITTORRENT_1_URL`, `QBITTORRENT_2_URL`, etc. Legacy single-instance config is still supported. See [[docs/features/multi-instance|Multi-Instance Feature]].
@@ -157,7 +157,7 @@ Watchman/
 >
 > - **Health**: 100 req/15min per IP
 > - **Auth**: 5 req/15min per IP
-> - **Control**: 20 req/15min per IP
+> - **Sensitive write endpoints**: 20 req/15min per IP
 > - **General API**: 100 req/15min per IP
 
 ## Code Search Quick Reference

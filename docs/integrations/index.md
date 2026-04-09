@@ -2,7 +2,7 @@
 title: Service Integrations
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [integration, index, services, backend]
 description: Index of all external service integration documentation for the Watchman project
 aliases: [integrations index, services, service docs]
@@ -11,7 +11,7 @@ aliases: [integrations index, services, service docs]
 # Service Integrations
 
 > [!abstract] Overview
-> Watchman integrates with 14+ self-hosted service types. Each integration provides health checks, statistics, and optional control actions.
+> Watchman integrates with 14+ self-hosted service types. Each integration provides health checks and statistics.
 
 ## Integration Index
 

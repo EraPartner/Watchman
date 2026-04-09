@@ -210,12 +210,12 @@ When adding a new API endpoint:
 
 ## Rate Limits
 
-| Tier    | Limit         | Endpoints                                 |
-| ------- | ------------- | ----------------------------------------- |
-| Health  | 100 req/15min | `/health`, service status endpoints       |
-| Auth    | 5 req/15min   | Login, logout, auth status                |
-| Control | 20 req/15min  | Service control (protection toggle, etc.) |
-| General | 100 req/15min | Most API endpoints                        |
+| Tier    | Limit         | Endpoints                                                           |
+| ------- | ------------- | ------------------------------------------------------------------- |
+| Health  | 100 req/15min | `/health`, service status endpoints                                 |
+| Auth    | 5 req/15min   | Login, logout, auth status                                          |
+| Control | 20 req/15min  | Sensitive write routes (protection toggle, cache clear, router ARP) |
+| General | 100 req/15min | Most API endpoints                                                  |
 
 See [[docs/security/rate-limiting|Rate Limiting]] for details.
 

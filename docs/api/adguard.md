@@ -2,16 +2,16 @@
 title: "API: AdGuard Service"
 type: api
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [api, adguard, service, dns, backend]
-description: AdGuard Home monitoring and control API endpoints
+description: AdGuard Home monitoring API endpoints plus a limited filtering toggle endpoint
 aliases: [adguard api, adguard endpoints]
 ---
 
 # AdGuard API Endpoints
 
 > [!abstract] Overview
-> Monitor and control AdGuard Home DNS filtering. Includes protection toggle and real-time update streaming via WebSocket.
+> Monitoring-focused AdGuard Home API endpoints. Includes a limited DNS protection toggle and real-time update streaming via WebSocket.
 
 ## Endpoints Summary
 

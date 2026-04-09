@@ -2,7 +2,7 @@
 title: Glossary & Terminology
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [glossary, terminology, reference, search, aliases, disambiguation]
 description: Key terms, aliases, and disambiguation for the Watchman project - helps with search and navigation
 aliases:
@@ -41,14 +41,14 @@ aliases:
 
 ## Core Concepts
 
-| Term                 | Also Known As                                     | Description                                                                                           | See Also                                    |
-| -------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------- |
-| **Service**          | integration, monitor, addon, plugin               | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay). | [[docs/features/service-monitoring          | Service Monitoring]] |
-| **Service Instance** | node, instance, server, deployment                | A specific deployment of a service type. Multiple instances of the same type are supported.           | [[docs/features/multi-instance              | Multi-Instance]]     |
-| **Health Check**     | status check, ping, heartbeat                     | A lightweight request to verify a service is responsive. Returns online/offline status.               | [[docs/api/index                            | API]]                |
-| **Stats**            | metrics, statistics, data, information            | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                    | [[docs/api/index                            | API]]                |
-| **ServiceManager**   | orchestrator, service manager, service controller | Central backend class that manages all service instances and routes requests.                         | [[apps/backend/services/ServiceManager.js]] |
-| **Circuit Breaker**  | failure protection, fault tolerance, breaker      | Pattern that prevents repeated calls to failing services.                                             | [[docs/performance/index                    | Performance]]        |
+| Term                 | Also Known As                                | Description                                                                                           | See Also                                    |
+| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------- |
+| **Service**          | integration, monitor, addon, plugin          | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay). | [[docs/features/service-monitoring          | Service Monitoring]] |
+| **Service Instance** | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.           | [[docs/features/multi-instance              | Multi-Instance]]     |
+| **Health Check**     | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.               | [[docs/api/index                            | API]]                |
+| **Stats**            | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                    | [[docs/api/index                            | API]]                |
+| **ServiceManager**   | orchestrator, service manager                | Central backend class that manages all service instances and routes requests.                         | [[apps/backend/services/ServiceManager.js]] |
+| **Circuit Breaker**  | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                             | [[docs/performance/index                    | Performance]]        |
 
 ## Services
 

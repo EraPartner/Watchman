@@ -2,7 +2,7 @@
 title: Features
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [feature, index]
 description: Index of all feature documentation for the Watchman project
 aliases: [features index, feature docs]
@@ -11,7 +11,7 @@ aliases: [features index, feature docs]
 # Features
 
 > [!abstract] Overview
-> Watchman's core features provide comprehensive monitoring and control of self-hosted services.
+> Watchman's core features provide comprehensive monitoring of self-hosted services.
 
 ## Feature Index
 
@@ -46,7 +46,6 @@ SORT file.name ASC
 package "Service Monitoring" as SM {
     [Health Checks]
     [Statistics]
-    [Control Actions]
 }
 
 package "Multi-Instance" as MI {

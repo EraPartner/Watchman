@@ -277,7 +277,7 @@ it("handles rejected promises", async () => {
 1. **Critical path** -- Authentication flow, service health checks
 2. **Error handling** -- Circuit breaker behavior, retry logic
 3. **Edge cases** -- Missing config, network failures, invalid input
-4. **User interactions** -- Login, service control, navigation
+4. **User interactions** -- Login, monitoring workflows, navigation
 5. **Real-time updates** -- WebSocket connection, reconnection, message handling
 
 ## PlantUML Diagrams

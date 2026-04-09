@@ -2,7 +2,7 @@
 title: Service Monitoring
 type: feature
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [feature, monitoring, backend, services]
 description: Core service monitoring feature - health checks and statistics for self-hosted services
 aliases: [monitoring, health checks, service status]
@@ -33,10 +33,6 @@ class ServiceName {
 
   async getStats() {
     // Detailed metrics - returns { data, timestamp }
-  }
-
-  async performAction(action, params) {
-    // Optional control operations
   }
 }
 ```
@@ -84,7 +80,7 @@ See [[docs/integrations/index|Service Integrations]] for per-service documentati
 
 - **Health checks**: 30s TTL
 - **Statistics**: 60s TTL
-- Cache invalidation on control actions
+- Cache invalidation on write endpoints that mutate monitored state (for example, cache clear and AdGuard protection toggle)
 
 ## Circuit Breaker
 

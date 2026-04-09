@@ -2,7 +2,7 @@
 title: Rate Limiting
 type: security
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [security, rate-limiting, middleware, throttling, backend]
 description: Tiered rate limiting documentation for the Watchman API - protects against abuse, brute force, and DoS
 aliases: [rate limiting, throttling, rate limit, request limiting]
@@ -17,12 +17,12 @@ aliases: [rate limiting, throttling, rate limit, request limiting]
 
 [[apps/backend/middleware/rateLimiting.js|rateLimiting.js]] uses `express-rate-limit` with per-tier configurations:
 
-| Limiter          | Window | Max Requests | Use For         | Bypass                        |
-| ---------------- | ------ | ------------ | --------------- | ----------------------------- |
-| `healthLimiter`  | 1 min  | 200          | Health checks   | localhost                     |
-| `generalLimiter` | 1 min  | 100          | General API     | localhost + health User-Agent |
-| `controlLimiter` | 5 min  | 10           | Service control | none                          |
-| `authLimiter`    | 15 min | 10           | Auth endpoints  | none                          |
+| Limiter          | Window | Max Requests | Use For                   | Bypass                        |
+| ---------------- | ------ | ------------ | ------------------------- | ----------------------------- |
+| `healthLimiter`  | 1 min  | 200          | Health checks             | localhost                     |
+| `generalLimiter` | 1 min  | 100          | General API               | localhost + health User-Agent |
+| `controlLimiter` | 5 min  | 10           | Sensitive write endpoints | none                          |
+| `authLimiter`    | 15 min | 10           | Auth endpoints            | none                          |
 
 ## Middleware Chain
 
@@ -43,12 +43,12 @@ Request → healthLimiter / generalLimiter → Route-specific limiter → Auth �
 
 ## Environment Variables
 
-| Variable                 | Default | Description                          |
-| ------------------------ | ------- | ------------------------------------ |
-| `RATE_LIMIT_HEALTH_MAX`  | 200     | Max health check requests per window |
-| `RATE_LIMIT_GENERAL_MAX` | 100     | Max general API requests per window  |
-| `RATE_LIMIT_CONTROL_MAX` | 10      | Max control requests per window      |
-| `RATE_LIMIT_AUTH_MAX`    | 10      | Max auth requests per window         |
+| Variable                 | Default | Description                             |
+| ------------------------ | ------- | --------------------------------------- |
+| `RATE_LIMIT_HEALTH_MAX`  | 200     | Max health check requests per window    |
+| `RATE_LIMIT_GENERAL_MAX` | 100     | Max general API requests per window     |
+| `RATE_LIMIT_CONTROL_MAX` | 10      | Max sensitive write requests per window |
+| `RATE_LIMIT_AUTH_MAX`    | 10      | Max auth requests per window            |
 
 ## Response Format
 
@@ -75,7 +75,7 @@ When rate limit is exceeded:
 
 - **Health**: Localhost bypass for monitoring systems
 - **General**: Localhost + valid User-Agent bypass for health checks
-- **Control**: No bypass (always applied)
+- **Sensitive write endpoints**: No bypass (always applied)
 - **Auth**: No bypass (security critical)
 
 ### Logging
@@ -83,7 +83,7 @@ When rate limit is exceeded:
 Each limiter logs when limits are reached:
 
 - **General**: Warning log
-- **Control**: Warning log with "potential abuse" flag
+- **Sensitive write endpoints**: Warning log with "potential abuse" flag
 - **Auth**: Warning log with HIGH severity and "possible brute force" flag
 
 ## Related
