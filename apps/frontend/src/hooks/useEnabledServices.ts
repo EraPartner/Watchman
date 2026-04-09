@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
+import { queryKeys } from "../lib/queryKeys";
 
 /**
  * Hook to check which services are enabled via ENABLED_SERVICES environment variable
@@ -7,7 +8,7 @@ import { apiClient } from "../services/ApiClient";
  */
 export function useEnabledServices() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["frontend", "config"],
+    queryKey: queryKeys.frontendConfig(),
     queryFn: () => apiClient.getFrontendConfig(),
     staleTime: Infinity, // Config rarely changes
     retry: 2,

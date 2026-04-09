@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
+import { queryKeys } from "../lib/queryKeys";
 
 // Service health hook with React Query
 export const useServiceHealth = (serviceName: string, options = {}) => {
   return useQuery({
-    queryKey: ["service-health", serviceName],
+    queryKey: queryKeys.serviceStatus(serviceName),
     queryFn: async () => apiClient.getServiceHealth(serviceName),
     refetchInterval: 10000, // 10 seconds
     staleTime: 5000, // 5 seconds
@@ -17,7 +18,7 @@ export const useServiceHealth = (serviceName: string, options = {}) => {
 // Service stats hook with React Query
 export const useServiceStats = (serviceName: string, enabled = true) => {
   return useQuery({
-    queryKey: ["service-stats", serviceName],
+    queryKey: queryKeys.serviceStats(serviceName),
     queryFn: async () => apiClient.getServiceStats(serviceName),
     refetchInterval: 30000, // 30 seconds for stats
     staleTime: 15000, // 15 seconds
@@ -29,7 +30,7 @@ export const useServiceStats = (serviceName: string, enabled = true) => {
 // All services health hook
 export const useAllServicesHealth = () => {
   return useQuery({
-    queryKey: ["all-services-health"],
+    queryKey: queryKeys.servicesHealth(),
     queryFn: async () => apiClient.getServicesHealth(),
     refetchInterval: 15000, // 15 seconds
     staleTime: 7500, // 7.5 seconds
@@ -54,10 +55,13 @@ export const useAdGuardProtectionToggle = () => {
     onSuccess: () => {
       // Invalidate related queries
       queryClient.invalidateQueries({
-        queryKey: ["service-health", "adguard"],
+        queryKey: queryKeys.serviceStatus("adguard"),
       });
-      queryClient.invalidateQueries({ queryKey: ["service-stats", "adguard"] });
-      queryClient.invalidateQueries({ queryKey: ["all-services-health"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.serviceStats("adguard"),
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adguardFull() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
     },
   });
 };
@@ -66,7 +70,7 @@ export const useAdGuardProtectionToggle = () => {
 export const useClearCache = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<any, Error, void>({
+  return useMutation<unknown, Error, void>({
     mutationFn: async () => {
       return apiClient.clearBackendCache("all");
     },

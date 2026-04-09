@@ -7,11 +7,155 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
 import { useEnabledServices } from "../hooks/useEnabledServices";
 import { APP_CONFIG } from "../lib/constants";
+import { queryKeys } from "../lib/queryKeys";
 
 interface HomebridgeCardProps {
   instanceId?: string;
   instanceNumber?: number;
 }
+
+type HomebridgeQueryError = { message?: string };
+
+type HomebridgeBaseResponse = {
+  error?: string;
+  warning?: string;
+  message?: string;
+  timestamp?: string;
+};
+
+type HomebridgeVersionResponse = HomebridgeBaseResponse & {
+  installedVersion?: string;
+  installed_version?: string;
+  installed?: string;
+  version?: string;
+  homebridgeVersion?: string;
+  homebridge_version?: string;
+  raw?: {
+    installedVersion?: string;
+    installed_version?: string;
+    installed?: string;
+    version?: string;
+    homebridgeVersion?: string;
+    homebridge_version?: string;
+  };
+};
+
+type HomebridgeServerResponse = HomebridgeBaseResponse & {
+  data?: {
+    installedVersion?: string;
+    installed_version?: string;
+    installed?: string;
+    version?: string;
+    homebridgeVersion?: string;
+    homebridge_version?: string;
+    serverVersion?: string;
+    uptime?: number | string;
+    time?: { uptime?: number | string };
+    raw?: {
+      installedVersion?: string;
+      installed_version?: string;
+      installed?: string;
+      version?: string;
+      homebridgeVersion?: string;
+      homebridge_version?: string;
+      serverVersion?: string;
+      time?: { uptime?: number | string };
+    };
+  };
+};
+
+type HomebridgeAccessoryInstance = {
+  connectionFailedCount?: number;
+};
+
+type HomebridgeAccessory = {
+  instance?: HomebridgeAccessoryInstance;
+};
+
+type HomebridgeAccessoriesResponse = HomebridgeBaseResponse & {
+  data?: HomebridgeAccessory[];
+  lastData?: {
+    data?: HomebridgeAccessory[];
+  };
+};
+
+const getErrorMessage = (error: unknown): string | undefined => {
+  if (!error || typeof error !== "object") return undefined;
+  return (error as HomebridgeQueryError).message;
+};
+
+const getInstalledVersion = (
+  versionResp: HomebridgeVersionResponse | undefined,
+  serverResp: HomebridgeServerResponse | undefined
+): string => {
+  if (versionResp) {
+    const installed =
+      versionResp.installedVersion ||
+      versionResp.installed_version ||
+      versionResp.installed ||
+      versionResp.raw?.installedVersion ||
+      versionResp.raw?.installed_version ||
+      versionResp.raw?.installed;
+    if (installed) return String(installed);
+
+    const generic =
+      versionResp.version ||
+      versionResp.homebridgeVersion ||
+      versionResp.homebridge_version ||
+      versionResp.raw?.version ||
+      versionResp.raw?.homebridgeVersion ||
+      versionResp.raw?.homebridge_version;
+    if (generic) return String(generic);
+  }
+
+  const fallbackServerData = serverResp?.data;
+  if (fallbackServerData) {
+    const installed =
+      fallbackServerData.installedVersion ||
+      fallbackServerData.installed_version ||
+      fallbackServerData.installed ||
+      fallbackServerData.raw?.installedVersion ||
+      fallbackServerData.raw?.installed_version ||
+      fallbackServerData.raw?.installed;
+    if (installed) return String(installed);
+
+    const generic =
+      fallbackServerData.version ||
+      fallbackServerData.homebridgeVersion ||
+      fallbackServerData.homebridge_version ||
+      fallbackServerData.serverVersion ||
+      fallbackServerData.raw?.version ||
+      fallbackServerData.raw?.homebridgeVersion ||
+      fallbackServerData.raw?.homebridge_version ||
+      fallbackServerData.raw?.serverVersion;
+    if (generic) return String(generic);
+  }
+
+  return "N/A";
+};
+
+const getUptimeDisplay = (
+  serverResp: HomebridgeServerResponse | undefined
+): string => {
+  const uptimeValue =
+    serverResp?.data?.uptime ||
+    serverResp?.data?.time?.uptime ||
+    serverResp?.data?.raw?.time?.uptime;
+
+  if (uptimeValue === undefined) return "N/A";
+
+  const n = Number(uptimeValue);
+  if (Number.isNaN(n)) return String(uptimeValue);
+  if (n < 60) return `${n}s`;
+
+  const hours = Math.floor(n / 3600);
+  const minutes = Math.floor((n % 3600) / 60);
+  const parts: string[] = [];
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (!hours && !minutes) parts.push(`${n}s`);
+  return parts.join(" ");
+};
 
 const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
   instanceId = "homebridge",
@@ -25,28 +169,28 @@ const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
     : "Homebridge";
 
   // Fetch server-information from allowed API endpoint.
-  const serverInfoQuery = useQuery({
-    queryKey: ["homebridge", "server-information", instanceId],
+  const serverInfoQuery = useQuery<HomebridgeServerResponse>({
+    queryKey: queryKeys.homebridgeServerInformation(instanceId),
     queryFn: () => apiClient.getHomebridgeServerInformation(),
-    refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
+    refetchInterval: APP_CONFIG.DEFAULT_REFRESH_INTERVAL,
     retry: 1,
     enabled: isEnabled,
   });
 
   // Fetch version from the allowed version endpoint (/api/status/homebridge-version)
-  const versionQuery = useQuery({
-    queryKey: ["homebridge", "homebridge-version", instanceId],
+  const versionQuery = useQuery<HomebridgeVersionResponse>({
+    queryKey: queryKeys.homebridgeVersion(instanceId),
     queryFn: () => apiClient.getHomebridgeVersion(),
-    refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
+    refetchInterval: APP_CONFIG.DEFAULT_REFRESH_INTERVAL,
     retry: 1,
     enabled: isEnabled,
   });
 
   // Fetch accessories list from backend /api/accessories
-  const accessoriesQuery = useQuery({
-    queryKey: ["homebridge", "accessories", instanceId],
+  const accessoriesQuery = useQuery<HomebridgeAccessoriesResponse>({
+    queryKey: queryKeys.homebridgeAccessories(instanceId),
     queryFn: () => apiClient.getHomebridgeAccessories(),
-    refetchInterval: APP_CONFIG.ADGUARD_REFRESH_INTERVAL,
+    refetchInterval: APP_CONFIG.DEFAULT_REFRESH_INTERVAL,
     retry: 1,
     enabled: isEnabled,
   });
@@ -54,13 +198,10 @@ const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
   const loading =
     serverInfoQuery.isLoading ||
     versionQuery.isLoading ||
-    accessoriesQuery.isLoading ||
-    serverInfoQuery.isFetching ||
-    versionQuery.isFetching ||
-    accessoriesQuery.isFetching;
-  const serverInfoResp = serverInfoQuery.data as any;
-  const versionResp = versionQuery.data as any;
-  const accessoriesResp = accessoriesQuery.data as any;
+    accessoriesQuery.isLoading;
+  const serverInfoResp = serverInfoQuery.data;
+  const versionResp = versionQuery.data;
+  const accessoriesResp = accessoriesQuery.data;
   const accessoriesWarning =
     accessoriesResp?.warning || accessoriesResp?.message;
 
@@ -74,13 +215,13 @@ const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
 
   // Query-level error messages
   const serverQueryError = serverInfoQuery.isError
-    ? (serverInfoQuery.error as any)?.message || String(serverInfoQuery.error)
+    ? getErrorMessage(serverInfoQuery.error) || String(serverInfoQuery.error)
     : null;
   const versionQueryError = versionQuery.isError
-    ? (versionQuery.error as any)?.message || String(versionQuery.error)
+    ? getErrorMessage(versionQuery.error) || String(versionQuery.error)
     : null;
   const accessoriesQueryError = accessoriesQuery.isError
-    ? (accessoriesQuery.error as any)?.message || String(accessoriesQuery.error)
+    ? getErrorMessage(accessoriesQuery.error) || String(accessoriesQuery.error)
     : null;
   const errorMessage =
     serverQueryError ||
@@ -90,138 +231,8 @@ const HomebridgeCard: React.FC<HomebridgeCardProps> = ({
     null;
   const combinedError = errorMessage || accessoriesQueryError || null;
 
-  // Normalize server data (support either resp.data or resp directly)
-  const serverData = serverInfoResp && (serverInfoResp.data || serverInfoResp);
-
-  // Extract services from the /api/accessories response. Each element in the returned
-  // array represents a service (aid/iid). Support common wrapper shapes like
-  // { data: [...] }, { accessories: [...] } or { services: [...] }.
-  const servicesArray: any[] = (() => {
-    if (!accessoriesResp) return [];
-
-    const tryExtract = (obj: any): any[] | null => {
-      if (!obj) return null;
-      if (Array.isArray(obj)) return obj;
-      if (obj.services && Array.isArray(obj.services)) return obj.services;
-      if (obj.accessories && Array.isArray(obj.accessories))
-        return obj.accessories;
-      if (obj.data && Array.isArray(obj.data)) return obj.data;
-      if (obj.items && Array.isArray(obj.items)) return obj.items;
-      if (obj.raw && Array.isArray(obj.raw)) return obj.raw;
-      if (obj.data && typeof obj.data === "object") {
-        if (Array.isArray(obj.data.services)) return obj.data.services;
-        if (Array.isArray(obj.data.accessories)) return obj.data.accessories;
-      }
-      return null;
-    };
-
-    return (
-      tryExtract(accessoriesResp) ||
-      tryExtract(accessoriesResp.data) ||
-      tryExtract(accessoriesResp.raw) ||
-      []
-    );
-  })();
-
-  // Count total services and online services. Treat a service as offline when
-  // instance.connectionFailedCount > 0. If instance info is absent, assume online.
-  const totalServices = servicesArray.length;
-  const onlineServicesCount = servicesArray.reduce((acc, s) => {
-    try {
-      const inst = s && s.instance;
-      if (!inst) return acc + 1;
-      const failed = inst.connectionFailedCount;
-      if (typeof failed === "number") return failed > 0 ? acc : acc + 1;
-      return acc + 1;
-    } catch (e) {
-      return acc;
-    }
-  }, 0);
-
-  // Helper to safely read nested fields from various shapes
-  const getFirst = (obj: any, paths: string[][]) => {
-    for (const p of paths) {
-      let cur = obj;
-      let ok = true;
-      for (const k of p) {
-        if (cur == null) {
-          ok = false;
-          break;
-        }
-        cur = cur[k];
-      }
-      if (ok && cur !== undefined && cur !== null) return cur;
-    }
-    return null;
-  };
-
-  // Helper to pretty-print server information safely, with uptime formatting
-  const formatUptime = (u: any) => {
-    if (u == null) return null;
-    // If it's a number (seconds), convert to human friendly string
-    const n = Number(u);
-    if (!Number.isNaN(n)) {
-      if (n < 60) return `${n}s`;
-      const hours = Math.floor(n / 3600);
-      const minutes = Math.floor((n % 3600) / 60);
-      const parts: string[] = [];
-      if (hours) parts.push(`${hours}h`);
-      if (minutes) parts.push(`${minutes}m`);
-      if (!hours && !minutes) parts.push(`${n}s`);
-      return parts.join(" ");
-    }
-    // Otherwise return as-is (string)
-    return String(u);
-  };
-
-  const uptimeValue = getFirst(serverData, [
-    ["uptime"],
-    ["time", "uptime"],
-    ["raw", "time", "uptime"],
-  ]);
-  const uptimeDisplay = uptimeValue ? formatUptime(uptimeValue) : "N/A";
-
-  // Extract installedVersion from the version endpoint response with safe fallbacks
-  const versionFinal = (() => {
-    const vr = versionResp;
-    if (!vr) {
-      // If version endpoint not available, try to find version in serverData/raw
-      const sd = serverData || serverInfoResp || null;
-      if (!sd) return "N/A";
-      const sCandidate = typeof sd === "object" && sd.data ? sd.data : sd;
-      return (
-        sCandidate?.installedVersion ||
-        sCandidate?.installed_version ||
-        sCandidate?.version ||
-        sCandidate?.homebridgeVersion ||
-        "N/A"
-      );
-    }
-
-    // Normalize candidate (support resp.data or resp)
-    const candidate = typeof vr === "object" && vr.data ? vr.data : vr;
-    // First look for installedVersion fields
-    const installed =
-      candidate?.installedVersion ||
-      candidate?.installed_version ||
-      candidate?.installed ||
-      (candidate?.raw &&
-        (candidate.raw.installedVersion ||
-          candidate.raw.installed_version ||
-          candidate.raw.installed));
-    if (installed) return String(installed);
-    // Fall back to generic version keys
-    const generic =
-      candidate?.version ||
-      candidate?.homebridgeVersion ||
-      candidate?.homebridge_version ||
-      (candidate?.raw &&
-        (candidate.raw.version ||
-          candidate.raw.homebridgeVersion ||
-          candidate.raw.homebridge_version));
-    if (generic) return String(generic);
-    return "N/A";
-  })();
+  const uptimeDisplay = getUptimeDisplay(serverInfoResp);
+  const versionFinal = getInstalledVersion(versionResp, serverInfoResp);
 
   return (
     <Card className="w-full">

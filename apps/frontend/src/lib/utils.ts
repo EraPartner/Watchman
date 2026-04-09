@@ -57,3 +57,13 @@ export function formatUptime(seconds: number): string {
 export function formatSpeed(bytesPerSecond: number | null | undefined): string {
   return `${formatBytes(bytesPerSecond)}/s`;
 }
+
+/**
+ * Build a display name for a potentially multi-instance service
+ */
+export function instanceDisplayName(
+  name: string,
+  instanceNumber?: number
+): string {
+  return instanceNumber ? `${name} #${instanceNumber}` : name;
+}

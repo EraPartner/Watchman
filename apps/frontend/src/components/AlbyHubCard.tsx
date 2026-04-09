@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
-import { apiClient } from "../services/ApiClient";
 import { useEnabledServices } from "../hooks/useEnabledServices";
+import { useServiceHealth } from "../hooks/useServiceHealth";
+import { useFrontendConfig } from "../hooks/useFrontendConfig";
+import type { FrontendConfig } from "../services/ApiClient";
 import { ExternalLink, Server } from "lucide-react";
 import { formatDisplayUrl, openHref } from "../lib/url";
+import { instanceDisplayName } from "../lib/utils";
 
 interface AlbyHubCardProps {
   fullHeight?: boolean;
@@ -20,78 +23,36 @@ export const AlbyHubCard: React.FC<AlbyHubCardProps> = ({
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("albyhub");
 
-  const displayName = instanceNumber
-    ? `Alby Hub #${instanceNumber}`
-    : "Alby Hub";
+  const displayName = instanceDisplayName("Alby Hub", instanceNumber);
 
-  const [status, setStatus] = useState<
-    "online" | "offline" | "warning" | "loading"
-  >("loading");
-  // albyUrlRaw holds the ALBYHUB_URL value exposed via backend /api/config/frontend
-  const [albyUrlRaw, setAlbyUrlRaw] = useState<string | null>(null);
+  const { data: healthData } = useServiceHealth(instanceId, {
+    enabled: isEnabled,
+  });
+  const { data: frontendConfigData } = useFrontendConfig();
 
-  useEffect(() => {
-    if (!isEnabled) return;
+  const rawStatus = healthData?.status;
+  const status =
+    rawStatus === "not_configured" || rawStatus === undefined
+      ? rawStatus === undefined
+        ? "loading"
+        : "offline"
+      : (rawStatus as "online" | "offline" | "warning");
 
-    let mounted = true;
+  const frontendCfg = frontendConfigData as FrontendConfig | undefined;
+  const albyUrlRaw = frontendCfg?.services?.albyhub?.url ?? null;
 
-    const fetchHealth = async () => {
-      try {
-        const health = await apiClient.getServiceHealth(instanceId);
-        if (!mounted) return;
-        const mapped =
-          health.status === "not_configured"
-            ? "offline"
-            : health.status || "offline";
-        setStatus(mapped as any);
-      } catch (err) {
-        if (!mounted) return;
-        setStatus("offline");
-      }
-    };
-
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 15000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [isEnabled, instanceId]);
-
-  // Fetch frontend config once to read the ALBYHUB_URL provided by backend
-  useEffect(() => {
-    if (!isEnabled) return;
-
-    let mounted = true;
-    (async () => {
-      try {
-        const cfg = await apiClient.getFrontendConfig();
-        if (!mounted) return;
-        const alby = cfg?.services?.albyhub;
-        if (alby && alby.url) setAlbyUrlRaw(alby.url);
-      } catch (e) {
-        // ignore
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // Build display URL from backend-provided ALBYHUB_URL: show host:port (no protocol, no path)
   let backendDisplay: string | null = null;
   let backendHref: string | null = null;
   if (albyUrlRaw) {
     try {
-      // ensure URL has protocol for parsing
       const withProto = /^[a-z]+:\/\//i.test(albyUrlRaw)
         ? albyUrlRaw
         : `http://${albyUrlRaw}`;
       const parsed = new URL(withProto);
       backendHref = parsed.origin;
       backendDisplay = parsed.hostname + (parsed.port ? `:${parsed.port}` : "");
-    } catch (e) {
-      backendDisplay = albyUrlRaw; // fallback to raw
+    } catch {
+      backendDisplay = albyUrlRaw;
       backendHref = null;
     }
   }
@@ -119,7 +80,6 @@ export const AlbyHubCard: React.FC<AlbyHubCardProps> = ({
             </div>
           </div>
 
-          {/* Single URL display (sourced from backend's ALBYHUB_URL via /api/config/frontend) */}
           <div className="border-t pt-3">
             <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
               <Server className="h-3 w-3" /> URL

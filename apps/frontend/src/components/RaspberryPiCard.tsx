@@ -17,6 +17,7 @@ import {
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { buildHref, openHref } from "../lib/url";
 import { useEnabledServices } from "@/hooks/useEnabledServices";
+import { formatUptime } from "../lib/utils";
 
 interface RaspberryPiCardProps {
   serviceName?: string;
@@ -28,16 +29,6 @@ interface RaspberryPiCardProps {
   instanceNumber?: number;
 }
 
-// Helper to format uptime in seconds to human-readable format
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
 
 export const RaspberryPiCard = memo<RaspberryPiCardProps>(
   ({
@@ -97,9 +88,6 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
 
     const formattedStats = useMemo(() => {
       if (!stats || !enableStats) return null;
-
-      // Debug log to see what stats we're receiving
-      console.log("🔍 Raspberry Pi Card received stats:", stats);
 
       const entries: { key: string; value: string; isImportant?: boolean }[] =
         [];
@@ -185,8 +173,6 @@ export const RaspberryPiCard = memo<RaspberryPiCardProps>(
           isImportant: false,
         });
       }
-
-      console.log("📋 Formatted entries:", entries);
 
       return entries;
     }, [stats, enableStats]);

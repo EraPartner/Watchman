@@ -16,6 +16,12 @@ export const buildHref = (raw?: string | null, preferHttps = false): string | nu
   return preferHttps ? `https://${r}` : `http://${r}`;
 };
 
+export const formatPingDisplay = (ping?: boolean | null): string => {
+  if (ping === true) return "ICMP: Responding";
+  if (ping === false) return "ICMP: No response";
+  return "ICMP: N/A";
+};
+
 export const openHref = (href?: string | null) => {
   if (!href) return;
   try {

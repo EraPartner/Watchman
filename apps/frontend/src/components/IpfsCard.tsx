@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { UpdateBadge } from "./UpdateBadge";
-import { apiClient } from "../services/ApiClient";
 import {
   Database,
   Link as LinkIcon,
@@ -11,7 +10,33 @@ import {
   Users,
 } from "lucide-react";
 import ServiceLink from "@/components/ServiceLink";
-import { formatBytes } from "../lib/utils";
+import { formatBytes, instanceDisplayName } from "../lib/utils";
+import { useFrontendConfig } from "../hooks/useFrontendConfig";
+import { useServiceHealth, useServiceStats } from "../hooks/useServiceHealth";
+import type { FrontendConfig } from "../services/ApiClient";
+
+interface IpfsStats {
+  version?: string;
+  Version?: string;
+  addresses?: unknown[] | number;
+  peers?: number | string;
+  repo?: {
+    repoSize?: number | string;
+    RepoSize?: number | string;
+    repoSizeBytes?: number | string;
+  };
+  bw?: {
+    totalIn?: number | string;
+    TotalIn?: number | string;
+    totalOut?: number | string;
+    TotalOut?: number | string;
+    rateIn?: number | string;
+    RateIn?: number | string;
+    rateInBytes?: number | string;
+    rateOut?: number | string;
+    RateOut?: number | string;
+  };
+}
 
 interface IpfsCardProps {
   name?: string;
@@ -24,64 +49,27 @@ export const IpfsCard: React.FC<IpfsCardProps> = ({
   instanceId = "ipfs",
   instanceNumber,
 }) => {
-  const [status, setStatus] = useState<
-    "online" | "offline" | "warning" | "loading"
-  >("loading");
-  const [stats, setStats] = useState<any | null>(null);
-  const [frontendCfg, setFrontendCfg] = useState<any | null>(null);
+  const displayName = instanceDisplayName(name, instanceNumber);
 
-  const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
+  const { data: frontendConfigData } = useFrontendConfig();
+  const frontendCfg = (frontendConfigData as FrontendConfig | undefined)
+    ?.services?.ipfs;
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchData = async () => {
-      try {
-        const health = await apiClient.getServiceHealth(instanceId);
-        if (!mounted) return;
-        const mapped =
-          health.status === "not_configured"
-            ? "offline"
-            : (health.status as any);
-        setStatus(mapped);
-        if (health.status === "online" || health.status === "warning") {
-          const s = await apiClient.getServiceStats(instanceId);
-          if (!mounted) return;
-          setStats(s);
-        } else {
-          setStats(null);
-        }
-      } catch (err) {
-        if (!mounted) return;
-        setStatus("offline");
-        setStats(null);
-      }
-    };
+  const { data: healthData } = useServiceHealth(instanceId);
+  const rawStatus = healthData?.status;
+  const status =
+    rawStatus === "not_configured"
+      ? "offline"
+      : rawStatus === undefined
+        ? "loading"
+        : (rawStatus as "online" | "offline" | "warning" | "loading");
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [instanceId]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const cfg = await apiClient.getFrontendConfig();
-        if (mounted) setFrontendCfg(cfg.services?.ipfs || null);
-      } catch (e) {
-        // ignore
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const statsEnabled = status === "online" || status === "warning";
+  const { data: statsData } = useServiceStats(instanceId, statsEnabled);
+  const stats = statsData as IpfsStats | undefined;
 
   const buildLink = () => {
-    const webUrl = frontendCfg?.webUrl || null;
+    const webUrl = frontendCfg?.webUrl ?? null;
     if (webUrl)
       return (
         <ServiceLink
@@ -93,8 +81,8 @@ export const IpfsCard: React.FC<IpfsCardProps> = ({
         />
       );
 
-    const host = frontendCfg?.host || null;
-    const port = frontendCfg?.port || null;
+    const host = frontendCfg?.host ?? null;
+    const port = frontendCfg?.port ?? null;
     if (host) {
       const raw = `${host}${port ? `:${port}` : ""}`;
       return (
@@ -116,35 +104,27 @@ export const IpfsCard: React.FC<IpfsCardProps> = ({
     return `${formatBytes(bytesPerSec)}/s`;
   };
 
-  const addressesCount =
-    stats && Array.isArray(stats.addresses)
-      ? stats.addresses.length
-      : stats && typeof stats.addresses === "number"
-        ? stats.addresses
-        : null;
+  const addressesCount = Array.isArray(stats?.addresses)
+    ? stats.addresses.length
+    : typeof stats?.addresses === "number"
+      ? stats.addresses
+      : null;
   const peersCount =
-    stats && typeof stats.peers === "number"
+    typeof stats?.peers === "number"
       ? stats.peers
-      : stats && stats.peers
+      : stats?.peers
         ? Number(stats.peers)
         : 0;
   const repoSize =
-    stats && stats.repo
-      ? stats.repo.repoSize ||
-        stats.repo.RepoSize ||
-        stats.repo.repoSizeBytes ||
-        null
-      : null;
-  const bwIn =
-    stats && stats.bw ? stats.bw.totalIn || stats.bw.TotalIn || 0 : null;
-  const bwOut =
-    stats && stats.bw ? stats.bw.totalOut || stats.bw.TotalOut || 0 : null;
+    stats?.repo?.repoSize ??
+    stats?.repo?.RepoSize ??
+    stats?.repo?.repoSizeBytes ??
+    null;
+  const bwIn = stats?.bw?.totalIn ?? stats?.bw?.TotalIn ?? 0;
+  const bwOut = stats?.bw?.totalOut ?? stats?.bw?.TotalOut ?? 0;
   const rateIn =
-    stats && stats.bw
-      ? stats.bw.rateIn || stats.bw.RateIn || stats.bw.rateInBytes || 0
-      : null;
-  const rateOut =
-    stats && stats.bw ? stats.bw.rateOut || stats.bw.RateOut || 0 : null;
+    stats?.bw?.rateIn ?? stats?.bw?.RateIn ?? stats?.bw?.rateInBytes ?? 0;
+  const rateOut = stats?.bw?.rateOut ?? stats?.bw?.RateOut ?? 0;
 
   return (
     <Card className="w-full">
@@ -154,9 +134,7 @@ export const IpfsCard: React.FC<IpfsCardProps> = ({
           {buildLink()}
         </div>
         <div className="flex items-center gap-2">
-          {status !== "loading" && status !== "offline" && (
-            <UpdateBadge service="ipfs" />
-          )}
+          {statsEnabled && <UpdateBadge service="ipfs" />}
           <ServerStatusBadge status={status} />
         </div>
       </CardHeader>
@@ -169,7 +147,7 @@ export const IpfsCard: React.FC<IpfsCardProps> = ({
                 <Server className="h-3 w-3" /> Version
               </div>
               <div className="font-mono font-semibold text-sm">
-                {stats.version || stats.Version || "Unknown"}
+                {stats?.version || stats?.Version || "Unknown"}
               </div>
             </div>
 
@@ -232,5 +210,3 @@ export const IpfsCard: React.FC<IpfsCardProps> = ({
     </Card>
   );
 };
-
-// named export only

@@ -11,7 +11,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AdGuardServerStats, ServerStatus } from "../types/server";
-import { useConfig } from "../hooks/use-config";
+import { useFrontendConfig } from "../hooks/useFrontendConfig";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { UpdateBadge } from "./UpdateBadge";
 import { formatNumber } from "../lib/utils";
@@ -49,7 +49,7 @@ export const AdGuardCard = ({
   stats,
   instanceNumber,
 }: AdGuardCardProps) => {
-  const { config } = useConfig();
+  const { data: config } = useFrontendConfig();
 
   const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
 

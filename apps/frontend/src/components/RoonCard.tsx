@@ -8,17 +8,8 @@ import {
   Server,
 } from "lucide-react";
 import { ServerStatusBadge } from "./ServerStatusBadge";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../services/ApiClient";
-import { useEnabledServices } from "../hooks/useEnabledServices";
-import { APP_CONFIG } from "../lib/constants";
-import { formatDisplayUrl, openHref } from "../lib/url";
-
-const formatPingDisplay = (ping?: boolean | null) => {
-  if (ping === true) return "ICMP: Responding";
-  if (ping === false) return "ICMP: No response";
-  return "ICMP: N/A";
-};
+import { formatDisplayUrl, formatPingDisplay, openHref } from "../lib/url";
+import { usePingServiceCard } from "../hooks/usePingServiceCard";
 
 interface RoonCardProps {
   instanceId?: string;
@@ -29,62 +20,28 @@ export const RoonCard: React.FC<RoonCardProps> = ({
   instanceId = "roon",
   instanceNumber,
 }) => {
-  const { isServiceEnabled } = useEnabledServices();
-  const isEnabled = isServiceEnabled("roon");
-
   const displayName = instanceNumber ? `Roon #${instanceNumber}` : "Roon";
 
-  const statusQuery = useQuery({
-    queryKey: ["roon", "status", instanceId],
-    queryFn: () => apiClient.getServiceHealth(instanceId),
-    refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
-    retry: 1,
-    enabled: isEnabled,
-  });
+  const {
+    loading,
+    status,
+    stats,
+    isOnline,
+    hasError,
+    hostValue,
+    hostHref,
+    ping,
+    ports,
+    errorMessage,
+  } = usePingServiceCard({ serviceKey: "roon", instanceId });
 
-  const statsQuery = useQuery({
-    queryKey: ["roon", "stats", instanceId],
-    queryFn: () => apiClient.getServiceStats(instanceId),
-    refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
-    retry: 1,
-    enabled: isEnabled,
-  });
-
-  const loading = statusQuery.isLoading && statsQuery.isLoading;
-  type RoonData =
-    | {
-        status?: string;
-        data?: {
-          host?: string;
-          ping?: boolean | null;
-          ports?: Array<{ port: number; open: boolean }>;
-        };
-        error?: string;
-      }
-    | undefined;
-  const status = statusQuery.data as RoonData;
-  const stats = statsQuery.data as RoonData;
-
-  const isOnline = status?.status === "online" || stats?.status === "online";
-  const hasError = status?.status === "error" || stats?.status === "error";
-
-  const hostValue = status?.data?.host || stats?.data?.host || null;
-  const DEFAULT_HTTP_PORT = 80;
-  let hostHref: string | null = null;
-  if (hostValue) {
-    try {
-      let base = hostValue as string;
-      if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
-      const u = new URL(base);
-      if (!u.port) u.port = String(DEFAULT_HTTP_PORT);
-      hostHref = u.toString();
-    } catch {
-      const candidate = `${hostValue}:${DEFAULT_HTTP_PORT}`;
-      hostHref = /^https?:\/\//i.test(candidate)
-        ? candidate
-        : `http://${candidate}`;
-    }
-  }
+  const statusBadgeValue = loading
+    ? "loading"
+    : isOnline
+      ? "online"
+      : hasError
+        ? "error"
+        : "offline";
 
   if (loading && !status && !stats) {
     return (
@@ -94,17 +51,7 @@ export const RoonCard: React.FC<RoonCardProps> = ({
             <Server className="h-4 w-4" />
             Roon (ROCK)
           </CardTitle>
-          <ServerStatusBadge
-            status={
-              loading
-                ? "loading"
-                : isOnline
-                  ? "online"
-                  : hasError
-                    ? "error"
-                    : "offline"
-            }
-          />
+          <ServerStatusBadge status={statusBadgeValue} />
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -122,17 +69,7 @@ export const RoonCard: React.FC<RoonCardProps> = ({
           <Server className="h-4 w-4" />
           {displayName}
         </CardTitle>
-        <ServerStatusBadge
-          status={
-            loading
-              ? "loading"
-              : isOnline
-                ? "online"
-                : hasError
-                  ? "error"
-                  : "offline"
-          }
-        />
+        <ServerStatusBadge status={statusBadgeValue} />
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-4 text-sm">
@@ -160,7 +97,6 @@ export const RoonCard: React.FC<RoonCardProps> = ({
           </div>
         </div>
 
-        {/* Always show ping and ports (when available) so we can see TCP results even if ICMP is blocked) */}
         {(stats?.data || status?.data) && (
           <div className="space-y-4">
             <div className="flex items-center justify-between text-sm">
@@ -170,36 +106,33 @@ export const RoonCard: React.FC<RoonCardProps> = ({
               </div>
               <div className="text-right">
                 <div className="font-medium text-xs">
-                  {formatPingDisplay(stats?.data?.ping ?? status?.data?.ping)}
+                  {formatPingDisplay(ping)}
                 </div>
               </div>
             </div>
 
-            {/* Ports: render regardless of overall online status to aid debugging */}
-            {(stats?.data?.ports || status?.data?.ports) && (
+            {ports && (
               <div className="space-y-2">
                 <div className="flex items-center gap-1 text-muted-foreground text-sm">
                   <Network className="h-3 w-3" />
                   Ports
                 </div>
                 <div className="grid grid-cols-1 gap-2">
-                  {(stats?.data?.ports || status?.data?.ports || []).map(
-                    (p) => (
-                      <div
-                        key={p.port}
-                        className={`rounded-md p-2 ${
-                          p.open ? "bg-green-50" : "bg-muted"
-                        }`}
-                      >
-                        <div className="text-xs text-muted-foreground">
-                          Port {p.port} (Roon ARC)
-                        </div>
-                        <div className="text-sm font-medium">
-                          {p.open ? "Open" : "Closed"}
-                        </div>
+                  {ports.map((p) => (
+                    <div
+                      key={p.port}
+                      className={`rounded-md p-2 ${
+                        p.open ? "bg-green-50" : "bg-muted"
+                      }`}
+                    >
+                      <div className="text-xs text-muted-foreground">
+                        Port {p.port} (Roon ARC)
                       </div>
-                    ),
-                  )}
+                      <div className="text-sm font-medium">
+                        {p.open ? "Open" : "Closed"}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -212,9 +145,9 @@ export const RoonCard: React.FC<RoonCardProps> = ({
             <div className="text-sm text-muted-foreground mb-2">
               {hasError ? "Connection Error" : "Roon Core (ROCK) is offline"}
             </div>
-            {(status?.error || stats?.error) && (
+            {errorMessage && (
               <div className="text-xs text-red-500 max-w-full break-words">
-                {status?.error || stats?.error}
+                {errorMessage}
               </div>
             )}
           </div>

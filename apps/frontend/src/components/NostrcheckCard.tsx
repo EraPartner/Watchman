@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { AlertTriangle, Globe, Wifi } from "lucide-react";
-import { useConfig } from "../hooks/use-config";
+import { useFrontendConfig } from "../hooks/useFrontendConfig";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { ServiceLink } from "@/components/ServiceLink";
 
@@ -22,7 +22,7 @@ export const NostrcheckCard: React.FC<NostrcheckCardProps> = ({
   fullHeight = false,
   instanceNumber,
 }) => {
-  const { config } = useConfig();
+  const { data: config } = useFrontendConfig();
 
   const displayName = instanceNumber ? `${name} #${instanceNumber}` : name;
 

@@ -17,6 +17,8 @@ import {
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { buildHref, openHref } from "../lib/url";
 import { useEnabledServices } from "@/hooks/useEnabledServices.ts";
+import { formatBytes, formatUptime } from "../lib/utils";
+import type { ServiceHealth } from "../services/ApiClient";
 
 interface MacMiniCardProps {
   serviceName?: string; // defaults to 'macmini' to match backend route
@@ -27,6 +29,22 @@ interface MacMiniCardProps {
   instanceId?: string;
   instanceNumber?: number;
 }
+
+type MacMiniDiskStats = {
+  total?: number;
+  used?: number;
+  usagePercent?: number;
+};
+
+type MacMiniStats = {
+  cpuLoad?: number | string;
+  cpuTemp?: number;
+  uptime?: number;
+  host?: string;
+  disk?: MacMiniDiskStats;
+};
+
+type HealthWithData = ServiceHealth & { data?: { host?: string } };
 
 export const MacMiniCard = memo<MacMiniCardProps>(
   ({
@@ -58,69 +76,61 @@ export const MacMiniCard = memo<MacMiniCardProps>(
     });
 
     const { data: stats, isLoading: statsLoading } = useServiceStats(
-      serviceName,
-      enableStats && isEnabled,
+      instanceId,
+      enableStats && isEnabled
     );
+
+    const typedHealth = health as HealthWithData | undefined;
+    const typedStats = stats as MacMiniStats | undefined;
+    const badgeStatus = health
+      ? health.status === "not_configured"
+        ? "offline"
+        : health.status
+      : "loading";
 
     const statusMetrics = useMemo(() => {
       if (!health) return null;
 
-      const getStatusColor = (status: string) => {
-        switch (status) {
-          case "online":
-            return "bg-green-500 text-green-50";
-          case "offline":
-            return "bg-red-500 text-red-50";
-          case "warning":
-            return "bg-yellow-500 text-yellow-50";
-          default:
-            return "bg-gray-500 text-gray-50";
-        }
-      };
-
       return {
-        statusColor: getStatusColor(health.status as any),
         isHealthy: health.status === "online",
       };
     }, [health]);
 
     const formattedStats = useMemo(() => {
-      if (!stats || !enableStats) return null;
+      if (!typedStats || !enableStats) return null;
 
       const entries: { key: string; value: string; isImportant?: boolean }[] =
         [];
 
       // CPU load (may be 1m/5m/15m or single value)
-      if (stats.cpuLoad != null) {
+      if (typedStats?.cpuLoad != null) {
         const v =
-          typeof stats.cpuLoad === "number"
-            ? `${stats.cpuLoad}%`
-            : String(stats.cpuLoad);
+          typeof typedStats.cpuLoad === "number"
+            ? `${typedStats.cpuLoad}%`
+            : String(typedStats.cpuLoad);
         entries.push({ key: "cpu load", value: v, isImportant: true });
       }
 
       // CPU temperature
-      if (stats.cpuTemp != null) {
+      if (typedStats?.cpuTemp != null) {
         entries.push({
           key: "cpu temp",
-          value: `${stats.cpuTemp}°C`,
+          value: `${typedStats.cpuTemp}°C`,
           isImportant: true,
         });
       }
 
       // Disk usage - show used/total and percent if available
-      if (stats.disk) {
-        if (typeof stats.disk === "object") {
+      if (typedStats?.disk) {
+        if (typeof typedStats.disk === "object") {
           const total =
-            stats.disk.total != null ? humanBytes(stats.disk.total) : "N/A";
+            typedStats.disk.total != null
+              ? formatBytes(typedStats.disk.total)
+              : "N/A";
           const used =
-            stats.disk.used != null ? humanBytes(stats.disk.used) : "N/A";
-          const percent =
-            stats.disk.usagePercent != null
-              ? `${stats.disk.usagePercent}%`
-              : stats.disk.used && stats.disk.total
-                ? `${Math.round((stats.disk.used / stats.disk.total) * 100)}%`
-                : "N/A";
+            typedStats.disk.used != null
+              ? formatBytes(typedStats.disk.used)
+              : "N/A";
           entries.push({
             key: "disk used",
             value: `${used} / ${total}`,
@@ -130,16 +140,16 @@ export const MacMiniCard = memo<MacMiniCardProps>(
       }
 
       // Uptime or load average
-      if (stats.uptime != null) {
+      if (typedStats?.uptime != null) {
         entries.push({
           key: "uptime",
-          value: formatUptime(stats.uptime),
+          value: formatUptime(typedStats.uptime),
           isImportant: false,
         });
       }
 
       return entries;
-    }, [stats, enableStats]);
+    }, [typedStats, enableStats]);
 
     const isLoading = healthLoading || (enableStats && statsLoading);
     const hasError = !!healthError;
@@ -153,13 +163,7 @@ export const MacMiniCard = memo<MacMiniCardProps>(
                 {finalDisplayName}
               </CardTitle>
             </div>
-            {statusMetrics && (
-              <ServerStatusBadge
-                status={
-                  (health?.status as any) || (health ? "offline" : "loading")
-                }
-              />
-            )}
+            {statusMetrics && <ServerStatusBadge status={badgeStatus} />}
           </div>
 
           <div className="flex items-center gap-2">
@@ -207,7 +211,9 @@ export const MacMiniCard = memo<MacMiniCardProps>(
               <AlertTriangle className="h-4 w-4" />
               <span className="text-sm">
                 Failed to load:{" "}
-                {String((healthError as any)?.message || "Unknown error")}
+                {healthError instanceof Error
+                  ? healthError.message
+                  : "Unknown error"}
               </span>
             </div>
           ) : (
@@ -219,9 +225,9 @@ export const MacMiniCard = memo<MacMiniCardProps>(
                 </span>
                 <span className="text-sm">{health?.status || "Unknown"}</span>
                 {/* Show configured host/IP when available (from health data or stats) */}
-                {((health as any)?.data?.host || (stats as any)?.host) && (
+                {(typedHealth?.data?.host || typedStats?.host) && (
                   <span className="text-xs text-muted-foreground ml-2">
-                    IP: {(health as any)?.data?.host || (stats as any)?.host}
+                    IP: {typedHealth?.data?.host || typedStats?.host}
                   </span>
                 )}
                 {health?.lastCheck && (
@@ -279,36 +285,7 @@ export const MacMiniCard = memo<MacMiniCardProps>(
         </CardContent>
       </Card>
     );
-  },
+  }
 );
 
 MacMiniCard.displayName = "MacMiniCard";
-
-// Utility helpers
-function humanBytes(bytes: number) {
-  if (!Number.isFinite(bytes)) return "N/A";
-  const thresh = 1024;
-  if (Math.abs(bytes) < thresh) return bytes + " B";
-  const units = ["KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-  let u = -1;
-  do {
-    bytes /= thresh;
-    ++u;
-  } while (Math.abs(bytes) >= thresh && u < units.length - 1);
-  return bytes.toFixed(1) + " " + units[u];
-}
-
-function formatUptime(seconds: number) {
-  if (!Number.isFinite(seconds)) return "N/A";
-  const days = Math.floor(seconds / 86400);
-  seconds %= 86400;
-  const hours = Math.floor(seconds / 3600);
-  seconds %= 3600;
-  const minutes = Math.floor(seconds / 60);
-  const parts = [];
-  if (days) parts.push(`${days}d`);
-  if (hours) parts.push(`${hours}h`);
-  if (minutes) parts.push(`${minutes}m`);
-  if (parts.length === 0) return `${Math.floor(seconds)}s`;
-  return parts.join(" ");
-}

@@ -1,6 +1,7 @@
 // Constants for the application
 export const APP_CONFIG = {
   // Polling intervals (in milliseconds)
+  DEFAULT_REFRESH_INTERVAL: 30000, // 30 seconds
   ADGUARD_REFRESH_INTERVAL: 15000, // 15 seconds
   TOR_REFRESH_INTERVAL: 300000, // 5 minutes
   ROON_REFRESH_INTERVAL: 30000, // 30 seconds

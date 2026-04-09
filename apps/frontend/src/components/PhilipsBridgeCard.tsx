@@ -8,17 +8,8 @@ import {
   Server,
 } from "lucide-react";
 import { ServerStatusBadge } from "./ServerStatusBadge";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../services/ApiClient";
-import { useEnabledServices } from "../hooks/useEnabledServices";
-import { APP_CONFIG } from "../lib/constants";
-import { formatDisplayUrl, openHref } from "../lib/url";
-
-const formatPingDisplay = (ping?: boolean | null) => {
-  if (ping === true) return "ICMP: Responding";
-  if (ping === false) return "ICMP: No response";
-  return "ICMP: N/A";
-};
+import { formatDisplayUrl, formatPingDisplay, openHref } from "../lib/url";
+import { usePingServiceCard } from "../hooks/usePingServiceCard";
 
 interface PhilipsBridgeCardProps {
   instanceId?: string;
@@ -29,48 +20,29 @@ const PhilipsBridgeCard: React.FC<PhilipsBridgeCardProps> = ({
   instanceId = "philips",
   instanceNumber,
 }) => {
-  const { isServiceEnabled } = useEnabledServices();
-  const isEnabled = isServiceEnabled("philips");
-
   const displayName = instanceNumber
     ? `Philips Bridge #${instanceNumber}`
     : "Philips Bridge";
 
-  const statusQuery = useQuery({
-    queryKey: ["philips", "status", instanceId],
-    queryFn: () => apiClient.getServiceHealth(instanceId),
-    refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
-    retry: 1,
-    enabled: isEnabled,
-  });
+  const {
+    loading,
+    status,
+    stats,
+    isOnline,
+    hasError,
+    hostValue,
+    hostHref,
+    ping,
+    errorMessage,
+  } = usePingServiceCard({ serviceKey: "philips", instanceId });
 
-  const statsQuery = useQuery({
-    queryKey: ["philips", "stats", instanceId],
-    queryFn: () => apiClient.getServiceStats(instanceId),
-    refetchInterval: APP_CONFIG.ROON_REFRESH_INTERVAL,
-    retry: 1,
-    enabled: isEnabled,
-  });
-
-  const loading = statusQuery.isLoading && statsQuery.isLoading;
-  const status = statusQuery.data as any;
-  const stats = statsQuery.data as any;
-
-  const isOnline = status?.status === "online" || stats?.status === "online";
-  const hasError = status?.status === "error" || stats?.status === "error";
-
-  const hostValue = status?.data?.host || stats?.data?.host || null;
-  let hostHref: string | null = null;
-  if (hostValue) {
-    try {
-      let base = hostValue as string;
-      if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
-      const u = new URL(base);
-      hostHref = u.toString();
-    } catch (err) {
-      hostHref = hostValue ? `http://${hostValue}` : null;
-    }
-  }
+  const statusBadgeValue = loading
+    ? "loading"
+    : isOnline
+      ? "online"
+      : hasError
+        ? "error"
+        : "offline";
 
   if (loading && !status && !stats) {
     return (
@@ -80,17 +52,7 @@ const PhilipsBridgeCard: React.FC<PhilipsBridgeCardProps> = ({
             <Server className="h-4 w-4" />
             Philips Bridge
           </CardTitle>
-          <ServerStatusBadge
-            status={
-              loading
-                ? "loading"
-                : isOnline
-                  ? "online"
-                  : hasError
-                    ? "error"
-                    : "offline"
-            }
-          />
+          <ServerStatusBadge status={statusBadgeValue} />
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -108,17 +70,7 @@ const PhilipsBridgeCard: React.FC<PhilipsBridgeCardProps> = ({
           <Server className="h-4 w-4" />
           {displayName}
         </CardTitle>
-        <ServerStatusBadge
-          status={
-            loading
-              ? "loading"
-              : isOnline
-                ? "online"
-                : hasError
-                  ? "error"
-                  : "offline"
-          }
-        />
+        <ServerStatusBadge status={statusBadgeValue} />
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-4 text-sm">
@@ -155,7 +107,7 @@ const PhilipsBridgeCard: React.FC<PhilipsBridgeCardProps> = ({
               </div>
               <div className="text-right">
                 <div className="font-medium">
-                  {formatPingDisplay(stats?.data?.ping ?? status?.data?.ping)}
+                  {formatPingDisplay(ping)}
                 </div>
               </div>
             </div>
@@ -168,9 +120,9 @@ const PhilipsBridgeCard: React.FC<PhilipsBridgeCardProps> = ({
             <div className="text-sm text-muted-foreground mb-2">
               {hasError ? "Connection Error" : "Philips Bridge is offline"}
             </div>
-            {(status?.error || stats?.error) && (
+            {errorMessage && (
               <div className="text-xs text-red-500 max-w-full break-words">
-                {status?.error || stats?.error}
+                {errorMessage}
               </div>
             )}
           </div>

@@ -8,6 +8,7 @@ import { useEnabledServices } from "../hooks/useEnabledServices";
 import { Button } from "./ui/button";
 import { buildHref, formatDisplayUrl, openHref } from "../lib/url";
 import { extractApiError, unwrapApiResponse } from "../lib/apiResponse";
+import { queryKeys } from "../lib/queryKeys";
 
 interface RouterCardProps {
   name: string; // display name
@@ -28,7 +29,7 @@ const RouterCard: React.FC<RouterCardProps> = ({
 
   // Reuse the shared services health endpoint (react-query will dedupe)
   const healthQuery = useQuery({
-    queryKey: ["services", "health"],
+    queryKey: queryKeys.servicesHealth(),
     queryFn: () => apiClient.getServicesHealth(),
     refetchInterval: 30000,
     retry: 1,
@@ -37,7 +38,7 @@ const RouterCard: React.FC<RouterCardProps> = ({
 
   // Frontend configuration query (declare early so dependent hooks can use it)
   const frontendCfgQuery = useQuery({
-    queryKey: ["frontend", "config"],
+    queryKey: queryKeys.frontendConfig(),
     queryFn: () => apiClient.getFrontendConfig(),
     refetchInterval: 60000,
     retry: 1,
@@ -82,7 +83,7 @@ const RouterCard: React.FC<RouterCardProps> = ({
     raw?: string;
   };
   const arpQuery = useQuery<ArpResp>({
-    queryKey: ["router", "arp", serviceKey],
+    queryKey: queryKeys.routerArp(serviceKey),
     queryFn: async () => {
       // First try the high-level apiClient if available
       if (
@@ -152,7 +153,6 @@ const RouterCard: React.FC<RouterCardProps> = ({
     else if (typeof (e as { error?: string }).error === "string")
       arpError = String((e as { error?: string }).error);
     else arpError = String(e);
-    console.debug("RouterCard: ARP error for", serviceKey, arpError);
   }
 
   const status = serviceObj

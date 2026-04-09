@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { UpdateBadge } from "./UpdateBadge";
 import { BitcoinStats } from "../types/api";
-import { apiClient, ServiceHealth } from "../services/ApiClient";
 import {
   Clock,
   Database,
@@ -14,7 +13,13 @@ import {
   Server,
 } from "lucide-react";
 import { useEnabledServices } from "../hooks/useEnabledServices";
-import { formatNumber, formatBytes, formatUptime } from "../lib/utils";
+import { useServiceHealth, useServiceStats } from "../hooks/useServiceHealth";
+import {
+  formatNumber,
+  formatBytes,
+  formatUptime,
+  instanceDisplayName,
+} from "../lib/utils";
 
 // Bitcoin logo SVG component
 const BitcoinIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -45,69 +50,22 @@ export const BitcoinCard: React.FC<BitcoinCardProps> = ({
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("bitcoin");
 
-  const displayName = instanceNumber ? `Bitcoin #${instanceNumber}` : "Bitcoin";
+  const displayName = instanceDisplayName("Bitcoin", instanceNumber);
 
-  const [status, setStatus] = useState<
-    "online" | "offline" | "warning" | "loading"
-  >("loading");
-  const [stats, setStats] = useState<BitcoinStats | null>(null);
+  const { data: healthData } = useServiceHealth(instanceId, {
+    enabled: isEnabled,
+  });
+  const rawStatus = healthData?.status;
+  const status: "online" | "offline" | "warning" | "loading" =
+    rawStatus === "not_configured"
+      ? "offline"
+      : rawStatus === undefined
+        ? "loading"
+        : (rawStatus as "online" | "offline" | "warning" | "loading");
 
-  useEffect(() => {
-    if (!isEnabled) return;
-
-    let mounted = true;
-    const fetchData = async () => {
-      try {
-        console.log(`[BitcoinCard] Fetching ${displayName} health...`);
-        const health: ServiceHealth =
-          await apiClient.getServiceHealth(instanceId);
-        console.log(`[BitcoinCard] ${displayName} health response:`, health);
-
-        if (!mounted) return;
-
-        // Handle the not_configured status by treating it as offline
-        const mappedStatus =
-          health.status === "not_configured"
-            ? "offline"
-            : (health.status as "online" | "offline" | "warning" | "loading");
-        setStatus(mappedStatus as "online" | "offline" | "warning" | "loading");
-
-        if (health.status === "online" || health.status === "warning") {
-          console.log(`[BitcoinCard] Fetching ${displayName} stats...`);
-          const nodeStats = await apiClient.getServiceStats(instanceId);
-          console.log(
-            `[BitcoinCard] ${displayName} stats response:`,
-            nodeStats
-          );
-
-          if (!mounted) return;
-
-          setStats(nodeStats as BitcoinStats);
-        } else {
-          console.log(
-            `[BitcoinCard] ${displayName} not online, clearing stats`
-          );
-          setStats(null);
-        }
-      } catch (error) {
-        console.error(
-          `[BitcoinCard] Error fetching ${displayName} data:`,
-          error
-        );
-        if (!mounted) return;
-        setStatus("offline");
-        setStats(null);
-      }
-    };
-
-    fetchData();
-    const interval = setInterval(fetchData, 15000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [isEnabled, instanceId, displayName]);
+  const statsEnabled = isEnabled && (status === "online" || status === "warning");
+  const { data: statsData } = useServiceStats(instanceId, statsEnabled);
+  const stats = statsData as BitcoinStats | undefined;
 
   // Helper function to format version
   const formatVersion = (version: string) => {

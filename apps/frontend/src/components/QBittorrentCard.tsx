@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { QBittorrentStats } from "../types/api";
 import { apiClient } from "../services/ApiClient";
+import { useFrontendConfig } from "../hooks/useFrontendConfig";
+import { queryKeys } from "../lib/queryKeys";
 import {
   Database,
   Download,
@@ -45,11 +48,8 @@ export const QBittorrentCard: React.FC<QBittorrentCardProps> = ({
   const { isServiceEnabled } = useEnabledServices();
   const isEnabled = isServiceEnabled("qbittorrent");
 
-  const [status, setStatus] = useState<
-    "online" | "offline" | "warning" | "loading"
-  >("loading");
-  const [stats, setStats] = useState<QBittorrentStats | null>(null);
-  const [frontendConfig, setFrontendConfig] = useState<any | null>(null);
+  const { data: frontendConfigData } = useFrontendConfig();
+  const frontendConfig = frontendConfigData?.services?.qbittorrent ?? null;
 
   // Determine the API endpoint based on instanceId
   const serviceKey = instanceId;
@@ -57,61 +57,38 @@ export const QBittorrentCard: React.FC<QBittorrentCardProps> = ({
     ? `qBittorrent #${instanceNumber}`
     : "qBittorrent";
 
-  useEffect(() => {
-    if (!isEnabled) return;
+  const statusQuery = useQuery({
+    queryKey: queryKeys.serviceStatus("qbittorrent", serviceKey),
+    queryFn: () => apiClient.getServiceHealth(serviceKey),
+    refetchInterval: 30000,
+    retry: 1,
+    enabled: isEnabled,
+  });
 
-    let mounted = true;
-    const fetchData = async () => {
-      try {
-        // For multi-instance, we need to fetch from the specific instance endpoint
-        const health = await apiClient.getServiceHealth(serviceKey);
+  const rawStatus = statusQuery.data?.status;
+  const mappedStatus = rawStatus === "not_configured" ? "offline" : rawStatus;
+  const status: "online" | "offline" | "warning" | "loading" =
+    !isEnabled || statusQuery.isError
+      ? "offline"
+      : statusQuery.isLoading || !mappedStatus
+        ? "loading"
+        : mappedStatus === "online" || mappedStatus === "warning"
+          ? mappedStatus
+          : "offline";
 
-        if (!mounted) return;
+  const statsEnabled =
+    isEnabled && (mappedStatus === "online" || mappedStatus === "warning");
 
-        // Handle the not_configured status by treating it as offline
-        const mappedStatus =
-          health.status === "not_configured" ? "offline" : health.status;
-        setStatus(mappedStatus as "online" | "offline" | "warning" | "loading");
+  const statsQuery = useQuery({
+    queryKey: queryKeys.serviceStats("qbittorrent", serviceKey),
+    queryFn: () =>
+      apiClient.getServiceStats(serviceKey) as Promise<QBittorrentStats>,
+    refetchInterval: 30000,
+    retry: 1,
+    enabled: statsEnabled,
+  });
 
-        if (health.status === "online" || health.status === "warning") {
-          const qbtStats = await apiClient.getServiceStats(serviceKey);
-
-          if (!mounted) return;
-
-          setStats(qbtStats);
-        } else {
-          setStats(null);
-        }
-      } catch {
-        if (!mounted) return;
-        setStatus("offline");
-        setStats(null);
-      }
-    };
-
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [isEnabled]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const cfg = await apiClient.getFrontendConfig();
-        if (mounted) setFrontendConfig(cfg.services?.qbittorrent || null);
-      } catch (err) {
-        // ignore
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const stats = statsEnabled ? (statsQuery.data ?? null) : null;
 
   // Helper function to get connection status color
   const getConnectionStatusColor = (status: string) => {

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
+import { queryKeys } from "../lib/queryKeys";
 
 export interface ServiceInstance {
   id: string;
@@ -19,7 +20,7 @@ export interface ServiceInstancesData {
 
 export const useServiceInstances = () => {
   const query = useQuery<ServiceInstancesData>({
-    queryKey: ["services", "instances"],
+    queryKey: queryKeys.servicesInstances(),
     queryFn: () => apiClient.getServiceInstances(),
     refetchInterval: 60000, // Refresh every minute
     retry: 1,

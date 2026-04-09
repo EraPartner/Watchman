@@ -13,8 +13,9 @@ import {
 import { ServerStatusBadge } from "./ServerStatusBadge";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
-import { useFrontendConfig } from "../hooks/useServicesHealth";
+import { useFrontendConfig } from "../hooks/useFrontendConfig";
 import { useEnabledServices } from "../hooks/useEnabledServices";
+import { queryKeys } from "../lib/queryKeys";
 import { formatDisplayUrl, openHref } from "../lib/url";
 import { formatBytes } from "../lib/utils";
 
@@ -64,7 +65,7 @@ export const SynologyCard: React.FC<SynologyCardProps> = ({
     : "Synology";
 
   const statusQuery = useQuery({
-    queryKey: ["synology", "status", instanceId],
+    queryKey: queryKeys.serviceStatus("synology", instanceId),
     queryFn: () => apiClient.getServiceHealth(instanceId),
     refetchInterval: 30000,
     retry: 1,
@@ -72,7 +73,7 @@ export const SynologyCard: React.FC<SynologyCardProps> = ({
   });
 
   const statsQuery = useQuery({
-    queryKey: ["synology", "stats", instanceId],
+    queryKey: queryKeys.serviceStats("synology", instanceId),
     queryFn: () => apiClient.getServiceStats(instanceId),
     refetchInterval: 30000,
     retry: 1,
