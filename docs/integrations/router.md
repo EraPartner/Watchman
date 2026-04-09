@@ -2,7 +2,7 @@
 title: Router Integration
 type: integration
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [integration, services, backend, monitoring]
 description: Network router integration (Beryl/Telenet) with ARP lookup
 aliases: [router, beryl, telenet, arp, network]
@@ -53,6 +53,8 @@ TELENET_PORTS=80
 The `/api/router/arp` endpoint performs network neighbor discovery:
 
 - Uses `ip neigh` (Linux) or `arp -a` (macOS)
+- Uses a short-lived in-memory TTL cache (3s) in `[[apps/backend/services/RouterArpService.js]]` to reduce repeated ARP command executions during rapid refreshes
+- Cache pruning is bounded with a max-entry limit to avoid unbounded memory growth while preserving TTL behavior
 - Filters by router's interface or subnet
 - Returns paginated results with LAN-specific subset
 - Strict service validation prevents command injection

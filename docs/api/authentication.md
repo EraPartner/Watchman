@@ -2,7 +2,7 @@
 title: "API: Authentication Endpoints"
 type: api
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [api, auth, authentication, backend, jwt, csrf]
 description: Authentication API endpoints - login, logout, and auth status check
 aliases: [auth endpoints, login api, logout api]
@@ -79,7 +79,8 @@ Cookies set on success:
 
 ### Source
 
-- Route: [[apps/backend/server.js]]
+- Route module: [[apps/backend/routes/authRoutes.js]]
+- Registration: [[apps/backend/server.js]]
 - Auth middleware: [[apps/backend/middleware/auth.js]]
 - CSRF middleware: [[apps/backend/middleware/csrf.js]]
 - Lockout middleware: [[apps/backend/middleware/accountLockout.js]]
@@ -109,7 +110,8 @@ Cookies cleared:
 
 ### Source
 
-- Route: [[apps/backend/server.js]]
+- Route module: [[apps/backend/routes/authRoutes.js]]
+- Registration: [[apps/backend/server.js]]
 
 ---
 
@@ -148,7 +150,8 @@ No parameters. Token extracted from:
 
 ### Source
 
-- Route: [[apps/backend/server.js]]
+- Route module: [[apps/backend/routes/authRoutes.js]]
+- Registration: [[apps/backend/server.js]]
 - Auth middleware: [[apps/backend/middleware/auth.js]]
 
 ---

@@ -1,8 +1,8 @@
 ---
 title: PerformantServiceCard Component
 type: component
-status: active
-date: 2026-04-02
+status: deprecated
+date: 2026-04-09
 tags: [component, frontend, react, service-card, performance, memo, usememo]
 description: Enhanced service card with priority-based polling intervals, memoized calculations, web URL links, and performance level indicators
 aliases: [performant service card, priority service card]
@@ -19,7 +19,7 @@ aliases: [performant service card, priority service card]
 
 ## File Location
 
-`[[apps/frontend/src/components/PerformantServiceCard.tsx]]`
+Removed from codebase during refactor. This document is retained for historical reference.
 
 ## Props
 

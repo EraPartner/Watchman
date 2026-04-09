@@ -2,7 +2,7 @@
 title: "Component: QBittorrentCard"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [component, frontend, react, service-card, qbittorrent, torrent]
 description: qBittorrent download client card showing transfer stats, active torrents, and connection info
 aliases: [qbittorrent card, torrent card, download monitoring]
@@ -26,11 +26,12 @@ Monitors qBittorrent instances showing current transfer activity, download/uploa
 
 ## Data Fetching
 
-Uses manual `useEffect` + `setInterval` pattern (not React Query):
+Uses React Query for both status and stats:
 
-- Authenticates with qBittorrent Web API via cookie
-- Fetches transfer info, torrent list, and server state
-- Polls at configured interval
+- Health query key: `queryKeys.serviceStatus("qbittorrent", instanceId)`
+- Stats query key: `queryKeys.serviceStats("qbittorrent", instanceId)`
+- Polling interval: 30s for both queries
+- Stats query is enabled only when service health resolves to online/warning
 
 ## Displayed Metrics
 
@@ -45,19 +46,19 @@ Uses manual `useEffect` + `setInterval` pattern (not React Query):
 | Free Disk Space     | Available storage                  |
 | qBittorrent Version | Client version                     |
 
-## Known Issues
+## Notes
 
-> [!warning] Technical Debt
->
-> - Uses manual `useEffect` + `setInterval` instead of React Query
-> - Cookie-based authentication requires session management
+- Behavior remains functionally equivalent after refactor; data-fetching mechanics moved to React Query.
+- qBittorrent backend authentication/session behavior remains unchanged.
 
 ## Dependencies
 
 - `[[apps/frontend/src/components/ui/card.tsx]]` — Card layout
 - `[[apps/frontend/src/components/ServerStatusBadge.tsx]]` — Status indicator
-- `[[apps/frontend/src/hooks/useEnabledServices|useEnabledServices]]`
-- `[[apps/frontend/src/services/ApiClient|apiClient]]`
+- `[[apps/frontend/src/hooks/useEnabledServices.ts|useEnabledServices]]`
+- `[[apps/frontend/src/hooks/useFrontendConfig.ts|useFrontendConfig]]`
+- `[[apps/frontend/src/lib/queryKeys.ts]]`
+- `[[apps/frontend/src/services/ApiClient.ts|apiClient]]`
 
 ## Source
 

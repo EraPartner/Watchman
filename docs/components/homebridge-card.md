@@ -2,7 +2,7 @@
 title: "Component: HomebridgeCard"
 type: component
 status: active
-date: 2026-04-03
+date: 2026-04-09
 tags: [component, frontend, react, service-card, homebridge, smart-home]
 description: Homebridge smart home hub monitoring card with server info, version, and accessories
 aliases: [homebridge card, smart home card, homekit bridge monitoring]
@@ -28,16 +28,15 @@ Monitors Homebridge instances that bridge non-HomeKit smart home devices to Appl
 
 Uses React Query with `useQuery` for status polling.
 
+- Loading state is based on **initial load** (`isLoading`) only, so background `isFetching` refetches do not trigger loading flicker.
+
 ## Displayed Metrics
 
-| Metric          | Description                     |
-| --------------- | ------------------------------- |
-| Version         | Homebridge version              |
-| Platform        | Operating system platform       |
-| Uptime          | Server uptime duration          |
-| Accessories     | Connected accessory count       |
-| Node.js Version | Runtime version                 |
-| Last Seen       | Last successful check timestamp |
+| Metric    | Description                     |
+| --------- | ------------------------------- |
+| Version   | Homebridge version              |
+| Uptime    | Server uptime duration          |
+| Last Seen | Last successful check timestamp |
 
 ## Accessories Degradation UX
 
@@ -47,8 +46,8 @@ Uses React Query with `useQuery` for status polling.
 
 > [!warning] Technical Debt
 >
-> - Contains an empty placeholder `<div>` at line 245 with only a comment showing intended content
-> - Casts API responses to `any` instead of typed interfaces
+> - Contains an empty placeholder `<div>` block with only a comment showing intended content
+> - No contract/behavior change in recent cleanup; this component was updated for render-state hygiene only
 
 ## Dependencies
 

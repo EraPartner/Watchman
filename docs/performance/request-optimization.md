@@ -2,7 +2,7 @@
 title: Request Optimization
 type: performance
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [performance, frontend, optimization]
 description: Frontend request batching and deduplication optimization
 aliases: [request optimization, batching, deduplication, request optimizer]
@@ -15,38 +15,41 @@ aliases: [request optimization, batching, deduplication, request optimizer]
 
 ## Implementation
 
-[[apps/frontend/src/services/RequestOptimizer.ts|RequestOptimizer.ts]]
+Current implementation is centered on React Query caching/invalidation and API client request deduplication (`[[apps/frontend/src/services/ApiClient.ts]]`, `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/lib/queryKeys.ts]]`).
 
 ### Features
 
 - **Request Deduplication**: Identical concurrent requests are merged into a single API call
-- **Request Batching**: Multiple health check requests can be batched together
-- **Result Distribution**: All waiting callers receive the same response
+- **Centralized query keys**: Consistent cache keying via `queryKeys`
+- **Targeted invalidation with family dedup**: WebSocket updates trigger debounced invalidation using `queryKeys.servicePrefix(...)` plus specific keys (for example `adguardFull`, `torRelay`, and router ARP), with flush-time deduplication of query-key families before invalidation
+- **Targeted invalidation dedup implementation**: flush-time query-family dedup now uses a keyed map before calling React Query invalidations, reducing duplicate invalidation calls during bursty update windows
+- **Typed in-flight dedup map**: ApiClient in-flight request dedup uses `Map<string, Promise<unknown>>`
+- **Request header hygiene**: `Content-Type: application/json` is auto-set only for non-`GET`/`HEAD` requests unless already provided
+- **Update check query hygiene**: `UpdateBadge` update checks now run through React Query (`queryKeys.serviceUpdates(service)`) with a 6-hour stale/refetch window instead of local interval polling
 
 ## Architecture
 
 ```
-Component A → RequestOptimizer ─┐
-                                ├→ Single API call → Response → All callers
-Component B → RequestOptimizer ─┘
+Component A → React Query/API Client ─┐
+                                      ├→ Single API call → Response → Shared cache
+Component B → React Query/API Client ─┘
 ```
 
 ## Usage
 
-The `RequestOptimizer` wraps API client calls:
-
-```typescript
-const result = await requestOptimizer.execute(
-  "service-health",
-  { serviceId },
-  () => apiClient.getServiceStatus(serviceId)
-);
-```
+Components/hooks use React Query with centralized keys (for example `queryKeys.serviceStatus(serviceId)`), and the WebSocket hook invalidates affected key families on updates.
 
 ## Integration with Hooks
 
-- `useServicesHealth` - Uses batching for multiple service health checks
-- `useServiceHealth` - Uses deduplication for individual service checks
+- `useServiceHealth` / `useAllServicesHealth` - primary service health query hooks
+- `useWebSocket` - debounced targeted key-based query invalidation for real-time updates
+- `UpdateBadge` - update availability query via `useQuery` + `apiClient.getServiceUpdates(service)`
+
+## Related Code
+
+- `[[apps/frontend/src/components/UpdateBadge.tsx]]`
+- `[[apps/frontend/src/services/ApiClient.ts]]` (`getServiceUpdates`)
+- `[[apps/frontend/src/lib/queryKeys.ts]]` (`serviceUpdates`)
 
 ## WebSocket vs Polling
 

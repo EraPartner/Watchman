@@ -2,7 +2,7 @@
 title: ADR-007 - API Client with Retry and Error Handling
 type: adr
 status: accepted
-date: 2026-04-02
+date: 2026-04-09
 tags: [adr, frontend, architecture, error-handling]
 description: Singleton API client with exponential backoff retry, request deduplication, CSRF injection, and standardized error handling
 aliases: [api client, retry logic, error handling]
@@ -34,6 +34,11 @@ A singleton `ApiClient` class provides:
 - **CSRF token injection** - automatically adds CSRF token to POST/PUT/PATCH/DELETE requests
 - **Response unwrapping** via `unwrapApiResponse` for standardized response envelope
 - **Auth token fallback** to localStorage for dev environments where HTTP-only cookies may not work
+- **Typed in-flight dedup map** based on `Promise<unknown>` (no `Promise<any>` in request dedup internals)
+- **Compatibility alias methods** for Homebridge endpoints delegate to canonical client methods to keep call sites stable during cleanup
+  - `getHomebridgeStatus()`, `getHomebridgeStats()`, and `getStatusHomebridge()` are marked deprecated and delegate to `getHomebridgeServerInformation()`
+- **Header defaulting hygiene** applies `Content-Type: application/json` automatically only for non-`GET`/`HEAD` requests unless explicitly provided
+- **Additional exported response interfaces/types** are available for consuming hooks/components (for example auth, services-health, frontend-config, and service-instance response shapes)
 
 ### Key Code
 

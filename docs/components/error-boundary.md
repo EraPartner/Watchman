@@ -2,7 +2,7 @@
 title: ErrorBoundary Component
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [component, frontend, react, error-handling, class-component]
 description: React class component error boundary that catches rendering errors and displays a fallback UI with reset capability
 aliases: [error boundary, error handler, fallback ui]
@@ -33,7 +33,7 @@ aliases: [error boundary, error handler, fallback ui]
 ### Error Capture
 
 - `getDerivedStateFromError` — Sets `hasError: true` and stores the error
-- `componentDidCatch` — Logs error and component stack to console (production: send to error reporting service)
+- `componentDidCatch` — Emits structured logger error payloads including error and component-stack context
 
 ### Display States
 
@@ -74,8 +74,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 - **Development error details** — Error details only shown in dev mode via `import.meta.env.MODE === "development"`
 - **Reset capability** — Allows recovery from transient errors without page reload
 - **Custom fallback support** — Consumers can provide their own error UI
+- **Structured diagnostics** — Error capture paths use frontend logger utilities instead of direct console error calls
 
 ## Related
 
 - [[docs/components/auth-guard|AuthGuard]] — Another protective wrapper component
 - [[docs/architecture/frontend-architecture|Frontend Architecture]] — Error handling strategy
+- `[[apps/frontend/src/lib/logger.ts]]` — Frontend structured logging utility

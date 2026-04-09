@@ -2,7 +2,7 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [feature, websocket, frontend, backend, real-time]
 description: WebSocket-based real-time status broadcasting for live dashboard updates
 aliases: [websocket, real-time, live updates, status broadcasting]
@@ -23,6 +23,9 @@ The [[apps/backend/services/WebSocketManager.js|WebSocketManager]] handles:
 2. Client connection management
 3. Status change broadcasting
 4. Graceful shutdown
+5. Idempotent disconnect handling (close/error paths are guarded to avoid double-processing a single disconnect)
+6. Broadcast cleanup routes stale sockets through disconnect handling so `connectionsByIp` tracking stays consistent
+7. WebSocket server-close cleanup clears both `clients` and `connectionsByIp` tracking maps
 
 ### Data Flow
 
@@ -42,6 +45,8 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 2. Message parsing and dispatch
 3. Reconnection logic
 4. Connection state tracking
+5. Debounced invalidation flush with query-family deduplication and targeted `queryKeys` invalidation
+6. Hook-level observability via frontend logger (`logger.warn`/`logger.debug`) instead of high-noise per-message console logging
 
 ## Benefits
 

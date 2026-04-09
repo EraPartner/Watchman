@@ -2,7 +2,7 @@
 title: useAuth Hook
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [hook, frontend, react, auth, authentication]
 description: Authentication state management hook providing login, logout, and session checking via cookie-based backend auth
 aliases: [auth hook, authentication hook, login hook]
@@ -74,6 +74,12 @@ Alias for `fetchMe()` — allows components to manually re-check auth status.
 - On mount: Calls `fetchMe()` to check existing session
 - After login: Calls `fetchMe()` to confirm session
 - After logout: Clears user state locally
+
+## Error Handling Notes
+
+- Auth failure paths now use frontend structured logger warnings instead of direct `console.error` calls.
+- Catch blocks use `unknown` typing for safer narrowing while preserving existing auth behavior.
+- Related logging utility: `[[apps/frontend/src/lib/logger.ts]]`
 
 ## Usage
 

@@ -2,7 +2,7 @@
 title: ADR-005 - Real-Time Communication via WebSocket
 type: adr
 status: accepted
-date: 2026-04-02
+date: 2026-04-09
 tags: [adr, architecture, backend, frontend, real-time]
 description: WebSocket-based real-time updates with JWT authentication, heartbeat monitoring, and automatic reconnection
 aliases: [websocket, real-time, live updates]
@@ -16,7 +16,7 @@ aliases: [websocket, real-time, live updates]
 ## Status
 
 - **Status**: Accepted
-- **Date**: 2026-04-02
+- **Date**: 2026-04-09
 
 ## Context
 
@@ -31,13 +31,16 @@ Watchman monitors service health in real-time. Polling via REST API would create
 - Heartbeat monitoring (ping/pong) detects dead connections
 - Connection limit per IP (default 5) prevents abuse
 - `WebSocketManager` extends EventEmitter for event broadcasting
+- Disconnect handling is idempotent to avoid double-processing from close+error races
+- Broadcast cleanup paths funnel stale sockets through `handleClientDisconnect` so per-IP counters (`connectionsByIp`) remain consistent
 
 ### Frontend
 
 - Global singleton WebSocket instance prevents multiple connections across React re-renders
 - Automatic reconnection with exponential backoff
 - Max 5 reconnect attempts before requiring manual refresh
-- WebSocket messages trigger batched/debounced React Query invalidations (150ms debounce)
+- WebSocket messages trigger batched/debounced targeted React Query invalidations (150ms debounce)
+- Frontend hook logging for invalidation failures and flush summaries is routed through the frontend logger (`logger.warn`/`logger.debug`) to reduce console noise during normal message flow
 
 ### Key Code
 

@@ -2,7 +2,7 @@
 title: API Documentation
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [api, index, backend, openapi, endpoint, rest]
 description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.0 specification
 aliases: [api index, endpoints, rest api, swagger, openapi spec]
@@ -202,6 +202,7 @@ The complete API specification is available in OpenAPI 3.0 format:
 When adding a new API endpoint:
 
 1. Add route in `apps/backend/server.js` or `apps/backend/routes/`
+   - Prefer dedicated registration modules under `apps/backend/routes/` for non-factory routes, wired from `apps/backend/server.js`
 2. Apply appropriate middleware (auth, CSRF, rate limiting)
 3. Update [[apps/backend/openapi.yaml|OpenAPI spec]] with endpoint definition
 4. Create endpoint documentation in `docs/api/`

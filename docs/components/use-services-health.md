@@ -1,25 +1,27 @@
 ---
 title: "Hook: useServicesHealth"
 type: component
-status: active
-date: 2026-04-02
-tags: [hook, frontend, react, health, query]
-description: React Query hook for fetching aggregate health of all enabled services
+status: deprecated
+date: 2026-04-09
+tags: [hook, frontend, react, health, query, deprecated]
+description: Legacy doc for removed useServicesHealth hook; functionality now provided by hooks in useServiceHealth.ts and queryKeys
 aliases: [use services health, services health hook, aggregate health]
 ---
 
 # Hook: useServicesHealth
 
 > [!abstract] Overview
-> A React Query hook that fetches the aggregate health status of all enabled services from the `/api/services/health` endpoint.
+> `useServicesHealth.ts` has been removed. Aggregate health and frontend config querying now live in other hooks using centralized query keys.
 
-## Purpose
+## Current Replacement
 
-Provides a convenient way to subscribe to the health status of all monitored services with automatic polling, caching, and retry logic.
+- Aggregate services health: `useAllServicesHealth()` from `[[apps/frontend/src/hooks/useServiceHealth.ts]]`
+- Frontend config: `useFrontendConfig()` from `[[apps/frontend/src/hooks/useFrontendConfig.ts]]`
+- Query keys are centralized in `[[apps/frontend/src/lib/queryKeys.ts]]`
 
-## Exports
+## Legacy API (for historical context)
 
-### `useServicesHealth()`
+### `useServicesHealth()` (removed)
 
 ```typescript
 const { data, isLoading, error, refetch } = useServicesHealth();
@@ -39,7 +41,7 @@ const { data, isLoading, error, refetch } = useServicesHealth();
 - `refetchInterval`: `APP_CONFIG.ADGUARD_REFRESH_INTERVAL`
 - `retry`: 1
 
-### `useFrontendConfig()`
+### `useFrontendConfig()` (moved)
 
 ```typescript
 const { data, isLoading, error } = useFrontendConfig();
@@ -58,16 +60,16 @@ const { data, isLoading, error } = useFrontendConfig();
 - `refetchInterval`: 60 seconds
 - `retry`: 1
 
-> [!note] Consolidation Opportunity
-> This hook overlaps with `[[docs/components/use-config-hook|useConfig]]` and `[[docs/components/use-enabled-services|useEnabledServices]]`. All three call `apiClient.getFrontendConfig()`. Consider consolidating to a single React Query-based config hook.
+> [!note]
+> Consolidation is complete for these paths: `use-config.tsx` and `useServicesHealth.ts` were removed; consumers should use `useFrontendConfig` and `useServiceHealth` exports.
 
 ## Usage Example
 
 ```tsx
-import { useServicesHealth } from "../hooks/useServicesHealth";
+import { useAllServicesHealth } from "../hooks/useServiceHealth";
 
 function StatusOverview() {
-  const { data, isLoading } = useServicesHealth();
+  const { data, isLoading } = useAllServicesHealth();
 
   if (isLoading) return <div>Loading...</div>;
 
@@ -87,11 +89,12 @@ function StatusOverview() {
 
 - `@tanstack/react-query` — `useQuery`
 - `[[apps/frontend/src/services/ApiClient|apiClient]]`
-- `[[apps/frontend/src/lib/constants.ts]]` — `APP_CONFIG`
+- `[[apps/frontend/src/lib/queryKeys.ts]]`
 
 ## Source
 
-- [[apps/frontend/src/hooks/useServicesHealth.ts]]
+- Current aggregate health source: [[apps/frontend/src/hooks/useServiceHealth.ts]]
+- Current frontend config source: [[apps/frontend/src/hooks/useFrontendConfig.ts]]
 
 ## Related
 

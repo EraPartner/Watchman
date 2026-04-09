@@ -1,8 +1,8 @@
 ---
 title: OptimizedServiceCard Component
 type: component
-status: active
-date: 2026-04-02
+status: deprecated
+date: 2026-04-09
 tags: [component, frontend, react, service-card, memo]
 description: Base service card component with React.memo optimization and React Query data fetching for health and stats
 aliases: [optimized service card, service card base]
@@ -19,7 +19,7 @@ aliases: [optimized service card, service card base]
 
 ## File Location
 
-`[[apps/frontend/src/components/OptimizedServiceCard.tsx]]`
+Removed from codebase during refactor. This document is retained for historical reference.
 
 ## Props
 

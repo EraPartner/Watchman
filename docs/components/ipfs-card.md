@@ -2,7 +2,7 @@
 title: "Component: IpfsCard"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [component, frontend, react, service-card, ipfs, kubo, p2p]
 description: IPFS/Kubo node monitoring card showing peer count, repo stats, and bandwidth usage
 aliases: [ipfs card, kubo card, distributed storage monitoring]
@@ -28,6 +28,11 @@ Monitors IPFS nodes showing network participation, storage usage, data transfer 
 
 Uses manual `useEffect` + `setInterval` pattern (not React Query).
 
+## Typing Notes
+
+- `[[apps/frontend/src/components/IpfsCard.tsx]]` now defines a local `IpfsStats` interface for stats payload access and uses typed `FrontendConfig` service config access.
+- This is an internal typing cleanup/refactor; UI behavior and displayed metrics remain unchanged.
+
 ## Displayed Metrics
 
 | Metric                       | Description                     |
@@ -45,7 +50,6 @@ Uses manual `useEffect` + `setInterval` pattern (not React Query).
 > [!warning] Technical Debt
 >
 > - Uses manual `useEffect` + `setInterval` instead of React Query
-> - Casts API responses to `any`
 
 ## Dependencies
 

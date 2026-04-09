@@ -2,7 +2,7 @@
 title: "API: Frontend Configuration"
 type: api
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [api, config, frontend, backend]
 description: GET /api/config/frontend - Frontend configuration endpoint
 aliases: [frontend config, config endpoint, frontend configuration]
@@ -15,13 +15,13 @@ aliases: [frontend config, config endpoint, frontend configuration]
 
 ## Endpoint
 
-| Property   | Value                      |
-| ---------- | -------------------------- |
-| **Method** | `GET`                      |
-| **Path**   | `/api/config/frontend`     |
-| **Auth**   | None                       |
-| **Rate**   | `generalLimiter`           |
-| **Source** | [[apps/backend/server.js]] |
+| Property   | Value                                 |
+| ---------- | ------------------------------------- |
+| **Method** | `GET`                                 |
+| **Path**   | `/api/config/frontend`                |
+| **Auth**   | None                                  |
+| **Rate**   | `generalLimiter`                      |
+| **Source** | [[apps/backend/routes/metaRoutes.js]] |
 
 ## Response
 
@@ -51,16 +51,18 @@ Called by the frontend on initial load to determine which service cards to rende
 ### Frontend Hook
 
 ```typescript
-// apps/frontend/src/hooks/use-config.tsx
-const { data: config } = useConfig();
+// apps/frontend/src/hooks/useFrontendConfig.ts
+const { data: config } = useFrontendConfig();
 // config.enabledServices determines which cards are shown
 ```
 
 ## Source
 
-- Route: [[apps/backend/server.js]]
+- Route module: [[apps/backend/routes/metaRoutes.js]]
+- Registration: [[apps/backend/server.js]]
 - Service: [[apps/backend/services/FrontendConfigService.js]]
-- Frontend hook: [[apps/frontend/src/hooks/use-config.tsx]]
+- Frontend hook: [[apps/frontend/src/hooks/useFrontendConfig.ts]]
+- Query keys: [[apps/frontend/src/lib/queryKeys.ts]]
 
 ## Related
 
@@ -77,11 +79,11 @@ const { data: config } = useConfig();
 !theme plain
 
 participant "Frontend" as FE
-participant "useConfig hook" as Hook
+participant "useFrontendConfig hook" as Hook
 participant "FrontendConfigService" as Svc
 participant "Config" as Cfg
 
-FE -> Hook : Mount\nuseConfig()
+FE -> Hook : Mount\nuseFrontendConfig()
 
 Hook -> Svc : GET /api/config/frontend
 

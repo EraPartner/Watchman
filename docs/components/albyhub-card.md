@@ -2,7 +2,7 @@
 title: "Component: AlbyHubCard"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [component, frontend, react, service-card, alby, lightning, bitcoin]
 description: Alby Hub Lightning wallet monitoring card with app list and node info
 aliases: [alby hub card, lightning wallet card, alby monitoring]
@@ -27,6 +27,11 @@ Monitors Alby Hub instances that manage Lightning Network applications and walle
 ## Data Fetching
 
 Uses manual `useEffect` + `setInterval` pattern (not React Query).
+
+## Typing Notes
+
+- `[[apps/frontend/src/components/AlbyHubCard.tsx]]` now reads frontend service config via typed `FrontendConfig` access instead of loose `as any` usage.
+- This is an internal typing cleanup/refactor and does not change card behavior.
 
 ## Displayed Metrics
 

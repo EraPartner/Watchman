@@ -2,7 +2,7 @@
 title: "API: Services Health"
 type: api
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [api, health, services, batch, backend]
 description: Aggregate and batch health check endpoints for all monitored services
 aliases: [services health, batch health, health batch]
@@ -71,7 +71,8 @@ Returns health status for all enabled services in a single request.
 
 ### Source
 
-- Route: [[apps/backend/server.js]]
+- Route module: [[apps/backend/routes/metaRoutes.js]]
+- Registration: [[apps/backend/server.js]]
 - ServiceManager: [[apps/backend/services/ServiceManager.js]]
 
 ---
@@ -138,12 +139,13 @@ Check health for a specific subset of services. More efficient than individual s
 
 ### Frontend Usage
 
-Used by [[apps/frontend/src/services/RequestOptimizer.ts|RequestBatcher]] to batch multiple health check requests into a single API call.
+Consumed by React Query hooks and dashboard views (for example `useAllServicesHealth()` in `[[apps/frontend/src/hooks/useServiceHealth.ts]]`).
 
 ### Source
 
-- Route: [[apps/backend/server.js]]
-- Request optimizer: [[apps/frontend/src/services/RequestOptimizer.ts]]
+- Route module: [[apps/backend/routes/metaRoutes.js]]
+- Registration: [[apps/backend/server.js]]
+- Frontend hooks: [[apps/frontend/src/hooks/useServiceHealth.ts]], [[apps/frontend/src/hooks/useServiceInstances.tsx]]
 
 ---
 
@@ -176,7 +178,8 @@ Returns metadata about multi-instance service configurations.
 
 ### Source
 
-- Route: [[apps/backend/server.js]]
+- Route module: [[apps/backend/routes/metaRoutes.js]]
+- Registration: [[apps/backend/server.js]]
 - ServiceManager: [[apps/backend/services/ServiceManager.js]]
 
 ---
@@ -234,7 +237,7 @@ BE --> FE : { services: {...} }
 !theme plain
 
 participant "Frontend" as FE
-participant "RequestBatcher" as Batch
+participant "React Query hooks" as Batch
 participant "Backend" as BE
 
 note over FE

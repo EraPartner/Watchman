@@ -2,7 +2,7 @@
 title: "Component: MacMiniCard"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [component, frontend, react, service-card, mac, ssh, server]
 description: Mac Mini server monitoring card with SSH-based stats including uptime, CPU temp, and disk
 aliases: [mac mini card, mac server card, ssh monitoring]
@@ -45,7 +45,7 @@ Uses React Query with `useQuery` for status polling.
 
 > [!warning] Technical Debt
 >
-> - Contains a duplicated `formatUptime` function (also exists in `utils.ts`)
+> - No contract/behavior change in the latest cleanup; dead `statusColor` computation was removed.
 
 ## Dependencies
 

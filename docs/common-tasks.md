@@ -2,7 +2,7 @@
 title: Common Tasks
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [reference, tasks, quick-reference]
 description: Task-oriented quick reference for common Watchman development operations
 aliases: [common tasks, quick reference, cheat sheet]
@@ -42,7 +42,7 @@ node -e "console.log(require('bcrypt').hashSync('yourpassword', 10))"
 1. Create service class in `apps/backend/services/`
 2. Register in `serviceFactoryConfig.js`
 3. Add env vars to `.env.example`
-4. Add route in `server.js`
+4. Register routes via `apps/backend/routes/*.js` (wired from `apps/backend/server.js`)
 5. Create frontend card component
 6. Update OpenAPI spec
 7. Create integration doc

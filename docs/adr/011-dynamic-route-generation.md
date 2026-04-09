@@ -2,7 +2,7 @@
 title: ADR-011 - Dynamic Route Generation with Mixed Manual Routes
 type: adr
 status: accepted
-date: 2026-04-02
+date: 2026-04-09
 tags: [adr, backend, architecture, routing]
 description: Hybrid routing approach combining factory-generated standard routes with manually-defined special endpoints
 aliases: [dynamic routes, route factory, mixed routing]
@@ -11,7 +11,7 @@ aliases: [dynamic routes, route factory, mixed routing]
 # ADR-011: Dynamic Route Generation with Mixed Manual Routes
 
 > [!abstract] Summary
-> Standard service routes (`/status`, `/stats`, `/updates`) are generated via factory functions, while services with special endpoints have manually defined routes in `server.js`.
+> Standard service routes (`/status`, `/stats`, `/updates`) are generated via factory functions, while services with special endpoints are registered through dedicated route modules wired by `server.js`.
 
 ## Status
 
@@ -34,13 +34,28 @@ Standard routes are generated via `createServiceRoutes()` and `createUpdatesRout
 
 ### Manual Routes for Special Cases
 
-Services with additional endpoints have manually defined routes in `server.js`:
+Services with additional endpoints are registered through dedicated route modules (wired in `server.js`):
 
 - **Bitcoin** - `/api/services/bitcoin/health` (additional health endpoint)
 - **Tor** - `/api/services/tor/relay/:nickname` (relay lookup)
 - **Homebridge** - `/api/services/homebridge/accessories` (accessory listing)
-- **Synology** - Stats override route
 - **Router** - ARP lookup endpoint
+
+Current modular registrations include:
+
+- `[[apps/backend/routes/authRoutes.js]]`
+- `[[apps/backend/routes/metaRoutes.js]]`
+- `[[apps/backend/routes/controlRoutes.js]]`
+- `[[apps/backend/routes/instanceRoutes.js]]`
+- `[[apps/backend/routes/homebridgeRoutes.js]]`
+- `[[apps/backend/routes/routerRoutes.js]]`
+
+This route-module decomposition is a structural refactor only; endpoint behavior and contracts are preserved.
+
+### Refinements in Current State
+
+- Synology stats rely on the standard factory route (`/api/synology/stats`) with no duplicate explicit override route in `server.js`.
+- Factory route success logs were intentionally reduced to lower log noise; error logs remain.
 
 ### Multi-Instance Support
 
@@ -49,7 +64,13 @@ Multi-instance services use regex route patterns (`:serviceId(\w+_\d+)`) to matc
 ### Key Code
 
 - `[[apps/backend/routes/serviceFactory.js]]` - Route factory functions
-- `[[apps/backend/server.js]]` - Route registration (both factory and manual)
+- `[[apps/backend/server.js]]` - Route registration wiring
+- `[[apps/backend/routes/authRoutes.js]]` - Authentication routes
+- `[[apps/backend/routes/metaRoutes.js]]` - Aggregate/meta routes
+- `[[apps/backend/routes/controlRoutes.js]]` - Control/mutation routes
+- `[[apps/backend/routes/instanceRoutes.js]]` - Multi-instance routes
+- `[[apps/backend/routes/homebridgeRoutes.js]]` - Homebridge special routes
+- `[[apps/backend/routes/routerRoutes.js]]` - Router ARP route
 
 ## Consequences
 
@@ -63,13 +84,13 @@ Multi-instance services use regex route patterns (`:serviceId(\w+_\d+)`) to matc
 ### Negative
 
 - Route ordering matters -- multi-instance regex routes must come before specific hardcoded routes
-- Manual routes duplicate some error handling patterns that the factory handles automatically
+- Route modules still duplicate some error handling patterns that the factory handles automatically
 - Factory middleware object (`factoryMiddleware`) is passed as a dependency, creating coupling
 - No route-level OpenAPI spec generation from the factory -- API docs must be maintained separately
 
 ### Risks
 
-- Route ordering bugs if new manual routes are added in the wrong position
+- Route ordering bugs if new module registrations are added in the wrong position
 - Inconsistency between factory-generated and manual route error handling
 
 ## PlantUML Diagrams
@@ -81,7 +102,7 @@ Multi-instance services use regex route patterns (`:serviceId(\w+_\d+)`) to matc
 !theme plain
 
 package "server.js" as Server {
-    [Route Registration]
+    [Route Registration Wiring]
 }
 
 package "Service Factory" as Factory {
@@ -95,7 +116,7 @@ package "Generated Routes" as Routes {
     [/api/:serviceId/updates]
 }
 
-package "Manual Routes" as Manual {
+package "Special Route Modules" as Manual {
     [Bitcoin health route]
     [Tor relay route]
     [Homebridge accessories]
@@ -105,7 +126,7 @@ package "Manual Routes" as Manual {
 Server -> Factory : createServiceRoutes()
 Factory --> Routes : Generate standard routes
 
-Server -> Manual : Define special routes
+Server -> Manual : Register special routes
 
 note right of Server
   Route order matters:
@@ -210,3 +231,9 @@ SM -> SM : Get service instance\nqbittorrent_2
 - [[docs/architecture/backend-architecture|Backend Architecture]]
 - Related code: `[[apps/backend/routes/serviceFactory.js]]`
 - Related code: `[[apps/backend/server.js]]`
+- Related code: `[[apps/backend/routes/authRoutes.js]]`
+- Related code: `[[apps/backend/routes/metaRoutes.js]]`
+- Related code: `[[apps/backend/routes/controlRoutes.js]]`
+- Related code: `[[apps/backend/routes/instanceRoutes.js]]`
+- Related code: `[[apps/backend/routes/homebridgeRoutes.js]]`
+- Related code: `[[apps/backend/routes/routerRoutes.js]]`

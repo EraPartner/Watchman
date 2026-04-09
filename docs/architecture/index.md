@@ -2,7 +2,7 @@
 title: Architecture
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [architecture, index]
 description: Index of all architecture documentation for the Watchman project
 aliases: [architecture index, system design, system architecture]
@@ -12,6 +12,9 @@ aliases: [architecture index, system design, system architecture]
 
 > [!abstract] Overview
 > Watchman uses a client-server architecture with a React frontend and Node.js/Express backend communicating via REST API and WebSocket.
+
+> [!note]
+> Backend API route registration is orchestrated by [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]], called from [[apps/backend/server.js|server.js]].
 
 ## Architecture Index
 

@@ -2,9 +2,9 @@
 title: useWebSocket Hook
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [hook, frontend, react, websocket, real-time, singleton]
-description: Global singleton WebSocket hook with automatic reconnection, exponential backoff, connection throttling, and debounced React Query cache invalidation
+description: Global singleton WebSocket hook with automatic reconnection, exponential backoff, connection throttling, and batched targeted React Query invalidation
 aliases: [websocket hook, real-time hook, ws hook]
 ---
 
@@ -61,23 +61,41 @@ delay = min(INITIAL_RECONNECT_DELAY * 2^attempt, MAX_RECONNECT_DELAY)
 
 ## Message Types
 
-| Type             | Behavior                                             |
-| ---------------- | ---------------------------------------------------- |
-| `connection`     | Shows success toast                                  |
-| `service_update` | Schedules React Query invalidation for the service   |
-| `alert`          | Shows toast notification (error/warning/info)        |
-| `metrics`        | Schedules React Query invalidation for "metrics" key |
+| Type             | Behavior                                                                        |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `connection`     | Shows success toast                                                             |
+| `service_update` | Schedules batched invalidation for matching service query families              |
+| `alert`          | Shows toast notification (error/warning/info)                                   |
+| `metrics`        | Schedules invalidation for `[[apps/frontend/src/lib/queryKeys.ts]]` metrics key |
+
+Note: service update and metrics payloads are handled without per-message console logging; operational diagnostics are emitted via `logger` where needed. This logging cleanup does not change WebSocket message handling or invalidation behavior.
 
 ## Cache Invalidation
 
-The hook implements **batched, debounced** cache invalidation:
+The hook implements **batched, debounced** cache invalidation using the centralized query key factory `[[apps/frontend/src/lib/queryKeys.ts]]`:
 
-1. WebSocket messages add query keys to a `Set` (deduplicates automatically)
+1. WebSocket messages add service keys to a `Set` (deduplicates automatically)
 2. A 150ms debounce timer starts on the first message
-3. When the timer fires, all pending keys are invalidated at once
-4. New messages during the timer are collected for the next batch
+3. When the timer fires, pending keys are invalidated at once using targeted query keys
+4. Query-key families are deduplicated before invalidation (flush-time `Map`-based dedup)
+5. New messages during the timer are collected for the next batch
 
 This prevents cache thrashing when multiple service updates arrive rapidly.
+
+### Invalidation Rules
+
+- For `service_update`, the hook invalidates targeted key families via:
+  - `queryKeys.servicePrefix(baseServiceKey)` (example: `qbittorrent`), and
+  - `queryKeys.servicePrefix(serviceKey)` when instance-qualified (example: `qbittorrent_2`).
+- For AdGuard updates, it also invalidates `queryKeys.adguardFull()`.
+- For Tor updates, it also invalidates `queryKeys.torRelay()`.
+- For router services (`beryl`, `telenet`), it also invalidates `queryKeys.routerArp(serviceKey)`.
+- For `metrics`, it invalidates `queryKeys.metrics()`.
+- After any non-metrics service invalidation batch, it invalidates `queryKeys.servicesHealth()` so dashboard aggregate health stays aligned.
+
+In practice, flush-time deduplication currently covers these query-key families: `servicePrefix`, `adguardFull`, `torRelay`, `routerArp`, `metrics`, and `servicesHealth`.
+
+Flush-time diagnostics use frontend logger methods (`logger.warn` for invalidation failures and `logger.debug` for batch summaries).
 
 ## Return Value
 
@@ -111,7 +129,7 @@ function Dashboard() {
 
 - **Global singleton** — Prevents multiple WebSocket connections across React component re-renders and multiple hook usages
 - **Subscriber pattern** — Components subscribe to global state changes rather than each managing their own connection
-- **Debounced invalidation** — Prevents React Query from thrashing when many updates arrive simultaneously
+- **Debounced + targeted invalidation** — Prevents React Query thrashing while keeping base and instance service keys in sync
 - **Connection throttling** — Prevents rapid-fire connection attempts that could overwhelm the server
 - **Clean close detection** — Only reconnects if the close wasn't intentional (code !== 1000)
 
@@ -121,3 +139,4 @@ function Dashboard() {
 - [[docs/adr/005-real-time-websocket|ADR-005: Real-Time Communication via WebSocket]]
 - `[[apps/backend/services/WebSocketManager.js]]` — Backend WebSocket manager
 - `[[apps/frontend/src/services/ApiClient.ts]]` — API client (complementary communication)
+- `[[apps/frontend/src/lib/logger.ts]]` — Frontend structured logging utility

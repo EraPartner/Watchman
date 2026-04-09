@@ -2,7 +2,7 @@
 title: "Hook: useEnabledServices"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [hook, frontend, react, config, feature-flag]
 description: React Query hook for determining which services are enabled via environment configuration
 aliases: [use enabled services, enabled services hook, service config]
@@ -68,6 +68,8 @@ function Dashboard() {
 
 - `@tanstack/react-query` — `useQuery`
 - `[[apps/frontend/src/services/ApiClient|apiClient]]`
+- `[[apps/frontend/src/lib/queryKeys.ts]]`
+- `[[apps/frontend/src/hooks/useFrontendConfig.ts]]` (shared query key consumer)
 
 ## Source
 

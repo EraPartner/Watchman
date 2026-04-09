@@ -2,7 +2,7 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [architecture, frontend, react, typescript]
 description: Frontend architecture documentation for the Watchman React application
 aliases: [frontend, react architecture, frontend design]
@@ -33,11 +33,14 @@ App
 ├── Router
 │   ├── Index (Dashboard)
 │   │   ├── LiveServerDashboard
+│   │   │   ├── dashboardStatus helpers
+│   │   │   ├── dashboardData helpers
+│   │   │   ├── useDashboardQueries hook
+│   │   │   ├── DashboardTileSection
 │   │   │   ├── ServerStatusBadge
 │   │   │   └── Service Cards (grid)
-│   │   │       ├── OptimizedServiceCard / PerformantServiceCard
-│   │   │       │   ├── ServiceLink
-│   │   │       │   └── UpdateBadge
+│   │   │       ├── ServiceLink
+│   │   │       ├── UpdateBadge
 │   │   │       └── [Service-specific Card]
 │   │   └── ErrorBoundary
 │   ├── Login
@@ -47,7 +50,10 @@ App
 
 ## Service Cards
 
-Each service has a dedicated card component that extends either `OptimizedServiceCard` or `PerformantServiceCard`:
+Each service has a dedicated card component with service-specific queries/rendering. Legacy shared base card wrappers were removed during refactor.
+
+- Type-focused cleanup in card internals keeps behavior unchanged while reducing loose casting in frontend config/stat access (notably [[apps/frontend/src/components/IpfsCard.tsx|IpfsCard.tsx]] and [[apps/frontend/src/components/AlbyHubCard.tsx|AlbyHubCard.tsx]]).
+- `IpfsCard` now uses a local `IpfsStats` payload type plus typed `FrontendConfig` access; `AlbyHubCard` now uses typed `FrontendConfig` access.
 
 | Card Component    | Base      | File                                                     |
 | ----------------- | --------- | -------------------------------------------------------- |
@@ -71,22 +77,34 @@ Each service has a dedicated card component that extends either `OptimizedServic
 ### Data Fetching
 
 - **TanStack Query (React Query)** - Server state management
-- **RequestOptimizer** - Request batching and deduplication (`[[apps/frontend/src/services/RequestOptimizer.ts]]`)
 - **ApiClient** - HTTP client wrapper (`[[apps/frontend/src/services/ApiClient.ts]]`)
+- **queryKeys** - Centralized query key factory (`[[apps/frontend/src/lib/queryKeys.ts]]`)
+- **UpdateBadge query path** - `[[apps/frontend/src/components/UpdateBadge.tsx]]` uses `useQuery` with `queryKeys.serviceUpdates(service)` and `apiClient.getServiceUpdates(service)` for update checks
+- **Dashboard query orchestration** - `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` centralizes LiveServerDashboard queries and refresh behavior, with `torRelay` and `frontendConfig` fetched as separate queries
+- **Dashboard manual refresh scope** - `refreshEnabledQueries()` in `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` also refetches `servicesHealthQuery` so overview counters refresh with manual refresh
+- **Dashboard tile helpers** - `[[apps/frontend/src/components/dashboard/dashboardData.ts]]` provides reusable instance-tile assembly helpers (`appendInstanceTiles`, `getInstanceNumber`)
+- **Dashboard section rendering** - `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]` centralizes repeated Software/Hardware tile-section rendering used by `[[apps/frontend/src/components/LiveServerDashboard.tsx]]`
+
+### Frontend Logging
+
+- Frontend diagnostics for hooks/components are normalized through `[[apps/frontend/src/lib/logger.ts]]` rather than direct `console.*` usage in hot paths.
+- Recent cleanup updates include `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/hooks/useAuth.tsx]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`, and `[[apps/frontend/src/lib/csrf.ts]]`.
 
 ### Custom Hooks
 
 | Hook                  | Purpose                        | File                                                  |
 | --------------------- | ------------------------------ | ----------------------------------------------------- |
 | `useAuth`             | Authentication state           | `[[apps/frontend/src/hooks/useAuth.tsx]]`             |
-| `useServicesHealth`   | Batch health polling           | `[[apps/frontend/src/hooks/useServicesHealth.ts]]`    |
 | `useServiceHealth`    | Single service health          | `[[apps/frontend/src/hooks/useServiceHealth.ts]]`     |
 | `useServiceInstances` | Multi-instance management      | `[[apps/frontend/src/hooks/useServiceInstances.tsx]]` |
 | `useEnabledServices`  | Enabled services config        | `[[apps/frontend/src/hooks/useEnabledServices.ts]]`   |
 | `useWebSocket`        | Real-time WebSocket connection | `[[apps/frontend/src/hooks/useWebSocket.ts]]`         |
-| `use-config`          | Frontend configuration         | `[[apps/frontend/src/hooks/use-config.tsx]]`          |
+| `useFrontendConfig`   | Frontend configuration         | `[[apps/frontend/src/hooks/useFrontendConfig.ts]]`    |
 | `use-mobile`          | Mobile breakpoint              | `[[apps/frontend/src/hooks/use-mobile.tsx]]`          |
 | `use-toast`           | Toast notifications            | `[[apps/frontend/src/hooks/use-toast.ts]]`            |
+
+> [!note]
+> Removed hook/module references: `use-config.tsx` and `useServicesHealth.ts` are deleted; `RequestOptimizer.ts` is no longer present.
 
 ## Routing
 
@@ -123,6 +141,10 @@ package "Router" {
 
 package "Layout" {
   [LiveServerDashboard] as Layout
+  [DashboardTileSection] as DashSection
+  [dashboardStatus.ts] as DashStatus
+  [dashboardData.ts] as DashData
+  [useDashboardQueries.ts] as DashQueries
   [ErrorBoundary] as ErrBoundary
 }
 
@@ -133,8 +155,6 @@ package "Shared Components" {
 }
 
 package "Service Cards" {
-  [OptimizedServiceCard] as OptCard
-  [PerformantServiceCard] as PerfCard
   [AdGuardCard] as AdGuard
   [BitcoinCard] as Bitcoin
   [TorCard] as Tor
@@ -153,19 +173,18 @@ package "Service Cards" {
 
 package "Hooks" {
   [useAuth] as Auth
-  [useServicesHealth] as SvcHealth
   [useServiceHealth] as SvcHealthOne
   [useServiceInstances] as SvcInst
   [useEnabledServices] as Enabled
   [useWebSocket] as WS
-  [useConfig] as Config
+  [useFrontendConfig] as Config
   [useMobile] as Mobile
   [useToast] as Toast
 }
 
 package "Services" {
   [ApiClient] as API
-  [RequestOptimizer] as Optimizer
+  [queryKeys] as QueryKeys
 }
 
 App --> Router : routes
@@ -177,33 +196,37 @@ Dashboard --> Layout
 Dashboard --> ErrBoundary
 
 Layout --> Badge
-Layout --> OptCard
-Layout --> PerfCard
+Layout --> DashSection
+Layout --> DashStatus : uses
+Layout --> DashData : uses
+Layout --> DashQueries : uses
 
-OptCard --> AdGuard : extends
-OptCard --> Bitcoin : extends
-OptCard --> Tor : extends
-OptCard --> IPFS : extends
-OptCard --> Syno : extends
-OptCard --> Roon : extends
-OptCard --> Philips : extends
-OptCard --> HB : extends
-OptCard --> Mac : extends
-OptCard --> Alby : extends
-OptCard --> RPi : extends
-OptCard --> Router : extends
-OptCard --> Nostr : extends
-
-OptCard --> SvcLink
-OptCard --> Update
+Layout --> AdGuard
+Layout --> Bitcoin
+Layout --> Tor
+Layout --> QB
+Layout --> IPFS
+Layout --> Syno
+Layout --> Roon
+Layout --> Philips
+Layout --> HB
+Layout --> Mac
+Layout --> Alby
+Layout --> RPi
+Layout --> Router
+Layout --> Nostr
+Layout --> SvcLink
+Layout --> Update
 
 Auth --> API : uses
-SvcHealth --> API : uses
-SvcHealth --> Optimizer : uses
 SvcHealthOne --> API : uses
+SvcHealthOne --> QueryKeys : keys
 SvcInst --> API : uses
 Enabled --> API : uses
+Enabled --> QueryKeys : keys
+Config --> QueryKeys : keys
 WS --> API : connects
+WS --> QueryKeys : invalidates
 @enduml
 ```
 
@@ -257,10 +280,10 @@ Hook -> Hook : Parse message
 Hook -> Hook : Determine update type
 
 alt Service Status Update
-    Hook -> Query : queryClient.invalidateQueries\n(['service-health', serviceId])
+    Hook -> Query : batched invalidateQueries\n(targeted queryKey families)
     Query --> Card : Refetch service
 else Configuration Update
-    Hook -> Query : queryClient.invalidateQueries\n(['enabled-services'])
+    Hook -> Query : invalidateQueries(queryKeys.servicesHealth)
     Query --> Card : Refetch config
 end
 

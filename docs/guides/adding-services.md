@@ -2,7 +2,7 @@
 title: Adding Services Guide
 type: guide
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [guide, backend, services, development]
 description: Step-by-step guide to adding a new service integration to Watchman
 aliases: [add service, new service, service integration, how to add service]
@@ -124,9 +124,9 @@ NEWSERVICE_PORT=8080
 
 Update `config.js` `getConfig()` to include the service config.
 
-## Step 4: Add Route
+## Step 4: Register Route
 
-In `apps/backend/server.js`, add to the service routes loop:
+For standard service `/status` + `/stats` endpoints, add the service ID to the factory route loop in `apps/backend/server.js`:
 
 ```javascript
 for (const svc of [
@@ -153,6 +153,8 @@ for (const svc of [
   );
 }
 ```
+
+If the service needs non-standard endpoints, implement them in a dedicated route module under `apps/backend/routes/` and register that module from `apps/backend/server.js` (current examples: `authRoutes.js`, `metaRoutes.js`, `controlRoutes.js`, `instanceRoutes.js`, `homebridgeRoutes.js`, `routerRoutes.js`).
 
 ## Step 5: Create Frontend Card Component
 
@@ -201,7 +203,7 @@ Update [[docs/components/index|Components Index]] with the new card.
 - [ ] Registered in `serviceFactoryConfig.js`
 - [ ] Added to default enabled services in `config.js`
 - [ ] Environment variables added to `.env.example`
-- [ ] Route added in `server.js`
+- [ ] Route added to factory loop and/or dedicated route module registered from `server.js`
 - [ ] Frontend card component created
 - [ ] Card added to dashboard
 - [ ] OpenAPI spec updated
@@ -226,7 +228,7 @@ participant "Docs" as Docs
 Dev -> BE : Create NewServiceName.js\n(service class)
 Dev -> Factory : Register in\nserviceFactoryConfig.js
 Dev -> BE : Add env vars to\n.env.example
-Dev -> Server : Add route in\nserver.js
+Dev -> Server : Register route\n(factory loop or module)
 Dev -> FE : Create NewServiceCard.tsx\n(frontend component)
 Dev -> FE : Add card to dashboard
 Dev -> Docs : Update openapi.yaml

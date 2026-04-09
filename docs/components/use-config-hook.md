@@ -1,38 +1,42 @@
 ---
-title: "Hook: useConfig"
+title: "Hook: useFrontendConfig (replaces useConfig)"
 type: component
 status: active
-date: 2026-04-02
-tags: [hook, frontend, react, config, legacy]
-description: Legacy configuration hook using useEffect and manual state management
-aliases: [use config, config hook, legacy config]
+date: 2026-04-09
+tags: [hook, frontend, react, config]
+description: React Query frontend configuration hook; legacy useConfig hook removed
+aliases: [use frontend config, use config, config hook]
 ---
 
-# Hook: useConfig
+# Hook: useFrontendConfig (replaces useConfig)
 
 > [!abstract] Overview
-> A legacy configuration hook that uses `useEffect` and manual state management to fetch frontend configuration. Being consolidated in favor of React Query-based alternatives.
+> Frontend configuration is now fetched via `useFrontendConfig`, a React Query hook. The legacy `useConfig` hook (`use-config.tsx`) has been removed.
 
 ## Purpose
 
-Original hook for fetching runtime configuration from the backend. Provides service URLs, app metadata, and feature flags. Includes hardcoded fallback values when the backend is unavailable.
+Fetch runtime frontend configuration from `GET /api/config/frontend` and expose it via React Query cache so other hooks/components can share the same source of truth.
 
-> [!warning] Legacy Pattern
-> This hook uses manual `useEffect` + `useState` instead of React Query. It duplicates functionality provided by `[[docs/components/use-enabled-services|useEnabledServices]]` and `[[docs/components/use-services-health|useFrontendConfig]]`. Consider migrating consumers to the React Query-based hooks.
+## Export
 
-## Exports
-
-### `useConfig()`
+### `useFrontendConfig()`
 
 ```typescript
-const { config, loading, error } = useConfig();
+const { data, isLoading, error } = useFrontendConfig();
 ```
 
-| Property  | Type                     | Description          |
-| --------- | ------------------------ | -------------------- |
-| `config`  | `FrontendConfig \| null` | Configuration object |
-| `loading` | `boolean`                | Loading state        |
-| `error`   | `string \| null`         | Error message        |
+| Property    | Type                          | Description          |
+| ----------- | ----------------------------- | -------------------- |
+| `data`      | `FrontendConfig \| undefined` | Configuration object |
+| `isLoading` | `boolean`                     | Loading state        |
+| `error`     | `Error \| null`               | Error state          |
+
+## Query Configuration
+
+- Query key: `queryKeys.frontendConfig()` (`["frontend", "config"]`)
+- `staleTime`: 60s
+- `refetchInterval`: 60s
+- `retry`: 1
 
 ## Config Shape
 
@@ -54,25 +58,22 @@ interface FrontendConfig {
 
 ## Behavior
 
-- Fetches config from `GET /api/config/frontend` on mount (once, no refetching)
-- On failure, falls back to hardcoded values:
-  - AdGuard URL: `http://127.0.0.1:5213`
-  - Tor nickname: `"unknown"`
-  - Nostrcheck: disabled
-  - App name: `"Watchman Dashboard"`, version: `"1.0.0"`
+- Fetches config from `GET /api/config/frontend`
+- Shares cached config across hooks/components via React Query
+- Used by `useEnabledServices` and service cards that need frontend runtime config
 
-> [!note] Hardcoded Fallbacks
-> The fallback values are hardcoded and should come from environment variables or be removed. In production, these values will be incorrect if the backend is unavailable.
+> [!note] Legacy hook removal
+> `[[apps/frontend/src/hooks/use-config.tsx]]` was removed as part of refactoring. Consumers should use `[[apps/frontend/src/hooks/useFrontendConfig.ts]]`.
 
 ## Usage Example
 
 ```tsx
-import { useConfig } from "../hooks/use-config";
+import { useFrontendConfig } from "../hooks/useFrontendConfig";
 
 function Header() {
-  const { config, loading } = useConfig();
+  const { data: config, isLoading } = useFrontendConfig();
 
-  if (loading) return null;
+  if (isLoading) return null;
 
   return <h1>{config?.app.name}</h1>;
 }
@@ -81,14 +82,14 @@ function Header() {
 ## Dependencies
 
 - `[[apps/frontend/src/services/ApiClient|apiClient]]`
+- `[[apps/frontend/src/lib/queryKeys.ts]]`
 
 ## Source
 
-- [[apps/frontend/src/hooks/use-config.tsx]]
+- [[apps/frontend/src/hooks/useFrontendConfig.ts]]
 
 ## Related
 
 - [[docs/components/index|Components Index]]
 - [[docs/api/frontend-config|Frontend Config API]]
-- [[docs/components/use-enabled-services|useEnabledServices]] (preferred alternative)
-- [[docs/components/use-services-health|useFrontendConfig]] (preferred alternative)
+- [[docs/components/use-enabled-services|useEnabledServices]]

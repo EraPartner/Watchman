@@ -2,7 +2,7 @@
 title: "Hook: useServiceHealth"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [hook, frontend, react, health, stats, mutation, query]
 description: React Query hooks for individual service health, stats, mutations, and cache management
 aliases: [use service health, service stats, protection toggle, cache clear]
@@ -25,7 +25,7 @@ const { data, isLoading, error } = useServiceHealth("adguard");
 
 **Query Configuration:**
 
-- Query key: `["service-health", serviceName]`
+- Query key: `queryKeys.serviceStatus(serviceName)`
 - `refetchInterval`: 10 seconds
 - `staleTime`: 5 seconds
 - `retry`: 2 with exponential backoff (max 30s)
@@ -40,14 +40,14 @@ const { data, isLoading } = useServiceStats("adguard", true);
 
 **Query Configuration:**
 
-- Query key: `["service-stats", serviceName]`
+- Query key: `queryKeys.serviceStats(serviceName)`
 - `refetchInterval`: 30 seconds
 - `staleTime`: 15 seconds
 - `retry`: 1
 
 ### `useAllServicesHealth()`
 
-Fetches health for all services (alternative to `useServicesHealth`).
+Fetches aggregate health for enabled services.
 
 ```typescript
 const { data } = useAllServicesHealth();
@@ -55,13 +55,13 @@ const { data } = useAllServicesHealth();
 
 **Query Configuration:**
 
-- Query key: `["all-services-health"]`
+- Query key: `queryKeys.servicesHealth()`
 - `refetchInterval`: 15 seconds
 - `staleTime`: 7.5 seconds
 - `retry`: 2
 
-> [!note] Overlap with useServicesHealth
-> This hook and `[[docs/components/use-services-health|useServicesHealth]]` both call `apiClient.getServicesHealth()` but use different query keys and intervals. One should be consolidated.
+> [!note]
+> Legacy `useServicesHealth.ts` has been removed. This hook now provides the aggregate-health path through `useAllServicesHealth()`.
 
 ### `useAdGuardProtectionToggle()`
 
@@ -75,7 +75,7 @@ toggle.mutate({ enabled: true, duration: 3600 });
 **Behavior:**
 
 - Calls `POST /api/adguard/protection`
-- Invalidates `["service-health", "adguard"]`, `["service-stats", "adguard"]`, and `["all-services-health"]` on success
+- Invalidates `queryKeys.serviceStatus("adguard")`, `queryKeys.serviceStats("adguard")`, `queryKeys.adguardFull()`, and `queryKeys.servicesHealth()` on success
 
 ### `useClearCache()`
 
@@ -120,6 +120,7 @@ function AdGuardPanel() {
 
 - `@tanstack/react-query` — `useQuery`, `useMutation`, `useQueryClient`
 - `[[apps/frontend/src/services/ApiClient|apiClient]]`
+- `[[apps/frontend/src/lib/queryKeys.ts]]`
 
 ## Source
 

@@ -2,7 +2,7 @@
 title: "Component: LiveServerDashboard"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [component, frontend, react, page, dashboard, layout]
 description: Main dashboard component that orchestrates all service cards into a responsive grid layout
 aliases: [live server dashboard, dashboard, main dashboard, home page]
@@ -19,25 +19,21 @@ Serves as the primary view of the Watchman application. Orchestrates data fetchi
 
 ## Data Fetching
 
-Uses React Query to fetch data for each enabled service independently:
+Uses `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` to centralize dashboard query definitions, query keys, and refresh behavior for enabled services. Query keys remain centralized in `[[apps/frontend/src/lib/queryKeys.ts]]`:
 
-| Query Key                   | Data                              | Refetch Interval                      |
-| --------------------------- | --------------------------------- | ------------------------------------- |
-| `["adguard", "full"]`       | Combined health + stats           | `APP_CONFIG.ADGUARD_REFRESH_INTERVAL` |
-| `["tor", "relay"]`          | Tor relay stats + frontend config | `APP_CONFIG.TOR_REFRESH_INTERVAL`     |
-| `["bitcoin", "status"]`     | Bitcoin node status               | 30s                                   |
-| `["qbittorrent", "status"]` | qBittorrent status                | 30s                                   |
-| `["ipfs", "status"]`        | IPFS node status                  | 30s                                   |
-| `["synology", "status"]`    | Synology NAS status               | 60s                                   |
-| `["roon", "status"]`        | Roon server status                | `APP_CONFIG.ADGUARD_REFRESH_INTERVAL` |
-| `["philips", "status"]`     | Philips Hue status                | 60s                                   |
-| `["homebridge", "status"]`  | Homebridge status                 | 30s                                   |
-| `["albyhub", "status"]`     | Alby Hub status                   | 30s                                   |
-| `["macmini", "status"]`     | Mac Mini status                   | 30s                                   |
-| `["raspi", "status"]`       | Raspberry Pi status               | 30s                                   |
-| `["nostrcheck", "status"]`  | Nostrcheck status                 | 30s                                   |
-| `["beryl", "status"]`       | Beryl router status               | 30s                                   |
-| `["telenet", "status"]`     | Telenet router status             | 30s                                   |
+- `refreshEnabledQueries()` also refetches `queryKeys.servicesHealth()` so overview counters update during manual dashboard refresh.
+
+| Query Key                                | Data                              | Refetch Interval                      |
+| ---------------------------------------- | --------------------------------- | ------------------------------------- |
+| `queryKeys.adguardFull()`                | Combined health + stats           | `APP_CONFIG.ADGUARD_REFRESH_INTERVAL` |
+| `queryKeys.torRelay()`                   | Tor relay payload                 | `APP_CONFIG.TOR_REFRESH_INTERVAL`     |
+| `queryKeys.frontendConfig()`             | Frontend config payload           | On demand (`staleTime: Infinity`)     |
+| `queryKeys.serviceStatus("bitcoin")`     | Bitcoin node status               | 30s                                   |
+| `queryKeys.serviceStatus("qbittorrent")` | qBittorrent status                | 30s                                   |
+| `queryKeys.serviceStatus("ipfs")`        | IPFS node status                  | 30s                                   |
+| `queryKeys.serviceStatus("synology")`    | Synology NAS status               | 60s                                   |
+| `queryKeys.serviceStatus("roon")`        | Roon server status                | `APP_CONFIG.ADGUARD_REFRESH_INTERVAL` |
+| `queryKeys.servicesHealth()`             | Aggregate enabled-services health | 30s                                   |
 
 ## Layout Pattern
 
@@ -56,6 +52,8 @@ Related services are vertically stacked within the same grid cell to save horizo
 - Cards are organized into rows using chunking
 - Each row uses CSS grid with responsive columns
 - Multi-instance services render as separate cards with `#N` suffixes
+- Instance tiles are assembled through shared helpers in `[[apps/frontend/src/components/dashboard/dashboardData.ts]]` (`appendInstanceTiles`, `getInstanceNumber`) to keep multi-instance rendering logic reusable
+- Repeated Software/Hardware section-row rendering is delegated to `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]` for maintainability.
 
 ## Props
 
@@ -71,6 +69,12 @@ This component takes no props. It derives all data from:
 - All 14 service card components
 - `[[apps/frontend/src/hooks/useEnabledServices|useEnabledServices]]`
 - `[[apps/frontend/src/hooks/useServiceInstances|useServiceInstances]]`
+- `[[apps/frontend/src/lib/queryKeys.ts]]`
+- `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]`
+- `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]`
+- `[[apps/frontend/src/components/dashboard/dashboardStatus.ts]]`
+- `[[apps/frontend/src/components/dashboard/dashboardData.ts]]`
+- `[[apps/frontend/src/components/dashboard/dashboardData.ts]]` instance helpers: `appendInstanceTiles`, `getInstanceNumber`
 - `[[apps/frontend/src/services/ApiClient|apiClient]]`
 - `[[apps/frontend/src/lib/constants.ts]]` — `APP_CONFIG`
 - shadcn/ui: `Card`, `CardHeader`, `CardTitle`, `CardContent`, `Button`
@@ -80,7 +84,7 @@ This component takes no props. It derives all data from:
 
 > [!warning] Technical Debt
 >
-> - **God Component**: At ~793 lines, this component handles too many responsibilities. Should be split into `DashboardHeader`, `OverviewStats`, `SoftwareSection`, `HardwareSection`, and `ServiceTileRenderer`.
+> - **Large orchestrator component**: Still coordinates many concerns, though status/data logic and query orchestration were extracted into helper modules under `components/dashboard/`.
 > - **Misleading `lastUpdateTime`**: `new Date()` is set at render time, making `timeSinceUpdate` always show seconds since last render, not actual data freshness.
 > - **Multi-instance data sharing**: All instances of the same service type currently share the same data query — instance-specific fetching is incomplete.
 
