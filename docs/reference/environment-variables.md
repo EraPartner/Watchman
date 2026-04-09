@@ -2,7 +2,7 @@
 title: Environment Variables
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [reference, configuration, backend]
 description: Complete reference of all environment variables for the Watchman project
 aliases: [env vars, environment, configuration, config]
@@ -15,20 +15,22 @@ aliases: [env vars, environment, configuration, config]
 
 ## Required Variables
 
-| Variable             | Description                       | Example                                       |
-| -------------------- | --------------------------------- | --------------------------------------------- |
-| `AUTH_USERNAME`      | Admin username                    | `admin`                                       |
-| `AUTH_PASSWORD_HASH` | bcrypt password hash              | `$2b$10$...`                                  |
-| `JWT_SECRET`         | JWT signing secret (min 32 chars) | `your-super-secret-jwt-key-min-32-characters` |
-| `FRONTEND_URL`       | Frontend origin URL               | `http://localhost:5173`                       |
+| Variable             | Description                               | Example                                              |
+| -------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `AUTH_USERNAME`      | Admin username                            | `admin`                                              |
+| `AUTH_PASSWORD_HASH` | bcrypt password hash                      | `$2b$10$...`                                         |
+| `JWT_SECRET`         | JWT signing secret (min 32 chars)         | `your-super-secret-jwt-key-min-32-characters`        |
+| `FRONTEND_URL`       | Frontend origin(s), comma/space-separated | `http://localhost:5173 https://watchman.example.com` |
 
 ## Server Configuration
 
-| Variable           | Description                  | Default       | Example               |
-| ------------------ | ---------------------------- | ------------- | --------------------- |
-| `PORT`             | Backend server port          | `3001`        | `3001`                |
-| `NODE_ENV`         | Environment mode             | `development` | `production`          |
-| `ENABLED_SERVICES` | Comma-separated service list | All enabled   | `adguard,tor,bitcoin` |
+| Variable            | Description                                                                                                                  | Default       | Example                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------------------- |
+| `PORT`              | Backend server port                                                                                                          | `3001`        | `3001`                             |
+| `NODE_ENV`          | Environment mode                                                                                                             | `development` | `production`                       |
+| `TRUST_PROXY`       | Express `trust proxy` setting parsed from env (boolean, hop count, or trusted subnet/IP list) and applied in server startup. | `1`           | `false`, `1`, `loopback,127.0.0.1` |
+| `AUTH_RETURN_TOKEN` | Feature flag for legacy login response bodies: when `true`, includes deprecated `token` field in `/api/auth/login` JSON.     | `false`       | `true`                             |
+| `ENABLED_SERVICES`  | Comma-separated service list                                                                                                 | All enabled   | `adguard,tor,bitcoin`              |
 
 ## Cookie Configuration
 
@@ -37,6 +39,15 @@ aliases: [env vars, environment, configuration, config]
 | `COOKIE_DOMAIN`        | Override cookie domain | Auto-derived from FRONTEND_URL |
 | `COOKIE_STRICT_DOMAIN` | Force strict domain    | `false` for multiple origins   |
 | `CSRF_COOKIE_NAME`     | CSRF cookie name       | `csrfToken`                    |
+
+## Auth and Proxy Notes
+
+- `AUTH_RETURN_TOKEN=false` is the default and recommended mode; authentication is cookie-first via HTTP-only `token` cookie.
+- Use `AUTH_RETURN_TOKEN=true` only for temporary client compatibility while migrating away from reading `token` from login JSON.
+- `TRUST_PROXY` affects client IP detection and secure cookie/protocol behavior when running behind reverse proxies.
+- `FRONTEND_URL` supports multiple origins separated by commas and/or spaces; each origin is validated individually in [[apps/backend/config.js]].
+- Production HTTPS warnings are evaluated per configured frontend origin (non-local public origins should be HTTPS) in [[apps/backend/config.js]].
+- Related implementation files: [[apps/backend/server.js]], [[apps/backend/routes/authRoutes.js]], [[apps/backend/utils/env.js]], [[apps/backend/utils/origin.js]].
 
 ## Service Configurations
 

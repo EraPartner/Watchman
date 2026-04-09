@@ -2,7 +2,7 @@
 title: Testing Strategy and Patterns
 type: doc
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [testing, strategy, vitest, patterns]
 description: Comprehensive testing strategy, patterns, and conventions for the Watchman project
 aliases: [testing strategy, test patterns, test conventions]
@@ -137,7 +137,21 @@ describe("cn utility", () => {
 });
 ```
 
-## Backend Testing (Planned)
+## Backend Testing
+
+Current middleware coverage includes `responseSizeLimit` behavior in [[apps/backend/tests/responseSizeLimit.test.js]] for [[apps/backend/middleware/responseSizeLimit.js]]:
+
+- health endpoint bypasses response-size enforcement
+- under-limit responses pass through normally
+- over-limit before headers sends non-recursive `413` JSON response
+- over-limit after headers destroys the socket for active streams
+
+Implementation detail: byte counting now tracks both `res.write` and `res.end` in [[apps/backend/middleware/responseSizeLimit.js]], and fixes the `originalEnd` handling bug.
+
+Authentication route integration coverage now includes login response compatibility in [[apps/backend/tests/authRoutes.integration.test.js]] for [[apps/backend/routes/authRoutes.js]]:
+
+- `AUTH_RETURN_TOKEN=false` omits `token` from response body while still setting the auth cookie
+- `AUTH_RETURN_TOKEN=true` includes `token` in response body and still sets the auth cookie
 
 ### Service Class Testing
 
@@ -247,16 +261,16 @@ it("handles rejected promises", async () => {
 
 ## Current Test Coverage
 
-| Area               | Status         | Notes                                      |
-| ------------------ | -------------- | ------------------------------------------ |
-| Utility functions  | ✅ Covered     | `utils.test.ts` tests `cn()` function      |
-| React components   | ❌ Not covered | All 14+ service cards need tests           |
-| Custom hooks       | ❌ Not covered | `useAuth`, `useWebSocket`, etc. need tests |
-| API client         | ❌ Not covered | `ApiClient.ts` needs tests                 |
-| Backend services   | ❌ Not covered | All service classes need tests             |
-| Backend middleware | ❌ Not covered | Auth, CSRF, rate limiting need tests       |
-| Backend routes     | ❌ Not covered | API endpoints need tests                   |
-| WebSocket manager  | ❌ Not covered | Real-time communication needs tests        |
+| Area               | Status               | Notes                                                                 |
+| ------------------ | -------------------- | --------------------------------------------------------------------- |
+| Utility functions  | ✅ Covered           | `utils.test.ts` tests `cn()` function                                 |
+| React components   | ❌ Not covered       | All 14+ service cards need tests                                      |
+| Custom hooks       | ❌ Not covered       | `useAuth`, `useWebSocket`, etc. need tests                            |
+| API client         | ❌ Not covered       | `ApiClient.ts` needs tests                                            |
+| Backend services   | ❌ Not covered       | All service classes need tests                                        |
+| Backend middleware | ⚠️ Partially covered | `responseSizeLimit` covered; auth/CSRF/rate limiting still need tests |
+| Backend routes     | ⚠️ Partially covered | Auth login compatibility covered in `authRoutes.integration.test.js`  |
+| WebSocket manager  | ❌ Not covered       | Real-time communication needs tests                                   |
 
 ## Testing Priorities
 

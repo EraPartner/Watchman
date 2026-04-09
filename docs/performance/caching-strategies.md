@@ -2,7 +2,7 @@
 title: Caching Strategies
 type: performance
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [performance, caching, backend]
 description: In-memory response caching strategies with TTL for the Watchman backend
 aliases: [caching, cache, response cache, ttl]
@@ -33,6 +33,13 @@ Uses `node-cache` for in-memory caching.
 | `healthCacheMiddleware` | Caches health check responses |
 | `statsCacheMiddleware`  | Caches statistics responses   |
 | `clearCache(type)`      | Clears cache by type or all   |
+
+Behavior notes (from [[apps/backend/middleware/cache.js]]):
+
+- Default cacheable methods are `GET` and `HEAD`
+- Allowed methods are configurable via middleware `methods` option
+- Middleware exits early (safe pass-through) when a cache key cannot be derived
+- `X-Cache-TTL` reports remaining TTL in seconds (not epoch milliseconds)
 
 ## Cache Invalidation
 

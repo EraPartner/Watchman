@@ -2,7 +2,7 @@
 title: Authentication
 type: security
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [security, authentication, backend, jwt]
 description: Authentication system documentation - JWT, cookies, and CSRF protection
 aliases: [auth, jwt, csrf, login, authentication]
@@ -25,8 +25,11 @@ Body: { username, password }
 → Generate JWT access token
 → Set HTTP-only cookie
 → Issue CSRF token cookie
-→ Return user info
+→ Return cookie-first login response (`message`, `user`)
+→ Optionally include deprecated `token` when `AUTH_RETURN_TOKEN=true`
 ```
+
+Implementation references: [[apps/backend/routes/authRoutes.js]], [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/server.js]], [[apps/backend/openapi.yaml]].
 
 ### Session Check
 
@@ -58,6 +61,15 @@ POST /api/auth/logout
 | Max Age     | 8 hours                                    |
 | Domain      | Derived from FRONTEND_URL                  |
 
+Cookie options are centralized in [[apps/backend/routes/authRoutes.js]] and consumed through API route registration in [[apps/backend/routes/registerApiRoutes.js]].
+
+## Login Response Compatibility
+
+- Default behavior is cookie-first auth: login returns `message` and `user`, and clients authenticate via HTTP-only cookie.
+- `token` in the login response body is deprecated and hidden by default.
+- Set `AUTH_RETURN_TOKEN=true` only for temporary compatibility with legacy clients that still read body tokens.
+- OpenAPI documents `token` as optional/deprecated in [[apps/backend/openapi.yaml]].
+
 ## CSRF Protection
 
 Uses double-submit cookie pattern:
@@ -71,7 +83,7 @@ Uses double-submit cookie pattern:
 [[apps/backend/middleware/csrf.js|csrf.js]]:
 
 - `issueCsrfToken(res)` - Generate and set CSRF cookie
-- `verifyCsrf` - Middleware to verify CSRF token
+- `verifyCsrf` - Middleware to verify CSRF token using constant-time comparison (`crypto.timingSafeEqual`) to reduce timing side-channel risk
 
 ## Account Lockout
 

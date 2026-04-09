@@ -46,6 +46,8 @@ aliases: [auth endpoints, login api, logout api]
 
 #### 200 OK
 
+Cookie-first behavior is default. The response always includes `message` and `user`, and includes `token` only when `AUTH_RETURN_TOKEN=true` (deprecated compatibility mode).
+
 ```json
 {
   "message": "Login successful",
@@ -56,6 +58,8 @@ aliases: [auth endpoints, login api, logout api]
   }
 }
 ```
+
+Validation coverage: [[apps/backend/tests/authRoutes.integration.test.js]] verifies both `AUTH_RETURN_TOKEN=false` (no body token) and `AUTH_RETURN_TOKEN=true` (body token present), with auth cookie set in both cases.
 
 Cookies set on success:
 

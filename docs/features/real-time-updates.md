@@ -26,6 +26,9 @@ The [[apps/backend/services/WebSocketManager.js|WebSocketManager]] handles:
 5. Idempotent disconnect handling (close/error paths are guarded to avoid double-processing a single disconnect)
 6. Broadcast cleanup routes stale sockets through disconnect handling so `connectionsByIp` tracking stays consistent
 7. WebSocket server-close cleanup clears both `clients` and `connectionsByIp` tracking maps
+8. Origin allowlist enforcement for handshake requests; disallowed origins are closed with policy violation code `1008`
+
+Origin validation uses normalized frontend origins from [[apps/backend/utils/origin.js]] and is enforced in [[apps/backend/services/WebSocketManager.js]].
 
 ### Data Flow
 

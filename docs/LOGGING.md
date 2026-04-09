@@ -2,7 +2,7 @@
 title: Logging Configuration
 type: reference
 status: active
-date: 2026-04-03
+date: 2026-04-09
 tags: [reference, logging, backend, configuration]
 description: Structured logging configuration for the Watchman backend - environment variables, log levels, and security features
 aliases: [logging, log level, logger, structured logging, logging configuration]
@@ -127,6 +127,11 @@ The logger automatically redacts sensitive information from logs:
 - Email addresses
 
 This happens regardless of the logging level, ensuring sensitive data is never written to logs.
+
+## Request ID Generation
+
+- `requestIdMiddleware` in [[apps/backend/middleware/logger.js]] generates IDs with `crypto.randomUUID()` when an incoming request does not provide one.
+- `generateRequestId()` in [[apps/backend/middleware/performanceMonitor.js]] also uses `crypto.randomUUID()` for consistent request/metric correlation IDs.
 
 ## Quick Start
 

@@ -24,18 +24,18 @@ aliases:
 
 Middleware is applied in the following order in [[apps/backend/server.js|server.js]]:
 
-| #   | Middleware                | File                                              | Purpose                                            |
-| --- | ------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| 1   | `requestIdMiddleware`     | [[apps/backend/middleware/logger.js]]             | Unique request ID tracking for logging correlation |
-| 2   | `requestLogger`           | [[apps/backend/middleware/logger.js]]             | Structured JSON logging with PII redaction         |
-| 3   | `performanceMonitor`      | [[apps/backend/middleware/performanceMonitor.js]] | Request performance tracking and metrics           |
-| 4   | `enforceIPControl`        | [[apps/backend/middleware/ipControl.js]]          | IP whitelist/blacklist enforcement                 |
-| 5   | `requestTimeout`          | [[apps/backend/middleware/requestTimeout.js]]     | Global request timeout (default 30s)               |
-| 6   | `responseSizeLimit`       | [[apps/backend/middleware/responseSizeLimit.js]]  | Large response prevention (default 5MB)            |
-| 7   | `apiResponseStandardizer` | [[apps/backend/middleware/apiResponse.js]]        | Response format standardization                    |
-| 8   | `helmet`                  | External (helmet package)                         | Security headers (CSP, HSTS, etc.)                 |
-| 9   | `cors`                    | External (cors package)                           | CORS restrictions based on config                  |
-| 10  | `compression`             | External (compression package)                    | gzip compression                                   |
+| #   | Middleware                | File                                              | Purpose                                                         |
+| --- | ------------------------- | ------------------------------------------------- | --------------------------------------------------------------- |
+| 1   | `requestIdMiddleware`     | [[apps/backend/middleware/logger.js]]             | Unique request ID tracking for logging correlation              |
+| 2   | `requestLogger`           | [[apps/backend/middleware/logger.js]]             | Structured JSON logging with PII redaction                      |
+| 3   | `performanceMonitor`      | [[apps/backend/middleware/performanceMonitor.js]] | Request performance tracking and metrics                        |
+| 4   | `enforceIPControl`        | [[apps/backend/middleware/ipControl.js]]          | IP whitelist/blacklist enforcement                              |
+| 5   | `requestTimeout`          | [[apps/backend/middleware/requestTimeout.js]]     | Global request timeout (default 30s)                            |
+| 6   | `responseSizeLimit`       | [[apps/backend/middleware/responseSizeLimit.js]]  | Large response prevention (default 5MB)                         |
+| 7   | `apiResponseStandardizer` | [[apps/backend/middleware/apiResponse.js]]        | Response format standardization                                 |
+| 8   | `helmet`                  | External (helmet package)                         | Security headers (CSP, HSTS, etc.)                              |
+| 9   | `cors`                    | External (cors package)                           | CORS restrictions using precomputed normalized origin allowlist |
+| 10  | `compression`             | External (compression package)                    | gzip compression                                                |
 
 ## Middleware Reference
 
@@ -122,12 +122,13 @@ All services extend a common pattern:
 
 ### Shared Utilities
 
-| Utility                     | File                                          | Purpose                                                                                                                                                               |
-| --------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| auth token extraction       | [[apps/backend/utils/authToken.js]]           | Shared extraction/parsing for HTTP middleware, `/api/auth/me`, and WebSocket auth handshake                                                                           |
-| environment parsing helpers | [[apps/backend/utils/env.js]]                 | Standardized parsing for ints/bools/lists/optional values used by config, service factory, and WebSocket manager                                                      |
-| router ARP extraction       | [[apps/backend/services/RouterArpService.js]] | Encapsulated ARP neighbor lookup and LAN host filtering used by router ARP route, with short-lived in-memory TTL cache (3s) and bounded max-entry pruning             |
-| route context/error helpers | [[apps/backend/routes/routeUtils.js]]         | Shared route helpers `getErrorMessage(error)` and `getServiceContext(getServiceManager, serviceName)` used by route modules to keep error/context handling consistent |
+| Utility                      | File                                          | Purpose                                                                                                                                                               |
+| ---------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| auth token extraction        | [[apps/backend/utils/authToken.js]]           | Shared extraction/parsing for HTTP middleware, `/api/auth/me`, and WebSocket auth handshake                                                                           |
+| environment parsing helpers  | [[apps/backend/utils/env.js]]                 | Standardized parsing for ints/bools/lists/optional values used by config, service factory, and WebSocket manager                                                      |
+| origin normalization helpers | [[apps/backend/utils/origin.js]]              | Normalizes and validates configured/request origins so CORS and WebSocket origin checks use the same canonical allowlist logic                                        |
+| router ARP extraction        | [[apps/backend/services/RouterArpService.js]] | Encapsulated ARP neighbor lookup and LAN host filtering used by router ARP route, with short-lived in-memory TTL cache (3s) and bounded max-entry pruning             |
+| route context/error helpers  | [[apps/backend/routes/routeUtils.js]]         | Shared route helpers `getErrorMessage(error)` and `getServiceContext(getServiceManager, serviceName)` used by route modules to keep error/context handling consistent |
 
 ## Route Architecture
 
@@ -143,6 +144,8 @@ API route composition is orchestrated by [[apps/backend/routes/registerApiRoutes
 - [[apps/backend/routes/homebridgeRoutes.js]]
 - [[apps/backend/routes/routerRoutes.js]]
 - [[apps/backend/routes/securityRoutes.js]]
+
+Auth route registration is dependency-driven: `AUTH_RETURN_TOKEN` is parsed in [[apps/backend/server.js]] and passed into [[apps/backend/routes/registerApiRoutes.js]], which then wires [[apps/backend/routes/authRoutes.js]] with cookie-first login behavior and optional legacy token-body compatibility.
 
 `server.js` now delegates this full API registration block to `registerApiRoutes(...)`, reducing inline route composition surface without changing API contracts.
 
@@ -176,6 +179,7 @@ Route modules updated to consume the shared route utilities include:
 - [[apps/backend/services/WebSocketManager.js]] uses an idempotency guard for disconnect handling so close/error paths do not double-process a single client disconnect.
 - Broadcast cleanup now routes stale/disconnected sockets through `handleClientDisconnect()` so `connectionsByIp` remains consistent with `clients` set cleanup.
 - On WebSocket server close, internal tracking maps are explicitly reset (`clients.clear()` and `connectionsByIp.clear()`) to keep post-shutdown state consistent.
+- WebSocket handshake enforces an origin allowlist derived from `FRONTEND_URL`; disallowed origins are closed with code `1008` in [[apps/backend/services/WebSocketManager.js]].
 
 ### Homebridge accessories normalization
 
@@ -193,6 +197,8 @@ Route modules updated to consume the shared route utilities include:
 - `cachedConfig` - Cached config for cross-module access
 - `parseServiceInstances()` - Multi-instance env var parsing
 - Uses shared helper functions from [[apps/backend/utils/env.js]] for consistent parsing semantics
+- `TRUST_PROXY` is parsed via shared env helpers and applied in [[apps/backend/server.js]] to configure Express proxy trust behavior per deployment.
+- CORS allowlist is precomputed from normalized frontend origins using [[apps/backend/utils/origin.js]] before middleware registration in [[apps/backend/server.js]].
 
 ## Circuit Breaker
 
