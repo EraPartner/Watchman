@@ -2,6 +2,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { validateSecurityConfig } from "./config/security.js";
+import { envBool, envInt, envList } from "./utils/env.js";
 
 // Get current directory for proper path resolution
 const __filename = fileURLToPath(import.meta.url);
@@ -147,9 +148,11 @@ const validateEnvironment = () => {
 
 // Parse enabled services from environment variable
 const parseEnabledServices = () => {
-  const enabledServicesEnv = process.env.ENABLED_SERVICES || "";
+  const enabledServices = envList("ENABLED_SERVICES").map((service) =>
+    service.toLowerCase()
+  );
 
-  if (!enabledServicesEnv) {
+  if (enabledServices.length === 0) {
     // If not specified, enable all services by default
     return new Set([
       "bitcoin",
@@ -169,13 +172,7 @@ const parseEnabledServices = () => {
     ]);
   }
 
-  // Parse comma-separated list
-  const services = enabledServicesEnv
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-
-  return new Set(services);
+  return new Set(enabledServices);
 };
 
 // Parse multi-instance service configurations
@@ -192,7 +189,10 @@ const parseServiceInstances = (serviceType) => {
   envVars.forEach((key) => {
     const match = key.match(instancePattern);
     if (match) {
-      instanceNumbers.add(parseInt(match[1]));
+      const instanceNumber = Number.parseInt(match[1], 10);
+      if (Number.isFinite(instanceNumber)) {
+        instanceNumbers.add(instanceNumber);
+      }
     }
   });
 
@@ -257,7 +257,7 @@ const getConfig = () => ({
     onionHost: process.env.BITCOIN_ONION_URL,
     rpcUser: process.env.BITCOIN_RPC_USER,
     rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
-    rpcPort: parseInt(process.env.BITCOIN_RPC_PORT) || 8332,
+    rpcPort: envInt("BITCOIN_RPC_PORT") || 8332,
     torProxy: process.env.BITCOIN_TOR_PROXY || "socks5h://127.0.0.1:9050",
   },
 
@@ -265,20 +265,19 @@ const getConfig = () => ({
   adguard: {
     baseUrl: process.env.ADGUARD_MAIN_URL,
     authToken: process.env.ADGUARD_MAIN_AUTH,
-    timeout: parseInt(process.env.ADGUARD_TIMEOUT) || 10000,
+    timeout: envInt("ADGUARD_TIMEOUT") || 10000,
   },
 
   // Nostrcheck configuration (optional)
   nostrcheck: {
     relayUrl: process.env.NOSTRCHECK_RELAY_URL || null,
     webUrl: process.env.NOSTRCHECK_WEB_URL || null,
-    enabled:
-      (process.env.NOSTRCHECK_ENABLED || "false").toLowerCase() === "true",
+    enabled: envBool("NOSTRCHECK_ENABLED", false),
   },
 
   // Server configuration
   server: {
-    port: parseInt(process.env.PORT) || 3001,
+    port: envInt("PORT") || 3001,
     nodeEnv: process.env.NODE_ENV || "development",
     frontendUrl: process.env.FRONTEND_URL,
   },

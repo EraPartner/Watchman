@@ -102,9 +102,6 @@ class PhilipsBridgeService {
     };
   }
 
-  disconnect() {
-    // No persistent connections
-  }
 }
 
 export default PhilipsBridgeService;

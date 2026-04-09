@@ -75,10 +75,7 @@ export default class ServiceManager {
           this.services.set(serviceName, serviceInstance);
 
           // Set default instance
-          const instanceId = multiInstanceServices.has(serviceName)
-            ? serviceName
-            : serviceName;
-          this.serviceInstances.set(serviceName, [instanceId]);
+          this.serviceInstances.set(serviceName, [serviceName]);
 
           // Handle post-initialization (e.g., Homebridge login)
           if (serviceConfig.postInit === "homebridgeLogin") {

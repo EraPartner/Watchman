@@ -14,6 +14,8 @@ import { WebSocketServer } from "ws";
 import EventEmitter from "events";
 import { verifyToken } from "../middleware/auth.js";
 import { logger } from "../middleware/logger.js";
+import { extractAuthToken } from "../utils/authToken.js";
+import { envInt } from "../utils/env.js";
 
 /**
  * WebSocket Manager Class
@@ -41,12 +43,10 @@ export class WebSocketManager extends EventEmitter {
     this._heartbeatInterval = null;
 
     /** @type {number} Heartbeat interval in milliseconds */
-    this.heartbeatInterval =
-      parseInt(process.env.WEBSOCKET_HEARTBEAT_INTERVAL) || 30000;
+    this.heartbeatInterval = envInt("WEBSOCKET_HEARTBEAT_INTERVAL") || 30000;
 
     /** @type {number} Maximum number of connections per IP */
-    this.maxConnectionsPerIp =
-      parseInt(process.env.WEBSOCKET_MAX_CONNECTIONS_PER_IP) || 5;
+    this.maxConnectionsPerIp = envInt("WEBSOCKET_MAX_CONNECTIONS_PER_IP") || 5;
 
     /** @type {Map<string, number>} Track connections per IP address */
     this.connectionsByIp = new Map();
@@ -152,7 +152,7 @@ export class WebSocketManager extends EventEmitter {
    */
   authenticateConnection(ws, req) {
     // Extract token from Authorization header or cookies
-    let token = this.extractToken(req);
+    const token = extractAuthToken(req);
 
     if (!token) {
       return { success: false, reason: "No authentication token provided" };
@@ -171,39 +171,6 @@ export class WebSocketManager extends EventEmitter {
         id: decoded.sub || decoded.id,
       },
     };
-  }
-
-  /**
-   * Extract authentication token from request
-   *
-   * @param {http.IncomingMessage} req - HTTP request object
-   * @returns {string|null} JWT token or null if not found
-   * @private
-   */
-  extractToken(req) {
-    // Check Authorization header first
-    const authHeader = req.headers["authorization"] || "";
-    if (authHeader && String(authHeader).startsWith("Bearer ")) {
-      return String(authHeader).slice(7);
-    }
-
-    // Parse cookies as fallback
-    if (req.headers?.cookie) {
-      const cookieHeader = req.headers.cookie;
-      const cookies = Object.fromEntries(
-        cookieHeader.split(";").map((c) => {
-          const [key, ...value] = c.split("=");
-          try {
-            return [key.trim(), decodeURIComponent(value.join("="))];
-          } catch (_) {
-            return [key.trim(), value.join("=")];
-          }
-        })
-      );
-      return cookies.token || null;
-    }
-
-    return null;
   }
 
   /**
@@ -243,6 +210,7 @@ export class WebSocketManager extends EventEmitter {
     ws._username = user.username;
     ws._clientIp = clientIp;
     ws._connectedAt = new Date();
+    ws._disconnectHandled = false;
 
     // Add to active clients
     this.clients.add(ws);
@@ -313,6 +281,11 @@ export class WebSocketManager extends EventEmitter {
    * @private
    */
   handleClientDisconnect(ws, clientIp) {
+    if (ws._disconnectHandled) {
+      return;
+    }
+    ws._disconnectHandled = true;
+
     this.clients.delete(ws);
 
     // Decrease connection count for IP
@@ -436,6 +409,10 @@ export class WebSocketManager extends EventEmitter {
           clearInterval(this._heartbeatInterval);
           this._heartbeatInterval = null;
         }
+
+        // Ensure internal connection tracking is fully reset on server close
+        this.clients.clear();
+        this.connectionsByIp.clear();
       });
     }
   }
@@ -508,8 +485,11 @@ export class WebSocketManager extends EventEmitter {
       }
     });
 
-    // Clean up disconnected clients
-    disconnectedClients.forEach((ws) => this.clients.delete(ws));
+    // Clean up disconnected clients with consistent per-IP tracking
+    disconnectedClients.forEach((ws) => {
+      const clientIp = ws._clientIp || "unknown";
+      this.handleClientDisconnect(ws, clientIp);
+    });
 
     if (sentCount > 0) {
       logger.debug(`Broadcasted ${description} to ${sentCount} clients`);

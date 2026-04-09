@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { Client } from "ssh2";
 import fs from "fs";
 import logger from "../middleware/logger.js";
-import { isSafePath } from "../utils/validation.js";
+import { isSafePath, isValidIPv4, isValidHostname } from "../utils/validation.js";
 import { pingHost as sharedPingHost } from "../utils/ping.js";
 
 const ALLOWED_COMMANDS = new Set(["uptime", "df", "osx-cpu-temp", "which"]);
@@ -71,8 +71,8 @@ class MacMiniService {
     if (!this.useSSH) throw new Error("SSH not configured for Mac Mini");
 
     // Validate host before building SSH args
-    if (!isValidIPv4(this.macMiniHost) && !isValidHostname(this.macMiniHost)) {
-      throw new Error(`Invalid MACMINI_HOST: ${this.macMiniHost}`);
+    if (!isValidIPv4(this.host) && !isValidHostname(this.host)) {
+      throw new Error(`Invalid MACMINI_HOST: ${this.host}`);
     }
 
     return new Promise((resolve, reject) => {
@@ -354,7 +354,7 @@ class MacMiniService {
         }
       }
 
-      const uptimeSeconds = parseUptimeSeconds(
+      const uptimeSeconds = MacMiniService.#parseUptimeSeconds(
         uptimeOut ? uptimeOut.trim() : null
       );
 
@@ -379,45 +379,36 @@ class MacMiniService {
     }
   }
 
-  disconnect() {
-    // nothing to cleanup
+  static #parseUptimeSeconds(uptime) {
+    if (!uptime) return null;
+
+    const daysMatch = uptime.match(/up\s+(\d+)\s+day/i);
+    const hoursMatch = uptime.match(/up\s+(\d+):(\d+)(?::(\d+))?\s+/);
+    const minutesMatch = uptime.match(/up\s+(\d+)\s+minutes?/i);
+    const hoursTextMatch = uptime.match(/up\s+(\d+)\s+hours?/i);
+
+    let seconds = 0;
+
+    if (daysMatch) {
+      seconds += parseInt(daysMatch[1], 10) * 86400;
+    }
+
+    if (hoursMatch) {
+      seconds += parseInt(hoursMatch[1], 10) * 3600;
+      seconds += parseInt(hoursMatch[2] || "0", 10) * 60;
+    }
+
+    if (hoursTextMatch) {
+      seconds += parseInt(hoursTextMatch[1], 10) * 3600;
+    }
+
+    if (minutesMatch) {
+      seconds += parseInt(minutesMatch[1], 10) * 60;
+    }
+
+    return seconds > 0 ? seconds : null;
   }
+
 }
 
 export default MacMiniService;
-
-function parseUptimeSeconds(uptime) {
-  if (!uptime) return null;
-
-  // Example formats:
-  //  15:04  up 1 day,  3:12, 3 users, load averages: 1.23 0.87 0.65
-  //  15:04:31 up 10 days,  5:03,  2 users,  load average: 0.00, 0.01, 0.05
-  //  up 5 minutes
-  //  up 3 hours
-
-  const daysMatch = uptime.match(/up\s+(\d+)\s+day/i);
-  const hoursMatch = uptime.match(/up\s+(\d+):(\d+)(?::(\d+))?\s+/);
-  const minutesMatch = uptime.match(/up\s+(\d+)\s+minutes?/i);
-  const hoursTextMatch = uptime.match(/up\s+(\d+)\s+hours?/i);
-
-  let seconds = 0;
-
-  if (daysMatch) {
-    seconds += parseInt(daysMatch[1], 10) * 86400; // 24 * 60 * 60
-  }
-
-  if (hoursMatch) {
-    seconds += parseInt(hoursMatch[1], 10) * 3600; // 60 * 60
-    seconds += parseInt(hoursMatch[2] || "0", 10) * 60;
-  }
-
-  if (hoursTextMatch) {
-    seconds += parseInt(hoursTextMatch[1], 10) * 3600;
-  }
-
-  if (minutesMatch) {
-    seconds += parseInt(minutesMatch[1], 10) * 60;
-  }
-
-  return seconds > 0 ? seconds : null;
-}

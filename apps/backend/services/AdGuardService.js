@@ -12,7 +12,7 @@ class AdGuardService {
       const credentials = `${config.username}:${config.password}`;
       this.authToken = Buffer.from(credentials).toString("base64");
     } else {
-      this.authToken = null;
+      this.authToken = undefined;
     }
 
     this.timeout = config.timeout || 5000;
@@ -207,17 +207,9 @@ class AdGuardService {
         body.duration = duration;
       }
 
-      const headers = {
-        "Content-Type": "application/json",
-      };
-
-      if (this.authToken) {
-        headers["Authorization"] = `Basic ${this.authToken}`;
-      }
-
       const response = await fetch(`${this.baseUrl}/control/protection`, {
         method: "POST",
-        headers,
+        headers: this.buildRequestHeaders(),
         body: JSON.stringify(body),
         agent: getAgentForUrl(this.baseUrl),
         signal: AbortSignal.timeout(this.timeout),

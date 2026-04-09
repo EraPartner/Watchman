@@ -26,20 +26,15 @@ export class QBittorrentService {
       formData.append("username", this.username);
       formData.append("password", this.password);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
       const response = await fetch(loginUrl, {
         method: "POST",
         body: formData,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        signal: controller.signal,
+        signal: AbortSignal.timeout(this.timeout),
         agent: loginUrl.startsWith("https:") ? httpsAgent : httpAgent,
       });
-
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         const responseText = await response.text();
@@ -53,7 +48,7 @@ export class QBittorrentService {
       }
       return false;
     } catch (error) {
-      if (error.name === "AbortError") {
+      if (error.name === "AbortError" || error.name === "TimeoutError") {
         logger.debug("qBittorrent authentication timed out", {
           service: "qbittorrent",
         });
@@ -77,19 +72,14 @@ export class QBittorrentService {
 
     const url = `${this.baseUrl}${endpoint}`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
     try {
       const response = await fetch(url, {
         headers: {
           Cookie: this.cookie,
         },
-        signal: controller.signal,
+        signal: AbortSignal.timeout(this.timeout),
         agent: url.startsWith("https:") ? httpsAgent : httpAgent,
       });
-
-      clearTimeout(timeoutId);
 
       if (response.status === 403) {
         // Re-authenticate and retry
@@ -102,21 +92,13 @@ export class QBittorrentService {
           throw new Error("Re-authentication failed");
         }
 
-        const retryController = new AbortController();
-        const retryTimeoutId = setTimeout(
-          () => retryController.abort(),
-          this.timeout
-        );
-
         const retryResponse = await fetch(url, {
           headers: {
             Cookie: this.cookie,
           },
-          signal: retryController.signal,
+          signal: AbortSignal.timeout(this.timeout),
           agent: url.startsWith("https:") ? httpsAgent : httpAgent,
         });
-
-        clearTimeout(retryTimeoutId);
 
         if (!retryResponse.ok) {
           throw new Error(
@@ -133,8 +115,7 @@ export class QBittorrentService {
 
       return this.parseResponse(response);
     } catch (error) {
-      clearTimeout(timeoutId);
-      if (error.name === "AbortError") {
+      if (error.name === "AbortError" || error.name === "TimeoutError") {
         throw new Error("Request timed out");
       }
       throw error;

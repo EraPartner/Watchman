@@ -273,30 +273,4 @@ export class AlbyHubService {
     }
   }
 
-  // Existing simple methods kept for compatibility
-  async getSystemInfo() {
-    return {
-      name: "Alby Hub",
-      model: "Alby",
-      version: "Unknown",
-      uptime: 0,
-      status: "Unknown",
-    };
-  }
-  async getCPUInfo() {
-    return { usage: 0, temperature: 0 };
-  }
-  async getMemoryInfo() {
-    return { total: 0, available: 0, used: 0, usage: 0 };
-  }
-  async getDiskInfo() {
-    return { total: 0, used: 0, free: 0, usage: 0 };
-  }
-  async getNetworkInfo() {
-    return { bytesReceived: 0, bytesTransmitted: 0 };
-  }
-
-  disconnect() {
-    // Nothing to do
-  }
 }

@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import { logger } from "../middleware/logger.js";
+import { formatDuration } from "../utils/serviceUtils.js";
 
 class SynologyService {
   constructor() {
@@ -152,10 +153,6 @@ class SynologyService {
 
     try {
       const stdout = await this._runSnmpGet(oids);
-      if (stderr && !stderr.includes("Warning:")) {
-        // Ignore harmless warnings
-        logger.warning("SNMP warning", { stderr });
-      }
 
       // Parse the output - each line is a value
       const values = stdout
@@ -189,7 +186,7 @@ class SynologyService {
           name: data.name,
           model: data.model,
           version: data.version,
-          uptime: this.formatUptime(data.uptime),
+          uptime: formatDuration(data.uptime * 1000),
           systemStatus: data.status,
         },
       };
@@ -383,24 +380,6 @@ class SynologyService {
     }
   }
 
-  formatUptime(seconds) {
-    const days = Math.floor(seconds / (24 * 60 * 60));
-    const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
-    const minutes = Math.floor((seconds % (60 * 60)) / 60);
-
-    if (days > 0) {
-      return `${days}d ${hours}h ${minutes}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else {
-      return `${minutes}m`;
-    }
-  }
-
-  disconnect() {
-    // No session to disconnect from with system commands
-    logger.info("Synology SNMP service disconnected");
-  }
 }
 
 export default SynologyService;

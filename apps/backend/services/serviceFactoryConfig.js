@@ -24,6 +24,7 @@ import RouterService from "./RouterService.js";
 import IpfsService from "./IpfsService.js";
 import HomebridgeService from "./HomebridgeService.js";
 import RaspberryPiService from "./RaspberryPiService.js";
+import { envInt, envOptionalInt, envPresentIntOr } from "../utils/env.js";
 
 /**
  * Parse ports from comma/space-separated string
@@ -56,17 +57,13 @@ export const serviceFactoryConfigs = {
         rpcUrl,
         rpcUser: process.env.BITCOIN_RPC_USER,
         rpcPassword: process.env.BITCOIN_RPC_PASSWORD,
-        timeout: parseInt(process.env.BITCOIN_TIMEOUT) || 120000,
-        connectTimeout: process.env.BITCOIN_CONNECT_TIMEOUT
-          ? parseInt(process.env.BITCOIN_CONNECT_TIMEOUT)
-          : undefined,
-        maxTime: process.env.BITCOIN_MAX_TIME
-          ? parseInt(process.env.BITCOIN_MAX_TIME)
-          : undefined,
+        timeout: envInt("BITCOIN_TIMEOUT") || 120000,
+        connectTimeout: envOptionalInt("BITCOIN_CONNECT_TIMEOUT"),
+        maxTime: envOptionalInt("BITCOIN_MAX_TIME"),
         useProxy: process.env.TOR_USE_PROXY === "true",
         torProxy: {
           host: process.env.TOR_PROXY_HOST || "127.0.0.1",
-          port: parseInt(process.env.TOR_PROXY_PORT) || 9050,
+          port: envInt("TOR_PROXY_PORT") || 9050,
         },
       };
     },
@@ -83,7 +80,7 @@ export const serviceFactoryConfigs = {
       authToken: process.env.ADGUARD_MAIN_AUTH,
       username: process.env.ADGUARD_USERNAME,
       password: process.env.ADGUARD_PASSWORD,
-      timeout: parseInt(process.env.ADGUARD_TIMEOUT) || 5000,
+      timeout: envInt("ADGUARD_TIMEOUT") || 5000,
     }),
   },
 
@@ -94,11 +91,11 @@ export const serviceFactoryConfigs = {
       relayNickname: process.env.TOR_RELAY_NICKNAME || "default-relay",
       onionooBaseUrl:
         process.env.TOR_ONIONOO_URL || "https://onionoo.torproject.org",
-      timeout: parseInt(process.env.TOR_TIMEOUT) || 10000,
+      timeout: envInt("TOR_TIMEOUT") || 10000,
       useProxy: process.env.TOR_USE_PROXY === "true" || false,
       torProxy: {
         host: process.env.TOR_PROXY_HOST || "127.0.0.1",
-        port: parseInt(process.env.TOR_PROXY_PORT) || 9050,
+        port: envInt("TOR_PROXY_PORT") || 9050,
       },
     }),
   },
@@ -108,7 +105,7 @@ export const serviceFactoryConfigs = {
     required: false,
     getConfig: () => ({
       baseUrl: process.env.QBITTORRENT_URL || "http://127.0.0.1:8069",
-      timeout: parseInt(process.env.QBITTORRENT_TIMEOUT) || 10000,
+      timeout: envInt("QBITTORRENT_TIMEOUT") || 10000,
     }),
   },
 
@@ -126,9 +123,7 @@ export const serviceFactoryConfigs = {
       if (!ipfsApiUrl) return null;
       return {
         apiUrl: ipfsApiUrl,
-        timeout: process.env.IPFS_TIMEOUT
-          ? parseInt(process.env.IPFS_TIMEOUT)
-          : 5000,
+        timeout: envPresentIntOr("IPFS_TIMEOUT", 5000),
       };
     },
   },
@@ -141,8 +136,8 @@ export const serviceFactoryConfigs = {
       return {
         host: process.env.ROON_HOST,
         ports: process.env.ROON_PORTS || process.env.ROON_DEFAULT_PORT,
-        timeout: parseInt(process.env.ROON_TIMEOUT) || 3000,
-        pingCount: parseInt(process.env.ROON_PING_COUNT) || 2,
+        timeout: envInt("ROON_TIMEOUT") || 3000,
+        pingCount: envInt("ROON_PING_COUNT") || 2,
         usePing: process.env.ROON_USE_PING === "false" ? false : true,
       };
     },
@@ -155,12 +150,8 @@ export const serviceFactoryConfigs = {
       if (!process.env.PHILIPS_BRIDGE_HOST) return null;
       return {
         host: process.env.PHILIPS_BRIDGE_HOST,
-        pingCount: process.env.PHILIPS_PING_COUNT
-          ? parseInt(process.env.PHILIPS_PING_COUNT)
-          : undefined,
-        timeout: process.env.PHILIPS_TIMEOUT
-          ? parseInt(process.env.PHILIPS_TIMEOUT)
-          : undefined,
+        pingCount: envOptionalInt("PHILIPS_PING_COUNT"),
+        timeout: envOptionalInt("PHILIPS_TIMEOUT"),
         usePing: process.env.PHILIPS_USE_PING !== "false",
       };
     },
@@ -181,9 +172,7 @@ export const serviceFactoryConfigs = {
         versionPath:
           process.env.HOMEBRIDGE_VERSION_PATH ||
           "/api/status/homebridge-version",
-        timeout: process.env.HOMEBRIDGE_TIMEOUT
-          ? parseInt(process.env.HOMEBRIDGE_TIMEOUT)
-          : undefined,
+        timeout: envOptionalInt("HOMEBRIDGE_TIMEOUT"),
         authToken:
           process.env.HOMEBRIDGE_AUTH_TOKEN ||
           process.env.HOMEBRIDGE_TOKEN ||
@@ -206,13 +195,9 @@ export const serviceFactoryConfigs = {
       return {
         host: process.env.MACMINI_HOST,
         sshUser: process.env.MACMINI_SSH_USER,
-        sshPort: process.env.MACMINI_SSH_PORT
-          ? parseInt(process.env.MACMINI_SSH_PORT)
-          : undefined,
+        sshPort: envOptionalInt("MACMINI_SSH_PORT"),
         sshKey: process.env.MACMINI_SSH_KEY_PATH || process.env.MACMINI_SSH_KEY,
-        timeout: process.env.MACMINI_TIMEOUT
-          ? parseInt(process.env.MACMINI_TIMEOUT)
-          : undefined,
+        timeout: envOptionalInt("MACMINI_TIMEOUT"),
       };
     },
   },
@@ -224,9 +209,7 @@ export const serviceFactoryConfigs = {
       if (!process.env.ALBYHUB_URL) return null;
       return {
         baseUrl: process.env.ALBYHUB_URL,
-        timeout: process.env.ALBYHUB_TIMEOUT
-          ? parseInt(process.env.ALBYHUB_TIMEOUT)
-          : undefined,
+        timeout: envOptionalInt("ALBYHUB_TIMEOUT"),
         authToken: process.env.ALBYHUB_TOKEN || null,
       };
     },
@@ -245,12 +228,8 @@ export const serviceFactoryConfigs = {
         name: "beryl",
         host: berylHost,
         ports: berylPorts ? parsePorts(berylPorts) : [],
-        timeout: process.env.BERYL_TIMEOUT_MS
-          ? parseInt(process.env.BERYL_TIMEOUT_MS)
-          : 3000,
-        pingCount: process.env.BERYL_PING_COUNT
-          ? parseInt(process.env.BERYL_PING_COUNT)
-          : 1,
+        timeout: envPresentIntOr("BERYL_TIMEOUT_MS", 3000),
+        pingCount: envPresentIntOr("BERYL_PING_COUNT", 1),
       };
     },
   },
@@ -268,12 +247,8 @@ export const serviceFactoryConfigs = {
         name: "telenet",
         host: telenetHost,
         ports: telenetPorts ? parsePorts(telenetPorts) : [],
-        timeout: process.env.TELENET_TIMEOUT_MS
-          ? parseInt(process.env.TELENET_TIMEOUT_MS)
-          : 3000,
-        pingCount: process.env.TELENET_PING_COUNT
-          ? parseInt(process.env.TELENET_PING_COUNT)
-          : 1,
+        timeout: envPresentIntOr("TELENET_TIMEOUT_MS", 3000),
+        pingCount: envPresentIntOr("TELENET_PING_COUNT", 1),
       };
     },
   },
@@ -285,16 +260,10 @@ export const serviceFactoryConfigs = {
       if (!process.env.RASPI_HOST) return null;
       return {
         host: process.env.RASPI_HOST,
-        port: process.env.RASPI_PORT
-          ? parseInt(process.env.RASPI_PORT)
-          : undefined,
-        timeout: process.env.RASPI_TIMEOUT
-          ? parseInt(process.env.RASPI_TIMEOUT)
-          : undefined,
+        port: envOptionalInt("RASPI_PORT"),
+        timeout: envOptionalInt("RASPI_TIMEOUT"),
         macMiniHost: process.env.MACMINI_HOST,
-        macMiniSSHPort: process.env.MACMINI_SSH_PORT
-          ? parseInt(process.env.MACMINI_SSH_PORT)
-          : undefined,
+        macMiniSSHPort: envOptionalInt("MACMINI_SSH_PORT"),
         macMiniSSHUser: process.env.MACMINI_SSH_USER,
         macMiniSSHKey:
           process.env.MACMINI_SSH_KEY_PATH || process.env.MACMINI_SSH_KEY,

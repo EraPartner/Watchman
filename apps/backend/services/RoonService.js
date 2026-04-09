@@ -1,3 +1,4 @@
+import net from "net";
 import { pingHost } from "../utils/ping.js";
 import logger from "../middleware/logger.js";
 
@@ -200,9 +201,6 @@ class RoonService {
     };
   }
 
-  disconnect() {
-    // Nothing to disconnect for simple checks
-  }
 }
 
 export default RoonService;

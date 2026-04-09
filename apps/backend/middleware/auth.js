@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import logger from "./logger.js";
+import { extractAuthToken } from "../utils/authToken.js";
 
 // Generate a constant dummy bcrypt hash at startup for timing-equalization
 const DUMMY_HASH = bcrypt.hashSync("invalid", 10);
@@ -82,25 +83,7 @@ export async function authenticateCredentials(username, password) {
  * @returns {void}
  */
 export function requireAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-  let token = null;
-
-  // Extract token from Authorization header
-  if (
-    authHeader &&
-    typeof authHeader === "string" &&
-    authHeader.startsWith("Bearer ")
-  ) {
-    const headerToken = authHeader.slice(7);
-    if (headerToken.length > 0) {
-      token = headerToken;
-    }
-  }
-
-  // Fallback to cookie token if header token not found
-  if (!token && req.cookies?.token) {
-    token = req.cookies.token;
-  }
+  const token = extractAuthToken(req);
 
   if (!token) {
     return res.status(401).json({
@@ -123,7 +106,7 @@ export function requireAuth(req, res, next) {
     ...decoded,
     tokenIssuedAt: decoded.iat
       ? new Date(decoded.iat * 1000).toISOString()
-      : null,
+      : undefined,
   };
 
   next();

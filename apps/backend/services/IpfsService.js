@@ -24,14 +24,13 @@ export default class IpfsService {
   // Accept an optional `method` override (e.g. 'POST') to explicitly use POST for specific endpoints
   async _fetch(path, method = undefined) {
     const url = `${this.apiUrl.replace(/\/+$/, "")}${path}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const signal = AbortSignal.timeout(this.timeout);
 
     const doRequest = async (reqMethod = "GET") => {
       let opts;
       if (reqMethod === "GET") {
         opts = {
-          signal: controller.signal,
+          signal,
           agent: url.startsWith("https:") ? httpsAgent : httpAgent,
         };
       } else {
@@ -40,7 +39,7 @@ export default class IpfsService {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: "",
-          signal: controller.signal,
+          signal,
           agent: url.startsWith("https:") ? httpsAgent : httpAgent,
         };
       }
@@ -63,7 +62,6 @@ export default class IpfsService {
         res = await doRequest(fallback);
       }
 
-      clearTimeout(timeoutId);
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(`IPFS API ${path} returned ${res.status}: ${text}`);
@@ -81,8 +79,7 @@ export default class IpfsService {
         return txt;
       }
     } catch (err) {
-      clearTimeout(timeoutId);
-      if (err && err.name === "AbortError")
+      if (err && (err.name === "AbortError" || err.name === "TimeoutError"))
         throw new Error("Request timed out");
       throw err;
     }
