@@ -30,6 +30,10 @@ apps/*/dist
 # Temporary files
 cookies.txt
 Node
+login_response.json
+
+# Runtime data
+.tor-data/
 
 # Editor directories and files
 .vscode/*

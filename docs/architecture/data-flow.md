@@ -2,7 +2,7 @@
 title: Data Flow
 type: architecture
 status: active
-date: 2026-04-02
+date: 2026-04-09
 tags: [architecture, backend, frontend, data-flow]
 description: Data flow documentation for authentication, monitoring, and real-time updates
 aliases: [data flow, request flow, communication patterns]
@@ -81,6 +81,8 @@ aliases: [data flow, request flow, communication patterns]
 3. Parse multi-instance configurations
 4. Initialize ServiceManager
 5. Initialize TorManager (if tor enabled)
+   - TorManager default data dir is `apps/backend/.tor-data`
+   - Tor SOCKS readiness is determined via local TCP probe on `127.0.0.1:{socksPort}`
 6. Initialize each service via factory pattern
 7. Frontend requests config → GET /api/config/frontend
 8. FrontendConfigService returns enabled services list

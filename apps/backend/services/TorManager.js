@@ -1,14 +1,20 @@
 import { spawn } from "child_process";
 import fs from "fs/promises";
-import path from "path";
+import net from "net";
+import path, { dirname } from "path";
+import { fileURLToPath } from "url";
 import { logger } from "../middleware/logger.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DEFAULT_TOR_DATA_DIR = path.resolve(__dirname, "..", ".tor-data");
 
 class TorManager {
   constructor(config = {}) {
     this.torPath = config.torPath || "tor";
     this.socksPort = config.socksPort || 9050;
     this.controlPort = config.controlPort || 9051;
-    this.dataDir = config.dataDir || path.join(process.cwd(), ".tor-data");
+    this.dataDir = config.dataDir || DEFAULT_TOR_DATA_DIR;
     this.torProcess = null;
     this.isStarting = false;
     this.startupTimeout = config.startupTimeout || 30000; // 30 seconds
@@ -95,45 +101,33 @@ class TorManager {
   }
 
   async isRunning() {
-    try {
-      // Check if something is listening on the SOCKS port using spawn
-      const { stdout } = await this._runSpawn("lsof", [
-        "-i",
-        `:${this.socksPort}`,
-      ]);
-      return stdout.includes("LISTEN");
-    } catch {
-      return false;
-    }
+    return this._isPortOpen(this.socksPort);
   }
 
-  // Helper to run a spawn command and collect output
-  _runSpawn(cmd, args) {
-    return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 5000,
-      });
+  _isPortOpen(port, host = "127.0.0.1", timeout = 1000) {
+    return new Promise((resolve) => {
+      let socket;
+      try {
+        socket = net.createConnection({ port, host });
+      } catch {
+        resolve(false);
+        return;
+      }
+      let settled = false;
 
-      let stdout = "";
-      let stderr = "";
-
-      child.stdout.on("data", (data) => {
-        stdout += data.toString();
-      });
-      child.stderr.on("data", (data) => {
-        stderr += data.toString();
-      });
-
-      child.on("close", (code) => {
-        if (code !== 0) {
-          reject(new Error(`${cmd} exited with code ${code}`));
-        } else {
-          resolve({ stdout, stderr });
+      const settle = (isOpen) => {
+        if (settled) {
+          return;
         }
-      });
+        settled = true;
+        socket.destroy();
+        resolve(isOpen);
+      };
 
-      child.on("error", reject);
+      socket.setTimeout(timeout);
+      socket.once("connect", () => settle(true));
+      socket.once("timeout", () => settle(false));
+      socket.once("error", () => settle(false));
     });
   }
 
@@ -223,13 +217,15 @@ Log notice stdout
 
       // Wait for Tor to start
       const startTime = Date.now();
+      let delayMs = 250;
       while (Date.now() - startTime < this.startupTimeout) {
         if (await this.isRunning()) {
           logger.service("tor", `Tor proxy is ready on port ${this.socksPort}`);
           this.isStarting = false;
           return true;
         }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs = Math.min(delayMs * 2, 1000);
       }
 
       throw new Error("Tor startup timeout");

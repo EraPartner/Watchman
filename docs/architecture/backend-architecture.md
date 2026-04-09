@@ -120,6 +120,13 @@ All services extend a common pattern:
 | WebSocketManager      | [[apps/backend/services/WebSocketManager.js]]      | Real-time status broadcasting  |
 | FrontendConfigService | [[apps/backend/services/FrontendConfigService.js]] | Frontend config endpoint       |
 
+#### TorManager runtime notes
+
+- Default Tor runtime data directory is module-relative: `apps/backend/.tor-data` (not `process.cwd()` relative).
+- Runtime readiness and health checks use local TCP connect probing on `127.0.0.1:{socksPort}`.
+- Startup wait loop uses bounded exponential backoff (`250ms` → `500ms` → `1000ms` max) until `startupTimeout`.
+- Cleanup removes generated `torrc` only and preserves Tor cache/state artifacts for faster subsequent starts.
+
 ### Shared Utilities
 
 | Utility                      | File                                          | Purpose                                                                                                                                                               |

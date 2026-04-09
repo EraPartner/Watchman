@@ -76,6 +76,10 @@ aliases: [env vars, environment, configuration, config]
 | `TOR_RELAY_NICKNAME` | Relay nickname   | `my-relay`  |
 | `TOR_RELAY_IP`       | Relay IP address | `192.0.2.1` |
 
+> [!info] Tor runtime data location
+> TorManager runtime data defaults to `apps/backend/.tor-data` (module-relative), not a process working-directory-relative path.
+> This path is an implementation default in [[apps/backend/services/TorManager.js|TorManager.js]] and does not currently have an environment variable override.
+
 ### qBittorrent
 
 | Variable               | Description     | Example                 |
