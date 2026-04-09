@@ -42,7 +42,7 @@
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
     "pigpio-client": "^1.5.2",
-    "socks-proxy-agent": "^8.0.5",
+    "socks-proxy-agent": "^10.0.0",
     "swagger-ui-express": "^5.0.1",
     "ws": "^8.18.0"
   },
