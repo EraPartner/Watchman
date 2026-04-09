@@ -30,40 +30,89 @@ export function responseSizeLimit(options = {}) {
 
     let bytesWritten = 0;
     const originalWrite = res.write;
-    const originalEnd = res.writeHead;
+    const originalEnd = res.end;
+    let limitExceeded = false;
+    let bypassAccounting = false;
+
+    const getChunkLength = (chunk, encoding) => {
+      if (!chunk) return 0;
+      if (Buffer.isBuffer(chunk)) return chunk.length;
+      if (typeof chunk === "string") {
+        return Buffer.byteLength(
+          chunk,
+          typeof encoding === "string" ? encoding : undefined
+        );
+      }
+      return Buffer.byteLength(String(chunk));
+    };
+
+    const handleLimitExceeded = () => {
+      if (limitExceeded) {
+        if (res.socket && !res.socket.destroyed) {
+          res.socket.destroy();
+        }
+        return;
+      }
+
+      limitExceeded = true;
+
+      logger.warn("Response size limit exceeded", {
+        method: req.method,
+        path: req.path,
+        size: bytesWritten,
+        limit: maxSize,
+        ip: req.ip,
+      });
+
+      if (!res.headersSent) {
+        bypassAccounting = true;
+        try {
+          const payload = JSON.stringify({
+            error: errorMessage,
+            code: "RESPONSE_TOO_LARGE",
+          });
+          res.statusCode = 413;
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          originalEnd.call(res, payload);
+          return;
+        } finally {
+          bypassAccounting = false;
+        }
+      }
+
+      if (res.socket && !res.socket.destroyed) {
+        res.socket.destroy();
+      }
+    };
+
+    const accountChunkAndCheckLimit = (chunk, encoding) => {
+      if (bypassAccounting || limitExceeded) {
+        return !limitExceeded;
+      }
+
+      bytesWritten += getChunkLength(chunk, encoding);
+      if (bytesWritten > maxSize) {
+        handleLimitExceeded();
+        return false;
+      }
+
+      return true;
+    };
 
     // Override write to track size
     res.write = function (chunk, encoding, callback) {
-      if (chunk) {
-        const chunkLength = Buffer.isBuffer(chunk)
-          ? chunk.length
-          : Buffer.byteLength(chunk);
-        bytesWritten += chunkLength;
-
-        if (bytesWritten > maxSize) {
-          logger.warn("Response size limit exceeded", {
-            method: req.method,
-            path: req.path,
-            size: bytesWritten,
-            limit: maxSize,
-            ip: req.ip,
-          });
-
-          // Close the connection if too much data was sent
-          if (!res.headersSent) {
-            res.status(413).json({
-              error: errorMessage,
-              code: "RESPONSE_TOO_LARGE",
-            });
-          }
-          // Destroy the socket to stop further data
-          if (res.socket) {
-            res.socket.destroy();
-          }
-          return false;
-        }
+      if (!accountChunkAndCheckLimit(chunk, encoding)) {
+        return false;
       }
       return originalWrite.apply(this, arguments);
+    };
+
+    // Override end to include final chunk in accounting
+    res.end = function (chunk, encoding, callback) {
+      if (!accountChunkAndCheckLimit(chunk, encoding)) {
+        return this;
+      }
+      return originalEnd.apply(this, arguments);
     };
 
     next();

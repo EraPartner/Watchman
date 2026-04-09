@@ -260,9 +260,9 @@ Log notice stdout
         setTimeout(() => {
           if (!settled) {
             settled = true;
-            try {
+            if (proc.exitCode === null && !proc.killed) {
               proc.kill("SIGKILL");
-            } catch (_) {}
+            }
             resolve();
           }
         }, 5000);

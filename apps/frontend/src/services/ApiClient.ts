@@ -5,6 +5,7 @@ import { extractApiError, unwrapApiResponse } from "../lib/apiResponse";
 
 // Re-export for backward compatibility
 const backendUrl = getBackendUrl();
+const AUTH_FALLBACK_TOKEN_STORAGE_KEY = "watchman_auth_token";
 
 // Simple API client that only talks to our backend
 export interface ServiceHealth {
@@ -327,16 +328,52 @@ class ApiClient {
     this.baseUrl = backendUrl;
 
     // Restore persisted fallback auth token (if any) so Authorization header
-    // continues to be sent across page reloads in dev scenarios where cookies
-    // may not be available. Use a safe check for browser environment.
+    // can still be sent in compatibility scenarios where cookies are not
+    // available (e.g. certain dev/proxy setups).
+    this.restorePersistedFallbackAuthToken();
+  }
+
+  private restorePersistedFallbackAuthToken() {
     try {
       if (typeof window !== "undefined" && window.localStorage) {
-        const saved = window.localStorage.getItem("watchman_auth_token");
-        if (saved) this.authToken = saved;
+        const saved = window.localStorage.getItem(
+          AUTH_FALLBACK_TOKEN_STORAGE_KEY
+        );
+        this.authToken =
+          typeof saved === "string" && saved.length > 0 ? saved : null;
       }
     } catch {
       // ignore storage errors
     }
+  }
+
+  private setFallbackAuthToken(token: string | null) {
+    this.authToken = token;
+
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        if (token) {
+          window.localStorage.setItem(AUTH_FALLBACK_TOKEN_STORAGE_KEY, token);
+        } else {
+          window.localStorage.removeItem(AUTH_FALLBACK_TOKEN_STORAGE_KEY);
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  private extractCompatibilityAuthToken(response: unknown): string | undefined {
+    if (!response || typeof response !== "object" || !("token" in response)) {
+      return undefined;
+    }
+
+    const token = (response as { token?: unknown }).token;
+    if (typeof token !== "string" || token.length === 0) {
+      return undefined;
+    }
+
+    return token;
   }
 
   // AdGuard endpoints
@@ -544,41 +581,18 @@ class ApiClient {
       headers: { "Content-Type": "application/json" },
     });
 
-    // If server returned a token in the response body, store it as a fallback
-    // auth token so future requests include an Authorization header when cookies
-    // are not available (dev/proxy scenarios).
-    try {
-      const token =
-        res && typeof res === "object" && "token" in res
-          ? res.token
-          : undefined;
-      if (typeof token === "string" && token.length > 0) {
-        this.authToken = token;
-        try {
-          if (typeof window !== "undefined" && window.localStorage) {
-            window.localStorage.setItem("watchman_auth_token", token);
-          }
-        } catch {
-          // ignore storage errors
-        }
-      }
-    } catch {
-      // ignore
-    }
+    // Compatibility mode: only keep a fallback bearer token when server
+    // explicitly returns one. If token is omitted (new secure default), clear
+    // any stale persisted fallback so old credentials are not reused.
+    const compatibilityToken = this.extractCompatibilityAuthToken(res);
+    this.setFallbackAuthToken(compatibilityToken || null);
 
     return res;
   }
 
   async logout(): Promise<LogoutResponse> {
-    // Clear in-memory token as well as calling logout endpoint to clear cookie
-    this.authToken = null;
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        window.localStorage.removeItem("watchman_auth_token");
-      }
-    } catch {
-      // ignore storage errors
-    }
+    // Clear in-memory/persisted fallback token and clear cookie server-side.
+    this.setFallbackAuthToken(null);
     return this.request("/api/auth/logout", { method: "POST" });
   }
 

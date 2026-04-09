@@ -15,7 +15,8 @@ import EventEmitter from "events";
 import { verifyToken } from "../middleware/auth.js";
 import { logger } from "../middleware/logger.js";
 import { extractAuthToken } from "../utils/authToken.js";
-import { envInt } from "../utils/env.js";
+import { envInt, envTrustProxy } from "../utils/env.js";
+import { buildAllowedOriginSet, normalizeOrigin } from "../utils/origin.js";
 
 /**
  * WebSocket Manager Class
@@ -50,6 +51,15 @@ export class WebSocketManager extends EventEmitter {
 
     /** @type {Map<string, number>} Track connections per IP address */
     this.connectionsByIp = new Map();
+
+    /** @type {boolean|number|string} Express-compatible trust proxy setting */
+    this.trustProxy = envTrustProxy("TRUST_PROXY", 1);
+
+    /** @type {Set<string>} Allowed browser origins for WebSocket upgrades */
+    this.allowedOrigins = buildAllowedOriginSet(process.env.FRONTEND_URL || "");
+
+    /** @type {boolean} Require browser Origin header to be in allowlist */
+    this.enforceOriginCheck = this.allowedOrigins.size > 0;
   }
 
   /**
@@ -105,6 +115,16 @@ export class WebSocketManager extends EventEmitter {
   handleConnection(ws, req) {
     try {
       const clientIp = this.getClientIp(req);
+
+      if (!this.isOriginAllowed(req)) {
+        const origin = req?.headers?.origin;
+        logger.warn("WebSocket connection rejected: origin not allowed", {
+          ip: clientIp,
+          origin: typeof origin === "string" ? origin : "missing",
+        });
+        ws.close(1008, "Origin not allowed");
+        return;
+      }
 
       // Rate limiting: Check connections per IP
       const existingConnections = this.connectionsByIp.get(clientIp) || 0;
@@ -181,16 +201,42 @@ export class WebSocketManager extends EventEmitter {
    * @private
    */
   getClientIp(req) {
-    const forwarded = req.headers["x-forwarded-for"];
-    if (forwarded) {
-      return String(forwarded).split(",")[0].trim();
+    if (this.trustProxy !== false) {
+      const forwarded = req.headers["x-forwarded-for"];
+      if (forwarded) {
+        return String(forwarded).split(",")[0].trim();
+      }
+
+      const realIp = req.headers["x-real-ip"];
+      if (realIp) {
+        return String(realIp).trim();
+      }
     }
+
     return (
-      req.headers["x-real-ip"] ||
-      req.connection.remoteAddress ||
-      req.socket.remoteAddress ||
-      "unknown"
+      req.connection.remoteAddress || req.socket.remoteAddress || "unknown"
     );
+  }
+
+  /**
+   * Validate the websocket Origin header against configured frontend origins.
+   * When no frontend origins are configured, this check is disabled for compatibility.
+   *
+   * @param {http.IncomingMessage} req - HTTP request object
+   * @returns {boolean} Whether request origin is allowed
+   * @private
+   */
+  isOriginAllowed(req) {
+    if (!this.enforceOriginCheck) {
+      return true;
+    }
+
+    const normalizedOrigin = normalizeOrigin(req?.headers?.origin);
+    if (!normalizedOrigin) {
+      return false;
+    }
+
+    return this.allowedOrigins.has(normalizedOrigin);
   }
 
   /**

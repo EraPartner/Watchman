@@ -106,28 +106,39 @@ const validateEnvironment = () => {
     process.exit(1);
   }
 
-  // Enhanced FRONTEND_URL validation
-  if (process.env.FRONTEND_URL && !isValidUrl(process.env.FRONTEND_URL)) {
+  // Enhanced FRONTEND_URL validation (supports comma/space-separated origins)
+  const frontendUrls = (process.env.FRONTEND_URL || "")
+    .split(/[ ,]+/)
+    .map((url) => url.trim())
+    .filter(Boolean);
+
+  const invalidFrontendUrl = frontendUrls.find((url) => !isValidUrl(url));
+  if (invalidFrontendUrl) {
     configLogger.error(
-      "FRONTEND_URL must be a valid URL (http:// or https://)"
+      `FRONTEND_URL contains invalid URL: ${invalidFrontendUrl}`
+    );
+    configLogger.error(
+      "FRONTEND_URL values must be valid URLs (http:// or https://), separated by commas or spaces"
     );
     process.exit(1);
   }
 
-  // Warn if production without HTTPS (except for localhost/local networks)
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.FRONTEND_URL &&
-    !process.env.FRONTEND_URL.startsWith("https://")
-  ) {
-    const url = process.env.FRONTEND_URL;
-    const isLocalhost =
-      url.includes("localhost") ||
-      url.includes("127.0.0.1") ||
-      url.includes("0.0.0.0");
-    const isLocalNetwork = url.match(/https?:\/\/(192\.168\.|10\.|172\.)/);
+  // Warn if production has non-HTTPS public origins (except localhost/local networks)
+  if (process.env.NODE_ENV === "production" && frontendUrls.length > 0) {
+    const nonHttpsPublicOrigins = frontendUrls.filter((url) => {
+      if (url.startsWith("https://")) {
+        return false;
+      }
 
-    if (!isLocalhost && !isLocalNetwork) {
+      const isLocalhost =
+        url.includes("localhost") ||
+        url.includes("127.0.0.1") ||
+        url.includes("0.0.0.0");
+      const isLocalNetwork = url.match(/https?:\/\/(192\.168\.|10\.|172\.)/);
+      return !isLocalhost && !isLocalNetwork;
+    });
+
+    if (nonHttpsPublicOrigins.length > 0) {
       configLogger.warn(
         "FRONTEND_URL should use HTTPS in production for security (cookies, HSTS)"
       );

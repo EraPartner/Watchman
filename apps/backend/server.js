@@ -64,6 +64,8 @@ import {
 import { destroyAgents } from "./utils/httpAgentPool.js";
 import { registerApiRoutes } from "./routes/registerApiRoutes.js";
 import { getRouterArpData } from "./services/RouterArpService.js";
+import { envBool, envTrustProxy } from "./utils/env.js";
+import { buildAllowedOriginSet, normalizeOrigin } from "./utils/origin.js";
 
 // __esmdirname equivalent for ESM
 const __esmdirname = dirname(fileURLToPath(import.meta.url));
@@ -74,7 +76,9 @@ validateEnvironment();
 const config = getConfig();
 const app = express();
 // Trust proxy for correct ip detection behind reverse proxies
-app.set("trust proxy", 1);
+const trustProxy = envTrustProxy("TRUST_PROXY", 1);
+const AUTH_RETURN_TOKEN = envBool("AUTH_RETURN_TOKEN", false);
+app.set("trust proxy", trustProxy);
 const server = createServer(app);
 const PORT = config.server.port;
 const FRONTEND_URLS = (config.server.frontendUrl || "")
@@ -82,6 +86,17 @@ const FRONTEND_URLS = (config.server.frontendUrl || "")
   .map((o) => o.trim())
   .filter(Boolean);
 const FRONTEND_URL = FRONTEND_URLS[0] || config.server.frontendUrl;
+const FRONTEND_ORIGINS = [...buildAllowedOriginSet(FRONTEND_URLS)];
+const ALLOWED_CORS_ORIGINS = new Set(FRONTEND_ORIGINS);
+for (const frontendOrigin of FRONTEND_ORIGINS) {
+  try {
+    const parsed = new URL(frontendOrigin);
+    ALLOWED_CORS_ORIGINS.add(`${parsed.protocol}//${parsed.hostname}:${PORT}`);
+  } catch (_error) {
+    // ignore malformed configured origins
+  }
+}
+ALLOWED_CORS_ORIGINS.add(`http://localhost:${PORT}`);
 const COOKIE_DOMAIN_OVERRIDE = process.env.COOKIE_DOMAIN || null;
 const DISABLE_COOKIE_DOMAIN =
   (process.env.COOKIE_STRICT_DOMAIN || "").toLowerCase() === "false" ||
@@ -99,7 +114,6 @@ const COOKIE_DOMAIN =
           return null;
         }
       })();
-const FRONTEND_HTTPS = FRONTEND_URLS.some((url) => url?.startsWith("https://"));
 const APP_VERSION = (() => {
   const candidates = [
     join(__esmdirname, "package.json"),
@@ -229,6 +243,13 @@ async function initializeServer() {
   logger.startup(`Environment: ${process.env.NODE_ENV || "development"}`);
   logger.startup(`Frontend URL: ${FRONTEND_URL}`);
   logger.startup(`Port: ${PORT}`);
+  logger.startup(`Trust proxy: ${String(trustProxy)}`);
+
+  if (AUTH_RETURN_TOKEN) {
+    logger.warning(
+      "AUTH_RETURN_TOKEN is enabled. Login responses will include a JWT token for compatibility. Disable this in production for stronger XSS resistance."
+    );
+  }
 
   try {
     serviceManager = new ServiceManager();
@@ -340,33 +361,17 @@ app.use(
         return callback(null, true);
       }
 
-      // Validate the format of the origin
-      try {
-        new URL(origin);
-      } catch (e) {
+      // Validate and normalize the format of the origin
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (!normalizedOrigin) {
         return callback(new Error("CORS: Invalid origin format"));
       }
 
-      // Build allowed origins list: FRONTEND_URL + backend's own origin
-      const allowed = [FRONTEND_URL];
-      const backendOrigin = `http://localhost:${PORT}`;
-      if (!allowed.includes(backendOrigin)) {
-        allowed.push(backendOrigin);
-      }
-      // Also allow the backend's own origin with any host
-      try {
-        const parsed = new URL(FRONTEND_URL);
-        const sameHostBackend = `${parsed.protocol}//${parsed.hostname}:${PORT}`;
-        if (!allowed.includes(sameHostBackend)) {
-          allowed.push(sameHostBackend);
-        }
-      } catch (_e) {
-        // ignore
-      }
-
-      if (!allowed.includes(origin)) {
+      if (!ALLOWED_CORS_ORIGINS.has(normalizedOrigin)) {
         if (process.env.NODE_ENV === "production") {
-          return callback(new Error(`CORS: Origin ${origin} not allowed`));
+          return callback(
+            new Error(`CORS: Origin ${normalizedOrigin} not allowed`)
+          );
         }
         // More permissive in development
         return callback(null, true);
@@ -415,8 +420,8 @@ registerApiRoutes(app, {
   requireAuth,
   extractAuthToken,
   verifyToken,
-  FRONTEND_URL,
   COOKIE_OPTIONS,
+  AUTH_RETURN_TOKEN,
   logger,
   healthLimiter,
   controlLimiter,

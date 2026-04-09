@@ -2,7 +2,11 @@ import { spawn } from "child_process";
 import { Client } from "ssh2";
 import fs from "fs";
 import logger from "../middleware/logger.js";
-import { isSafePath, isValidIPv4, isValidHostname } from "../utils/validation.js";
+import {
+  isSafePath,
+  isValidIPv4,
+  isValidHostname,
+} from "../utils/validation.js";
 import { pingHost as sharedPingHost } from "../utils/ping.js";
 
 const ALLOWED_COMMANDS = new Set(["uptime", "df", "osx-cpu-temp", "which"]);
@@ -53,11 +57,6 @@ class MacMiniService {
         this._cachedSshKey = null;
       }
     }
-  }
-
-  #isCommandAllowed(cmd) {
-    const base = cmd.split(/\s+/)[0];
-    return ALLOWED_COMMANDS.has(base);
   }
 
   // Try multiple ping strategies via shared utility
@@ -408,7 +407,6 @@ class MacMiniService {
 
     return seconds > 0 ? seconds : null;
   }
-
 }
 
 export default MacMiniService;

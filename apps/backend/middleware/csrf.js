@@ -28,13 +28,24 @@ export function verifyCsrf(req, res, next) {
     req.headers[CSRF_HEADER_NAME.toLowerCase()];
   const cookieToken = req.cookies && req.cookies[CSRF_COOKIE_NAME];
 
-  if (
-    !headerToken ||
-    !cookieToken ||
-    String(headerToken) !== String(cookieToken)
-  ) {
+  if (!tokensMatch(headerToken, cookieToken)) {
     return res.status(403).json({ error: "Invalid or missing CSRF token" });
   }
 
   next();
+}
+
+function tokensMatch(headerToken, cookieToken) {
+  if (!headerToken || !cookieToken) {
+    return false;
+  }
+
+  const headerBuffer = Buffer.from(String(headerToken));
+  const cookieBuffer = Buffer.from(String(cookieToken));
+
+  if (headerBuffer.length !== cookieBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(headerBuffer, cookieBuffer);
 }

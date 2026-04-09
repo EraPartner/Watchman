@@ -1,5 +1,21 @@
 import path from "path";
 
+function stripUnsafeControlChars(value) {
+  let result = "";
+
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    const isAsciiControl = code <= 31 || code === 127;
+    const isAllowedWhitespace = code === 9 || code === 10 || code === 13;
+
+    if (!isAsciiControl || isAllowedWhitespace) {
+      result += char;
+    }
+  }
+
+  return result;
+}
+
 /**
  * Input Validation & Sanitization Utilities
  *
@@ -22,9 +38,7 @@ export function sanitizeString(input, maxLength = 255) {
   if (typeof input !== "string") return null;
 
   // Remove control characters except tab/newline/carriage return
-  const sanitized = input
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    .trim();
+  const sanitized = stripUnsafeControlChars(input).trim();
 
   // Enforce max length
   if (sanitized.length > maxLength) {

@@ -11,6 +11,7 @@
  */
 
 import { join } from "path";
+import crypto from "crypto";
 
 // Check if logging is enabled (default: true)
 const LOG_ENABLED = process.env.LOG_ENABLED !== "false";
@@ -172,9 +173,7 @@ const logger = new Logger();
 
 // Request ID middleware
 export function requestIdMiddleware(req, res, next) {
-  req.requestId =
-    req.headers["x-request-id"] ||
-    `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = req.headers["x-request-id"] || crypto.randomUUID();
   res.setHeader("X-Request-ID", req.requestId);
   next();
 }

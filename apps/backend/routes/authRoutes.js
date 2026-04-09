@@ -1,5 +1,18 @@
 import { getErrorMessage } from "./routeUtils.js";
 
+function buildLoginResponse(user, accessToken, includeToken) {
+  const response = {
+    message: "Login successful",
+    user: { username: user.username, id: user.id },
+  };
+
+  if (includeToken) {
+    response.token = accessToken;
+  }
+
+  return response;
+}
+
 export function registerAuthRoutes(
   app,
   {
@@ -14,8 +27,8 @@ export function registerAuthRoutes(
     requireAuth,
     extractAuthToken,
     verifyToken,
-    FRONTEND_URL,
     COOKIE_OPTIONS,
+    AUTH_RETURN_TOKEN = false,
     logger,
   }
 ) {
@@ -40,23 +53,16 @@ export function registerAuthRoutes(
 
         const accessToken = signToken({ sub: user.id }, "access");
 
-        const isLocalhost =
-          FRONTEND_URL?.includes("localhost") ||
-          FRONTEND_URL?.includes("127.0.0.1");
         res.cookie("token", accessToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production" && !isLocalhost,
-          sameSite: isLocalhost ? "lax" : "strict",
+          ...COOKIE_OPTIONS,
           maxAge: 8 * 60 * 60 * 1000,
         });
 
         issueCsrfToken(res);
 
-        return res.status(200).json({
-          message: "Login successful",
-          token: accessToken,
-          user: { username: user.username, id: user.id },
-        });
+        return res
+          .status(200)
+          .json(buildLoginResponse(user, accessToken, AUTH_RETURN_TOKEN));
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error("Login error", { error: message });

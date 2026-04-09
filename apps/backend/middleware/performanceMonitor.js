@@ -1,4 +1,5 @@
 import logger from "./logger.js";
+import crypto from "crypto";
 
 class PerformanceMonitor {
   constructor() {
@@ -101,7 +102,7 @@ class PerformanceMonitor {
    * @private
    */
   generateRequestId() {
-    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `req_${crypto.randomUUID()}`;
   }
 
   /**

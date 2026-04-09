@@ -26,8 +26,8 @@ export const SECURITY_CONFIG = {
     MAX_HEADER_LENGTH: 8192,
     ALLOWED_SERVICE_NAME_PATTERN: /^[a-zA-Z0-9_]+$/,
     SUSPICIOUS_PATTERNS: [
-      /[<>\"']/, // XSS patterns
-      /(\|\||&&|\;)/, // Command injection
+      /[<>"']/, // XSS patterns
+      /(\|\||&&|;)/, // Command injection
       /(union|select|insert|update|delete|drop|exec|script)/i, // SQL injection
       /(javascript|vbscript|onload|onerror)/i, // Script injection
     ],

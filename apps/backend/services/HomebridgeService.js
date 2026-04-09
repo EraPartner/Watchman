@@ -234,7 +234,7 @@ class HomebridgeService {
       const res = await fetch(url, {
         method: "GET",
         headers: this.buildHeaders(),
-        agent: url.startsWith("https:") ? createHttpsAgent(true) : httpAgent,
+        agent: this._agent,
       });
       const text = await res.text().catch(() => "");
       const ct =

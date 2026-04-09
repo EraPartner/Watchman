@@ -56,8 +56,8 @@ tags:
     description: Configuration endpoints
 
 security:
-  - bearerAuth: [ ]
-  - cookieAuth: [ ]
+  - bearerAuth: []
+  - cookieAuth: []
 
 components:
   securitySchemes:
@@ -91,7 +91,7 @@ components:
       properties:
         status:
           type: string
-          enum: [ ok, error, offline ]
+          enum: [ok, error, offline]
         timestamp:
           type: string
           format: date-time
@@ -118,8 +118,19 @@ components:
       properties:
         message:
           type: string
-        accessToken:
+        user:
+          type: object
+          properties:
+            username:
+              type: string
+            id:
+              oneOf:
+                - type: string
+                - type: integer
+        token:
           type: string
+          deprecated: true
+          description: Optional compatibility token when AUTH_RETURN_TOKEN=true
 
     AuthMeResponse:
       type: object
@@ -152,7 +163,7 @@ components:
       properties:
         status:
           type: string
-          enum: [ online, offline, degraded ]
+          enum: [online, offline, degraded]
         timestamp:
           type: string
           format: date-time
@@ -246,7 +257,7 @@ components:
           format: date-time
         severity:
           type: string
-          enum: [ low, medium, high, critical ]
+          enum: [low, medium, high, critical]
         type:
           type: string
         message:
@@ -305,7 +316,7 @@ components:
           pattern: '^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$'
         action:
           type: string
-          enum: [ add, remove ]
+          enum: [add, remove]
         duration:
           type: integer
           description: Duration in seconds (for blacklist temporary blocks)
@@ -368,7 +379,7 @@ paths:
       summary: Basic health check
       description: Returns the basic health status of the backend server
       operationId: getHealth
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Server is healthy
@@ -382,9 +393,9 @@ paths:
       tags:
         - Authentication
       summary: User login
-      description: Authenticate user and receive JWT token
+      description: Authenticate user, set HTTP-only auth cookie, and return user info
       operationId: login
-      security: [ ]
+      security: []
       requestBody:
         required: true
         content:
@@ -400,7 +411,7 @@ paths:
                 $ref: "#/components/schemas/LoginResponse"
           headers:
             Set-Cookie:
-              description: JWT token in HTTP-only cookie
+              description: JWT token in HTTP-only cookie (primary auth transport)
               schema:
                 type: string
         "401":
@@ -442,7 +453,7 @@ paths:
       summary: Get current user
       description: Returns authentication status and user information
       operationId: getAuthMe
-      security: [ ]
+      security: []
       responses:
         "200":
           description: User information
@@ -517,7 +528,7 @@ paths:
       summary: Get AdGuard status
       description: Returns the current status of AdGuard DNS
       operationId: getAdGuardStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: AdGuard status
@@ -535,7 +546,7 @@ paths:
       summary: Get AdGuard statistics
       description: Returns AdGuard DNS statistics
       operationId: getAdGuardStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: AdGuard statistics
@@ -553,7 +564,7 @@ paths:
       summary: Get Bitcoin node health
       description: Returns the health status of the Bitcoin node
       operationId: getBitcoinHealth
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Bitcoin node health
@@ -571,7 +582,7 @@ paths:
       summary: Get Bitcoin node status
       description: Returns the current status of the Bitcoin node
       operationId: getBitcoinStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Bitcoin node status
@@ -589,7 +600,7 @@ paths:
       summary: Get Bitcoin node statistics
       description: Returns Bitcoin node statistics
       operationId: getBitcoinStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Bitcoin node statistics
@@ -607,7 +618,7 @@ paths:
       summary: Get qBittorrent status
       description: Returns the current status of qBittorrent
       operationId: getQBittorrentStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: qBittorrent status
@@ -625,7 +636,7 @@ paths:
       summary: Get qBittorrent statistics
       description: Returns qBittorrent statistics
       operationId: getQBittorrentStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: qBittorrent statistics
@@ -643,7 +654,7 @@ paths:
       summary: Get IPFS node status
       description: Returns the current status of the IPFS node
       operationId: getIpfsStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: IPFS node status
@@ -661,7 +672,7 @@ paths:
       summary: Get IPFS node statistics
       description: Returns IPFS node statistics
       operationId: getIpfsStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: IPFS node statistics
@@ -679,7 +690,7 @@ paths:
       summary: Get Roon server status
       description: Returns the current status of the Roon music server
       operationId: getRoonStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Roon server status
@@ -697,7 +708,7 @@ paths:
       summary: Get Roon server statistics
       description: Returns Roon server statistics
       operationId: getRoonStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Roon server statistics
@@ -739,7 +750,7 @@ paths:
       summary: Get Tor service health
       description: Returns the health status of the Tor service
       operationId: getTorHealth
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Tor service health
@@ -757,7 +768,7 @@ paths:
       summary: Get Synology NAS status
       description: Returns the current status of the Synology NAS
       operationId: getSynologyStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Synology NAS status
@@ -775,7 +786,7 @@ paths:
       summary: Get Synology NAS statistics
       description: Returns Synology NAS statistics
       operationId: getSynologyStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Synology NAS statistics
@@ -795,7 +806,7 @@ paths:
       summary: Get Philips Bridge status
       description: Returns the current status of the Philips Hue Bridge
       operationId: getPhilipsStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Philips Bridge status
@@ -813,7 +824,7 @@ paths:
       summary: Get Philips Bridge statistics
       description: Returns Philips Hue Bridge statistics
       operationId: getPhilipsStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Philips Bridge statistics
@@ -831,7 +842,7 @@ paths:
       summary: Get Homebridge status
       description: Returns the current status of Homebridge
       operationId: getHomebridgeStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Homebridge status
@@ -849,7 +860,7 @@ paths:
       summary: Get Homebridge statistics
       description: Returns Homebridge statistics
       operationId: getHomebridgeStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Homebridge statistics
@@ -937,7 +948,7 @@ paths:
       summary: Get Alby Hub status
       description: Returns the current status of Alby Hub
       operationId: getAlbyHubStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Alby Hub status
@@ -955,7 +966,7 @@ paths:
       summary: Get Alby Hub statistics
       description: Returns Alby Hub statistics
       operationId: getAlbyHubStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Alby Hub statistics
@@ -973,7 +984,7 @@ paths:
       summary: Get Mac Mini status
       description: Returns the current status of the Mac Mini server
       operationId: getMacMiniStatus
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Mac Mini status
@@ -991,7 +1002,7 @@ paths:
       summary: Get Mac Mini statistics
       description: Returns Mac Mini statistics
       operationId: getMacMiniStats
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Mac Mini statistics
@@ -1009,7 +1020,7 @@ paths:
       summary: Get all services health
       description: Returns health status of all configured services
       operationId: getAllServicesHealth
-      security: [ ]
+      security: []
       responses:
         "200":
           description: All services health status
@@ -1027,7 +1038,7 @@ paths:
       summary: Get ARP table
       description: Returns the ARP/neighbor table for a router service
       operationId: getRouterArp
-      security: [ ]
+      security: []
       parameters:
         - name: service
           in: query
@@ -1065,7 +1076,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [ low, medium, high, critical ]
+            enum: [low, medium, high, critical]
         - name: type
           in: query
           schema:
@@ -1219,7 +1230,7 @@ paths:
       summary: Get frontend configuration
       description: Returns configuration data for the frontend application
       operationId: getFrontendConfig
-      security: [ ]
+      security: []
       responses:
         "200":
           description: Frontend configuration

@@ -73,9 +73,20 @@ export const cacheMiddleware = (
   keyGenerator = (req) => req.url,
   options = {}
 ) => {
-  const { skipCacheOnError = true, cacheOnlyStatusCodes = [200] } = options;
+  const {
+    skipCacheOnError = true,
+    cacheOnlyStatusCodes = [200],
+    methods = ["GET", "HEAD"],
+  } = options;
+  const allowedMethods = new Set(
+    methods.map((method) => String(method).toUpperCase())
+  );
 
   return (req, res, next) => {
+    if (!allowedMethods.has(String(req.method || "").toUpperCase())) {
+      return next();
+    }
+
     let cacheKey;
 
     try {
@@ -88,8 +99,7 @@ export const cacheMiddleware = (
           method: req.method,
           requestId: req.requestId,
         });
-        next();
-        return;
+        return next();
       }
 
       // Check for cached response
@@ -103,7 +113,11 @@ export const cacheMiddleware = (
 
         // Add cache headers
         res.setHeader("X-Cache", "HIT");
-        res.setHeader("X-Cache-TTL", cache.getTtl(cacheKey));
+        const ttl = cache.getTtl(cacheKey);
+        if (typeof ttl === "number") {
+          const ttlSeconds = Math.max(0, Math.ceil((ttl - Date.now()) / 1000));
+          res.setHeader("X-Cache-TTL", String(ttlSeconds));
+        }
 
         return res.status(200).json(cachedResponse);
       }
@@ -122,6 +136,10 @@ export const cacheMiddleware = (
         method: req.method,
         requestId: req.requestId,
       });
+    }
+
+    if (!cacheKey) {
+      return next();
     }
 
     // Override res.json to cache successful responses

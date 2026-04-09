@@ -21,8 +21,8 @@ export function registerApiRoutes(app, deps) {
     requireAuth,
     extractAuthToken,
     verifyToken,
-    FRONTEND_URL,
     COOKIE_OPTIONS,
+    AUTH_RETURN_TOKEN,
     logger,
     healthLimiter,
     controlLimiter,
@@ -59,8 +59,8 @@ export function registerApiRoutes(app, deps) {
     requireAuth,
     extractAuthToken,
     verifyToken,
-    FRONTEND_URL,
     COOKIE_OPTIONS,
+    AUTH_RETURN_TOKEN,
     logger,
   });
 

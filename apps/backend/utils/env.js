@@ -82,3 +82,40 @@ export function envList(name, delimiterPattern = /[ ,]+/) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
+/**
+ * Parse Express trust proxy setting from environment.
+ *
+ * Supported values:
+ * - "false" => false
+ * - "true" => true
+ * - integer string => number
+ * - any other non-empty string => passthrough string
+ * - undefined/empty => defaultValue
+ */
+export function envTrustProxy(name = "TRUST_PROXY", defaultValue = 1) {
+  const value = process.env[name];
+  if (typeof value !== "string") {
+    return defaultValue;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return defaultValue;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  if (normalized === "false") {
+    return false;
+  }
+
+  if (normalized === "true") {
+    return true;
+  }
+
+  if (/^-?\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+
+  return trimmed;
+}
