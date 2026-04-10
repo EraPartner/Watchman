@@ -2,7 +2,7 @@
 title: Contributing Guide
 type: guide
 status: active
-date: 2026-04-02
+date: 2026-04-10
 tags: [guide, contributing, development, workflow]
 description: Contribution guidelines and workflow for the Watchman project
 aliases: [contributing, contribution, workflow, pr guidelines]
@@ -71,6 +71,7 @@ Use descriptive commit messages:
 - Write tests for new functionality
 - Run `npm run test` before submitting PR
 - Tests located in `tests/` directory
+- For frontend coverage checks, run `npm run test:coverage --workspace=apps/frontend` (configured in [[apps/frontend/package.json]] and [[apps/frontend/vitest.config.ts]])
 
 ## Documentation
 

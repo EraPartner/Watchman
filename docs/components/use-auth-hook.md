@@ -119,3 +119,9 @@ function Dashboard() {
 - `[[apps/frontend/src/App.tsx]]` — App-level `AuthProvider` integration
 - `[[apps/backend/middleware/auth.js]]` — Backend auth middleware
 - `[[apps/frontend/src/hooks/useAuth.test.tsx]]` — Verifies single bootstrap fetch across multiple consumers
+
+## Test Coverage
+
+- `[[apps/frontend/src/hooks/useAuth.test.tsx]]` covers bootstrap behavior and expanded negative-path auth flows.
+- Login page integration of `useAuth` is covered by `[[apps/frontend/src/pages/Login.test.tsx]]`.
+- Auth gating behavior that consumes `useAuth` is covered by `[[apps/frontend/src/components/AuthGuard.test.tsx]]`.

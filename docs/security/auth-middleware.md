@@ -2,7 +2,7 @@
 title: Auth Middleware
 type: security
 status: active
-date: 2026-04-02
+date: 2026-04-10
 tags: [security, middleware, authentication, jwt, backend]
 description: Authentication middleware documentation - JWT token handling, credential validation, and requireAuth middleware
 aliases: [auth middleware, jwt middleware, authentication, requireAuth]
@@ -115,6 +115,12 @@ if (user) {
 | `JWT_SECRET`         | Secret key for signing JWTs (min 32 chars recommended) |
 | `AUTH_USERNAME`      | Admin username                                         |
 | `AUTH_PASSWORD_HASH` | bcrypt hash of admin password                          |
+
+## Coverage Notes
+
+- `requireAuth` and credential error-path behavior are covered in [[apps/backend/tests/authMiddleware.test.js]], including the bcrypt failure branch.
+- Token extraction/verification edge cases are covered in [[apps/backend/tests/authToken.test.js]], including non-object request handling and empty-key cookie parsing behavior.
+- CSRF validation edge cases for state-changing requests are covered in [[apps/backend/tests/csrf.test.js]], including mismatched-length token rejection.
 
 ## PlantUML Diagrams
 

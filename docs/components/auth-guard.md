@@ -62,6 +62,11 @@ import AuthGuard from "@/components/AuthGuard";
 />;
 ```
 
+## Test Coverage
+
+- `[[apps/frontend/src/components/AuthGuard.test.tsx]]` verifies loading, unauthenticated redirect, and authenticated render behavior.
+- `[[apps/frontend/src/pages/Login.test.tsx]]` provides complementary flow coverage for redirect/login transitions.
+
 ## Related
 
 - [[docs/components/error-boundary|ErrorBoundary]] — Another protective wrapper component

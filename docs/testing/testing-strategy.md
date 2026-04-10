@@ -38,7 +38,8 @@ apps/frontend/
 ├── src/
 │   ├── lib/
 │   │   ├── utils.ts
-│   │   ├── utils.test.ts           # Utility function tests
+│   │   ├── utils.test.ts           # Utility formatter + display helper tests
+│   │   ├── apiResponse.test.ts     # API envelope unwrap/error helper tests
 │   │   └── csrf.test.ts            # CSRF utility tests
 │   ├── components/
 │   │   └── AuthGuard.test.tsx      # Route guard behavior coverage
@@ -195,6 +196,19 @@ Frontend auth surface coverage now also includes:
 - [[apps/frontend/src/pages/Login.test.tsx]] - login page interaction and error-path handling (already-authenticated redirect, missing-credentials validation, remember-me success flow, failed login error rendering, default error fallback, auth-context error rendering, loading-state disabled submit UX) (**100% lines/branches/functions** for [[apps/frontend/src/pages/Login.tsx]])
 - Current measured coverage for [[apps/frontend/src/lib/csrf.ts]]: **96.77% lines**, **84.21% branches**, **100% functions**
 
+Frontend utility + response-shape coverage now also includes:
+
+- [[apps/frontend/src/lib/utils.test.ts]] - expanded formatter/display utility coverage for [[apps/frontend/src/lib/utils.ts]]:
+  - `formatNumber` million/thousand suffix formatting and sub-thousand localization path
+  - `formatBytes` nullish handling, non-finite/zero handling, and unit scaling behavior
+  - `formatUptime` day/hour/minute rendering paths
+  - `formatSpeed` `/s` formatting and nullish passthrough behavior
+  - `instanceDisplayName` instance-number suffix handling
+- [[apps/frontend/src/lib/apiResponse.test.ts]] - new response envelope utility coverage for [[apps/frontend/src/lib/apiResponse.ts]]:
+  - `isApiResponseEnvelope` type/shape validation
+  - `unwrapApiResponse` `_payload` precedence, `data` fallback, and non-envelope passthrough
+  - `extractApiError` precedence chain (`error` → `message` → fallback) for envelope and plain-object payloads
+
 Frontend API client architecture now uses a stable public client wrapper `[[apps/frontend/src/services/ApiClient.ts]]` backed by `[[apps/frontend/src/services/apiClient/core.ts]]`, `[[apps/frontend/src/services/apiClient/endpoints.ts]]`, and `[[apps/frontend/src/services/apiClient/types.ts]]`.
 
 Frontend API client tests now include:
@@ -322,7 +336,8 @@ it("handles rejected promises", async () => {
 
 | Area               | Status               | Notes                                                                                                                    |
 | ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Utility functions  | ✅ Covered           | `utils.test.ts` tests `cn()` function                                                                                    |
+| Utility functions  | ✅ Improved          | `utils.test.ts` covers `cn`, `formatNumber`, `formatBytes`, `formatUptime`, `formatSpeed`, and `instanceDisplayName`     |
+| API response utils | ✅ Covered           | New `apiResponse.test.ts` covers `isApiResponseEnvelope`, `unwrapApiResponse`, and `extractApiError`                     |
 | React components   | ⚠️ Partially covered | `AuthGuard.tsx` and `Login.tsx` are now at 100% line/branch/function coverage; all 14+ service cards still need tests    |
 | Custom hooks       | ⚠️ Partially covered | `useAuth.tsx` now at 100% lines/functions and 86.66% branches; `useWebSocket` and others still need tests                |
 | API client         | ⚠️ Partially covered | `endpoints.ts` now at 86.58% lines, 96.66% branches, 71.79% functions; continue higher-level integration scenarios       |

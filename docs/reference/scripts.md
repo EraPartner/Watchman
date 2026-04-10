@@ -2,7 +2,7 @@
 title: Scripts Reference
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-04-10
 tags: [reference, scripts, development]
 description: Reference of all npm scripts and commands for the Watchman project
 aliases: [scripts, npm scripts, commands, build commands]
@@ -38,16 +38,17 @@ aliases: [scripts, npm scripts, commands, build commands]
 
 ### Frontend (`apps/frontend`)
 
-| Command                | Description              |
-| ---------------------- | ------------------------ |
-| `npm run dev`          | Start Vite dev server    |
-| `npm run build`        | Production build         |
-| `npm run preview`      | Preview production build |
-| `npm run lint`         | ESLint check             |
-| `npm run lint:fix`     | Fix ESLint issues        |
-| `npm run format`       | Prettier format          |
-| `npm run format:check` | Check formatting         |
-| `npm run test`         | Run Vitest tests         |
+| Command                 | Description              |
+| ----------------------- | ------------------------ |
+| `npm run dev`           | Start Vite dev server    |
+| `npm run build`         | Production build         |
+| `npm run preview`       | Preview production build |
+| `npm run lint`          | ESLint check             |
+| `npm run lint:fix`      | Fix ESLint issues        |
+| `npm run format`        | Prettier format          |
+| `npm run format:check`  | Check formatting         |
+| `npm run test`          | Run Vitest tests         |
+| `npm run test:coverage` | Run Vitest with coverage |
 
 ### Backend (`apps/backend`)
 

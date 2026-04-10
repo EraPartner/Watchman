@@ -113,6 +113,16 @@ npx vitest run --testNamePattern="testName"
   - login fallback token behavior
   - write-operation payload behavior
   - service-key endpoint composition
+- [[apps/frontend/src/lib/utils.test.ts]] (expanded coverage)
+  - `formatNumber` suffix + localized formatting branches (`M`, `K`, and sub-thousand values)
+  - `formatBytes` nullish/non-finite handling and unit formatting
+  - `formatUptime` day/hour/minute formatting paths
+  - `formatSpeed` byte-rate formatting and nullish passthrough
+  - `instanceDisplayName` instance-suffix vs base-name behavior
+- [[apps/frontend/src/lib/apiResponse.test.ts]] (new)
+  - `isApiResponseEnvelope` valid-shape and invalid-shape detection
+  - `unwrapApiResponse` `_payload` precedence, `data` fallback, and pass-through behavior
+  - `extractApiError` precedence rules (`error` → `message` → fallback) for envelope and non-envelope payloads
 
 ## Test Structure
 
@@ -121,6 +131,7 @@ apps/frontend/
 ├── src/
 │   ├── lib/
 │   │   ├── utils.test.ts              # Utility function tests
+│   │   ├── apiResponse.test.ts        # API response envelope/error helper tests
 │   │   └── csrf.test.ts               # CSRF token read/header behavior + config edge cases
 │   ├── components/
 │   │   └── AuthGuard.test.tsx         # Route guard rendering/redirect behavior
@@ -140,15 +151,16 @@ apps/backend/
 
 ## Coverage Status
 
-| Area               | Status         | Notes                                                                                               |
-| ------------------ | -------------- | --------------------------------------------------------------------------------------------------- |
-| Utility functions  | ✅ Covered     | `cn()` function tested                                                                              |
-| React components   | ⚠️ Partial     | `AuthGuard` and `Login` now at 100% line/branch/function coverage; service cards still need tests   |
-| Custom hooks       | ⚠️ Partial     | `useAuth.tsx` now at 100% lines/functions and 86.66% branches; additional hooks still need coverage |
-| API client         | ⚠️ Partial     | `endpoints.ts` now at 86.58% lines, 96.66% branches, 71.79% functions                               |
-| Backend services   | ❌ Not covered | All service classes need tests                                                                      |
-| Backend middleware | ✅ Improved    | Auth/CSRF middleware now at 100% line coverage; backend suite passing 81/81 tests                   |
-| Backend routes     | ⚠️ Partial     | Auth route integration coverage expanded                                                            |
+| Area               | Status         | Notes                                                                                                                                                             |
+| ------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Utility functions  | ✅ Improved    | `utils.test.ts` now covers `cn`, `formatNumber`, `formatBytes`, `formatUptime`, `formatSpeed`, and `instanceDisplayName`                                          |
+| React components   | ⚠️ Partial     | `AuthGuard` and `Login` now at 100% line/branch/function coverage; service cards still need tests                                                                 |
+| Custom hooks       | ⚠️ Partial     | `useAuth.tsx` now at 100% lines/functions and 86.66% branches; additional hooks still need coverage                                                               |
+| API response utils | ✅ Covered     | New [[apps/frontend/src/lib/apiResponse.test.ts]] covers envelope detection, unwrapping, and error extraction helpers in [[apps/frontend/src/lib/apiResponse.ts]] |
+| API client         | ⚠️ Partial     | `endpoints.ts` now at 86.58% lines, 96.66% branches, 71.79% functions                                                                                             |
+| Backend services   | ❌ Not covered | All service classes need tests                                                                                                                                    |
+| Backend middleware | ✅ Improved    | Auth/CSRF middleware now at 100% line coverage; backend suite passing 81/81 tests                                                                                 |
+| Backend routes     | ⚠️ Partial     | Auth route integration coverage expanded                                                                                                                          |
 
 ## Related
 
