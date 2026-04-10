@@ -93,6 +93,54 @@ Uses double-submit cookie pattern:
 - `issueCsrfToken(res)` - Generate and set CSRF cookie
 - `verifyCsrf` - Middleware to verify CSRF token using constant-time comparison (`crypto.timingSafeEqual`) to reduce timing side-channel risk
 
+Client-side CSRF header/cookie handling is implemented in `[[apps/frontend/src/lib/csrf.ts]]` and covered by `[[apps/frontend/src/lib/csrf.test.ts]]`.
+
+## Auth/CSRF Test Coverage
+
+Recent auth/CSRF-focused test additions and expansions:
+
+- Frontend auth hook coverage: [[apps/frontend/src/hooks/useAuth.test.tsx]] (+11 tests)
+  - login failure paths (missing user response + network-error fallback)
+  - logout error path
+  - outside-provider hook usage throws as expected
+  - bootstrap fallback username behavior when `username` is missing (stringified `id`)
+  - auth bootstrap error handling when payload access throws
+  - login/logout success behavior
+  - non-`Error` login/logout failure fallback (`Network error`)
+- Frontend CSRF utilities: [[apps/frontend/src/lib/csrf.test.ts]] (+6 tests)
+  - token header injection behavior
+  - cookie-read exception logging path
+  - `hasToken()` absent-token false behavior
+  - no-token header omission behavior
+  - empty-value `configure()` fallback behavior (defaults preserved)
+  - custom cookie/header configuration token lookup + header injection
+- Frontend route guard behavior: [[apps/frontend/src/components/AuthGuard.test.tsx]] (+3 tests)
+  - loading state
+  - unauthenticated redirect to `/login`
+  - authenticated child rendering
+- Frontend login flow/error states: [[apps/frontend/src/pages/Login.test.tsx]] (+7 tests)
+  - already-authenticated redirect
+  - missing-credentials validation
+  - remember-me success submission
+  - failed login error rendering
+  - default login error fallback rendering (`Login failed`)
+  - auth-context error rendering
+  - loading/disabled submit behavior
+- Frontend API auth-related endpoint behavior: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 8 tests)
+  - includes login fallback token path and endpoint composition edge cases used by auth surface
+- Backend auth and CSRF middleware coverage: [[apps/backend/tests/authMiddleware.test.js]], [[apps/backend/tests/csrf.test.js]]
+  - both currently at **100% line coverage**
+- Backend auth token edge parsing (non-object request and empty-key cookie): [[apps/backend/tests/authToken.test.js]]
+
+Session coverage snapshot:
+
+- [[apps/frontend/src/hooks/useAuth.tsx]]: 100% lines/functions, 86.66% branches
+- [[apps/frontend/src/lib/csrf.ts]]: 96.77% lines, 84.21% branches, 100% functions
+- [[apps/frontend/src/pages/Login.tsx]]: 100% lines/branches/functions
+- [[apps/frontend/src/components/AuthGuard.tsx]]: 100% lines/branches/functions
+- [[apps/frontend/src/services/apiClient/endpoints.ts]]: 86.58% lines, 96.66% branches, 71.79% functions
+- Backend test suite: **81/81 tests passing**
+
 ## Account Lockout
 
 [[apps/backend/middleware/accountLockout.js|accountLockout.js]]:

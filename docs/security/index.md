@@ -2,7 +2,7 @@
 title: Security
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-10
 tags: [security, index]
 description: Index of all security documentation for the Watchman project
 aliases: [security index, security docs]
@@ -52,6 +52,19 @@ SORT file.name ASC
 ## Production Hardening
 
 See [[docs/guides/deployment|Deployment Guide]] for production security checklist.
+
+## Recent Auth/CSRF Test Coverage
+
+- Frontend auth and route-protection tests: [[apps/frontend/src/hooks/useAuth.test.tsx]] (+11), [[apps/frontend/src/components/AuthGuard.test.tsx]] (+3), [[apps/frontend/src/pages/Login.test.tsx]] (+7)
+  - includes auth bootstrap fallback username, bootstrap payload-error handling, login/logout success paths, logout/login failure paths, outside-provider throw behavior, and non-`Error` network fallback assertions
+  - includes login page redirect, missing-credentials validation, remember-me success, failed login rendering, default fallback message, auth-context error rendering, and loading/disabled submit coverage
+- Frontend CSRF utility coverage: [[apps/frontend/src/lib/csrf.test.ts]] (+6)
+  - includes token header injection, cookie-read exception logging, `hasToken()` absent-token false-path, missing-token no-header behavior, empty config fallback, and custom cookie/header config token injection
+- Frontend API auth-adjacent endpoint coverage: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 8 tests)
+  - includes login fallback token handling and endpoint composition edge cases
+- Backend auth/csrf edge-branch coverage: [[apps/backend/tests/authMiddleware.test.js]], [[apps/backend/tests/authToken.test.js]], [[apps/backend/tests/csrf.test.js]]
+  - auth and csrf middleware now report **100% line coverage**
+  - backend suite status: **81/81 tests passing**
 
 ## Related
 

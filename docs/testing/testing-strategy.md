@@ -11,7 +11,7 @@ aliases: [testing strategy, test patterns, test conventions]
 # Testing Strategy and Patterns
 
 > [!abstract] Overview
-> Watchman uses **Vitest** as the unified test runner across the monorepo. Frontend tests run in a jsdom environment with React Testing Library. Backend testing focuses on unit tests for service classes and middleware.
+> Watchman uses **Vitest** as the unified test runner across the monorepo. Frontend tests run in a jsdom environment with React Testing Library. Backend testing focuses on route integration, middleware/validation behavior, and utility-level correctness.
 
 ## Testing Philosophy
 
@@ -38,18 +38,22 @@ apps/frontend/
 ├── src/
 │   ├── lib/
 │   │   ├── utils.ts
-│   │   └── utils.test.ts          # Utility function tests
+│   │   ├── utils.test.ts           # Utility function tests
+│   │   └── csrf.test.ts            # CSRF utility tests
 │   ├── components/
-│   │   └── ComponentName.test.tsx  # Component tests (to be added)
-│   └── hooks/
-│       └── useHookName.test.ts     # Hook tests (to be added)
+│   │   └── AuthGuard.test.tsx      # Route guard behavior coverage
+│   ├── hooks/
+│   │   └── useAuth.test.tsx        # Auth hook/provider coverage
+│   └── pages/
+│       └── Login.test.tsx          # Login page auth flow coverage
 apps/backend/
-├── services/
-│   └── ServiceName.test.js         # Service unit tests (to be added)
-├── middleware/
-│   └── middlewareName.test.js      # Middleware tests (to be added)
-└── routes/
-    └── routeName.test.js           # Route tests (to be added)
+└── tests/
+    ├── authMiddleware.test.js         # JWT auth middleware coverage
+    ├── authToken.test.js              # Auth token helper coverage
+    ├── csrf.test.js                   # CSRF middleware coverage
+    ├── requestTimeout.test.js         # Timeout/abort middleware coverage
+    ├── TorManager.test.js             # Tor manager coverage
+    └── logger.test.js                 # Structured logger coverage
 ```
 
 ## Running Tests
@@ -60,6 +64,7 @@ npm run test
 
 # Frontend tests
 npm run test --workspace=apps/frontend
+npm run test:coverage --workspace=apps/frontend
 npx vitest run                          # Run once (CI mode)
 npx vitest                              # Watch mode
 npx vitest --watch                      # Explicit watch mode
@@ -74,7 +79,7 @@ npx vitest run --testNamePattern="cn utility"
 # Run tests with coverage (when configured)
 npx vitest run --coverage
 
-# Backend tests (when added)
+# Backend tests
 npm run test --workspace=apps/backend
 ```
 
@@ -154,12 +159,52 @@ Authentication route integration coverage now includes login response compatibil
 - `AUTH_RETURN_TOKEN=true` includes `token` in response body and still sets the auth cookie
 - Login token signing asserts payload `{ sub, username }` with options `{ expiresIn: "8h" }`
 
+Backend coverage now includes focused tests for middleware, auth helpers, and infrastructure utilities:
+
+- [[apps/backend/tests/authMiddleware.test.js]] - JWT auth middleware request handling, including bcrypt failure branch handling
+- [[apps/backend/tests/authToken.test.js]] - auth token parsing/signing helper behavior, including non-object request handling and empty-key cookie parsing
+- [[apps/backend/tests/csrf.test.js]] - CSRF middleware validation and failure paths, including mismatched-length token rejection
+- [[apps/backend/tests/requestTimeout.test.js]] - timeout + abort propagation behavior
+- [[apps/backend/tests/TorManager.test.js]] - expanded Tor manager lifecycle and error handling
+- [[apps/backend/tests/logger.test.js]] - expanded structured logger behavior and formatting
+
+Additional focused utility coverage includes:
+
+- [[apps/backend/tests/validation.test.js]] - request validation behavior and edge handling
+- [[apps/backend/tests/logger.test.js]] - structured logging utility behavior
+- [[apps/backend/tests/routeUtils.test.js]] - route helper utility correctness
+- [[apps/backend/tests/ip.test.js]] - IP parsing/normalization helpers
+
 Frontend auth/bootstrap coverage includes [[apps/frontend/src/hooks/useAuth.test.tsx]] for [[apps/frontend/src/hooks/useAuth.tsx]]:
 
 - Auth state bootstrap (`getAuthMe`) is shared through `AuthProvider` and called once across multiple `useAuth` consumers
+- Bootstrap identity fallback is covered when backend user payload omits `username` (hook falls back to stringified `id`)
+- Auth bootstrap payload access errors are covered (warning path + unauthenticated fallback)
 - Login flow uses a silent post-login `fetchMe` refresh to avoid loading-state flicker; this is behavior in [[apps/frontend/src/hooks/useAuth.tsx]] and should remain covered as auth tests expand
+- Login and logout success paths are explicitly covered
+- Login failure paths now include both missing-user and network-error scenarios
+- Logout failure path is covered
+- Non-`Error` login/logout thrown values are covered with generic `Network error` fallback assertions
+- Outside-provider `useAuth` usage is covered and expected to throw
+- Current measured coverage for [[apps/frontend/src/hooks/useAuth.tsx]]: **100% lines**, **100% functions**, **86.66% branches**
+
+Frontend auth surface coverage now also includes:
+
+- [[apps/frontend/src/lib/csrf.test.ts]] - CSRF cookie/header helper behavior and config edge cases (token header injection, cookie-read exception logging, `hasToken()` absent-token false-path, missing-token no-header behavior, empty-config fallback, custom cookie/header names)
+- [[apps/frontend/src/components/AuthGuard.test.tsx]] - loading, redirect, and authenticated render behavior for route protection (**100% lines/branches/functions** for [[apps/frontend/src/components/AuthGuard.tsx]])
+- [[apps/frontend/src/pages/Login.test.tsx]] - login page interaction and error-path handling (already-authenticated redirect, missing-credentials validation, remember-me success flow, failed login error rendering, default error fallback, auth-context error rendering, loading-state disabled submit UX) (**100% lines/branches/functions** for [[apps/frontend/src/pages/Login.tsx]])
+- Current measured coverage for [[apps/frontend/src/lib/csrf.ts]]: **96.77% lines**, **84.21% branches**, **100% functions**
 
 Frontend API client architecture now uses a stable public client wrapper `[[apps/frontend/src/services/ApiClient.ts]]` backed by `[[apps/frontend/src/services/apiClient/core.ts]]`, `[[apps/frontend/src/services/apiClient/endpoints.ts]]`, and `[[apps/frontend/src/services/apiClient/types.ts]]`.
+
+Frontend API client tests now include:
+
+- [[apps/frontend/src/services/apiClient/core.test.ts]] - core request/retry/error handling behavior
+- [[apps/frontend/src/services/apiClient/endpoints.test.ts]] - endpoint mapping and API contract helpers (expanded from 3 to 8 tests, covering Bitcoin timeout, deprecated Homebridge alias, login fallback token, write payload helpers, and service-key endpoint composition)
+- [[apps/frontend/vitest.config.ts]] - Vitest projects + coverage configuration
+- [[apps/frontend/package.json]] - `test:coverage` script and `@vitest/coverage-v8` dependency
+
+Current measured coverage for [[apps/frontend/src/services/apiClient/endpoints.ts]]: **86.58% lines**, **96.66% branches**, **71.79% functions**.
 
 Backend timeout/abort behavior now includes request-level abort propagation from [[apps/backend/middleware/requestTimeout.js]] into route/service health calls (`[[apps/backend/routes/metaRoutes.js]]`, `[[apps/backend/services/ServiceManager.js]]`). Add targeted tests for timeout and client-disconnect abort paths when extending backend middleware coverage.
 
@@ -275,16 +320,18 @@ it("handles rejected promises", async () => {
 
 ## Current Test Coverage
 
-| Area               | Status               | Notes                                                                      |
-| ------------------ | -------------------- | -------------------------------------------------------------------------- |
-| Utility functions  | ✅ Covered           | `utils.test.ts` tests `cn()` function                                      |
-| React components   | ❌ Not covered       | All 14+ service cards need tests                                           |
-| Custom hooks       | ⚠️ Partially covered | `useAuth` provider bootstrap covered; `useWebSocket` and others need tests |
-| API client         | ❌ Not covered       | `ApiClient.ts` needs tests                                                 |
-| Backend services   | ❌ Not covered       | All service classes need tests                                             |
-| Backend middleware | ⚠️ Partially covered | `responseSizeLimit` covered; auth/CSRF/rate limiting still need tests      |
-| Backend routes     | ⚠️ Partially covered | Auth login compatibility covered in `authRoutes.integration.test.js`       |
-| WebSocket manager  | ❌ Not covered       | Real-time communication needs tests                                        |
+| Area               | Status               | Notes                                                                                                                    |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Utility functions  | ✅ Covered           | `utils.test.ts` tests `cn()` function                                                                                    |
+| React components   | ⚠️ Partially covered | `AuthGuard.tsx` and `Login.tsx` are now at 100% line/branch/function coverage; all 14+ service cards still need tests    |
+| Custom hooks       | ⚠️ Partially covered | `useAuth.tsx` now at 100% lines/functions and 86.66% branches; `useWebSocket` and others still need tests                |
+| API client         | ⚠️ Partially covered | `endpoints.ts` now at 86.58% lines, 96.66% branches, 71.79% functions; continue higher-level integration scenarios       |
+| Backend services   | ❌ Not covered       | All service classes need tests                                                                                           |
+| Backend middleware | ✅ Improved          | `auth` and `csrf` middleware are now at 100% line coverage; `requestTimeout` and `responseSizeLimit` are directly tested |
+| Backend routes     | ⚠️ Partially covered | Auth login compatibility covered in [[apps/backend/tests/authRoutes.integration.test.js]]                                |
+| WebSocket manager  | ❌ Not covered       | Real-time communication needs tests                                                                                      |
+
+Backend test suite status in this session: **81/81 tests passing**.
 
 ## Testing Priorities
 
