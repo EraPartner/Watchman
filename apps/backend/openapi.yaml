@@ -134,12 +134,18 @@ components:
 
     AuthMeResponse:
       type: object
+      required:
+        - authenticated
       properties:
         authenticated:
           type: boolean
         user:
           type: object
           properties:
+            id:
+              oneOf:
+                - type: string
+                - type: integer
             username:
               type: string
 
@@ -191,6 +197,45 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/ServiceHealth"
+
+    HealthBatchRequest:
+      type: object
+      required:
+        - services
+      properties:
+        services:
+          type: array
+          maxItems: 25
+          items:
+            type: string
+
+    ServicesHealthBatchResponse:
+      type: object
+      additionalProperties:
+        $ref: "#/components/schemas/ServiceHealth"
+
+    ServiceInstancesResponse:
+      type: object
+      properties:
+        instances:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              count:
+                type: integer
+              instances:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    type:
+                      type: string
+        timestamp:
+          type: string
+          format: date-time
 
     AdGuardProtectionRequest:
       type: object
@@ -323,7 +368,15 @@ components:
 
     FrontendConfigResponse:
       type: object
+      required:
+        - enabledServices
+        - services
+        - app
       properties:
+        enabledServices:
+          type: array
+          items:
+            type: string
         services:
           type: object
           additionalProperties: true
@@ -334,6 +387,27 @@ components:
               type: string
             version:
               type: string
+            description:
+              type: string
+        network:
+          type: object
+          properties:
+            frontendUrl:
+              type: string
+              nullable: true
+            backendUrl:
+              type: string
+              nullable: true
+        security:
+          type: object
+          properties:
+            csrf:
+              type: object
+              properties:
+                cookieName:
+                  type: string
+                headerName:
+                  type: string
 
   responses:
     UnauthorizedError:
@@ -1020,7 +1094,6 @@ paths:
       summary: Get all services health
       description: Returns health status of all configured services
       operationId: getAllServicesHealth
-      security: []
       responses:
         "200":
           description: All services health status
@@ -1028,6 +1101,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AllServicesHealth"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/services/health-batch:
+    post:
+      tags:
+        - Services
+      summary: Batch service health checks
+      description: Returns health status for requested service IDs (max 25)
+      operationId: getServicesHealthBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthBatchRequest"
+      responses:
+        "200":
+          description: Batch health status keyed by service ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServicesHealthBatchResponse"
+        "400":
+          description: Invalid request body or service IDs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/services/instances:
+    get:
+      tags:
+        - Services
+      summary: Get service instance metadata
+      description: Returns service types and discovered instance IDs
+      operationId: getServiceInstances
+      responses:
+        "200":
+          description: Service instance metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInstancesResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
 

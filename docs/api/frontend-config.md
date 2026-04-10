@@ -2,7 +2,7 @@
 title: "API: Frontend Configuration"
 type: api
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [api, config, frontend, backend]
 description: GET /api/config/frontend - Frontend configuration endpoint
 aliases: [frontend config, config endpoint, frontend configuration]
@@ -30,23 +30,41 @@ aliases: [frontend config, config endpoint, frontend configuration]
 ```json
 {
   "enabledServices": ["adguard", "bitcoin", "tor", "qbittorrent"],
-  "version": "1.0.0",
-  "features": {
-    "multiInstance": true,
-    "webSocket": true
+  "services": {
+    "adguard": { "webUrl": "http://127.0.0.1:5213", "useAuth": true },
+    "tor": { "proxyPort": 9050, "controlPort": 9051, "useProxy": true }
+  },
+  "app": {
+    "name": "Watchman Dashboard",
+    "version": "1.0.0",
+    "description": "Self-hosted home lab dashboard"
+  },
+  "network": {
+    "frontendUrl": "http://localhost:5173",
+    "backendUrl": "http://localhost:3001"
+  },
+  "security": {
+    "csrf": {
+      "cookieName": "csrfToken",
+      "headerName": "x-csrf-token"
+    }
   }
 }
 ```
 
-| Field             | Type       | Description                         |
-| ----------------- | ---------- | ----------------------------------- |
-| `enabledServices` | `string[]` | List of enabled service identifiers |
-| `version`         | `string`   | Backend version                     |
-| `features`        | `object`   | Feature flags for frontend          |
+| Field             | Type       | Description                                                              |
+| ----------------- | ---------- | ------------------------------------------------------------------------ |
+| `enabledServices` | `string[]` | List of enabled service identifiers                                      |
+| `services`        | `object`   | Service-specific frontend config (URLs/flags)                            |
+| `app`             | `object`   | App metadata (`name`, `version`, `description`)                          |
+| `network`         | `object`   | Optional frontend/backend URL values exposed for runtime diagnostics     |
+| `security`        | `object`   | Frontend-consumable security config (currently CSRF cookie/header names) |
 
 ## Usage
 
 Called by the frontend on initial load to determine which service cards to render.
+
+`security.csrf` is consumed by `[[apps/frontend/src/lib/csrf.ts]]` via `[[apps/frontend/src/services/apiClient/endpoints.ts]]` (`getFrontendConfig()`) to configure CSRF header/cookie names dynamically.
 
 ### Frontend Hook
 
@@ -59,10 +77,11 @@ const { data: config } = useFrontendConfig();
 ## Source
 
 - Route module: [[apps/backend/routes/metaRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]], [[apps/backend/server.js]]
 - Service: [[apps/backend/services/FrontendConfigService.js]]
 - Frontend hook: [[apps/frontend/src/hooks/useFrontendConfig.ts]]
 - Query keys: [[apps/frontend/src/lib/queryKeys.ts]]
+- OpenAPI schema: [[apps/backend/openapi.yaml]] (`FrontendConfigResponse`)
 
 ## Related
 
@@ -95,7 +114,8 @@ else Not set
     Cfg -> Cfg : Use default all
 end
 
-Svc --> Hook : { enabledServices, version, features }
+Svc --> Hook : { enabledServices, services,
+app, network, security.csrf }
 Hook --> FE : Render service cards
 
 note right of FE

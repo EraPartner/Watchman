@@ -2,7 +2,7 @@
 title: Testing Strategy and Patterns
 type: doc
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [testing, strategy, vitest, patterns]
 description: Comprehensive testing strategy, patterns, and conventions for the Watchman project
 aliases: [testing strategy, test patterns, test conventions]
@@ -152,6 +152,20 @@ Authentication route integration coverage now includes login response compatibil
 
 - `AUTH_RETURN_TOKEN=false` omits `token` from response body while still setting the auth cookie
 - `AUTH_RETURN_TOKEN=true` includes `token` in response body and still sets the auth cookie
+- Login token signing asserts payload `{ sub, username }` with options `{ expiresIn: "8h" }`
+
+Frontend auth/bootstrap coverage includes [[apps/frontend/src/hooks/useAuth.test.tsx]] for [[apps/frontend/src/hooks/useAuth.tsx]]:
+
+- Auth state bootstrap (`getAuthMe`) is shared through `AuthProvider` and called once across multiple `useAuth` consumers
+- Login flow uses a silent post-login `fetchMe` refresh to avoid loading-state flicker; this is behavior in [[apps/frontend/src/hooks/useAuth.tsx]] and should remain covered as auth tests expand
+
+Frontend API client architecture now uses a stable public client wrapper `[[apps/frontend/src/services/ApiClient.ts]]` backed by `[[apps/frontend/src/services/apiClient/core.ts]]`, `[[apps/frontend/src/services/apiClient/endpoints.ts]]`, and `[[apps/frontend/src/services/apiClient/types.ts]]`.
+
+Backend timeout/abort behavior now includes request-level abort propagation from [[apps/backend/middleware/requestTimeout.js]] into route/service health calls (`[[apps/backend/routes/metaRoutes.js]]`, `[[apps/backend/services/ServiceManager.js]]`). Add targeted tests for timeout and client-disconnect abort paths when extending backend middleware coverage.
+
+Frontend backend URL coverage includes [[apps/frontend/src/lib/backendUrl.test.ts]] for [[apps/frontend/src/lib/backendUrl.ts]]:
+
+- `getWebSocketUrl()` uses secure `wss://` when backend URL is HTTPS
 
 ### Service Class Testing
 
@@ -261,16 +275,16 @@ it("handles rejected promises", async () => {
 
 ## Current Test Coverage
 
-| Area               | Status               | Notes                                                                 |
-| ------------------ | -------------------- | --------------------------------------------------------------------- |
-| Utility functions  | ✅ Covered           | `utils.test.ts` tests `cn()` function                                 |
-| React components   | ❌ Not covered       | All 14+ service cards need tests                                      |
-| Custom hooks       | ❌ Not covered       | `useAuth`, `useWebSocket`, etc. need tests                            |
-| API client         | ❌ Not covered       | `ApiClient.ts` needs tests                                            |
-| Backend services   | ❌ Not covered       | All service classes need tests                                        |
-| Backend middleware | ⚠️ Partially covered | `responseSizeLimit` covered; auth/CSRF/rate limiting still need tests |
-| Backend routes     | ⚠️ Partially covered | Auth login compatibility covered in `authRoutes.integration.test.js`  |
-| WebSocket manager  | ❌ Not covered       | Real-time communication needs tests                                   |
+| Area               | Status               | Notes                                                                      |
+| ------------------ | -------------------- | -------------------------------------------------------------------------- |
+| Utility functions  | ✅ Covered           | `utils.test.ts` tests `cn()` function                                      |
+| React components   | ❌ Not covered       | All 14+ service cards need tests                                           |
+| Custom hooks       | ⚠️ Partially covered | `useAuth` provider bootstrap covered; `useWebSocket` and others need tests |
+| API client         | ❌ Not covered       | `ApiClient.ts` needs tests                                                 |
+| Backend services   | ❌ Not covered       | All service classes need tests                                             |
+| Backend middleware | ⚠️ Partially covered | `responseSizeLimit` covered; auth/CSRF/rate limiting still need tests      |
+| Backend routes     | ⚠️ Partially covered | Auth login compatibility covered in `authRoutes.integration.test.js`       |
+| WebSocket manager  | ❌ Not covered       | Real-time communication needs tests                                        |
 
 ## Testing Priorities
 

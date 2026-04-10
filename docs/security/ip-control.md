@@ -2,7 +2,7 @@
 title: IP Control
 type: security
 status: active
-date: 2026-04-02
+date: 2026-04-10
 tags: [security, ip-control, backend]
 description: IP whitelist/blacklist enforcement documentation
 aliases: [ip control, ip whitelist, ip blacklist, access control]
@@ -16,6 +16,7 @@ aliases: [ip control, ip whitelist, ip blacklist, access control]
 ## Implementation
 
 [[apps/backend/middleware/ipControl.js|ipControl.js]]
+[[apps/backend/utils/ip.js|ip.js]]
 
 ### Middleware Functions
 
@@ -23,6 +24,13 @@ aliases: [ip control, ip whitelist, ip blacklist, access control]
 | ---------------------- | ------------------------------------------ |
 | `requireWhitelistedIP` | Blocks requests from non-whitelisted IPs   |
 | `enforceIPControl`     | Applies both whitelist and blacklist rules |
+
+### IP Normalization
+
+- Request IP extraction now uses `getRequestIp(req)` from [[apps/backend/utils/ip.js]]
+- Stored and compared whitelist/blacklist/temp-block entries are normalized through `normalizeIp(...)`
+- Localhost detection for startup-safe behavior uses `isLocalhostIp(...)`
+- Equivalent representations (for example `::ffff:127.0.0.1` and `127.0.0.1`) are treated as the same IP
 
 ## Configuration
 
@@ -48,6 +56,8 @@ Endpoints requiring IP whitelist:
 ### General Enforcement
 
 `enforceIPControl` middleware is applied early in the stack for all requests.
+
+Middleware registration source: [[apps/backend/bootstrap/configureMiddleware.js]], invoked from [[apps/backend/server.js]].
 
 ## Related
 

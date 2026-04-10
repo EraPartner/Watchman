@@ -2,7 +2,7 @@
 title: Request Optimization
 type: performance
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [performance, frontend, optimization]
 description: Frontend request batching and deduplication optimization
 aliases: [request optimization, batching, deduplication, request optimizer]
@@ -25,6 +25,9 @@ Current implementation is centered on React Query caching/invalidation and API c
 - **Targeted invalidation dedup implementation**: flush-time query-family dedup now uses a keyed map before calling React Query invalidations, reducing duplicate invalidation calls during bursty update windows
 - **Typed in-flight dedup map**: ApiClient in-flight request dedup uses `Map<string, Promise<unknown>>`
 - **Request header hygiene**: `Content-Type: application/json` is auto-set only for non-`GET`/`HEAD` requests unless already provided
+- **React Query retry hardening**: global retry predicate in `[[apps/frontend/src/App.tsx]]` avoids retrying 4xx responses while preserving bounded retries for transient failures
+- **Auth bootstrap loading stability**: `[[apps/frontend/src/hooks/useAuth.tsx]]` uses silent post-login auth refresh to avoid unnecessary loading-state churn
+- **Dashboard clock rerender isolation**: `[[apps/frontend/src/components/LiveServerDashboard.tsx]]` isolates the per-second `Updated Xs ago` ticker into a memoized child component
 - **Update check query hygiene**: `UpdateBadge` update checks now run through React Query (`queryKeys.serviceUpdates(service)`) with a 6-hour stale/refetch window instead of local interval polling
 
 ## Architecture
@@ -49,6 +52,9 @@ Components/hooks use React Query with centralized keys (for example `queryKeys.s
 
 - `[[apps/frontend/src/components/UpdateBadge.tsx]]`
 - `[[apps/frontend/src/services/ApiClient.ts]]` (`getServiceUpdates`)
+- `[[apps/frontend/src/services/apiClient/core.ts]]`
+- `[[apps/frontend/src/services/apiClient/endpoints.ts]]`
+- `[[apps/frontend/src/services/apiClient/types.ts]]`
 - `[[apps/frontend/src/lib/queryKeys.ts]]` (`serviceUpdates`)
 
 ## WebSocket vs Polling

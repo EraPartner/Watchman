@@ -2,7 +2,7 @@
 title: Environment Variables
 type: reference
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [reference, configuration, backend]
 description: Complete reference of all environment variables for the Watchman project
 aliases: [env vars, environment, configuration, config]
@@ -39,6 +39,7 @@ aliases: [env vars, environment, configuration, config]
 | `COOKIE_DOMAIN`        | Override cookie domain | Auto-derived from FRONTEND_URL |
 | `COOKIE_STRICT_DOMAIN` | Force strict domain    | `false` for multiple origins   |
 | `CSRF_COOKIE_NAME`     | CSRF cookie name       | `csrfToken`                    |
+| `CSRF_HEADER_NAME`     | CSRF header name       | `x-csrf-token`                 |
 
 ## Auth and Proxy Notes
 

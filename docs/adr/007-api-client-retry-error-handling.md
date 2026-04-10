@@ -2,7 +2,7 @@
 title: ADR-007 - API Client with Retry and Error Handling
 type: adr
 status: accepted
-date: 2026-04-09
+date: 2026-04-10
 tags: [adr, frontend, architecture, error-handling]
 description: Singleton API client with exponential backoff retry, request deduplication, CSRF injection, and standardized error handling
 aliases: [api client, retry logic, error handling]
@@ -11,7 +11,7 @@ aliases: [api client, retry logic, error handling]
 # ADR-007: API Client with Retry and Error Handling
 
 > [!abstract] Summary
-> A singleton `ApiClient` class provides typed methods for every backend endpoint with automatic retry, in-flight deduplication, AbortController timeouts, and CSRF token injection.
+> A singleton `ApiClient` class provides typed methods for every backend endpoint with idempotent-method retry, in-flight deduplication, AbortController timeouts, and CSRF token injection.
 
 ## Status
 
@@ -27,13 +27,13 @@ Multiple React components need to communicate with the backend API. Without a ce
 A singleton `ApiClient` class provides:
 
 - **Typed methods** for every backend endpoint (health, stats, auth, service control)
-- **Automatic retry** with exponential backoff + jitter (up to 3 attempts)
+- **Automatic retry for idempotent methods only (`GET`/`HEAD`)** with exponential backoff + jitter (up to 3 attempts)
   - Retryable status codes: 408, 429, 500, 502, 503, 504
 - **In-flight request deduplication** - concurrent identical requests share the same promise
 - **AbortController-based timeouts** - prevents hanging requests
 - **CSRF token injection** - automatically adds CSRF token to POST/PUT/PATCH/DELETE requests
 - **Response unwrapping** via `unwrapApiResponse` for standardized response envelope
-- **Auth token fallback** to localStorage for dev environments where HTTP-only cookies may not work
+- **Auth token compatibility fallback** is in-memory only (set when backend returns deprecated body token)
 - **Typed in-flight dedup map** based on `Promise<unknown>` (no `Promise<any>` in request dedup internals)
 - **Compatibility alias methods** for Homebridge endpoints delegate to canonical client methods to keep call sites stable during cleanup
   - `getHomebridgeStatus()`, `getHomebridgeStats()`, and `getStatusHomebridge()` are marked deprecated and delegate to `getHomebridgeServerInformation()`
@@ -42,7 +42,10 @@ A singleton `ApiClient` class provides:
 
 ### Key Code
 
-- `[[apps/frontend/src/services/ApiClient.ts]]` - API client implementation
+- `[[apps/frontend/src/services/ApiClient.ts]]` - stable public API client surface
+- `[[apps/frontend/src/services/apiClient/core.ts]]` - request pipeline (retry, timeout, dedup, headers, CSRF/auth header injection)
+- `[[apps/frontend/src/services/apiClient/endpoints.ts]]` - endpoint method layer
+- `[[apps/frontend/src/services/apiClient/types.ts]]` - exported API types/interfaces
 
 ## Consequences
 
@@ -51,20 +54,21 @@ A singleton `ApiClient` class provides:
 - Centralized API client ensures consistent error handling across all components
 - In-flight deduplication prevents race conditions from concurrent requests
 - Retry with jitter handles transient network issues gracefully
+- Restricting retries to `GET`/`HEAD` avoids replaying non-idempotent writes
 - CSRF token automatically added to state-changing requests
-- Auth token fallback supports dev/proxy scenarios
+- In-memory compatibility token avoids persistence risks from browser storage
 
 ### Negative
 
 - Each endpoint has a dedicated method -- adding new endpoints requires modifying the client class
 - Response unwrapping assumes a standardized response envelope from the backend
-- Auth token in localStorage is a security trade-off (accessible to XSS) but necessary for dev scenarios
+- Compatibility-mode body token still exists and should remain disabled unless required by legacy clients
 - No request caching -- every call goes to the server (caching handled by React Query)
 
 ### Risks
 
 - Client class becomes large as endpoints are added
-- localStorage auth token fallback could leak credentials in XSS scenarios
+- Compatibility body-token mode (`AUTH_RETURN_TOKEN=true`) increases bearer-token exposure in frontend runtime
 
 ## PlantUML Diagrams
 
@@ -226,4 +230,4 @@ end note
 
 - [[docs/components/index|Frontend Components]]
 - [[docs/architecture/frontend-architecture|Frontend Architecture]]
-- Related code: `[[apps/frontend/src/services/ApiClient.ts]]`
+- Related code: `[[apps/frontend/src/services/ApiClient.ts]]`, `[[apps/frontend/src/services/apiClient/core.ts]]`, `[[apps/frontend/src/services/apiClient/endpoints.ts]]`, `[[apps/frontend/src/services/apiClient/types.ts]]`

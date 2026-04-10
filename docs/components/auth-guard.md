@@ -2,7 +2,7 @@
 title: AuthGuard Component
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-10
 tags: [component, frontend, react, auth, route-protection]
 description: Route protection wrapper that prevents dashboard rendering until authentication is confirmed, redirecting unauthenticated users to login
 aliases: [auth guard, route guard, protected route]
@@ -15,7 +15,7 @@ aliases: [auth guard, route guard, protected route]
 
 ## Overview
 
-`AuthGuard` wraps protected routes (primarily the dashboard) and uses the `useAuth` hook to check authentication status. It prevents the dashboard from rendering and starting API requests until the user is authenticated.
+`AuthGuard` wraps protected routes (primarily the dashboard) and uses `useAuth` from the shared auth context to check authentication status. It prevents the dashboard from rendering and starting API requests until the user is authenticated.
 
 ## File Location
 
@@ -68,3 +68,4 @@ import AuthGuard from "@/components/AuthGuard";
 - `useAuth` — Authentication hook used by this component
 - [[docs/security/authentication|Authentication]] — Auth system documentation
 - `[[apps/frontend/src/hooks/useAuth.tsx]]` — Auth hook implementation
+- `[[apps/frontend/src/App.tsx]]` — Route tree wrapped with `AuthProvider`

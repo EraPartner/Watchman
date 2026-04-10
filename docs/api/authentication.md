@@ -2,7 +2,7 @@
 title: "API: Authentication Endpoints"
 type: api
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [api, auth, authentication, backend, jwt, csrf]
 description: Authentication API endpoints - login, logout, and auth status check
 aliases: [auth endpoints, login api, logout api]
@@ -66,6 +66,11 @@ Cookies set on success:
 - `token` (HTTP-only, secure, SameSite=strict) - JWT access token, 8 hour expiry
 - CSRF token cookie (accessible to JS) - Double-submit CSRF pattern
 
+JWT signing details:
+
+- Payload: `{ sub, username }`
+- Sign options: `{ expiresIn: "8h" }`
+
 #### 401 Unauthorized
 
 ```json
@@ -80,14 +85,16 @@ Cookies set on success:
 - **Account Lockout**: See [[docs/security/authentication|Account Lockout]]
 - **Rate Limiting**: `authLimiter` - stricter than general endpoints
 - **CSRF Token**: Issued on login for subsequent state-changing requests
+- **5xx Response Hardening**: Login failures return generic `Internal server error` and do not expose raw error messages
 
 ### Source
 
 - Route module: [[apps/backend/routes/authRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
 - Auth middleware: [[apps/backend/middleware/auth.js]]
 - CSRF middleware: [[apps/backend/middleware/csrf.js]]
 - Lockout middleware: [[apps/backend/middleware/accountLockout.js]]
+- IP normalization utility used for auth/lockout keying: [[apps/backend/utils/ip.js]]
 
 ---
 
@@ -115,7 +122,7 @@ Cookies cleared:
 ### Source
 
 - Route module: [[apps/backend/routes/authRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
 
 ---
 
@@ -136,6 +143,7 @@ No parameters. Token extracted from:
 {
   "authenticated": true,
   "user": {
+    "id": "admin-id",
     "username": "admin"
   }
 }
@@ -155,7 +163,7 @@ No parameters. Token extracted from:
 ### Source
 
 - Route module: [[apps/backend/routes/authRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
 - Auth middleware: [[apps/backend/middleware/auth.js]]
 
 ---

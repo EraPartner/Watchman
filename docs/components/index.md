@@ -2,7 +2,7 @@
 title: Frontend Components
 type: index
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [component, index, frontend, ui]
 description: Index of all React component and hook documentation for the Watchman frontend
 aliases: [components index, react components, ui components]
@@ -75,11 +75,14 @@ SORT file.name ASC
 
 ## Services and Utilities
 
-| Module            | Description                             | File                                                                                                                       |
-| ----------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `ApiClient`       | HTTP client wrapper                     | [[apps/frontend/src/services/ApiClient.ts]]                                                                                |
-| `queryKeys`       | Centralized React Query key factory     | [[apps/frontend/src/lib/queryKeys.ts]]                                                                                     |
-| Dashboard helpers | Extracted dashboard status/data helpers | [[apps/frontend/src/components/dashboard/dashboardStatus.ts]], [[apps/frontend/src/components/dashboard/dashboardData.ts]] |
+| Module                | Description                                    | File                                                                                                                       |
+| --------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ApiClient`           | Public HTTP client wrapper                     | [[apps/frontend/src/services/ApiClient.ts]]                                                                                |
+| `apiClient/core`      | Request pipeline (retry/dedup/timeout/headers) | [[apps/frontend/src/services/apiClient/core.ts]]                                                                           |
+| `apiClient/endpoints` | Endpoint method layer                          | [[apps/frontend/src/services/apiClient/endpoints.ts]]                                                                      |
+| `apiClient/types`     | Shared API response/request types              | [[apps/frontend/src/services/apiClient/types.ts]]                                                                          |
+| `queryKeys`           | Centralized React Query key factory            | [[apps/frontend/src/lib/queryKeys.ts]]                                                                                     |
+| Dashboard helpers     | Extracted dashboard status/data helpers        | [[apps/frontend/src/components/dashboard/dashboardStatus.ts]], [[apps/frontend/src/components/dashboard/dashboardData.ts]] |
 
 > [!note]
 > Legacy files removed during refactors: `use-config.tsx`, `useServicesHealth.ts`, `RequestOptimizer.ts`, `OptimizedServiceCard.tsx`, and `PerformantServiceCard.tsx`.

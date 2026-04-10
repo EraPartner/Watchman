@@ -2,7 +2,7 @@
 title: Authentication
 type: security
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [security, authentication, backend, jwt]
 description: Authentication system documentation - JWT, cookies, and CSRF protection
 aliases: [auth, jwt, csrf, login, authentication]
@@ -29,7 +29,7 @@ Body: { username, password }
 → Optionally include deprecated `token` when `AUTH_RETURN_TOKEN=true`
 ```
 
-Implementation references: [[apps/backend/routes/authRoutes.js]], [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/server.js]], [[apps/backend/openapi.yaml]].
+Implementation references: [[apps/backend/routes/authRoutes.js]], [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]], [[apps/backend/server.js]], [[apps/backend/openapi.yaml]].
 
 ### Session Check
 
@@ -37,9 +37,11 @@ Implementation references: [[apps/backend/routes/authRoutes.js]], [[apps/backend
 GET /api/auth/me
 → Check Authorization header or cookie
 → Verify JWT token
-→ Return authenticated status
+→ Return authenticated status + user { id, username } when authenticated
 → Refresh CSRF token
 ```
+
+Authenticated response shape is documented in [[apps/backend/openapi.yaml]] (`AuthMeResponse`) and implemented in [[apps/backend/routes/authRoutes.js]].
 
 ### Logout
 
@@ -62,6 +64,12 @@ POST /api/auth/logout
 | Domain      | Derived from FRONTEND_URL                  |
 
 Cookie options are centralized in [[apps/backend/routes/authRoutes.js]] and consumed through API route registration in [[apps/backend/routes/registerApiRoutes.js]].
+
+Token claims and signing options:
+
+- Login signs payload `{ sub, username }`
+- Sign options include `expiresIn: "8h"`
+- Integration coverage: [[apps/backend/tests/authRoutes.integration.test.js]] asserts payload and sign options
 
 ## Login Response Compatibility
 
@@ -92,6 +100,7 @@ Uses double-submit cookie pattern:
 - Tracks failed login attempts per username/IP
 - Locks account after threshold exceeded
 - Prevents brute force attacks
+- Username/IP lockout keys use normalized IP values from [[apps/backend/utils/ip.js]] to avoid duplicate keys for equivalent addresses (for example IPv4-mapped IPv6)
 
 ## Password Storage
 

@@ -2,7 +2,7 @@
 title: useWebSocket Hook
 type: component
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [hook, frontend, react, websocket, real-time, singleton]
 description: Global singleton WebSocket hook with automatic reconnection, exponential backoff, connection throttling, and batched targeted React Query invalidation
 aliases: [websocket hook, real-time hook, ws hook]
@@ -61,12 +61,12 @@ delay = min(INITIAL_RECONNECT_DELAY * 2^attempt, MAX_RECONNECT_DELAY)
 
 ## Message Types
 
-| Type             | Behavior                                                                        |
-| ---------------- | ------------------------------------------------------------------------------- |
-| `connection`     | Shows success toast                                                             |
-| `service_update` | Schedules batched invalidation for matching service query families              |
-| `alert`          | Shows toast notification (error/warning/info)                                   |
-| `metrics`        | Schedules invalidation for `[[apps/frontend/src/lib/queryKeys.ts]]` metrics key |
+| Type             | Behavior                                                                         |
+| ---------------- | -------------------------------------------------------------------------------- |
+| `connection`     | Shows success toast                                                              |
+| `service_update` | Schedules batched invalidation for `serviceStatus` and `serviceStats` query keys |
+| `alert`          | Shows toast notification (error/warning/info)                                    |
+| `metrics`        | Schedules invalidation for `[[apps/frontend/src/lib/queryKeys.ts]]` metrics key  |
 
 Note: service update and metrics payloads are handled without per-message console logging; operational diagnostics are emitted via `logger` where needed. This logging cleanup does not change WebSocket message handling or invalidation behavior.
 
@@ -82,18 +82,20 @@ The hook implements **batched, debounced** cache invalidation using the centrali
 
 This prevents cache thrashing when multiple service updates arrive rapidly.
 
+Dashboard freshness display (`Updated Xs ago`) now relies on React Query `dataUpdatedAt` values in [[apps/frontend/src/components/LiveServerDashboard.tsx]], so targeted invalidation accuracy directly impacts that timestamp.
+
 ### Invalidation Rules
 
-- For `service_update`, the hook invalidates targeted key families via:
-  - `queryKeys.servicePrefix(baseServiceKey)` (example: `qbittorrent`), and
-  - `queryKeys.servicePrefix(serviceKey)` when instance-qualified (example: `qbittorrent_2`).
+- For `service_update`, the hook invalidates targeted keys:
+  - `queryKeys.serviceStatus(baseServiceKey, serviceKey)`
+  - `queryKeys.serviceStats(baseServiceKey, serviceKey)`
 - For AdGuard updates, it also invalidates `queryKeys.adguardFull()`.
 - For Tor updates, it also invalidates `queryKeys.torRelay()`.
-- For router services (`beryl`, `telenet`), it also invalidates `queryKeys.routerArp(serviceKey)`.
+- For router services (`beryl`, `telenet`), it also invalidates `queryKeys.routerArp(baseServiceKey)`.
 - For `metrics`, it invalidates `queryKeys.metrics()`.
 - After any non-metrics service invalidation batch, it invalidates `queryKeys.servicesHealth()` so dashboard aggregate health stays aligned.
 
-In practice, flush-time deduplication currently covers these query-key families: `servicePrefix`, `adguardFull`, `torRelay`, `routerArp`, `metrics`, and `servicesHealth`.
+In practice, flush-time deduplication currently covers these query-key families: `serviceStatus`, `serviceStats`, `adguardFull`, `torRelay`, `routerArp`, `metrics`, and `servicesHealth`.
 
 Flush-time diagnostics use frontend logger methods (`logger.warn` for invalidation failures and `logger.debug` for batch summaries).
 
@@ -132,6 +134,7 @@ function Dashboard() {
 - **Debounced + targeted invalidation** — Prevents React Query thrashing while keeping base and instance service keys in sync
 - **Connection throttling** — Prevents rapid-fire connection attempts that could overwhelm the server
 - **Clean close detection** — Only reconnects if the close wasn't intentional (code !== 1000)
+- **Derived WebSocket URL** — Uses `getWebSocketUrl()` to choose `ws`/`wss` based on environment and backend URL settings (`[[apps/frontend/src/lib/backendUrl.ts]]`)
 
 ## Related
 

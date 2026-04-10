@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [architecture, backend, express, nodejs, middleware, services]
 description: Backend architecture documentation for the Watchman Node.js/Express server - includes middleware, services, routes, and configuration
 aliases:
@@ -16,13 +16,18 @@ aliases:
 
 ## Entry Point
 
-[[apps/backend/server.js|server.js]] - Express application setup, middleware chain, server lifecycle, and delegation of API route wiring to [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]].
+[[apps/backend/server.js|server.js]] now acts as a composition root, delegating setup into bootstrap modules:
+
+- [[apps/backend/bootstrap/configureMiddleware.js]] - middleware stack and platform middleware wiring
+- [[apps/backend/bootstrap/registerRoutes.js]] - API route registration, health route, 404/error handlers, SPA fallback
+- [[apps/backend/bootstrap/shutdown.js]] - signal/error shutdown handler attachment and graceful shutdown routine
+- [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]] - API route module composition
 
 - Startup logging is intentionally conservative: it no longer advertises `/api/tor/proxy/health` in boot output.
 
 ## Middleware Stack (in order)
 
-Middleware is applied in the following order in [[apps/backend/server.js|server.js]]:
+Middleware is applied in the following order in [[apps/backend/bootstrap/configureMiddleware.js]] (invoked by [[apps/backend/server.js|server.js]]):
 
 | #   | Middleware                | File                                              | Purpose                                                         |
 | --- | ------------------------- | ------------------------------------------------- | --------------------------------------------------------------- |
@@ -36,6 +41,8 @@ Middleware is applied in the following order in [[apps/backend/server.js|server.
 | 8   | `helmet`                  | External (helmet package)                         | Security headers (CSP, HSTS, etc.)                              |
 | 9   | `cors`                    | External (cors package)                           | CORS restrictions using precomputed normalized origin allowlist |
 | 10  | `compression`             | External (compression package)                    | gzip compression                                                |
+
+`requestTimeout` now attaches `req.requestAbortController` and `req.requestAbortSignal`, aborting downstream work on timeout and client disconnect.
 
 ## Middleware Reference
 
@@ -81,6 +88,7 @@ Middleware is applied in the following order in [[apps/backend/server.js|server.
 - Initializes all enabled services via factory pattern
 - Routes health/stats requests
 - Applies circuit breaker pattern
+- Supports abort propagation in `getServiceHealth(serviceName, { signal })` via race-based cancellation helper
 - Manages TorManager lifecycle
 
 ### Service Factory
@@ -134,12 +142,13 @@ All services extend a common pattern:
 | auth token extraction        | [[apps/backend/utils/authToken.js]]           | Shared extraction/parsing for HTTP middleware, `/api/auth/me`, and WebSocket auth handshake                                                                           |
 | environment parsing helpers  | [[apps/backend/utils/env.js]]                 | Standardized parsing for ints/bools/lists/optional values used by config, service factory, and WebSocket manager                                                      |
 | origin normalization helpers | [[apps/backend/utils/origin.js]]              | Normalizes and validates configured/request origins so CORS and WebSocket origin checks use the same canonical allowlist logic                                        |
+| IP normalization helpers     | [[apps/backend/utils/ip.js]]                  | Normalizes request/client IPs and localhost detection for consistent behavior across IP control, account lockout, and auth routes                                     |
 | router ARP extraction        | [[apps/backend/services/RouterArpService.js]] | Encapsulated ARP neighbor lookup and LAN host filtering used by router ARP route, with short-lived in-memory TTL cache (3s) and bounded max-entry pruning             |
 | route context/error helpers  | [[apps/backend/routes/routeUtils.js]]         | Shared route helpers `getErrorMessage(error)` and `getServiceContext(getServiceManager, serviceName)` used by route modules to keep error/context handling consistent |
 
 ## Route Architecture
 
-API route composition is orchestrated by [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]], which is called from [[apps/backend/server.js|server.js]].
+API route composition is orchestrated by [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]], called from [[apps/backend/bootstrap/registerRoutes.js]] (itself invoked by [[apps/backend/server.js|server.js]]).
 
 `registerApiRoutes(...)` wires dedicated registration modules plus factory-generated service routes:
 
@@ -153,6 +162,8 @@ API route composition is orchestrated by [[apps/backend/routes/registerApiRoutes
 - [[apps/backend/routes/securityRoutes.js]]
 
 Auth route registration is dependency-driven: `AUTH_RETURN_TOKEN` is parsed in [[apps/backend/server.js]] and passed into [[apps/backend/routes/registerApiRoutes.js]], which then wires [[apps/backend/routes/authRoutes.js]] with cookie-first login behavior and optional legacy token-body compatibility.
+
+Route registration in [[apps/backend/routes/registerApiRoutes.js]] now centralizes canonical route lists with constants (`STANDARD_SERVICE_ROUTES`, `UPDATE_SERVICE_ROUTES`) to reduce registration duplication while preserving route contracts.
 
 `server.js` now delegates this full API registration block to `registerApiRoutes(...)`, reducing inline route composition surface without changing API contracts.
 

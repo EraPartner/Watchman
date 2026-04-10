@@ -2,7 +2,7 @@
 title: "API: Services Health"
 type: api
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [api, health, services, batch, backend]
 description: Aggregate and batch health check endpoints for all monitored services
 aliases: [services health, batch health, health batch]
@@ -66,13 +66,17 @@ Returns health status for all enabled services in a single request.
 
 - Checks only services listed in `ENABLED_SERVICES` env var
 - Each health check has a **5-second timeout**
+- Request abort from `requestTimeout`/client disconnect propagates into per-service health checks via `req.requestAbortSignal`
+- Route uses `healthCacheMiddleware` for cached health responses
+- Timeout handles are cleared in both success and `finally` paths to avoid leaked timers
 - Failed checks return `offline` status with error message
 - Health checks are wrapped with **circuit breaker** protection
 
 ### Source
 
 - Route module: [[apps/backend/routes/metaRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Route registration/dependencies: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
+- Request-timeout/abort source: [[apps/backend/middleware/requestTimeout.js]]
 - ServiceManager: [[apps/backend/services/ServiceManager.js]]
 
 ---
@@ -144,7 +148,7 @@ Consumed by React Query hooks and dashboard views (for example `useAllServicesHe
 ### Source
 
 - Route module: [[apps/backend/routes/metaRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
 - Frontend hooks: [[apps/frontend/src/hooks/useServiceHealth.ts]], [[apps/frontend/src/hooks/useServiceInstances.tsx]]
 
 ---
@@ -179,7 +183,7 @@ Returns metadata about multi-instance service configurations.
 ### Source
 
 - Route module: [[apps/backend/routes/metaRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
 - ServiceManager: [[apps/backend/services/ServiceManager.js]]
 
 ---

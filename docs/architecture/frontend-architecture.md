@@ -2,7 +2,7 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [architecture, frontend, react, typescript]
 description: Frontend architecture documentation for the Watchman React application
 aliases: [frontend, react architecture, frontend design]
@@ -77,7 +77,7 @@ Each service has a dedicated card component with service-specific queries/render
 ### Data Fetching
 
 - **TanStack Query (React Query)** - Server state management
-- **ApiClient** - HTTP client wrapper (`[[apps/frontend/src/services/ApiClient.ts]]`)
+- **ApiClient** - public HTTP client wrapper (`[[apps/frontend/src/services/ApiClient.ts]]`) backed by decomposed internals in `[[apps/frontend/src/services/apiClient/core.ts]]`, `[[apps/frontend/src/services/apiClient/endpoints.ts]]`, and `[[apps/frontend/src/services/apiClient/types.ts]]`
 - **queryKeys** - Centralized query key factory (`[[apps/frontend/src/lib/queryKeys.ts]]`)
 - **UpdateBadge query path** - `[[apps/frontend/src/components/UpdateBadge.tsx]]` uses `useQuery` with `queryKeys.serviceUpdates(service)` and `apiClient.getServiceUpdates(service)` for update checks
 - **Dashboard query orchestration** - `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` centralizes LiveServerDashboard queries and refresh behavior, with `torRelay` and `frontendConfig` fetched as separate queries
@@ -89,6 +89,15 @@ Each service has a dedicated card component with service-specific queries/render
 
 - Frontend diagnostics for hooks/components are normalized through `[[apps/frontend/src/lib/logger.ts]]` rather than direct `console.*` usage in hot paths.
 - Recent cleanup updates include `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/hooks/useAuth.tsx]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`, and `[[apps/frontend/src/lib/csrf.ts]]`.
+
+### Query Retry and Auth Bootstrap
+
+- React Query retry behavior in `[[apps/frontend/src/App.tsx]]` now uses a predicate that avoids retries for 4xx responses while keeping capped retries for retryable failures
+- Auth bootstrap in `[[apps/frontend/src/hooks/useAuth.tsx]]` keeps initial load behavior, and uses a silent post-login `/api/auth/me` refresh to avoid transient loading-state flicker
+
+### Dashboard Re-render Isolation
+
+- `Updated Xs ago` display in `[[apps/frontend/src/components/LiveServerDashboard.tsx]]` is isolated into memoized `LastUpdatedText` so the 1-second timer does not force full dashboard re-render
 
 ### Custom Hooks
 

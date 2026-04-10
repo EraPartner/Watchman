@@ -2,7 +2,7 @@
 title: "API: Cache Management"
 type: api
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [api, cache, backend, endpoints]
 description: POST /api/cache/clear - Response cache management endpoint
 aliases: [cache clear, cache management, clear cache]
@@ -76,7 +76,7 @@ aliases: [cache clear, cache management, clear cache]
 ## Source
 
 - Route module: [[apps/backend/routes/controlRoutes.js]]
-- Registration: [[apps/backend/server.js]]
+- Registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]], [[apps/backend/server.js]]
 - Cache middleware: [[apps/backend/middleware/cache.js]]
 
 ## Related
