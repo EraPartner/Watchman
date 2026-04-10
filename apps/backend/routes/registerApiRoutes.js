@@ -8,6 +8,23 @@ import { registerRouterRoutes } from "./routerRoutes.js";
 import { registerSecurityRoutes } from "./securityRoutes.js";
 import { registerServiceAliasRoutes } from "./serviceAliasRoutes.js";
 
+const STANDARD_SERVICE_ROUTES = [
+  "adguard",
+  "qbittorrent",
+  "ipfs",
+  "roon",
+  "synology",
+  "philips",
+  "albyhub",
+  "macmini",
+  "raspi",
+  "bitcoin",
+  "tor",
+  "homebridge",
+];
+
+const UPDATE_SERVICE_ROUTES = ["adguard", "bitcoin", "tor", "homebridge"];
+
 export function registerApiRoutes(app, deps) {
   const {
     authLimiter,
@@ -94,37 +111,12 @@ export function registerApiRoutes(app, deps) {
     logger,
   });
 
-  for (const svc of [
-    "adguard",
-    "qbittorrent",
-    "ipfs",
-    "roon",
-    "synology",
-    "philips",
-    "albyhub",
-    "macmini",
-    "raspi",
-  ]) {
+  for (const svc of STANDARD_SERVICE_ROUTES) {
     app.use(
       `/api/${svc}`,
       createServiceRoutes(svc, getServiceManager, factoryMiddleware)
     );
   }
-
-  app.use(
-    "/api/bitcoin",
-    createServiceRoutes("bitcoin", getServiceManager, factoryMiddleware)
-  );
-
-  app.use(
-    "/api/tor",
-    createServiceRoutes("tor", getServiceManager, factoryMiddleware)
-  );
-
-  app.use(
-    "/api/homebridge",
-    createServiceRoutes("homebridge", getServiceManager, factoryMiddleware)
-  );
 
   registerHomebridgeRoutes(app, {
     requireServiceEnabled,
@@ -136,7 +128,7 @@ export function registerApiRoutes(app, deps) {
     logger,
   });
 
-  for (const svc of ["adguard", "bitcoin", "tor", "homebridge"]) {
+  for (const svc of UPDATE_SERVICE_ROUTES) {
     app.use(
       `/api/${svc}`,
       createUpdatesRoute(svc, getServiceManager, factoryMiddleware)
@@ -155,6 +147,7 @@ export function registerApiRoutes(app, deps) {
 
   registerMetaRoutes(app, {
     healthLimiter,
+    healthCacheMiddleware,
     requireAuth,
     sanitizeString,
     isValidServiceId,

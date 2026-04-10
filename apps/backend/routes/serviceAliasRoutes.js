@@ -33,7 +33,9 @@ export function registerServiceAliasRoutes(
           });
         }
 
-        const health = await serviceManager.getServiceHealth("bitcoin");
+        const health = await serviceManager.getServiceHealth("bitcoin", {
+          signal: req.requestAbortSignal,
+        });
         return res.json(health);
       } catch (error) {
         const message = getErrorMessage(error);
@@ -64,7 +66,9 @@ export function registerServiceAliasRoutes(
           );
         }
 
-        const health = await serviceManager.getServiceHealth("tor");
+        const health = await serviceManager.getServiceHealth("tor", {
+          signal: req.requestAbortSignal,
+        });
         return res.json(health);
       } catch (error) {
         const message = getErrorMessage(error);

@@ -1,4 +1,5 @@
 import { getErrorMessage } from "./routeUtils.js";
+import { getRequestIp } from "../utils/ip.js";
 
 function buildLoginResponse(user, accessToken, includeToken) {
   const response = {
@@ -39,7 +40,7 @@ export function registerAuthRoutes(
     requireFields(["username", "password"]),
     async (req, res) => {
       const { username, password } = req.body;
-      const ip = req.ip;
+      const ip = getRequestIp(req);
 
       try {
         const user = await authenticateCredentials(username, password);
@@ -51,7 +52,10 @@ export function registerAuthRoutes(
 
         await resetLoginAttempts(username, ip);
 
-        const accessToken = signToken({ sub: user.id }, "access");
+        const accessToken = signToken(
+          { sub: user.id, username: user.username },
+          { expiresIn: "8h" }
+        );
 
         res.cookie("token", accessToken, {
           ...COOKIE_OPTIONS,
@@ -84,10 +88,22 @@ export function registerAuthRoutes(
     const decoded = verifyToken(token);
     if (!decoded) return res.status(200).json({ authenticated: false });
 
+    const claims =
+      typeof decoded === "object" && decoded !== null
+        ? decoded
+        : { sub: undefined, username: undefined };
+    const id = claims.sub;
+    const username =
+      typeof claims.username === "string" && claims.username.length > 0
+        ? claims.username
+        : typeof id === "string"
+          ? id
+          : undefined;
+
     issueCsrfToken(res);
     return res.json({
       authenticated: true,
-      user: { username: decoded.username },
+      user: { id, username },
     });
   });
 }

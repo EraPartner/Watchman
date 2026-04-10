@@ -96,7 +96,9 @@ export function registerHomebridgeRoutes(
           return res.json(info);
         }
 
-        const health = await serviceManager.getServiceHealth("homebridge");
+        const health = await serviceManager.getServiceHealth("homebridge", {
+          signal: req.requestAbortSignal,
+        });
         return res.json({
           data: health && health.data ? health.data : null,
           raw: health,

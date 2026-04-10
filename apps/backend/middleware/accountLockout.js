@@ -1,5 +1,6 @@
 // Account lockout mechanism to prevent brute force attacks
 import logger from "./logger.js";
+import { getRequestIp, normalizeIp } from "../utils/ip.js";
 
 class AccountLockoutManager {
   constructor(options = {}) {
@@ -114,10 +115,11 @@ class AccountLockoutManager {
    * @returns {string} Unique key
    */
   getKey(username, ip) {
+    const normalizedIp = normalizeIp(ip);
     // Use a combination of username and IP to track attempts
     // This helps prevent IP-based lockouts from affecting multiple users
     // and user-based lockouts from being bypassed by changing IP
-    return `${username}:${ip}`;
+    return `${username}:${normalizedIp}`;
   }
 
   /**
@@ -155,7 +157,7 @@ const accountLockoutManager = new AccountLockoutManager();
 export const checkLockout = (req, res, next) => {
   const username = req.body?.username;
   if (!username) return next();
-  const ip = req.ip;
+  const ip = getRequestIp(req);
   const { locked, lockedUntil } = accountLockoutManager.isLocked(username, ip);
 
   if (locked) {

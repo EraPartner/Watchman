@@ -36,7 +36,9 @@ export function registerInstanceServiceRoutes(
           });
         }
 
-        const health = await serviceManager.getServiceHealth(serviceId);
+        const health = await serviceManager.getServiceHealth(serviceId, {
+          signal: req.requestAbortSignal,
+        });
         res.json(health);
       } catch (error) {
         const message = getErrorMessage(error);

@@ -1,7 +1,6 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import compression from "compression";
 import { createServer } from "http";
 import swaggerUi from "swagger-ui-express";
 import fs from "fs";
@@ -60,22 +59,26 @@ import {
   isValidIPv4,
   validateParams,
   validateQuery,
+  isValidServiceId,
 } from "./utils/validation.js";
 import { destroyAgents } from "./utils/httpAgentPool.js";
 import { registerApiRoutes } from "./routes/registerApiRoutes.js";
 import { getRouterArpData } from "./services/RouterArpService.js";
 import { envBool, envTrustProxy } from "./utils/env.js";
 import { buildAllowedOriginSet, normalizeOrigin } from "./utils/origin.js";
+import { configureMiddleware } from "./bootstrap/configureMiddleware.js";
+import { registerRoutes } from "./bootstrap/registerRoutes.js";
+import {
+  attachShutdownHandlers,
+  performGracefulShutdown,
+} from "./bootstrap/shutdown.js";
 
-// __esmdirname equivalent for ESM
 const __esmdirname = dirname(fileURLToPath(import.meta.url));
 
-// Validate environment before starting server
 validateEnvironment();
 
 const config = getConfig();
 const app = express();
-// Trust proxy for correct ip detection behind reverse proxies
 const trustProxy = envTrustProxy("TRUST_PROXY", 1);
 const AUTH_RETURN_TOKEN = envBool("AUTH_RETURN_TOKEN", false);
 app.set("trust proxy", trustProxy);
@@ -108,7 +111,6 @@ const COOKIE_DOMAIN =
       (() => {
         try {
           const hostname = FRONTEND_URL ? new URL(FRONTEND_URL).hostname : null;
-          // Only set domain if hostname includes a dot (not localhost/127.0.0.1)
           return hostname && hostname.includes(".") ? hostname : null;
         } catch (_err) {
           return null;
@@ -132,9 +134,7 @@ const APP_VERSION = (() => {
   return "1.0.0";
 })();
 
-// Production security checks
 if (process.env.NODE_ENV === "production") {
-  // Enforce FRONTEND_URL in production to avoid open CORS
   if (FRONTEND_URLS.length === 0) {
     logger.error(
       "FRONTEND_URL must be set to your frontend origin(s) in production to avoid open CORS."
@@ -142,7 +142,6 @@ if (process.env.NODE_ENV === "production") {
     process.exit(1);
   }
 
-  // Ensure HTTPS in production
   const nonHttpsOrigins = FRONTEND_URLS.filter(
     (url) => !url.startsWith("https://")
   );
@@ -152,7 +151,6 @@ if (process.env.NODE_ENV === "production") {
     );
   }
 
-  // Validate JWT secret is set and strong
   if (!config.auth.jwtSecret || config.auth.jwtSecret.length < 32) {
     logger.error(
       "JWT_SECRET must be at least 32 characters long in production"
@@ -161,8 +159,6 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
-// Cookie defaults with improved security
-// Computed after FRONTEND_URL is known so we can handle localhost correctly
 const isLocalhostOrigin =
   FRONTEND_URL?.includes("localhost") || FRONTEND_URL?.includes("127.0.0.1");
 const COOKIE_OPTIONS = {
@@ -177,66 +173,23 @@ const COOKIE_OPTIONS = {
   ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
 };
 
-// Initialize service manager and WebSocket
+const frontendDist = join(__esmdirname, "frontend", "dist");
+
 let serviceManager;
 let httpServerInstance = null;
 
-/**
- * Global error handlers for production-ready error management
- * Ensures graceful handling of unexpected errors and proper logging
- */
-process.on("uncaughtException", (error) => {
-  logger.error("Uncaught Exception - Critical Error", {
-    error: error.message,
-    stack: error.stack,
-    timestamp: new Date().toISOString(),
+function handleGracefulShutdown(signal) {
+  return performGracefulShutdown(signal, {
+    logger,
+    httpServerInstance,
+    WebSocketManager,
+    serviceManager,
+    destroyAgents,
+    performanceMonitor,
   });
+}
 
-  if (process.env.NODE_ENV === "production") {
-    // Perform graceful shutdown in production
-    handleGracefulShutdown("uncaughtException");
-  } else {
-    // In development, still exit but with more visible error
-    logger.error("Uncaught Exception - Critical Error", {
-      error: error.message,
-      stack: error.stack,
-    });
-    process.exit(1);
-  }
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  logger.error("Unhandled Promise Rejection", {
-    reason: reason?.toString() || "Unknown reason",
-    promise: promise.toString(),
-    timestamp: new Date().toISOString(),
-  });
-
-  if (process.env.NODE_ENV === "production") {
-    // Perform graceful shutdown in production
-    handleGracefulShutdown("unhandledRejection");
-  } else {
-    // In development, still exit but with more visible error
-    logger.error("Unhandled Promise Rejection - Critical Error", {
-      reason: reason?.toString() || "Unknown reason",
-    });
-    process.exit(1);
-  }
-});
-
-/**
- * Process signal handlers for graceful shutdown
- * Handles SIGINT (Ctrl+C) and SIGTERM signals
- */
-process.on("SIGINT", () => {
-  logger.info("Received SIGINT signal, initiating graceful shutdown");
-  handleGracefulShutdown("SIGINT");
-});
-
-process.on("SIGTERM", () => {
-  logger.info("Received SIGTERM signal, initiating graceful shutdown");
-  handleGracefulShutdown("SIGTERM");
-});
+attachShutdownHandlers({ logger, handleGracefulShutdown });
 
 async function initializeServer() {
   logger.startup("Initializing Watchman Backend Server");
@@ -255,7 +208,6 @@ async function initializeServer() {
     serviceManager = new ServiceManager();
     await serviceManager.initializeServices();
 
-    // Initialize WebSocket server
     WebSocketManager.initialize(server);
 
     logger.success("Service initialization complete");
@@ -265,290 +217,82 @@ async function initializeServer() {
   }
 }
 
-// Enhanced middleware with production-ready security
-app.use(requestIdMiddleware); // Add request ID tracking
-app.use(requestLogger); // Add structured logging
-app.use(performanceMonitor.trackRequest());
-app.use(enforceIPControl); // IP access control
-app.use(requestTimeout); // Global request timeout to prevent hanging requests
-app.use(responseSizeLimit); // Prevent large response DoS attacks
-app.use(
-  apiResponseStandardizer({
-    autoWrap: true,
-  })
-);
-
-// Serve frontend static files in production
-const frontendDist = join(__esmdirname, "frontend", "dist");
-if (process.env.NODE_ENV === "production" && fs.existsSync(frontendDist)) {
-  logger.info(`Serving frontend from ${frontendDist}`);
-  app.use(express.static(frontendDist, { maxAge: "1d" }));
-}
-
-// Enhanced Helmet configuration for production
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'", ...(FRONTEND_URL ? [FRONTEND_URL] : [])],
-        fontSrc: ["'self'"],
-        objectSrc: ["'none'"],
-        mediaSrc: ["'self'"],
-        frameSrc: ["'none'"],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-    hsts: {
-      maxAge: 31536000,
-      includeSubDomains: true,
-      preload: true,
-    },
-    noSniff: true,
-    xssFilter: true,
-    hidePoweredBy: true,
-    frameguard: { action: "deny" },
-    permittedCrossDomainPolicies: { permittedPolicies: "none" },
-  })
-);
-
-// Add Permissions-Policy header and enhanced security headers
-app.use((req, res, next) => {
-  res.setHeader(
-    "Permissions-Policy",
-    "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
-  );
-
-  // Add additional security headers for production-ready deployment
-  res.setHeader("X-Request-ID", req.requestId || req.id || "unknown");
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Download-Options", "noopen");
-  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
-  res.setHeader(
-    "Cache-Control",
-    "no-store, no-cache, must-revalidate, proxy-revalidate"
-  );
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-
-  // Remove server information
-  res.removeHeader("X-Powered-By");
-
-  next();
+configureMiddleware(app, {
+  requestIdMiddleware,
+  requestLogger,
+  performanceMonitor,
+  enforceIPControl,
+  requestTimeout,
+  responseSizeLimit,
+  apiResponseStandardizer,
+  frontendDist,
+  logger,
+  helmet,
+  FRONTEND_URL,
+  cors,
+  normalizeOrigin,
+  ALLOWED_CORS_ORIGINS,
+  cookieParser,
+  swaggerUi,
+  YAML,
+  fs,
+  join,
+  __esmdirname,
+  generalLimiter,
 });
-
-app.use(compression({ level: 6, threshold: 1024 }));
-
-// Enhanced CORS configuration with explicit origin validation
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow same-origin or explicit FRONTEND_URL; block others in production
-      if (!origin) return callback(null, true);
-
-      // Validate that FRONTEND_URL is properly configured
-      if (!FRONTEND_URL || FRONTEND_URL === "*") {
-        if (process.env.NODE_ENV === "production") {
-          return callback(
-            new Error("CORS: FRONTEND_URL not configured in production")
-          );
-        }
-        // Allow any origin in development if not configured
-        return callback(null, true);
-      }
-
-      // Validate and normalize the format of the origin
-      const normalizedOrigin = normalizeOrigin(origin);
-      if (!normalizedOrigin) {
-        return callback(new Error("CORS: Invalid origin format"));
-      }
-
-      if (!ALLOWED_CORS_ORIGINS.has(normalizedOrigin)) {
-        if (process.env.NODE_ENV === "production") {
-          return callback(
-            new Error(`CORS: Origin ${normalizedOrigin} not allowed`)
-          );
-        }
-        // More permissive in development
-        return callback(null, true);
-      }
-
-      return callback(null, true);
-    },
-    credentials: true,
-    maxAge: 86400, // 24 hours
-  })
-);
-app.use(express.json({ limit: "10mb" }));
-app.use(cookieParser());
-
-// Serve Swagger API documentation
-try {
-  const swaggerDocument = YAML.load(
-    fs.readFileSync(join(__esmdirname, "api-docs.yaml"), "utf8")
-  );
-
-  if (swaggerUi && swaggerUi.serve && swaggerUi.setup) {
-    app.use(
-      "/api/docs",
-      swaggerUi.serve,
-      swaggerUi.setup(swaggerDocument, { explorer: true })
-    );
-  }
-} catch (err) {
-  logger.warning("Swagger UI not available", { error: err.message });
-}
-
-// Apply rate limiting
-app.use("/api/", generalLimiter);
 
 const getServiceManager = () => serviceManager;
 
-registerApiRoutes(app, {
-  authLimiter,
-  checkLockout,
-  requireFields,
-  authenticateCredentials,
-  recordFailedLogin,
-  resetLoginAttempts,
-  signToken,
-  issueCsrfToken,
-  requireAuth,
-  extractAuthToken,
-  verifyToken,
-  COOKIE_OPTIONS,
-  AUTH_RETURN_TOKEN,
-  logger,
+registerRoutes(app, {
   healthLimiter,
-  controlLimiter,
-  verifyCsrf,
-  requireServiceEnabled,
-  requireBoolean,
-  clearCache,
-  validateParams,
-  isValidServiceId,
-  healthCacheMiddleware,
-  statsCacheMiddleware,
-  parsePagination,
-  paginate,
-  sanitizeString,
-  cachedConfig,
-  getFrontendConfig,
-  requireAnyServiceEnabled,
-  validateQuery,
-  isValidIPv4,
-  getRouterArpData,
-  requireWhitelistedIP,
-  getServiceManager,
+  APP_VERSION,
+  registerApiRoutes,
+  apiRouteDeps: {
+    authLimiter,
+    checkLockout,
+    requireFields,
+    authenticateCredentials,
+    recordFailedLogin,
+    resetLoginAttempts,
+    signToken,
+    issueCsrfToken,
+    requireAuth,
+    extractAuthToken,
+    verifyToken,
+    COOKIE_OPTIONS,
+    AUTH_RETURN_TOKEN,
+    logger,
+    healthLimiter,
+    controlLimiter,
+    verifyCsrf,
+    requireServiceEnabled,
+    requireBoolean,
+    clearCache,
+    validateParams,
+    isValidServiceId,
+    healthCacheMiddleware,
+    statsCacheMiddleware,
+    parsePagination,
+    paginate,
+    sanitizeString,
+    cachedConfig,
+    getFrontendConfig,
+    requireAnyServiceEnabled,
+    validateQuery,
+    isValidIPv4,
+    getRouterArpData,
+    requireWhitelistedIP,
+    getServiceManager,
+  },
+  logger,
+  frontendDist,
+  fs,
+  join,
 });
 
-// Health check endpoint
-app.get("/health", healthLimiter, (req, res) => {
-  res.locals.skipStandardization = true;
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    service: "watchman-backend",
-    version: APP_VERSION,
-  });
-});
-
-// API routes are registered via routes/registerApiRoutes.js
-
-// 404 handler
-app.use((req, res, next) => {
-  res.status(404).json({ error: "Not Found" });
-});
-
-// Centralized error handler
-app.use((err, req, res, next) => {
-  logger.error("Unhandled error", {
-    message: err.message,
-    stack: process.env.NODE_ENV === "production" ? undefined : err.stack,
-  });
-  const status = err.status || 500;
-  res.status(status).json({ error: err.message || "Internal Server Error" });
-});
-
-// Graceful shutdown helper
-async function handleGracefulShutdown(signal) {
-  logger.progress(`Received ${signal || "shutdown"}, shutting down gracefully`);
-
-  // Stop accepting new connections
-  try {
-    if (httpServerInstance) {
-      logger.progress("Closing HTTP server to new connections");
-      await new Promise((resolve, reject) => {
-        httpServerInstance.close((err) => (err ? reject(err) : resolve()));
-        // Force resolve after 10s to avoid hanging
-        setTimeout(resolve, 10000);
-      });
-    }
-  } catch (err) {
-    logger.warning(
-      `Error closing HTTP server: ${err && err.message ? err.message : err}`
-    );
-  }
-
-  // Shutdown websockets
-  try {
-    WebSocketManager.shutdown();
-  } catch (err) {
-    logger.warning(
-      `Error shutting down WebSocket manager: ${err && err.message ? err.message : err}`
-    );
-  }
-
-  // Shutdown services
-  try {
-    if (serviceManager && typeof serviceManager.shutdown === "function") {
-      await serviceManager.shutdown();
-    }
-  } catch (err) {
-    logger.warning(
-      `Error shutting down service manager: ${err && err.message ? err.message : err}`
-    );
-  }
-
-  // Destroy HTTP/HTTPS agents
-  try {
-    destroyAgents();
-  } catch (err) {
-    // ignore
-  }
-
-  // Shutdown performance monitor
-  try {
-    if (
-      performanceMonitor &&
-      typeof performanceMonitor.shutdown === "function"
-    ) {
-      performanceMonitor.shutdown();
-      logger.success("Performance monitor shutdown complete");
-    }
-  } catch (err) {
-    // ignore
-  }
-
-  logger.success("Shutdown complete, exiting");
-  process.exit(0);
-}
-
-// Start server
 async function startServer() {
   try {
     await initializeServer();
-
-    // SPA fallback: serve index.html for any non-API route in production
-    if (process.env.NODE_ENV === "production" && fs.existsSync(frontendDist)) {
-      app.get("*", (req, res) => {
-        res.sendFile(join(frontendDist, "index.html"));
-      });
-    }
 
     httpServerInstance = server.listen(PORT, () => {
       logger.success(`Watchman Backend Server running on port ${PORT}`);

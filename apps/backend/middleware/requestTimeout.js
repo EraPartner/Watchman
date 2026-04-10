@@ -28,7 +28,14 @@ export function requestTimeout(options = {}) {
       return next();
     }
 
+    const abortController = new AbortController();
+    req.requestAbortController = abortController;
+    req.requestAbortSignal = abortController.signal;
+    let requestFinished = false;
+
     const timer = setTimeout(() => {
+      abortController.abort(new Error("Request timed out"));
+
       logger.warn("Request timeout", {
         method: req.method,
         path: req.path,
@@ -48,11 +55,15 @@ export function requestTimeout(options = {}) {
 
     // Clear timeout when response finishes
     res.on("finish", () => {
+      requestFinished = true;
       clearTimeout(timer);
     });
 
     // Also clear on close (client disconnect)
     res.on("close", () => {
+      if (!requestFinished) {
+        abortController.abort(new Error("Client disconnected"));
+      }
       clearTimeout(timer);
     });
 

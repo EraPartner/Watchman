@@ -34,7 +34,10 @@ async function withAuthApp({ authReturnToken }, run) {
     },
     recordFailedLogin: async () => {},
     resetLoginAttempts: async () => {},
-    signToken: () => "signed-jwt-token",
+    signToken: (...args) => {
+      signToken.calls.push(args);
+      return "signed-jwt-token";
+    },
     issueCsrfToken: (res) => {
       const csrfToken = "csrf-token-value";
       res.cookie("csrfToken", csrfToken, {
@@ -70,7 +73,7 @@ async function withAuthApp({ authReturnToken }, run) {
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
   try {
-    await run({ baseUrl });
+    await run({ baseUrl, signTokenCalls: signToken.calls });
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => {
@@ -83,6 +86,8 @@ async function withAuthApp({ authReturnToken }, run) {
     });
   }
 }
+
+const signToken = { calls: [] };
 
 async function login(baseUrl) {
   const response = await fetch(`${baseUrl}/api/auth/login`, {
@@ -101,6 +106,7 @@ async function login(baseUrl) {
 }
 
 test("POST /api/auth/login omits token when AUTH_RETURN_TOKEN=false", async () => {
+  signToken.calls = [];
   await withAuthApp({ authReturnToken: false }, async ({ baseUrl }) => {
     const { response, body } = await login(baseUrl);
     const setCookie = response.headers.get("set-cookie") || "";
@@ -114,6 +120,7 @@ test("POST /api/auth/login omits token when AUTH_RETURN_TOKEN=false", async () =
 });
 
 test("POST /api/auth/login includes token when AUTH_RETURN_TOKEN=true", async () => {
+  signToken.calls = [];
   await withAuthApp({ authReturnToken: true }, async ({ baseUrl }) => {
     const { response, body } = await login(baseUrl);
     const setCookie = response.headers.get("set-cookie") || "";
@@ -124,4 +131,21 @@ test("POST /api/auth/login includes token when AUTH_RETURN_TOKEN=true", async ()
     assert.equal(body.token, "signed-jwt-token");
     assert.match(setCookie, /token=signed-jwt-token/);
   });
+});
+
+test("POST /api/auth/login signs token with aligned 8h expiry options", async () => {
+  signToken.calls = [];
+  await withAuthApp(
+    { authReturnToken: false },
+    async ({ baseUrl, signTokenCalls }) => {
+      const { response } = await login(baseUrl);
+      assert.equal(response.status, 200);
+
+      assert.equal(signTokenCalls.length, 1);
+      const [payload, options] = signTokenCalls[0];
+      assert.equal(payload.sub, "admin-id");
+      assert.equal(payload.username, "admin");
+      assert.deepEqual(options, { expiresIn: "8h" });
+    }
+  );
 });

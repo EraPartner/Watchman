@@ -37,8 +37,6 @@ export class QBittorrentService {
       });
 
       if (response.ok) {
-        const responseText = await response.text();
-
         const setCookieHeader = response.headers.get("set-cookie");
         if (setCookieHeader) {
           this.cookie = setCookieHeader.split(";")[0];

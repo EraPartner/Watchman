@@ -80,7 +80,6 @@ export function registerControlRoutes(
         });
         return res.status(500).json({
           error: "Failed to toggle AdGuard protection",
-          message,
         });
       }
     }

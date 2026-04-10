@@ -7,6 +7,47 @@ import {
 } from "./serviceFactoryConfig.js";
 import circuitBreakerManager from "../utils/circuitBreaker.js";
 
+function createAbortError(message = "Operation aborted") {
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+function getAbortErrorFromSignal(signal) {
+  if (!signal) {
+    return createAbortError();
+  }
+
+  return signal.reason instanceof Error
+    ? signal.reason
+    : createAbortError("Operation aborted");
+}
+
+async function withAbort(promise, signal) {
+  if (!signal) {
+    return promise;
+  }
+
+  if (signal.aborted) {
+    throw getAbortErrorFromSignal(signal);
+  }
+
+  let abortListener;
+
+  const abortPromise = new Promise((_, reject) => {
+    abortListener = () => reject(getAbortErrorFromSignal(signal));
+    signal.addEventListener("abort", abortListener, { once: true });
+  });
+
+  try {
+    return await Promise.race([promise, abortPromise]);
+  } finally {
+    if (abortListener) {
+      signal.removeEventListener("abort", abortListener);
+    }
+  }
+}
+
 export default class ServiceManager {
   constructor() {
     this.services = new Map();
@@ -124,7 +165,9 @@ export default class ServiceManager {
     return this.services.get(serviceName);
   }
 
-  async getServiceHealth(serviceName) {
+  async getServiceHealth(serviceName, options = {}) {
+    const signal = options.signal;
+
     const service = this.services.get(serviceName);
     if (!service) {
       return {
@@ -142,8 +185,15 @@ export default class ServiceManager {
     });
 
     try {
-      return await breaker.execute(() => service.checkHealth());
+      const healthPromise = breaker.execute(() =>
+        service.checkHealth({ signal })
+      );
+      return await withAbort(healthPromise, signal);
     } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+
       // If circuit is open, return cached state or offline
       if (breaker.state === "open") {
         logger.warn(`Circuit breaker open for service: ${serviceName}`, {

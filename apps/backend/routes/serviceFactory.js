@@ -72,7 +72,9 @@ export function createServiceRoutes(
           });
         }
 
-        const health = await sm.getServiceHealth(serviceName);
+        const health = await sm.getServiceHealth(serviceName, {
+          signal: req.requestAbortSignal,
+        });
         res.json(health);
       } catch (error) {
         const message = getErrorMessage(error);

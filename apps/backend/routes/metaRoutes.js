@@ -1,15 +1,78 @@
 import { getErrorMessage } from "./routeUtils.js";
 
-async function checkServicesHealth(getServiceManager, services) {
+function createAbortError(message) {
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+function getAbortReason(signal, fallbackMessage) {
+  if (!signal) {
+    return createAbortError(fallbackMessage);
+  }
+
+  return signal.reason instanceof Error
+    ? signal.reason
+    : createAbortError(fallbackMessage);
+}
+
+async function checkServiceHealthWithTimeout(
+  serviceManager,
+  serviceName,
+  timeoutMs,
+  requestSignal
+) {
+  const timeoutController = new AbortController();
+  let timeoutId;
+  let requestAbortListener;
+
+  try {
+    if (requestSignal) {
+      if (requestSignal.aborted) {
+        throw getAbortReason(requestSignal, "Request aborted");
+      }
+
+      requestAbortListener = () => {
+        timeoutController.abort(
+          getAbortReason(requestSignal, "Request aborted")
+        );
+      };
+
+      requestSignal.addEventListener("abort", requestAbortListener, {
+        once: true,
+      });
+    }
+
+    timeoutId = setTimeout(() => {
+      timeoutController.abort(createAbortError("Health check timeout"));
+    }, timeoutMs);
+
+    const health = await serviceManager.getServiceHealth(serviceName, {
+      signal: timeoutController.signal,
+    });
+
+    return health;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    if (requestSignal && requestAbortListener) {
+      requestSignal.removeEventListener("abort", requestAbortListener);
+    }
+  }
+}
+
+async function checkServicesHealth(getServiceManager, services, requestSignal) {
   const serviceManager = getServiceManager();
   const healthPromises = services.map(async (serviceName) => {
     try {
-      const health = await Promise.race([
-        serviceManager.getServiceHealth(serviceName),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Health check timeout")), 5000)
-        ),
-      ]);
+      const health = await checkServiceHealthWithTimeout(
+        serviceManager,
+        serviceName,
+        5000,
+        requestSignal
+      );
       return [serviceName, health];
     } catch (error) {
       const message = getErrorMessage(error);
@@ -36,6 +99,7 @@ export function registerMetaRoutes(
   app,
   {
     healthLimiter,
+    healthCacheMiddleware,
     requireAuth,
     sanitizeString,
     isValidServiceId,
@@ -49,13 +113,15 @@ export function registerMetaRoutes(
     "/api/services/health",
     healthLimiter,
     requireAuth,
+    healthCacheMiddleware,
     async (req, res) => {
       try {
         const enabledServices = cachedConfig.enabledServices;
         const services = Array.from(enabledServices);
         const healthResults = await checkServicesHealth(
           getServiceManager,
-          services
+          services,
+          req.requestAbortSignal
         );
 
         return res.json({
@@ -69,7 +135,6 @@ export function registerMetaRoutes(
         });
         return res.status(500).json({
           error: "Failed to check services health",
-          message,
         });
       }
     }
@@ -121,7 +186,8 @@ export function registerMetaRoutes(
 
         const healthResults = await checkServicesHealth(
           getServiceManager,
-          services
+          services,
+          req.requestAbortSignal
         );
         return res.json(healthResults);
       } catch (error) {
@@ -131,7 +197,6 @@ export function registerMetaRoutes(
         });
         return res.status(500).json({
           error: "Failed to check batch services health",
-          message,
         });
       }
     }
@@ -167,7 +232,6 @@ export function registerMetaRoutes(
       });
       return res.status(500).json({
         error: "Failed to get service instances",
-        message,
       });
     }
   });

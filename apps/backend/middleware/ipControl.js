@@ -3,6 +3,7 @@ import logger from "./logger.js";
 import { readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
+import { getRequestIp, isLocalhostIp, normalizeIp } from "../utils/ip.js";
 
 class IPControlManager {
   constructor() {
@@ -10,9 +11,12 @@ class IPControlManager {
     this.blacklist = new Set();
     this.tempBlacklist = new Map(); // IP -> expiry timestamp
     this._hasNonLocalhost = false;
+    this._initialized = false;
     this.configPath = path.join(process.cwd(), "config", "ip-control.json");
 
-    this.loadConfig();
+    this.loadConfig().finally(() => {
+      this._initialized = true;
+    });
 
     // Cleanup expired temp blocks every minute
     this._cleanupInterval = setInterval(() => this.cleanupTempBlocks(), 60000);
@@ -21,8 +25,12 @@ class IPControlManager {
 
   _updateHasNonLocalhost() {
     this._hasNonLocalhost = Array.from(this.whitelist).some(
-      (ip) => ip !== "127.0.0.1" && ip !== "::1"
+      (ip) => !isLocalhostIp(ip)
     );
+  }
+
+  _normalizeList(list = []) {
+    return new Set(Array.from(list || []).map((ip) => normalizeIp(ip)));
   }
 
   async loadConfig() {
@@ -31,8 +39,8 @@ class IPControlManager {
         const data = await readFile(this.configPath, "utf-8");
         const config = JSON.parse(data);
 
-        this.whitelist = new Set(config.whitelist || []);
-        this.blacklist = new Set(config.blacklist || []);
+        this.whitelist = this._normalizeList(config.whitelist || []);
+        this.blacklist = this._normalizeList(config.blacklist || []);
         this._updateHasNonLocalhost();
 
         logger.info("IP control config loaded", {
@@ -41,8 +49,8 @@ class IPControlManager {
         });
       } else {
         // Create default config with localhost whitelisted
-        this.whitelist.add("127.0.0.1");
-        this.whitelist.add("::1");
+        this.whitelist.add(normalizeIp("127.0.0.1"));
+        this.whitelist.add(normalizeIp("::1"));
         this._updateHasNonLocalhost();
         await this.saveConfig();
       }
@@ -51,8 +59,8 @@ class IPControlManager {
         error: error.message,
       });
       // Default to localhost only
-      this.whitelist.add("127.0.0.1");
-      this.whitelist.add("::1");
+      this.whitelist.add(normalizeIp("127.0.0.1"));
+      this.whitelist.add(normalizeIp("::1"));
       this._updateHasNonLocalhost();
     }
   }
@@ -74,37 +82,40 @@ class IPControlManager {
   }
 
   addToWhitelist(ip) {
-    this.whitelist.add(ip);
+    const normalized = normalizeIp(ip);
+    this.whitelist.add(normalized);
     this._updateHasNonLocalhost();
-    this.blacklist.delete(ip); // Remove from blacklist if present
+    this.blacklist.delete(normalized); // Remove from blacklist if present
     return this.saveConfig();
   }
 
   removeFromWhitelist(ip) {
-    this.whitelist.delete(ip);
+    this.whitelist.delete(normalizeIp(ip));
     this._updateHasNonLocalhost();
     return this.saveConfig();
   }
 
   addToBlacklist(ip) {
-    this.blacklist.add(ip);
+    const normalized = normalizeIp(ip);
+    this.blacklist.add(normalized);
     this._updateHasNonLocalhost();
-    this.whitelist.delete(ip); // Remove from whitelist if present
+    this.whitelist.delete(normalized); // Remove from whitelist if present
     return this.saveConfig();
   }
 
   removeFromBlacklist(ip) {
-    this.blacklist.delete(ip);
+    this.blacklist.delete(normalizeIp(ip));
     return this.saveConfig();
   }
 
   tempBlock(ip, durationMs = 3600000) {
     // 1 hour default
     const expiresAt = Date.now() + durationMs;
-    this.tempBlacklist.set(ip, expiresAt);
+    const normalized = normalizeIp(ip);
+    this.tempBlacklist.set(normalized, expiresAt);
 
     logger.warn("IP temporarily blocked", {
-      ip,
+      ip: normalized,
       duration: durationMs / 1000 / 60 + " minutes",
       expiresAt: new Date(expiresAt).toISOString(),
     });
@@ -121,17 +132,24 @@ class IPControlManager {
   }
 
   isAllowed(ip) {
+    const normalizedIp = normalizeIp(ip);
+
+    // Safe startup behavior: while config is loading, only allow localhost.
+    if (!this._initialized) {
+      return isLocalhostIp(normalizedIp);
+    }
+
     // Check temp blacklist first
-    if (this.tempBlacklist.has(ip)) {
-      const expiresAt = this.tempBlacklist.get(ip);
+    if (this.tempBlacklist.has(normalizedIp)) {
+      const expiresAt = this.tempBlacklist.get(normalizedIp);
       if (Date.now() < expiresAt) {
         return false;
       }
-      this.tempBlacklist.delete(ip);
+      this.tempBlacklist.delete(normalizedIp);
     }
 
     // Permanent blacklist
-    if (this.blacklist.has(ip)) {
+    if (this.blacklist.has(normalizedIp)) {
       return false;
     }
 
@@ -141,7 +159,7 @@ class IPControlManager {
     }
 
     // Whitelist mode: only allow whitelisted IPs
-    return this.whitelist.has(ip);
+    return this.whitelist.has(normalizedIp);
   }
 
   getStats() {
@@ -164,7 +182,7 @@ export const ipControl = new IPControlManager();
  * Middleware to enforce IP access control
  */
 export function enforceIPControl(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress;
+  const ip = getRequestIp(req);
 
   if (!ipControl.isAllowed(ip)) {
     logger.warn("Access denied for blocked IP", {
@@ -185,7 +203,7 @@ export function enforceIPControl(req, res, next) {
  * Middleware for admin routes only - requires whitelist
  */
 export function requireWhitelistedIP(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress;
+  const ip = getRequestIp(req);
 
   if (!ipControl.whitelist.has(ip)) {
     logger.warn("Non-whitelisted IP attempted admin access", {
