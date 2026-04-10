@@ -1,31 +1,64 @@
-// Minimal client-side auth hook that uses the backend cookie-based auth endpoints.
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { apiClient } from "../services/ApiClient";
 import { logger } from "../lib/logger";
 
-type User = { username: string } | null;
+type User = {
+  id?: string | number;
+  username: string;
+} | null;
 
-export function useAuth() {
+type AuthContextValue = {
+  user: User;
+  isAuthenticated: boolean;
+  loading: boolean;
+  error: string | null;
+  login: (
+    username: string,
+    password: string,
+    remember?: boolean
+  ) => Promise<{ success: boolean; user?: User; error?: string }>;
+  logout: () => Promise<{ success: boolean; error?: string }>;
+  refresh: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function useAuthController(): AuthContextValue {
   const [user, setUser] = useState<User>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch current auth status from backend
-  const fetchMe = useCallback(async () => {
-    setLoading(true);
+  const fetchMe = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const body = await apiClient.getAuthMe().catch(() => null);
+      const body = await apiClient.getAuthMe().catch(() => undefined);
       if (!body || !body.authenticated) {
         setUser(null);
       } else {
-        setUser(body.user || { username: body.user?.username || "unknown" });
+        const username =
+          body.user?.username ||
+          (typeof body.user?.id === "string" ? body.user.id : "unknown");
+        setUser({ id: body.user?.id, username });
       }
     } catch (err: unknown) {
       logger.warn("[AUTH] Failed to fetch auth state", err);
       setUser(null);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -33,35 +66,35 @@ export function useAuth() {
     fetchMe();
   }, [fetchMe]);
 
-  // Perform login by POSTing credentials. Backend sets a httpOnly cookie on success.
-  async function login(username: string, password: string, remember = false) {
-    setLoading(true);
-    setError(null);
-    try {
-      const body = await apiClient.login(username, password, remember);
-      if (!body || !body.user) {
-        setError("Login failed");
-        setUser(null);
+  const login = useCallback(
+    async (username: string, password: string, remember = false) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const body = await apiClient.login(username, password, remember);
+        if (!body || !body.user) {
+          setError("Login failed");
+          setUser(null);
+          setLoading(false);
+          return { success: false, error: "Login failed" };
+        }
+
+        await fetchMe({ silent: true });
+        return { success: true, user: body?.user || null };
+      } catch (err: unknown) {
+        logger.warn("[AUTH] Login request failed", err);
+        const message = err instanceof Error ? err.message : "Network error";
+        setError(message);
         setLoading(false);
-        return { success: false, error: "Login failed" };
+        return { success: false, error: message };
+      } finally {
+        setLoading(false);
       }
+    },
+    [fetchMe]
+  );
 
-      // Use apiClient.getAuthMe to refresh state (this will use cookie or fallback token)
-      await fetchMe();
-      return { success: true, user: body?.user || null };
-    } catch (err: unknown) {
-      logger.warn("[AUTH] Login request failed", err);
-      const message = err instanceof Error ? err.message : "Network error";
-      setError(message);
-      setLoading(false);
-      return { success: false, error: message };
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Logout - call backend to clear cookie
-  async function logout() {
+  const logout = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -76,15 +109,31 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  return {
-    user,
-    isAuthenticated: !!user,
-    loading,
-    error,
-    login,
-    logout,
-    refresh: fetchMe,
-  } as const;
+  return useMemo(
+    () => ({
+      user,
+      isAuthenticated: !!user,
+      loading,
+      error,
+      login,
+      logout,
+      refresh: fetchMe,
+    }),
+    [user, loading, error, login, logout, fetchMe]
+  );
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const value = useAuthController();
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
 }

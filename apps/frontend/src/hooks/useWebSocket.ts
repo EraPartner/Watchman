@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { logger } from "../lib/logger";
 import { queryKeys } from "../lib/queryKeys";
+import { getWebSocketUrl } from "../lib/backendUrl";
 
 interface WebSocketMessage {
   type: "connection" | "service_update" | "alert" | "metrics";
@@ -51,7 +52,7 @@ export const useWebSocket = (url?: string) => {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const websocketUrl = url || "ws://localhost:3001/ws";
+  const websocketUrl = url || getWebSocketUrl();
 
   // Debounced/batched invalidation state
   const pendingInvalidationsRef = useRef<Set<string>>(new Set());
@@ -103,11 +104,8 @@ export const useWebSocket = (url?: string) => {
         const keyParts = key.split("_");
         const baseServiceKey = keyParts.length > 1 ? keyParts[0] : key;
 
-        addInvalidation(queryKeys.servicePrefix(baseServiceKey));
-
-        if (key !== baseServiceKey) {
-          addInvalidation(queryKeys.servicePrefix(key));
-        }
+        addInvalidation(queryKeys.serviceStatus(baseServiceKey, key));
+        addInvalidation(queryKeys.serviceStats(baseServiceKey, key));
 
         if (baseServiceKey === "adguard") {
           addInvalidation(queryKeys.adguardFull());

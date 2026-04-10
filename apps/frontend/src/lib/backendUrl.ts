@@ -36,6 +36,45 @@ export function getBackendUrl(): string {
   return "http://localhost:3001";
 }
 
+export function getWebSocketUrl(path = "/ws"): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const envUrl = env.get("VITE_BACKEND_URL");
+  const preferredProtocol =
+    typeof window !== "undefined" && window.location.protocol === "https:"
+      ? "wss:"
+      : "ws:";
+
+  if (envUrl) {
+    try {
+      const parsed = new URL(envUrl);
+      const protocol =
+        preferredProtocol === "wss:" || parsed.protocol === "https:"
+          ? "wss:"
+          : "ws:";
+      return `${protocol}//${parsed.host}${normalizedPath}`;
+    } catch {
+      // fall through to runtime-derived defaults
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    const backendUrl = getBackendUrl();
+
+    if (backendUrl) {
+      try {
+        const parsed = new URL(backendUrl);
+        return `${preferredProtocol}//${parsed.host}${normalizedPath}`;
+      } catch {
+        // fall through
+      }
+    }
+
+    return `${preferredProtocol}//${window.location.host}${normalizedPath}`;
+  }
+
+  return `ws://localhost:3001${normalizedPath}`;
+}
+
 /**
  * Default API timeout in milliseconds
  */

@@ -5,11 +5,20 @@
 
 import { logger } from "./logger";
 
-const CSRF_COOKIE_NAME = "csrfToken";
-const CSRF_HEADER_NAME = "x-csrf-token";
+const DEFAULT_CSRF_COOKIE_NAME = "csrfToken";
+const DEFAULT_CSRF_HEADER_NAME = "x-csrf-token";
+
+type CsrfConfig = {
+  cookieName: string;
+  headerName: string;
+};
 
 export class CSRFManager {
   private static instance: CSRFManager;
+  private config: CsrfConfig = {
+    cookieName: DEFAULT_CSRF_COOKIE_NAME,
+    headerName: DEFAULT_CSRF_HEADER_NAME,
+  };
 
   private constructor() {}
 
@@ -18,6 +27,26 @@ export class CSRFManager {
       CSRFManager.instance = new CSRFManager();
     }
     return CSRFManager.instance;
+  }
+
+  /**
+   * Override CSRF cookie/header names from backend config.
+   */
+  public configure(config?: Partial<CsrfConfig>): void {
+    this.config = {
+      cookieName:
+        config?.cookieName?.trim() ||
+        this.config.cookieName ||
+        DEFAULT_CSRF_COOKIE_NAME,
+      headerName:
+        config?.headerName?.trim() ||
+        this.config.headerName ||
+        DEFAULT_CSRF_HEADER_NAME,
+    };
+  }
+
+  public getConfig(): CsrfConfig {
+    return { ...this.config };
   }
 
   /**
@@ -36,7 +65,7 @@ export class CSRFManager {
         {} as Record<string, string>
       );
 
-      return cookies[CSRF_COOKIE_NAME] || null;
+      return cookies[this.config.cookieName] || null;
     } catch (error) {
       logger.warn("[CSRF] Failed to read token from cookies", error);
       return null;
@@ -51,7 +80,7 @@ export class CSRFManager {
   ): Record<string, string> {
     const token = this.getToken();
     if (token) {
-      headers[CSRF_HEADER_NAME] = token;
+      headers[this.config.headerName] = token;
     }
     return headers;
   }

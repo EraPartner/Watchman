@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AdGuardCard } from "./AdGuardCard";
 import { TorCard } from "./TorCard";
 import { AdGuardServerStats, TorServerStats } from "../types/server";
@@ -35,6 +35,31 @@ import {
 } from "./dashboard/dashboardStatus";
 import { useDashboardQueries } from "./dashboard/useDashboardQueries";
 
+const LastUpdatedText = React.memo(function LastUpdatedText({
+  lastSuccessfulUpdateTimestamp,
+}: {
+  lastSuccessfulUpdateTimestamp: number;
+}) {
+  const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowTimestamp(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const timeSinceUpdate =
+    lastSuccessfulUpdateTimestamp > 0
+      ? Math.max(
+          0,
+          Math.floor((nowTimestamp - lastSuccessfulUpdateTimestamp) / 1000)
+        )
+      : 0;
+
+  return <span>Updated {timeSinceUpdate}s ago</span>;
+});
+
 export const LiveServerDashboard = () => {
   const { isServiceEnabled } = useEnabledServices();
   const { getInstances } = useServiceInstances();
@@ -56,8 +81,6 @@ export const LiveServerDashboard = () => {
     adguardEnabled,
     isServiceEnabled,
   });
-
-  const lastUpdateTime = new Date();
 
   // derive adguard/tor/other statuses from queries
   const adguardData = adguardQuery.data;
@@ -84,9 +107,33 @@ export const LiveServerDashboard = () => {
 
   const torCardStats: TorServerStats | undefined = buildTorCardStats(torData);
 
-  const timeSinceUpdate = Math.floor(
-    (Date.now() - lastUpdateTime.getTime()) / 1000
-  );
+  const lastSuccessfulUpdateTimestamp = useMemo(() => {
+    const timestamps = [
+      adguardQuery.dataUpdatedAt,
+      torQuery.dataUpdatedAt,
+      frontendConfigQuery.dataUpdatedAt,
+      bitcoinQuery.dataUpdatedAt,
+      qbittorrentQuery.dataUpdatedAt,
+      ipfsQuery.dataUpdatedAt,
+      synologyQuery.dataUpdatedAt,
+      roonQuery.dataUpdatedAt,
+      servicesHealthQuery.dataUpdatedAt,
+    ];
+    return timestamps.reduce(
+      (latest, value) => Math.max(latest, value || 0),
+      0
+    );
+  }, [
+    adguardQuery.dataUpdatedAt,
+    torQuery.dataUpdatedAt,
+    frontendConfigQuery.dataUpdatedAt,
+    bitcoinQuery.dataUpdatedAt,
+    qbittorrentQuery.dataUpdatedAt,
+    ipfsQuery.dataUpdatedAt,
+    synologyQuery.dataUpdatedAt,
+    roonQuery.dataUpdatedAt,
+    servicesHealthQuery.dataUpdatedAt,
+  ]);
 
   // Refresh helper - refetch all enabled queries
   const handleRefresh = async () => {
@@ -423,7 +470,9 @@ export const LiveServerDashboard = () => {
                 : "Critical"}
         </div>
         <p className="text-xs text-muted-foreground">
-          Updated {timeSinceUpdate}s ago
+          <LastUpdatedText
+            lastSuccessfulUpdateTimestamp={lastSuccessfulUpdateTimestamp}
+          />
         </p>
       </CardContent>
     </Card>,
