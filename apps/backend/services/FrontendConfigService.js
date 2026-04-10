@@ -29,6 +29,7 @@ export class FrontendConfigService {
       services: this.buildServicesConfig(),
       app: this.getAppInfo(),
       network: this.getNetworkConfig(),
+      security: this.getSecurityConfig(),
     };
   }
 
@@ -60,6 +61,19 @@ export class FrontendConfigService {
     return {
       frontendUrl: process.env.FRONTEND_URL || null,
       backendUrl: process.env.BACKEND_URL || null,
+    };
+  }
+
+  /**
+   * Get frontend-consumable security config
+   * @returns {Object} Security settings exposed to frontend
+   */
+  getSecurityConfig() {
+    return {
+      csrf: {
+        cookieName: process.env.CSRF_COOKIE_NAME || "csrfToken",
+        headerName: process.env.CSRF_HEADER_NAME || "x-csrf-token",
+      },
     };
   }
 
