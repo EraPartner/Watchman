@@ -16,6 +16,8 @@ This file provides guidelines for agentic coding agents working in this reposito
 
 Agents are **specialized subagents** — each has a strict, narrow purpose. The main agent must delegate to the correct subagent for each task. Never use an agent outside its defined scope:
 
+**Invocation rule:** For `watchman-kb-updater` only, invoke it directly as a custom subagent (`subagent_type: "watchman-kb-updater"` from `.opencode/agent/watchman-kb-updater.md`). Do **not** try to load it via Awesome instruction loaders/search. Keep standard loading behavior for all other agents/instructions.
+
 | Agent                        | Use For                                                          | Do NOT Use For                           |
 | ---------------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
 | `senior-feature-engineer`    | Implementing new features, fixing bugs                           | Code review, refactoring, tests, commits |

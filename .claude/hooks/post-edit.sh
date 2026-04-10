@@ -10,9 +10,9 @@ FILE=$(python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_in
 
 [ -z "$FILE" ] && exit 0
 
-# TypeScript/TSX: ESLint on the changed file only
+# TypeScript/TSX (frontend) and JS (backend): ESLint on the changed file only
 # Run from the workspace directory so ESLint can locate eslint.config.js
-if [[ "$FILE" == *.ts || "$FILE" == *.tsx ]]; then
+if [[ "$FILE" == *.ts || "$FILE" == *.tsx || "$FILE" == *.js ]]; then
   if [[ "$FILE" == "$PROJECT/apps/frontend/"* ]]; then
     ESLINT_CWD="$PROJECT/apps/frontend"
   elif [[ "$FILE" == "$PROJECT/apps/backend/"* ]]; then

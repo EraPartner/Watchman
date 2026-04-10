@@ -7,12 +7,30 @@ import typescriptParser from "@typescript-eslint/parser";
 import react from "eslint-plugin-react";
 
 export default [
+  {
+    ignores: [
+      "dist",
+      "dist/**",
+      "**/dist/**",
+      "backend/",
+      "hardware/",
+      "public/",
+    ],
+  },
+
   // include the recommended config first
   js.configs.recommended,
 
   // project-specific rules and settings
   {
-    ignores: ["dist", "backend/", "hardware/", "public/"],
+    ignores: [
+      "dist",
+      "dist/**",
+      "**/dist/**",
+      "backend/",
+      "hardware/",
+      "public/",
+    ],
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
