@@ -1,22 +1,22 @@
 # AGENTS.md - Watchman Project Guidelines
 
-Agent guidelines for this repo.
+This file provides guidelines for agentic coding agents working in this repository.
 
 ## Quick Start
 
-1. **Read docs first** — Search Obsidian KB (`docs/`) before touching code
-2. **Follow conventions** — Match existing patterns; no new ones
-3. **Write tests** — All features/fixes need test coverage
+1. **Read docs first** — Search the Obsidian KB (`docs/`) before touching code
+2. **Follow conventions** — Match existing patterns; do not introduce new ones
+3. **Write tests** — All new features and bug fixes need test coverage
 4. **Update docs** — Call `watchman-kb-updater` after every code change
-5. **Commit when asked** — Never commit unless user explicitly requests it
+5. **Commit when asked** — Never commit unless the user explicitly requests it
 
 ## Agent Usage Rules
 
 ### Subagent-Only Usage
 
-Agents = **specialized subagents** — strict, narrow purpose. Main agent delegates to correct subagent. Never use agent outside defined scope:
+Agents are **specialized subagents** — each has a strict, narrow purpose. The main agent must delegate to the correct subagent for each task. Never use an agent outside its defined scope:
 
-**Invocation rule:** For `watchman-kb-updater` only, invoke directly as custom subagent (`subagent_type: "watchman-kb-updater"` from `.opencode/agent/watchman-kb-updater.md`). Do **not** load via Awesome instruction loaders/search. Standard loading for all other agents/instructions.
+**Invocation rule:** For `watchman-kb-updater` only, invoke it directly as a custom subagent (`subagent_type: "watchman-kb-updater"` from `.opencode/agent/watchman-kb-updater.md`). Do **not** try to load it via Awesome instruction loaders/search. Keep standard loading behavior for all other agents/instructions.
 
 | Agent                        | Use For                                                          | Do NOT Use For                           |
 | ---------------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
@@ -31,39 +31,39 @@ Agents = **specialized subagents** — strict, narrow purpose. Main agent delega
 
 ### Knowledge Base Workflow
 
-**Before code changes or architectural decisions, agents MUST learn the codebase:**
+**Before making any code changes or architectural decisions, agents MUST learn about the codebase:**
 
-1. **Search Obsidian KB first** via Obsidian MCP tools:
+1. **Search the Obsidian knowledge base first** using Obsidian MCP tools:
    - `mcp-obsidian_obsidian_simple_search` — Full-text search across all docs
    - `mcp-obsidian_obsidian_complex_search` — Query by tags, paths, frontmatter
-   - `mcp-obsidian_obsidian_list_files_in_dir` — List docs in folder
+   - `mcp-obsidian_obsidian_list_files_in_dir` — List docs in a specific folder
    - `mcp-obsidian_obsidian_get_file_contents` — Read specific doc files
 
-2. **Check relevant docs** — See **Knowledge Base** section for full structure. Key entry points:
-   - `docs/common-tasks.md` — Task-oriented quick reference (start here)
+2. **Check relevant documentation** — See the **Knowledge Base** section below for the full structure. Key entry points:
+   - `docs/common-tasks.md` — Task-oriented quick reference (start here if you know what you want to do)
    - `docs/glossary.md` — Terminology with aliases and search tips
    - `docs/getting-started.md` — New developer onboarding map
    - `docs/adr/` — Architecture Decision Records (read before architectural changes)
-   - `docs/api/` — API docs (check before creating/modifying endpoints)
+   - `docs/api/` — API documentation (check before creating/modifying endpoints)
    - `docs/features/` — Feature docs (understand existing behavior)
    - `docs/integrations/` — Service integration specs (check before modifying services)
    - `docs/guides/` — How-to guides and patterns
    - `docs/reference/` — Code patterns, scripts, environment variables
 
 3. **Cross-reference with code:**
-   - After learning from docs, verify against actual code
-   - Use `explore` subagent for fast pattern matching
-   - Use `read` and `glob` for specific file inspection
+   - After learning from docs, verify against actual code files
+   - Use `explore` subagent for fast pattern matching in code
+   - Use `read` and `glob` tools for specific file inspection
 
 4. **Update after changes:**
-   - Call `watchman-kb-updater` after code changes
-   - Keeps docs in sync with implementation
+   - Call `watchman-kb-updater` subagent after completing code changes
+   - This keeps docs in sync with implementation
 
-**Rationale:** KB has architectural decisions, API contracts, service integration specs, system diagrams. Skipping causes duplication, inconsistent patterns, broken contracts.
+**Rationale:** The knowledge base contains architectural decisions, API contracts, service integration specs, and system diagrams. Skipping this step leads to duplicated work, inconsistent patterns, and broken contracts.
 
 ## Project Overview
 
-Watchman = full-stack monitoring dashboard for self-hosted services:
+Watchman is a full-stack monitoring dashboard for self-hosted services with:
 
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
 - **Backend**: Node.js + Express + JWT auth + OpenAPI/Swagger
@@ -74,7 +74,7 @@ Watchman = full-stack monitoring dashboard for self-hosted services:
 
 ### Monorepo Structure
 
-npm workspaces monorepo, three packages:
+This is an npm workspaces monorepo with three packages:
 
 | Package              | Path               | Description                 |
 | -------------------- | ------------------ | --------------------------- |
@@ -82,7 +82,7 @@ npm workspaces monorepo, three packages:
 | `@watchman/backend`  | `apps/backend/`    | Node.js backend API         |
 | `packages/shared/`   | `packages/shared/` | Shared utilities (reserved) |
 
-Filtered commands use workspace names:
+When running filtered commands, use the workspace names:
 
 ```bash
 npm run <script> --workspace=apps/frontend
@@ -91,15 +91,15 @@ npm run <script> --workspace=apps/backend
 
 ## Terminology
 
-See `docs/glossary.md` for full glossary. Key terms:
+See `docs/glossary.md` for the complete glossary with aliases and search tips. Key terms:
 
-- **Service**: External self-hosted app Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay).
-- **Service Instance**: Specific deployment of a service type. Multiple instances supported (e.g., multiple qBittorrent nodes).
-- **Health Check**: Lightweight request verifying service responsiveness. Returns online/offline status.
+- **Service**: An external self-hosted application that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay).
+- **Service Instance**: A specific deployment of a service type. Multiple instances of the same type are supported (e.g., multiple qBittorrent nodes).
+- **Health Check**: A lightweight request to verify a service is responsive. Returns online/offline status.
 - **Stats**: Detailed service-specific metrics (e.g., AdGuard query counts, Bitcoin block height).
-- **ServiceManager**: Central backend class managing all service instances and routing requests.
-- **Circuit Breaker**: Pattern preventing repeated calls to failing services.
-- **Multi-Instance**: Support for multiple nodes of same service type via numbered environment variables.
+- **ServiceManager**: Central backend class that manages all service instances and routes requests.
+- **Circuit Breaker**: Pattern that prevents repeated calls to failing services.
+- **Multi-Instance**: Support for running multiple nodes of the same service type via numbered environment variables.
 
 ## Build Commands
 
@@ -174,35 +174,35 @@ npm run security:test      # Run security test script
 - ES2020 target, ESNext modules
 - React JSX transform (`react-jsx`)
 - Bundler module resolution
-- Interfaces for props, state, component definitions
-- `noUnusedLocals`, `noUnusedParameters`, `noImplicitAny`, `noFallthroughCasesInSwitch` all `false` (relaxed)
+- Use interfaces for props, state, and component definitions
+- `noUnusedLocals`, `noUnusedParameters`, `noImplicitAny`, `noFallthroughCasesInSwitch` are all `false` (relaxed)
 
 ### JavaScript/Node.js (Backend)
 
 - **ES2022+** features, ESM modules (`"type": "module"`)
-- `async/await` for all async code
-- `import`/`export` syntax (no CommonJS)
+- Use `async/await` for all asynchronous code
+- Use `import`/`export` syntax (no CommonJS)
 - **Never use `null`** — use `undefined` for optional values
-- Functions over classes where possible (service classes excepted)
+- Prefer functions over classes where possible (service classes are the exception)
 - No comments unless absolutely necessary
 - Keep code simple and maintainable
 
 ### React Components
 
-- Functional components with hooks
+- Functional components with hooks as default
 - PascalCase for components, camelCase for functions/variables
-- Custom hooks for reusable stateful logic
-- Single responsibility principle
-- Prop validation with TypeScript
-- React Query (`@tanstack/react-query`) for server state
-- React Router v6 for routing
+- Use custom hooks for reusable stateful logic
+- Follow single responsibility principle
+- Implement proper prop validation with TypeScript
+- Use React Query (`@tanstack/react-query`) for server state
+- Use React Router v6 for routing
 
 ### Styling
 
 - Tailwind CSS with `tailwind-merge` and `clsx`
-- `class-variance-authority` for component variants
+- Use `class-variance-authority` for component variants
 - shadcn/ui component library (`apps/frontend/src/components/ui/`)
-- Mobile-first responsive design
+- Follow mobile-first responsive design
 
 ### ESLint Rules
 
@@ -212,26 +212,26 @@ npm run security:test      # Run security test script
 
 ### Error Handling
 
-- Error Boundaries for component-level errors
-- Proper error states in data fetching
+- Implement Error Boundaries for component-level errors
+- Use proper error states in data fetching
 - Handle async errors in effects and event handlers
 - Backend: structured JSON logging with PII redaction
 - Backend: global error handler with production-safe stack traces
-- Meaningful error messages to users
+- Provide meaningful error messages to users
 
 ## Existing Agent Instructions
 
-Load from Awesome MCP server via `awesome-copilot_load_instruction` **before** writing code in relevant area:
+Load these from the Awesome MCP server using `awesome-copilot_load_instruction` **before** writing code in the relevant area:
 
-- `nodejs-javascript-vitest.instructions.md` — Load before backend code
-- `reactjs.instructions.md` — Load before frontend React components
-- `performance-optimization.instructions.md` — Load for performance-critical paths
+- `nodejs-javascript-vitest.instructions.md` — Load before writing backend code
+- `reactjs.instructions.md` — Load before writing frontend React components
+- `performance-optimization.instructions.md` — Load when working on performance-critical paths
 
 ## Important Patterns
 
 ### Service Integration Pattern
 
-Each service follows standard pattern:
+Each service follows a standard pattern:
 
 ```javascript
 class ServiceName {
@@ -255,23 +255,23 @@ class ServiceName {
 }
 ```
 
-Services registered in `apps/backend/services/serviceFactoryConfig.js`. Routes generated dynamically via `apps/backend/routes/serviceFactory.js`.
+Services are registered in `apps/backend/services/serviceFactoryConfig.js` and routes are generated dynamically via `apps/backend/routes/serviceFactory.js`.
 
 ### Testing Guidelines
 
-- Tests for all new features and bug fixes
+- Write tests for all new features and bug fixes
 - Cover edge cases and error handling
-- Never modify original code to ease testing
-- `@testing-library/react` for component tests
+- Never modify original code to make testing easier
+- Use `@testing-library/react` for component tests
 - Vitest for test runner
 
 ### API Design
 
 - RESTful endpoints in Express
-- OpenAPI 3.0 spec (`apps/backend/openapi.yaml`)
+- OpenAPI 3.0 specification (`apps/backend/openapi.yaml`)
 - Swagger UI at `/api/docs`
 - Proper HTTP status codes
-- JWT auth via HTTP-only cookies
+- JWT authentication via HTTP-only cookies
 - CSRF protection (double-submit cookie pattern)
 - Tiered rate limiting per endpoint category
 - Response standardization via `apiResponse.js` middleware
@@ -298,7 +298,7 @@ Services registered in `apps/backend/services/serviceFactoryConfig.js`. Routes g
 
 ## Knowledge Base
 
-Docs KB in `docs/` — designed for Obsidian and AI agent usage.
+The project has a documentation knowledge base in `docs/` designed for Obsidian and AI agent usage.
 
 ### Structure
 
@@ -309,33 +309,33 @@ Docs KB in `docs/` — designed for Obsidian and AI agent usage.
 - `docs/adr/` — Architecture Decision Records (ADRs)
 - `docs/api/` — API documentation
 - `docs/guides/` — How-to guides (contributing, deployment, adding services)
-- `docs/features/` — Feature docs (Service Monitoring, Multi-Instance, Real-Time Updates)
+- `docs/features/` — Feature documentation (Service Monitoring, Multi-Instance, Real-Time Updates)
 - `docs/integrations/` — External service integrations (AdGuard, Bitcoin, Tor, qBittorrent, etc.)
-- `docs/security/` — Security docs (Authentication, Rate Limiting, IP Control)
-- `docs/performance/` — Performance docs (Caching, Request Optimization)
+- `docs/security/` — Security documentation (Authentication, Rate Limiting, IP Control)
+- `docs/performance/` — Performance documentation (Caching, Request Optimization)
 - `docs/components/` — Frontend components and hooks
 - `docs/testing/` — Testing documentation
-- `docs/architecture/` — Architecture docs (Backend, Frontend, Data Flow)
+- `docs/architecture/` — Architecture documentation (Backend, Frontend, Data Flow)
 - `docs/reference/` — Code patterns, scripts, environment variables, error codes
 
 ### Knowledge Base Maintenance
 
-**After any code changes, agents MUST call `watchman-kb-updater` subagent** (`.opencode/agent/watchman-kb-updater.md`). Keeps docs in sync. Updater will:
+**After completing any code changes, agents MUST call the `watchman-kb-updater` subagent** (`.opencode/agent/watchman-kb-updater.md`). This ensures docs stay in sync with implementation. The updater will:
 
-1. Identify changes from modified files
+1. Identify what changed based on modified files
 2. Update existing docs to reflect changes
 3. Create new docs for new features/endpoints/services
 4. Add code links `[[path/to/file.js]]`
 5. Update frontmatter dates
 6. Update OpenAPI spec if API changed
 
-**Mandatory** — all agents call KB updater before finishing.
+**This is mandatory** — all agents should call the KB updater before finishing their run.
 
 ## Environment Variables
 
-- Backend env: `apps/backend/.env.local` (copy from `.env.example`)
-- Frontend env: `apps/frontend/.env.local`
-- Never commit `.env.local` or files containing secrets
+- Backend env file: `apps/backend/.env.local` (copy from `.env.example`)
+- Frontend env file: `apps/frontend/.env.local`
+- Never commit `.env.local` or any file containing secrets
 
 ### Required Backend Variables
 
@@ -348,24 +348,24 @@ Docs KB in `docs/` — designed for Obsidian and AI agent usage.
 
 ### Service Variables
 
-Services configured via env vars with pattern `{SERVICE}_*` (e.g., `ADGUARD_MAIN_URL`, `BITCOIN_RPC_USER`). Multi-instance uses numbered prefixes (e.g., `QBITTORRENT_1_URL`, `QBITTORRENT_2_URL`).
+Services are configured via environment variables with the pattern `{SERVICE}_*` (e.g., `ADGUARD_MAIN_URL`, `BITCOIN_RPC_USER`). Multi-instance services use numbered prefixes (e.g., `QBITTORRENT_1_URL`, `QBITTORRENT_2_URL`).
 
-See `docs/reference/environment-variables.md` for complete reference.
+See `docs/reference/environment-variables.md` for the complete reference.
 
 ## Security Guidelines
 
 - **Never commit secrets** — Use `.env.local` (gitignored) for all credentials
-- **Never log sensitive data** — No API keys, tokens, passwords, PII in logs
+- **Never log sensitive data** — No API keys, tokens, passwords, or PII in logs
 - **Validate all inputs** — Server-side validation on backend, Zod on frontend where applicable
-- **Follow least privilege** — Service configs use minimal required permissions
-- **Rate limit public endpoints** — Abuse protection (implemented via middleware)
-- **Audit dependencies** — Check vulnerabilities before adding packages
+- **Follow least privilege** — Service configurations should use minimal required permissions
+- **Rate limit public endpoints** — Protect against abuse (already implemented via middleware)
+- **Audit dependencies** — Check for known vulnerabilities before adding packages
 - **CSRF protection** — Maintain double-submit cookie pattern for state-changing requests
 
 ## When Stuck
 
-If docs and code unclear:
+If docs and code are unclear:
 
 1. Check `docs/troubleshooting.md` for known issues
 2. Search `docs/reference/error-codes.md` for error context
-3. Ask user for clarification rather than guessing
+3. Ask the user for clarification rather than guessing
