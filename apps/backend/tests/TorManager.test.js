@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 import { TorManager } from "../services/TorManager.js";
+import logger from "../middleware/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,81 @@ function closeServer(server) {
       resolve();
     });
   });
+}
+
+async function createFakeTorExecutable({ opensSocksPort }) {
+  const binDir = await fs.mkdtemp(path.join(os.tmpdir(), "watchman-fake-tor-"));
+  const torBinaryPath = path.join(binDir, "tor");
+
+  const script = `#!/usr/bin/env node
+const fs = require("node:fs");
+const net = require("node:net");
+
+const opensPort = ${opensSocksPort ? "true" : "false"};
+const configArgIndex = process.argv.indexOf("-f");
+const configPath = configArgIndex >= 0 ? process.argv[configArgIndex + 1] : undefined;
+
+let socksPort = 0;
+if (configPath && fs.existsSync(configPath)) {
+  const configContent = fs.readFileSync(configPath, "utf8");
+  const match = configContent.match(/SocksPort\\s+(\\d+)/);
+  if (match) {
+    socksPort = Number(match[1]);
+  }
+}
+
+let server;
+if (opensPort && socksPort > 0) {
+  server = net.createServer();
+  server.listen(socksPort, "127.0.0.1");
+}
+
+const shutdown = () => {
+  if (server) {
+    server.close(() => process.exit(0));
+    return;
+  }
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+setInterval(() => {}, 1000);
+`;
+
+  await fs.writeFile(torBinaryPath, script, { mode: 0o755 });
+  await fs.chmod(torBinaryPath, 0o755);
+
+  return {
+    binDir,
+    cleanup: () => fs.rm(binDir, { recursive: true, force: true }),
+  };
+}
+
+async function createFakeCommand(binDir, name, body) {
+  const filePath = path.join(binDir, name);
+  const script = `#!/usr/bin/env sh
+${body}
+`;
+  await fs.writeFile(filePath, script, { mode: 0o755 });
+  await fs.chmod(filePath, 0o755);
+  return filePath;
+}
+
+async function withFakePath(commands, run) {
+  const binDir = await fs.mkdtemp(path.join(os.tmpdir(), "watchman-fake-bin-"));
+  const originalPath = process.env.PATH;
+
+  try {
+    for (const [name, body] of Object.entries(commands)) {
+      await createFakeCommand(binDir, name, body);
+    }
+    process.env.PATH = `${binDir}:${originalPath || ""}`;
+    return await run();
+  } finally {
+    process.env.PATH = originalPath;
+    await fs.rm(binDir, { recursive: true, force: true });
+  }
 }
 
 test("TorManager defaults dataDir to backend/.tor-data", () => {
@@ -98,6 +174,46 @@ test("TorManager initialize returns false on unexpected error", async () => {
   assert.equal(await manager.initialize(), false);
 });
 
+test("TorManager isInstalled falls back to brew when which fails", async () => {
+  await withFakePath(
+    {
+      which: "exit 1",
+      brew: 'if [ "$1" = "list" ] && [ "$2" = "tor" ]; then exit 0; fi; exit 1',
+    },
+    async () => {
+      const manager = new TorManager();
+      const installed = await manager.isInstalled();
+      assert.equal(installed, true);
+    }
+  );
+});
+
+test("TorManager installTor returns true on successful brew install", async () => {
+  await withFakePath(
+    {
+      brew: 'if [ "$1" = "install" ] && [ "$2" = "tor" ]; then exit 0; fi; exit 1',
+    },
+    async () => {
+      const manager = new TorManager();
+      const installed = await manager.installTor();
+      assert.equal(installed, true);
+    }
+  );
+});
+
+test("TorManager installTor returns false on failed brew install", async () => {
+  await withFakePath(
+    {
+      brew: "exit 1",
+    },
+    async () => {
+      const manager = new TorManager();
+      const installed = await manager.installTor();
+      assert.equal(installed, false);
+    }
+  );
+});
+
 test("TorManager startTor returns early when already starting", async () => {
   const manager = new TorManager();
   manager.isStarting = true;
@@ -124,6 +240,143 @@ test("TorManager startTor returns false when installation fails", async () => {
 
   assert.equal(result, false);
   assert.equal(manager.isStarting, false);
+});
+
+test("TorManager startTor returns true when spawned Tor opens SOCKS port", async () => {
+  const fakeTor = await createFakeTorExecutable({ opensSocksPort: true });
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "watchman-tor-start-")
+  );
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${fakeTor.binDir}:${originalPath || ""}`;
+
+  const manager = new TorManager({
+    socksPort: 19150,
+    controlPort: 19151,
+    dataDir: tempDir,
+    startupTimeout: 3000,
+  });
+  manager.isInstalled = async () => true;
+
+  try {
+    const result = await manager.startTor();
+    assert.equal(result, true);
+    assert.equal(manager.isStarting, false);
+    assert.ok(manager.torProcess);
+  } finally {
+    await manager.stopTor();
+    process.env.PATH = originalPath;
+    await fakeTor.cleanup();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("TorManager startTor returns false on startup timeout and stops process", async () => {
+  const fakeTor = await createFakeTorExecutable({ opensSocksPort: false });
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "watchman-tor-timeout-")
+  );
+  const originalPath = process.env.PATH;
+  const originalSetTimeout = global.setTimeout;
+
+  process.env.PATH = `${fakeTor.binDir}:${originalPath || ""}`;
+  global.setTimeout = (fn, _ms, ...args) => originalSetTimeout(fn, 1, ...args);
+
+  const manager = new TorManager({
+    socksPort: 19160,
+    controlPort: 19161,
+    dataDir: tempDir,
+    startupTimeout: 20,
+  });
+  manager.isInstalled = async () => true;
+
+  try {
+    const result = await manager.startTor();
+    assert.equal(result, false);
+    assert.equal(manager.isStarting, false);
+    assert.equal(manager.torProcess, null);
+  } finally {
+    global.setTimeout = originalSetTimeout;
+    process.env.PATH = originalPath;
+    await manager.stopTor();
+    await fakeTor.cleanup();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("TorManager startTor handles Tor stdout/stderr bootstrapping logs", async () => {
+  const fakeTor = await createFakeTorExecutable({ opensSocksPort: true });
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "watchman-tor-logs-")
+  );
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${fakeTor.binDir}:${originalPath || ""}`;
+
+  const progressCalls = [];
+  const serviceCalls = [];
+  const debugCalls = [];
+  const originalProgress = logger.progress;
+  const originalService = logger.service;
+  const originalDebug = logger.debug;
+
+  logger.progress = (...args) => {
+    progressCalls.push(args);
+  };
+  logger.service = (...args) => {
+    serviceCalls.push(args);
+  };
+  logger.debug = (...args) => {
+    debugCalls.push(args);
+  };
+
+  const manager = new TorManager({
+    socksPort: 19170,
+    controlPort: 19171,
+    dataDir: tempDir,
+    startupTimeout: 3000,
+  });
+  manager.isInstalled = async () => true;
+
+  try {
+    const result = await manager.startTor();
+    assert.equal(result, true);
+    assert.ok(manager.torProcess);
+
+    manager.torProcess.stdout.emit("data", Buffer.from("Bootstrapped 45%\n"));
+    manager.torProcess.stdout.emit(
+      "data",
+      Buffer.from("Bootstrapped 100%: Done\n")
+    );
+    manager.torProcess.stderr.emit("data", Buffer.from("notice something\n"));
+    manager.torProcess.stderr.emit("data", Buffer.from("fatal problem\n"));
+    manager.torProcess.emit("error", new Error("tor process crash"));
+
+    assert.equal(
+      progressCalls.some((call) =>
+        String(call[0]).includes("Tor bootstrapping... Bootstrapped 45%")
+      ),
+      true
+    );
+    assert.equal(
+      serviceCalls.some(
+        (call) => call[0] === "tor" && call[1] === "Tor is ready and running"
+      ),
+      true
+    );
+    assert.equal(
+      debugCalls.some((call) => String(call[0]).includes("Tor: fatal problem")),
+      true
+    );
+    assert.equal(manager.isStarting, false);
+  } finally {
+    logger.progress = originalProgress;
+    logger.service = originalService;
+    logger.debug = originalDebug;
+    await manager.stopTor();
+    process.env.PATH = originalPath;
+    await fakeTor.cleanup();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("TorManager createTorConfig creates torrc with expected content", async () => {
@@ -225,6 +478,41 @@ test("TorManager cleanup removes torrc and tolerates missing files", async () =>
     await manager.cleanup();
     assert.equal(stopCalls, 2);
   } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("TorManager cleanup logs warning when success logging throws", async () => {
+  const tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "watchman-tor-clean-")
+  );
+  const torrcPath = path.join(tempDir, "torrc");
+  await fs.writeFile(torrcPath, "test");
+
+  const manager = new TorManager({ dataDir: tempDir });
+  manager.stopTor = async () => {};
+
+  const warningCalls = [];
+  const originalWarning = logger.warning;
+  const originalSuccess = logger.success;
+  logger.warning = (...args) => {
+    warningCalls.push(args);
+  };
+  logger.success = () => {
+    throw new Error("logger failure");
+  };
+
+  try {
+    await manager.cleanup();
+    assert.equal(
+      warningCalls.some((call) =>
+        String(call[0]).includes("Could not clean up Tor data directory")
+      ),
+      true
+    );
+  } finally {
+    logger.warning = originalWarning;
+    logger.success = originalSuccess;
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });

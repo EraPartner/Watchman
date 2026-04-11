@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-04-11T10:27:00Z",
+  "commit": "5dc9b5e",
+  "branch": "main",
+  "mode": "safe",
+  "pattern": "sequential",
+  "qualityGates": {
+    "frontendTests": "pass (179/179)",
+    "backendTests": "pass (93/93)",
+    "frontendCoverage": {
+      "statements": 29.22,
+      "branches": 80.6,
+      "functions": 73.38,
+      "lines": 29.22
+    },
+    "backendCoverage": {
+      "lines": 98.29,
+      "branches": 93.46,
+      "functions": 95.92
+    }
+  },
+  "criticalTargets": [
+    "apps/frontend/src/components/LiveServerDashboard.tsx",
+    "apps/frontend/src/hooks/useWebSocket.ts",
+    "apps/frontend/src/components/UpdateBadge.tsx",
+    "apps/frontend/src/components/ServiceLink.tsx"
+  ],
+  "constraints": {
+    "dirtyWorktree": true,
+    "observation": "main branch has extensive unrelated local changes",
+    "isolationRequired": true,
+    "userConstraint": "no additional copied directories/worktrees",
+    "loopBranch": "coverage/loop-2026-04-11",
+    "obsidianMcpStatus": "unavailable"
+  },
+  "stopCondition": {
+    "maxIterations": 8,
+    "minimumRequirements": [
+      "frontend branch coverage >= 85",
+      "frontend function coverage >= 80",
+      "no net new test failures",
+      "all critical target files >= 85 line coverage"
+    ],
+    "fallbackExit": "stop after 2 consecutive iterations with <0.5 coverage improvement"
+  }
+}

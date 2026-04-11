@@ -2,7 +2,7 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-04-10
+date: 2026-04-11
 tags: [architecture, frontend, react, typescript]
 description: Frontend architecture documentation for the Watchman React application
 aliases: [frontend, react architecture, frontend design]
@@ -82,6 +82,7 @@ Each service has a dedicated card component with service-specific queries/render
 - **UpdateBadge query path** - `[[apps/frontend/src/components/UpdateBadge.tsx]]` uses `useQuery` with `queryKeys.serviceUpdates(service)` and `apiClient.getServiceUpdates(service)` for update checks
 - **Dashboard query orchestration** - `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` centralizes LiveServerDashboard queries and refresh behavior, with `torRelay` and `frontendConfig` fetched as separate queries
 - **Dashboard manual refresh scope** - `refreshEnabledQueries()` in `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` also refetches `servicesHealthQuery` so overview counters refresh with manual refresh
+- **Dashboard refresh coverage** - `[[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]]` covers `refreshEnabledQueries()` selective refetching for enabled services plus guaranteed `servicesHealth` refetch
 - **Dashboard tile helpers** - `[[apps/frontend/src/components/dashboard/dashboardData.ts]]` provides reusable instance-tile assembly helpers (`appendInstanceTiles`, `getInstanceNumber`)
 - **Dashboard section rendering** - `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]` centralizes repeated Software/Hardware tile-section rendering used by `[[apps/frontend/src/components/LiveServerDashboard.tsx]]`
 
@@ -89,6 +90,8 @@ Each service has a dedicated card component with service-specific queries/render
 
 - Frontend diagnostics for hooks/components are normalized through `[[apps/frontend/src/lib/logger.ts]]` rather than direct `console.*` usage in hot paths.
 - Recent cleanup updates include `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/hooks/useAuth.tsx]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`, and `[[apps/frontend/src/lib/csrf.ts]]`.
+- Logger redaction fallback now handles regex matches without a capture group by returning `[REDACTED]` (covered in `[[apps/frontend/src/lib/logger.test.ts]]`).
+- WebSocket hook behavior coverage now includes `[[apps/frontend/src/hooks/useWebSocket.test.tsx]]` for batched/deduped invalidation and alert/unknown message handling.
 
 ### Query Retry and Auth Bootstrap
 

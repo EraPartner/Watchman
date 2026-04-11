@@ -2,7 +2,7 @@
 title: Tor Integration
 type: integration
 status: active
-date: 2026-04-09
+date: 2026-04-11
 tags: [integration, services, backend, monitoring]
 description: Tor relay and proxy integration for Watchman
 aliases: [tor, tor relay, onion, tor proxy]
@@ -54,6 +54,15 @@ TOR_RELAY_IP=your-ip-address
 - Runtime root-level `.tor-data/` artifacts are ignored in git at repository root via [[.gitignore]]
 - SOCKS readiness/health checks use a local TCP socket probe on `127.0.0.1:{port}` instead of shelling out to `lsof`
 - Startup readiness polling uses backoff (`250ms` doubling up to `1000ms`) until timeout (`startupTimeout`)
+
+### Test Coverage Notes
+
+- [[apps/backend/tests/TorManager.test.js]] includes lifecycle/error-path coverage for [[apps/backend/services/TorManager.js]]:
+  - `isInstalled()` fallback from `which tor` to Homebrew detection
+  - `installTor()` success and failure paths
+  - `startTor()` bootstrap log handling from stdout/stderr plus child-process `error` path
+  - `cleanup()` warning-path behavior when success logger throws
+- Latest backend Node coverage run reports TorManager at **~95.90% lines / ~90.91% branches / ~90.63% functions**
 
 ## Frontend Component
 

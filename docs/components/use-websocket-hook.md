@@ -2,7 +2,7 @@
 title: useWebSocket Hook
 type: component
 status: active
-date: 2026-04-10
+date: 2026-04-11
 tags: [hook, frontend, react, websocket, real-time, singleton]
 description: Global singleton WebSocket hook with automatic reconnection, exponential backoff, connection throttling, and batched targeted React Query invalidation
 aliases: [websocket hook, real-time hook, ws hook]
@@ -99,6 +99,25 @@ In practice, flush-time deduplication currently covers these query-key families:
 
 Flush-time diagnostics use frontend logger methods (`logger.warn` for invalidation failures and `logger.debug` for batch summaries).
 
+## Test Coverage Notes
+
+Coverage now includes focused hook tests in [[apps/frontend/src/hooks/useWebSocket.test.tsx]] for [[apps/frontend/src/hooks/useWebSocket.ts]]:
+
+- batched/deduplicated `service_update` invalidation behavior for repeated updates on the same service key
+- aggregate `queryKeys.servicesHealth()` invalidation after service-update batches
+- `alert` message level routing (`error`, `warning`, `info`) to toast handlers
+- unknown-message warning-path logging behavior
+- disconnected-send warning behavior when `sendMessage` is called while not connected
+- send-error behavior when `sendMessage` is called while connected but `WebSocket.send()` throws
+- unmount-time invalidation flush behavior for queued service updates
+- malformed payload parse-error logging behavior for invalid JSON messages
+- reconnect scheduling/throttling behavior after abnormal close events
+- Tor invalidation family coverage (`queryKeys.torRelay()`) during relevant service updates
+- Router invalidation family coverage (`queryKeys.routerArp(...)`) for `beryl`/`telenet` update paths
+- metrics invalidation + connection toast behavior coverage (`queryKeys.metrics()` and `connection` message handling)
+- max reconnect attempts error-path coverage (stops retry loop and surfaces terminal reconnect failure behavior)
+- test cleanup stability coverage for singleton/global WebSocket state reset between tests
+
 ## Return Value
 
 ```typescript
@@ -140,6 +159,7 @@ function Dashboard() {
 
 - [[docs/features/real-time-updates|Real-Time Updates]]
 - [[docs/adr/005-real-time-websocket|ADR-005: Real-Time Communication via WebSocket]]
+- [[docs/testing/testing-strategy|Testing Strategy and Patterns]]
 - `[[apps/backend/services/WebSocketManager.js]]` — Backend WebSocket manager
 - `[[apps/frontend/src/services/ApiClient.ts]]` — API client (complementary communication)
 - `[[apps/frontend/src/lib/logger.ts]]` — Frontend structured logging utility

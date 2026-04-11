@@ -2,7 +2,7 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-04-09
+date: 2026-04-11
 tags: [feature, websocket, frontend, backend, real-time]
 description: WebSocket-based real-time status broadcasting for live dashboard updates
 aliases: [websocket, real-time, live updates, status broadcasting]
@@ -65,6 +65,22 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 3. On status change → broadcast to all connected clients
 4. Frontend receives update → re-renders affected components
 5. On disconnect → automatic reconnection with backoff
+
+## Test Coverage Notes
+
+- Frontend WebSocket message-handling coverage includes [[apps/frontend/src/hooks/useWebSocket.test.tsx]] for [[apps/frontend/src/hooks/useWebSocket.ts]]:
+  - batched/deduped `service_update` invalidation behavior
+  - alert-level toast routing (`error`/`warning`/`info`)
+  - unknown message-type warning path
+  - send-error handling when socket send fails despite an open-state call path
+  - unmount-time invalidation flush for queued service updates
+  - tor/router invalidation family behavior (`queryKeys.torRelay()` and `queryKeys.routerArp(...)`)
+  - metrics invalidation and `connection` message toast behavior
+  - max reconnect attempts error path and reconnect terminal-state handling
+  - cleanup stability for singleton WebSocket state across tests
+- Frontend notification-state coverage now also includes [[apps/frontend/src/hooks/use-toast.test.tsx]] for [[apps/frontend/src/hooks/use-toast.ts]]:
+  - reducer limit and dismiss-all behavior
+  - hook lifecycle coverage for add/update/dismiss/remove transitions
 
 ## PlantUML Diagrams
 

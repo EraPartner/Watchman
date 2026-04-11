@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-04-10
+date: 2026-04-11
 tags: [architecture, backend, express, nodejs, middleware, services]
 description: Backend architecture documentation for the Watchman Node.js/Express server - includes middleware, services, routes, and configuration
 aliases:
@@ -134,6 +134,15 @@ All services extend a common pattern:
 - Runtime readiness and health checks use local TCP connect probing on `127.0.0.1:{socksPort}`.
 - Startup wait loop uses bounded exponential backoff (`250ms` → `500ms` → `1000ms` max) until `startupTimeout`.
 - Cleanup removes generated `torrc` only and preserves Tor cache/state artifacts for faster subsequent starts.
+
+#### TorManager test coverage notes
+
+- [[apps/backend/tests/TorManager.test.js]] now explicitly validates:
+  - `isInstalled()` fallback from `which tor` failure to Homebrew detection
+  - `installTor()` success and failure paths
+  - `startTor()` stdout/stderr bootstrap log handling and child-process `error` path
+  - `cleanup()` warning path when success logger invocation throws
+  - measured coverage for [[apps/backend/services/TorManager.js]]: **~95.90% lines / ~90.91% branches / ~90.63% functions**
 
 ### Shared Utilities
 

@@ -49,6 +49,9 @@ class Logger {
 
     redactPatterns.forEach((pattern) => {
       redacted = redacted.replace(pattern, (match, group) => {
+        if (typeof group !== "string" || group.length === 0) {
+          return "[REDACTED]";
+        }
         return match.replace(group, "[REDACTED]");
       });
     });

@@ -39,6 +39,25 @@ test("issueCsrfToken sets csrf cookie and returns generated token", () => {
   assert.equal(state.cookieCall.options.path, "/");
 });
 
+test("issueCsrfToken sets secure strict cookie in production", () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+
+  try {
+    const { res, state } = createResponse();
+    issueCsrfToken(res);
+
+    assert.equal(state.cookieCall.options.secure, true);
+    assert.equal(state.cookieCall.options.sameSite, "strict");
+  } finally {
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  }
+});
+
 test("verifyCsrf bypasses GET/HEAD/OPTIONS", () => {
   for (const method of ["GET", "HEAD", "OPTIONS"]) {
     const req = { method, headers: {}, cookies: {} };

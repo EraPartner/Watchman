@@ -131,3 +131,38 @@ test("responseSizeLimit destroys socket when limit exceeded after headers sent",
   assert.equal(state.socketDestroyCalls, 1);
   assert.equal(response.socket.destroyed, true);
 });
+
+test("responseSizeLimit coerces object chunks when calculating size", () => {
+  const middleware = responseSizeLimit({ maxSize: 5 });
+  const req = createMockRequest();
+  const { response, state } = createMockResponse({ headersSent: false });
+
+  middleware(req, response, () => {});
+
+  const writeResult = response.write({
+    toString() {
+      return "123456";
+    },
+  });
+
+  assert.equal(writeResult, false);
+  assert.equal(response.statusCode, 413);
+  assert.equal(state.ends.length, 1);
+  assert.equal(state.socketDestroyCalls, 0);
+});
+
+test("responseSizeLimit returns false for writes after limit has been exceeded", () => {
+  const middleware = responseSizeLimit({ maxSize: 5 });
+  const req = createMockRequest();
+  const { response, state } = createMockResponse({ headersSent: false });
+
+  middleware(req, response, () => {});
+
+  const firstWriteResult = response.write("123456");
+  const secondWriteResult = response.write("1");
+
+  assert.equal(firstWriteResult, false);
+  assert.equal(secondWriteResult, false);
+  assert.equal(response.statusCode, 413);
+  assert.equal(state.ends.length, 1);
+});

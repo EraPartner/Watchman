@@ -2,7 +2,7 @@
 title: Service Monitoring
 type: feature
 status: active
-date: 2026-04-09
+date: 2026-04-11
 tags: [feature, monitoring, backend, services]
 description: Core service monitoring feature - health checks and statistics for self-hosted services
 aliases: [monitoring, health checks, service status]
@@ -89,6 +89,17 @@ Services use circuit breaker pattern to prevent cascading failures:
 - **Failure threshold**: 5 consecutive failures
 - **Reset timeout**: 30 seconds
 - **Request timeout**: 5 seconds
+
+## Frontend Coverage Notes (Monitoring UI)
+
+- Dashboard query-orchestration coverage in [[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]] for [[apps/frontend/src/components/dashboard/useDashboardQueries.ts]] now includes:
+  - selective refetching for enabled service queries
+  - always-refetched aggregate `servicesHealth`
+  - expanded enablement branches for `frontendConfig` and `qbittorrent`
+- Shared monitoring UI coverage now includes:
+  - [[apps/frontend/src/components/UpdateBadge.test.tsx]] for update-check + click behavior in [[apps/frontend/src/components/UpdateBadge.tsx]]
+  - [[apps/frontend/src/components/ServiceLink.test.tsx]] for host-only link display and click behavior in [[apps/frontend/src/components/ServiceLink.tsx]]
+  - [[apps/frontend/src/components/ServerStatusBadge.test.tsx]] for status variant rendering in [[apps/frontend/src/components/ServerStatusBadge.tsx]]
 
 ## PlantUML Diagrams
 

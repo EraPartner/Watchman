@@ -195,4 +195,47 @@ describe("ApiClientEndpoints", () => {
     await endpoints.getServiceStats("bitcoin");
     expect(core.request).toHaveBeenNthCalledWith(5, "/api/bitcoin/stats");
   });
+
+  it("maps remaining service endpoint wrappers", async () => {
+    const core = createCoreStub();
+    core.request.mockResolvedValue({});
+    const endpoints = new ApiClientEndpoints(core as never);
+
+    await endpoints.getTorHealth();
+    await endpoints.getSynologyStatus();
+    await endpoints.getSynologyStats();
+    await endpoints.getRoonStatus();
+    await endpoints.getRoonStats();
+    await endpoints.getPhilipsStatus();
+    await endpoints.getPhilipsStats();
+    await endpoints.getHomebridgeVersion();
+    await endpoints.getHomebridgeAccessories();
+    await endpoints.getAlbyStatus();
+    await endpoints.getAlbyStats();
+
+    expect(core.request).toHaveBeenNthCalledWith(1, "/api/tor/health");
+    expect(core.request).toHaveBeenNthCalledWith(2, "/api/synology/status");
+    expect(core.request).toHaveBeenNthCalledWith(3, "/api/synology/stats");
+    expect(core.request).toHaveBeenNthCalledWith(4, "/api/roon/status");
+    expect(core.request).toHaveBeenNthCalledWith(5, "/api/roon/stats");
+    expect(core.request).toHaveBeenNthCalledWith(6, "/api/philips/status");
+    expect(core.request).toHaveBeenNthCalledWith(7, "/api/philips/stats");
+    expect(core.request).toHaveBeenNthCalledWith(
+      8,
+      "/api/status/homebridge-version"
+    );
+    expect(core.request).toHaveBeenNthCalledWith(9, "/api/accessories");
+    expect(core.request).toHaveBeenNthCalledWith(10, "/api/albyhub/status");
+    expect(core.request).toHaveBeenNthCalledWith(11, "/api/albyhub/stats");
+  });
+
+  it("uses /api/tor/relay when nickname is omitted", async () => {
+    const core = createCoreStub();
+    core.request.mockResolvedValue({});
+    const endpoints = new ApiClientEndpoints(core as never);
+
+    await endpoints.getTorRelay();
+
+    expect(core.request).toHaveBeenCalledWith("/api/tor/relay");
+  });
 });

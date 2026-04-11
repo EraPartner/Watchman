@@ -60,7 +60,7 @@ See [[docs/guides/deployment|Deployment Guide]] for production security checklis
   - includes login page redirect, missing-credentials validation, remember-me success, failed login rendering, default fallback message, auth-context error rendering, and loading/disabled submit coverage
 - Frontend CSRF utility coverage: [[apps/frontend/src/lib/csrf.test.ts]] (+6)
   - includes token header injection, cookie-read exception logging, `hasToken()` absent-token false-path, missing-token no-header behavior, empty config fallback, and custom cookie/header config token injection
-- Frontend API auth-adjacent endpoint coverage: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 8 tests)
+- Frontend API auth-adjacent endpoint coverage: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 11 tests)
   - includes login fallback token handling and endpoint composition edge cases
 - Backend auth/csrf edge-branch coverage: [[apps/backend/tests/authMiddleware.test.js]], [[apps/backend/tests/authToken.test.js]], [[apps/backend/tests/csrf.test.js]]
   - auth and csrf middleware now report **100% line coverage**

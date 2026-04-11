@@ -2,7 +2,7 @@
 title: Authentication
 type: security
 status: active
-date: 2026-04-10
+date: 2026-04-11
 tags: [security, authentication, backend, jwt]
 description: Authentication system documentation - JWT, cookies, and CSRF protection
 aliases: [auth, jwt, csrf, login, authentication]
@@ -126,11 +126,14 @@ Recent auth/CSRF-focused test additions and expansions:
   - default login error fallback rendering (`Login failed`)
   - auth-context error rendering
   - loading/disabled submit behavior
-- Frontend API auth-related endpoint behavior: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 8 tests)
+- Frontend API auth-related endpoint behavior: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 11 tests)
   - includes login fallback token path and endpoint composition edge cases used by auth surface
 - Backend auth and CSRF middleware coverage: [[apps/backend/tests/authMiddleware.test.js]], [[apps/backend/tests/csrf.test.js]]
   - both currently at **100% line coverage**
+  - includes `requireAuth` no-`iat` decoded-token path (`tokenIssuedAt` is `undefined`)
+  - includes production CSRF cookie-option assertions (`secure=true`, `sameSite='strict'`)
 - Backend auth token edge parsing (non-object request and empty-key cookie): [[apps/backend/tests/authToken.test.js]]
+- Backend auth route integration edge handling: [[apps/backend/tests/authRoutes.integration.test.js]] now covers `/api/auth/me` non-object decoded-token fallback behavior
 
 Session coverage snapshot:
 

@@ -2,7 +2,7 @@
 title: Frontend Components
 type: index
 status: active
-date: 2026-04-10
+date: 2026-04-11
 tags: [component, index, frontend, ui]
 description: Index of all React component and hook documentation for the Watchman frontend
 aliases: [components index, react components, ui components]
@@ -52,6 +52,13 @@ SORT file.name ASC
 | [[docs/components/update-badge\|UpdateBadge]]                  | Available updates badge     | [[apps/frontend/src/components/UpdateBadge.tsx]]         |
 | [[docs/components/live-server-dashboard\|LiveServerDashboard]] | Main dashboard orchestrator | [[apps/frontend/src/components/LiveServerDashboard.tsx]] |
 
+### Shared Component Coverage Notes
+
+- [[apps/frontend/src/components/UpdateBadge.test.tsx]] covers 503-hidden behavior, warning-log path, and release-link click behavior for [[apps/frontend/src/components/UpdateBadge.tsx]].
+- [[apps/frontend/src/components/ServiceLink.test.tsx]] covers `hostOnly` rendering and click-through behavior for [[apps/frontend/src/components/ServiceLink.tsx]].
+- [[apps/frontend/src/components/ServerStatusBadge.test.tsx]] covers all status variant labels for [[apps/frontend/src/components/ServerStatusBadge.tsx]] (`loading`, `online`, `warning`, `error`, `maintenance`, `offline`).
+- [[apps/frontend/src/components/LiveServerDashboard.test.tsx]] coverage includes refresh pending-state behavior, stacked IPFS/Homebridge rendering path, and system health label matrix assertions for [[apps/frontend/src/components/LiveServerDashboard.tsx]].
+
 ## Custom Hooks
 
 | Hook                                                                                              | Description                       | File                                                |
@@ -65,6 +72,12 @@ SORT file.name ASC
 | [[docs/components/use-mobile-hook\|use-mobile]]                                                   | Mobile breakpoint detection       | [[apps/frontend/src/hooks/use-mobile.tsx]]          |
 | [[docs/components/use-toast-hook\|use-toast]]                                                     | Toast notifications               | [[apps/frontend/src/hooks/use-toast.ts]]            |
 
+### Hook Coverage Notes
+
+- [[apps/frontend/src/hooks/use-toast.test.tsx]] covers reducer and hook lifecycle behavior for [[apps/frontend/src/hooks/use-toast.ts]] (toast limit, dismiss-all, add/update/dismiss/remove lifecycle).
+- [[apps/frontend/src/hooks/use-mobile.test.tsx]] covers breakpoint reactivity and unmount cleanup behavior for [[apps/frontend/src/hooks/use-mobile.tsx]].
+- [[apps/frontend/src/hooks/useWebSocket.test.tsx]] expanded coverage includes tor/router invalidation families, metrics invalidation + connection toast handling, max reconnect-attempts error path, and cleanup stability for [[apps/frontend/src/hooks/useWebSocket.ts]].
+
 ## Pages
 
 | Page      | Route    | File                                     |
@@ -72,6 +85,10 @@ SORT file.name ASC
 | Dashboard | `/`      | [[apps/frontend/src/pages/Index.tsx]]    |
 | Login     | `/login` | [[apps/frontend/src/pages/Login.tsx]]    |
 | Not Found | `*`      | [[apps/frontend/src/pages/NotFound.tsx]] |
+
+### Page Test Coverage Notes
+
+- Dashboard page coverage added in [[apps/frontend/src/pages/Index.test.tsx]] for [[apps/frontend/src/pages/Index.tsx]] (now ~88% lines).
 
 ## Services and Utilities
 
@@ -83,6 +100,12 @@ SORT file.name ASC
 | `apiClient/types`     | Shared API response/request types              | [[apps/frontend/src/services/apiClient/types.ts]]                                                                          |
 | `queryKeys`           | Centralized React Query key factory            | [[apps/frontend/src/lib/queryKeys.ts]]                                                                                     |
 | Dashboard helpers     | Extracted dashboard status/data helpers        | [[apps/frontend/src/components/dashboard/dashboardStatus.ts]], [[apps/frontend/src/components/dashboard/dashboardData.ts]] |
+
+### Dashboard Helper Test Coverage Notes
+
+- [[apps/frontend/src/components/dashboard/dashboardData.test.ts]] validates dashboard data helper behavior in [[apps/frontend/src/components/dashboard/dashboardData.ts]].
+- [[apps/frontend/src/components/dashboard/dashboardStatus.test.ts]] validates status mapping and aggregate counter derivation in [[apps/frontend/src/components/dashboard/dashboardStatus.ts]].
+- [[apps/frontend/src/hooks/useWebSocket.test.tsx]] expands hook-level real-time coverage tied to dashboard refresh behavior via query invalidation.
 
 > [!note]
 > Legacy files removed during refactors: `use-config.tsx`, `useServicesHealth.ts`, `RequestOptimizer.ts`, `OptimizedServiceCard.tsx`, and `PerformantServiceCard.tsx`.
