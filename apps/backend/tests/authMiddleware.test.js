@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import {
   signToken,
   verifyToken,
@@ -191,5 +192,36 @@ test("requireAuth calls next and attaches decoded user with tokenIssuedAt", asyn
       req.user.tokenIssuedAt,
       new Date(decoded.iat * 1000).toISOString()
     );
+  });
+});
+
+test("requireAuth sets tokenIssuedAt undefined when token has no iat", async () => {
+  await withEnv({ JWT_SECRET: "test-secret" }, () => {
+    const token = jwt.sign(
+      { id: "admin", role: "user" },
+      process.env.JWT_SECRET,
+      {
+        algorithm: "HS256",
+        expiresIn: "1h",
+        noTimestamp: true,
+      }
+    );
+
+    const { res } = createMockResponse();
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
+      cookies: {},
+      user: undefined,
+    };
+    let nextCalled = false;
+
+    requireAuth(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.equal(nextCalled, true);
+    assert.equal(req.user.id, "admin");
+    assert.equal(req.user.role, "user");
+    assert.equal(req.user.tokenIssuedAt, undefined);
   });
 });

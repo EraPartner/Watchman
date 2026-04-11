@@ -299,3 +299,23 @@ test("GET /api/auth/me falls back to sub when username is empty", async () => {
     }
   );
 });
+
+test("GET /api/auth/me handles non-object decoded token safely", async () => {
+  await withAuthApp(
+    {
+      authReturnToken: false,
+      extractAuthToken: () => "token",
+      verifyToken: () => "not-an-object",
+    },
+    async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/auth/me`);
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(body, {
+        authenticated: true,
+        user: {},
+      });
+    }
+  );
+});
