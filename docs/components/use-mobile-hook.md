@@ -2,7 +2,7 @@
 title: "Hook: useIsMobile"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-11
 tags: [hook, frontend, react, responsive, viewport]
 description: React hook for detecting mobile viewport state using matchMedia
 aliases: [use is mobile, mobile detection, responsive hook, viewport hook]
@@ -65,6 +65,13 @@ None (uses only React and browser APIs).
 ## Source
 
 - [[apps/frontend/src/hooks/use-mobile.tsx]]
+- [[apps/frontend/src/hooks/use-mobile.test.tsx]]
+
+## Test Coverage Notes
+
+- [[apps/frontend/src/hooks/use-mobile.test.tsx]] validates responsive behavior for [[apps/frontend/src/hooks/use-mobile.tsx]]:
+  - returns `true` below the `768px` breakpoint and updates to `false` after a viewport-width change event
+  - removes the media query `change` listener on unmount (cleanup behavior)
 
 ## Related
 

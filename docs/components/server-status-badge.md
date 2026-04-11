@@ -2,7 +2,7 @@
 title: ServerStatusBadge Component
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-11
 tags: [component, frontend, react, badge, status]
 description: Reusable status badge component displaying online/offline/loading/warning/error/maintenance states with icons and colors
 aliases: [status badge, server status, health badge]
@@ -46,6 +46,16 @@ aliases: [status badge, server status, health badge]
 - **Maintenance state** — Outlined badge with wifi icon
 - **Default (offline)** — Falls through to offline display for unknown statuses
 
+## Test Coverage
+
+- `[[apps/frontend/src/components/ServerStatusBadge.test.tsx]]` verifies status-variant rendering for `[[apps/frontend/src/components/ServerStatusBadge.tsx]]`:
+  - loading → `Loading`
+  - online → `Online`
+  - warning → `Warning`
+  - error → `Error`
+  - maintenance → `Maintenance`
+  - offline → `Offline`
+
 ## Usage
 
 ```tsx
@@ -66,3 +76,8 @@ import { ServerStatusBadge } from "@/components/ServerStatusBadge";
 
 - `@/components/ui/badge` — shadcn/ui Badge component
 - `lucide-react` — Icon library (CheckCircle, AlertCircle, RefreshCw, Wifi)
+
+## Related
+
+- [[docs/components/index|Components Index]]
+- [[apps/frontend/src/components/ServerStatusBadge.test.tsx]]

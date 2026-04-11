@@ -2,7 +2,7 @@
 title: Code Patterns
 type: reference
 status: active
-date: 2026-04-09
+date: 2026-04-10
 tags: [reference, code-patterns, backend, frontend]
 description: Standard code patterns and conventions used across the Watchman codebase
 aliases: [patterns, conventions, code style, best practices]
@@ -135,6 +135,10 @@ logger.error("Unhandled UI error", { error, componentStack });
 Use `unknown` in catch blocks and narrow before logging details where needed.
 
 Related files: `[[apps/frontend/src/lib/logger.ts]]`, `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/hooks/useAuth.tsx]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`, `[[apps/frontend/src/lib/csrf.ts]]`.
+
+Redaction behavior note: in `[[apps/frontend/src/lib/logger.ts]]`, when a redaction regex matches without a capture group, the replacement falls back to `[REDACTED]`.
+
+Coverage reference: `[[apps/frontend/src/lib/logger.test.ts]]` validates this fallback branch and standard redaction behavior.
 
 ### Service Card Pattern
 

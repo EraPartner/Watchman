@@ -2,7 +2,7 @@
 title: "Component: LiveServerDashboard"
 type: component
 status: active
-date: 2026-04-09
+date: 2026-04-11
 tags: [component, frontend, react, page, dashboard, layout]
 description: Main dashboard component that orchestrates all service cards into a responsive grid layout
 aliases: [live server dashboard, dashboard, main dashboard, home page]
@@ -22,6 +22,7 @@ Serves as the primary view of the Watchman application. Orchestrates data fetchi
 Uses `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` to centralize dashboard query definitions, query keys, and refresh behavior for enabled services. Query keys remain centralized in `[[apps/frontend/src/lib/queryKeys.ts]]`:
 
 - `refreshEnabledQueries()` also refetches `queryKeys.servicesHealth()` so overview counters update during manual dashboard refresh.
+- Refresh-scope behavior is covered in [[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]]: enabled-service queries are refetched selectively, and `servicesHealth` is always refetched.
 
 | Query Key                                | Data                              | Refetch Interval                      |
 | ---------------------------------------- | --------------------------------- | ------------------------------------- |
@@ -71,6 +72,9 @@ This component takes no props. It derives all data from:
 - `[[apps/frontend/src/hooks/useServiceInstances|useServiceInstances]]`
 - `[[apps/frontend/src/lib/queryKeys.ts]]`
 - `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]`
+- `[[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]]`
+- `[[apps/frontend/src/components/dashboard/dashboardData.test.ts]]`
+- `[[apps/frontend/src/components/dashboard/dashboardStatus.test.ts]]`
 - `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]`
 - `[[apps/frontend/src/components/dashboard/dashboardStatus.ts]]`
 - `[[apps/frontend/src/components/dashboard/dashboardData.ts]]`
@@ -91,6 +95,17 @@ This component takes no props. It derives all data from:
 ## Source
 
 - [[apps/frontend/src/components/LiveServerDashboard.tsx]]
+
+## Test Coverage Notes
+
+- [[apps/frontend/src/components/LiveServerDashboard.test.tsx]] validates dashboard-level behavior in [[apps/frontend/src/components/LiveServerDashboard.tsx]]:
+  - loading-state rendering while dashboard data is still resolving
+  - overview counter derivation for mixed online/offline/warning service payloads
+  - refresh pending-state rendering/UX behavior during manual refresh cycles
+  - stacked Network tile rendering path for IPFS + Homebridge composition
+  - system health label matrix coverage for online/warning/offline combinations
+- [[apps/frontend/src/components/dashboard/dashboardData.test.ts]] covers helper logic used by dashboard tile composition in [[apps/frontend/src/components/dashboard/dashboardData.ts]] (stats normalization, chunking, and instance-tile assembly branches).
+- [[apps/frontend/src/components/dashboard/dashboardStatus.test.ts]] covers aggregate status mapping/counting used by dashboard overview counters in [[apps/frontend/src/components/dashboard/dashboardStatus.ts]].
 
 ## Related
 

@@ -2,7 +2,7 @@
 title: "Component: ServiceLink"
 type: component
 status: active
-date: 2026-04-02
+date: 2026-04-11
 tags: [component, frontend, react, shared, navigation]
 description: Reusable external link button for service web interfaces with URL normalization
 aliases: [service link, external link button, url button]
@@ -37,6 +37,13 @@ Provides a consistent way to display clickable links to monitored services' web 
 - Opens links via `openHref()` which handles new tab creation
 - Renders a small external link icon (Lucide `ExternalLink`) next to the URL
 
+## Test Coverage
+
+- `[[apps/frontend/src/components/ServiceLink.test.tsx]]` covers `[[apps/frontend/src/components/ServiceLink.tsx]]` behavior:
+  - missing `raw` URL path renders `N/A` and avoids URL helper calls
+  - `hostOnly` display behavior renders host-focused label without using `formatDisplayUrl()`
+  - click behavior opens the computed href via `openHref()`
+
 ## Usage Example
 
 ```tsx
@@ -60,6 +67,7 @@ import ServiceLink from "./ServiceLink";
 ## Source
 
 - [[apps/frontend/src/components/ServiceLink.tsx]]
+- [[apps/frontend/src/components/ServiceLink.test.tsx]]
 
 ## Related
 

@@ -2,7 +2,7 @@
 title: "Component: UpdateBadge"
 type: component
 status: active
-date: 2026-04-09
+date: 2026-04-11
 tags: [component, frontend, react, shared, updates, version]
 description: Displays update availability badge for services with clickable release notes link
 aliases: [update badge, version badge, update available]
@@ -34,6 +34,13 @@ Provides a visual indicator when a monitored service has a newer version availab
 - Hides on error or when no update is available
 - Shows a red destructive badge with `AlertCircle` icon when update is available
 - Clicking the badge opens the release URL in a new tab
+
+## Test Coverage
+
+- `[[apps/frontend/src/components/UpdateBadge.test.tsx]]` covers key behavior in `[[apps/frontend/src/components/UpdateBadge.tsx]]`:
+  - 503 response path resolves to hidden output (`null`) with debug logging (service not configured)
+  - warning logging path when React Query returns an error
+  - update-available rendering path including click behavior that opens the release URL in a new tab
 
 ## Implementation Notes
 
@@ -84,6 +91,7 @@ import { UpdateBadge } from "./UpdateBadge";
 ## Source
 
 - [[apps/frontend/src/components/UpdateBadge.tsx]]
+- [[apps/frontend/src/components/UpdateBadge.test.tsx]]
 
 ## Related
 

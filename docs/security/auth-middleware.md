@@ -2,7 +2,7 @@
 title: Auth Middleware
 type: security
 status: active
-date: 2026-04-10
+date: 2026-04-11
 tags: [security, middleware, authentication, jwt, backend]
 description: Authentication middleware documentation - JWT token handling, credential validation, and requireAuth middleware
 aliases: [auth middleware, jwt middleware, authentication, requireAuth]
@@ -119,8 +119,9 @@ if (user) {
 ## Coverage Notes
 
 - `requireAuth` and credential error-path behavior are covered in [[apps/backend/tests/authMiddleware.test.js]], including the bcrypt failure branch.
+- `requireAuth` decoded-token handling now explicitly covers payloads without `iat` in [[apps/backend/tests/authMiddleware.test.js]] (`req.user.tokenIssuedAt` stays `undefined`).
 - Token extraction/verification edge cases are covered in [[apps/backend/tests/authToken.test.js]], including non-object request handling and empty-key cookie parsing behavior.
-- CSRF validation edge cases for state-changing requests are covered in [[apps/backend/tests/csrf.test.js]], including mismatched-length token rejection.
+- CSRF validation edge cases for state-changing requests are covered in [[apps/backend/tests/csrf.test.js]], including mismatched-length token rejection and production cookie options (`secure=true`, `sameSite='strict'`).
 
 ## PlantUML Diagrams
 

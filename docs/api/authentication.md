@@ -2,7 +2,7 @@
 title: "API: Authentication Endpoints"
 type: api
 status: active
-date: 2026-04-10
+date: 2026-04-11
 tags: [api, auth, authentication, backend, jwt, csrf]
 description: Authentication API endpoints - login, logout, and auth status check
 aliases: [auth endpoints, login api, logout api]
@@ -92,6 +92,9 @@ JWT signing details:
 - Route module: [[apps/backend/routes/authRoutes.js]]
 - Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
 - Auth middleware: [[apps/backend/middleware/auth.js]]
+
+Integration coverage notes: [[apps/backend/tests/authRoutes.integration.test.js]] includes `/api/auth/me` fallback behavior when decoded token payload is non-object.
+
 - CSRF middleware: [[apps/backend/middleware/csrf.js]]
 - Lockout middleware: [[apps/backend/middleware/accountLockout.js]]
 - IP normalization utility used for auth/lockout keying: [[apps/backend/utils/ip.js]]
