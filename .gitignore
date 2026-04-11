@@ -51,7 +51,7 @@ yarn.lock
 pnpm-lock.yaml
 
 # Test coverage
-coverage
+coverage*
 .nyc_output
 
 # Cache
@@ -62,3 +62,9 @@ coverage
 # OS files
 .DS_Store
 Thumbs.db
+
+# Agent/IDE configs (local only)
+.obsidian/
+.claude/
+.opencode/
+AGENTS.*
