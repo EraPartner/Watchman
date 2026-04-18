@@ -2,239 +2,220 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-04-11
-tags: [architecture, backend, express, nodejs, middleware, services]
-description: Backend architecture documentation for the Watchman Node.js/Express server - includes middleware, services, routes, and configuration
+date: 2026-04-18
+tags: [architecture, backend, fastify, typescript, nodejs, services]
+description: Backend architecture documentation for the Watchman TypeScript/Fastify server - includes layered architecture, services, routes, and in-process state
 aliases:
-  [backend, server architecture, express architecture, backend docs, api server]
+  [backend, server architecture, fastify architecture, backend docs, api server]
 ---
 
 # Backend Architecture
 
 > [!abstract] Overview
-> The Watchman backend is a Node.js/Express server that orchestrates service integrations, handles authentication, and provides a REST API with WebSocket support.
+> The Watchman backend is a TypeScript + Fastify 4 server with layered architecture (config → core → infra → domain → application → transport). It orchestrates service integrations via BaseService subclasses, handles authentication, and provides REST API + WebSocket with in-process LRU caching and croner-based polling.
+
+## Layered Architecture
+
+The backend uses a clean layered architecture where dependencies flow downward only:
+
+```
+config/        → Environment validation (Zod), service registry
+↓
+core/          → Logger (Pino), DomainError hierarchy, Result<T>, clock, eventBus, container
+↓
+infra/         → HTTP (Undici), SSH (ssh2), GPIO (pigpio-client), SNMP (net-snmp)
+                → Cache (LRU with SWR), Scheduler (croner), CircuitBreaker, Metrics
+↓
+domain/        → BaseService abstract, ServiceRegistry keyed by ${kind}:${instanceId}
+↓
+application/   → UseCases: GetServiceStatus, GetAggregatedHealth, ControlService, ListInstances
+↓
+transport/     → HTTP (Fastify routes), WebSocket (AuthGate, ConnectionManager, Broadcaster)
+```
+
+Each layer has clear responsibilities and minimal coupling.
 
 ## Entry Point
 
-[[apps/backend/server.js|server.js]] now acts as a composition root, delegating setup into bootstrap modules:
+[[apps/backend/src/index.ts|index.ts]] bootstraps the application:
 
-- [[apps/backend/bootstrap/configureMiddleware.js]] - middleware stack and platform middleware wiring
-- [[apps/backend/bootstrap/registerRoutes.js]] - API route registration, health route, 404/error handlers, SPA fallback
-- [[apps/backend/bootstrap/shutdown.js]] - signal/error shutdown handler attachment and graceful shutdown routine
-- [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]] - API route module composition
+1. Loads and validates environment (Zod schema)
+2. Initializes core layer (logger, errorHandler, eventBus)
+3. Sets up infra layer (cache, circuitBreaker, httpClient, sshClient)
+4. Loads services from [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry]]
+5. Registers domain layer (BaseService instances in ServiceRegistry)
+6. Mounts HTTP routes and WebSocket handlers via Fastify
+7. Attaches graceful shutdown handler (SIGTERM, SIGINT)
+8. Starts background poller (croner-based, with AbortSignal for clean shutdown)
 
-- Startup logging is intentionally conservative: it no longer advertises `/api/tor/proxy/health` in boot output.
+## Plugin Stack (in order)
 
-## Middleware Stack (in order)
+Fastify plugins are registered in the following order in [[apps/backend/src/index.ts|index.ts]]:
 
-Middleware is applied in the following order in [[apps/backend/bootstrap/configureMiddleware.js]] (invoked by [[apps/backend/server.js|server.js]]):
+| #   | Plugin                  | Purpose                                                          |
+| --- | ----------------------- | ---------------------------------------------------------------- |
+| 1   | `@fastify/compress`     | gzip/brotli response compression                                 |
+| 2   | Helmet security headers | Security headers (CSP, HSTS, X-Frame-Options, etc.)              |
+| 3   | CORS pre-flight handler | CORS restrictions using normalized frontend origin allowlist     |
+| 4   | Request ID middleware   | Unique request ID attachment for logging correlation             |
+| 5   | Structured logger       | Pino-based JSON logging with automatic request/response tracking |
+| 6   | IP control middleware   | IP whitelist/blacklist enforcement on sensitive routes           |
+| 7   | JWT authentication      | Token validation from cookies or Authorization header            |
+| 8   | CSRF protection         | Double-submit cookie pattern for state-changing requests         |
+| 9   | Rate limiting           | Tiered per-IP throttling (health, auth, control, general)        |
+| 10  | Circuit breaker hooks   | Service availability checks before routing                       |
 
-| #   | Middleware                | File                                              | Purpose                                                         |
-| --- | ------------------------- | ------------------------------------------------- | --------------------------------------------------------------- |
-| 1   | `requestIdMiddleware`     | [[apps/backend/middleware/logger.js]]             | Unique request ID tracking for logging correlation              |
-| 2   | `requestLogger`           | [[apps/backend/middleware/logger.js]]             | Structured JSON logging with PII redaction                      |
-| 3   | `performanceMonitor`      | [[apps/backend/middleware/performanceMonitor.js]] | Request performance tracking and metrics                        |
-| 4   | `enforceIPControl`        | [[apps/backend/middleware/ipControl.js]]          | IP whitelist/blacklist enforcement                              |
-| 5   | `requestTimeout`          | [[apps/backend/middleware/requestTimeout.js]]     | Global request timeout (default 30s)                            |
-| 6   | `responseSizeLimit`       | [[apps/backend/middleware/responseSizeLimit.js]]  | Large response prevention (default 5MB)                         |
-| 7   | `apiResponseStandardizer` | [[apps/backend/middleware/apiResponse.js]]        | Response format standardization                                 |
-| 8   | `helmet`                  | External (helmet package)                         | Security headers (CSP, HSTS, etc.)                              |
-| 9   | `cors`                    | External (cors package)                           | CORS restrictions using precomputed normalized origin allowlist |
-| 10  | `compression`             | External (compression package)                    | gzip compression                                                |
+Request timeout and cancellation use Fastify's native request lifecycle hooks with AbortSignal propagation through service layers, allowing graceful cancellation on timeout or client disconnect.
 
-`requestTimeout` now attaches `req.requestAbortController` and `req.requestAbortSignal`, aborting downstream work on timeout and client disconnect.
+## Core Layer
 
-## Middleware Reference
+The core layer (`[[apps/backend/src/core/]]`) provides shared foundations:
 
-### Authentication & Security
+| Module              | Purpose                                                                        |
+| ------------------- | ------------------------------------------------------------------------------ |
+| logger              | Pino-based structured JSON logging with request ID correlation                |
+| errors              | DomainError hierarchy (NotFound, Unavailable, Unauthorized, Timeout, etc.)   |
+| Result              | Result<T, E> type for explicit success/failure semantics (no thrown errors)   |
+| clock               | Clock interface with real and test implementations for time-dependent logic   |
+| eventBus            | Pub/sub event emission for status change notifications (WebSocket broadcast) |
+| container           | Simple service container for dependency injection (no external DI library)   |
 
-| Middleware                                  | File                | Description                   |
-| ------------------------------------------- | ------------------- | ----------------------------- | --------------------------------------------------------- |
-| [[apps/backend/middleware/auth.js           | auth.js]]           | JWT authentication middleware | Validates JWT tokens from cookies or Authorization header |
-| [[apps/backend/middleware/csrf.js           | csrf.js]]           | CSRF protection               | Double-submit cookie pattern for state-changing requests  |
-| [[apps/backend/middleware/ipControl.js      | ipControl.js]]      | IP control                    | Whitelist/blacklist enforcement for sensitive endpoints   |
-| [[apps/backend/middleware/rateLimiting.js   | rateLimiting.js]]   | Rate limiting                 | Tiered request throttling per IP address                  |
-| [[apps/backend/middleware/accountLockout.js | accountLockout.js]] | Account lockout               | Failed login tracking and temporary lockout               |
+## Infrastructure Layer
 
-### Request Processing
+The infra layer (`[[apps/backend/src/infra/]]`) provides protocol-agnostic adapters:
 
-| Middleware                                     | File                   | Description         |
-| ---------------------------------------------- | ---------------------- | ------------------- | ------------------------------------------------ |
-| [[apps/backend/middleware/cache.js             | cache.js]]             | Response caching    | In-memory cache with TTL (30s health, 60s stats) |
-| [[apps/backend/middleware/validation.js        | validation.js]]        | Input validation    | Parameter sanitization and type checking         |
-| [[apps/backend/middleware/serviceEnabled.js    | serviceEnabled.js]]    | Service check       | Verifies service is enabled before processing    |
-| [[apps/backend/middleware/requestTimeout.js    | requestTimeout.js]]    | Request timeout     | Global timeout prevents hanging requests         |
-| [[apps/backend/middleware/responseSizeLimit.js | responseSizeLimit.js]] | Response size limit | Prevents large response DoS attacks              |
+| Module          | Dependencies       | Purpose                                                  |
+| --------------- | ------------------ | -------------------------------------------------------- |
+| http            | Undici             | HTTP client with pooling, timeout, retry semantics      |
+| ssh             | ssh2               | SSH client wrapper for remote command execution         |
+| gpio            | pigpio-client      | GPIO interface for Raspberry Pi monitoring              |
+| snmp            | net-snmp           | SNMP querying for network device monitoring             |
+| cache           | lru-cache          | In-process LRU cache with stale-while-revalidate (SWR) |
+| scheduler       | croner, AbortSignal | Background poller with configurable interval + jitter   |
+| circuitBreaker  | -                  | Per-service fault tolerance (5 failures, 30s reset)     |
+| metrics         | -                  | Metrics snapshot (circuit state, poller stats, memory)  |
 
-### Logging & Monitoring
+## Domain Layer
 
-| Middleware                                      | File                    | Description          |
-| ----------------------------------------------- | ----------------------- | -------------------- | ---------------------------------------- |
-| [[apps/backend/middleware/logger.js             | logger.js]]             | Request logging      | Structured JSON logging with request IDs |
-| [[apps/backend/middleware/performanceMonitor.js | performanceMonitor.js]] | Performance tracking | Request timing and metrics               |
+The domain layer (`[[apps/backend/src/domain/]]`) contains service implementations:
 
-### Response Handling
+### BaseService
 
-| Middleware                               | File             | Description           |
-| ---------------------------------------- | ---------------- | --------------------- | ------------------------------------------ |
-| [[apps/backend/middleware/apiResponse.js | apiResponse.js]] | Response standardizer | Standardizes success/error response format |
+[[apps/backend/src/domain/BaseService.ts|BaseService.ts]] - Abstract base class:
 
-## Service Layer
+All service integrations extend BaseService and implement:
+- `checkHealth(): Promise<ServiceHealth>` – Lightweight health check
+- `getStats(): Promise<ServiceStats>` – Detailed metrics
 
-### ServiceManager
-
-[[apps/backend/services/ServiceManager.js|ServiceManager.js]] - Central orchestrator:
-
-- Initializes all enabled services via factory pattern
-- Routes health/stats requests
-- Applies circuit breaker pattern
-- Supports abort propagation in `getServiceHealth(serviceName, { signal })` via race-based cancellation helper
-- Manages TorManager lifecycle
-
-### Service Factory
-
-[[apps/backend/services/serviceFactoryConfig.js|serviceFactoryConfig.js]] - Factory configuration:
-
-- Maps service names to service classes
-- Defines config extraction functions
-- Specifies post-initialization hooks
+Services are keyed by `${kind}:${instanceId}` in [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry.ts]]:
+- `adguard:1` – Single instance
+- `qbittorrent:1`, `qbittorrent:2` – Multiple instances
 
 ### Service Classes
 
-All services extend a common pattern:
+| Service          | Location                                          | Description                        | Multi-Instance |
+| ---------------- | ------------------------------------------------- | ---------------------------------- | -------------- |
+| AdGuard Home     | `src/domain/services/adguard/AdGuardService.ts`  | DNS-level ad blocker monitoring    | No             |
+| Bitcoin          | `src/domain/services/bitcoin/BitcoinService.ts`  | Bitcoin full node RPC              | No             |
+| Tor              | `src/domain/services/tor/TorService.ts`          | Tor relay monitoring               | No             |
+| qBittorrent      | `src/domain/services/qbittorrent/...`            | BitTorrent client                  | **Yes**        |
+| IPFS             | `src/domain/services/ipfs/IpfsService.ts`        | IPFS node monitoring               | No             |
+| Synology         | `src/domain/services/synology/...`               | Synology NAS                       | **Yes**        |
+| Roon             | `src/domain/services/roon/...`                   | Music server                       | **Yes**        |
+| Philips Hue      | `src/domain/services/philips/...`                | Smart lighting                     | No             |
+| Homebridge       | `src/domain/services/homebridge/...`             | HomeKit bridge                     | No             |
+| Mac Mini         | `src/domain/services/macmini/...`                | macOS server                       | **Yes**        |
+| Alby Hub         | `src/domain/services/albyhub/...`                | Lightning wallet                   | **Yes**        |
+| Raspberry Pi     | `src/domain/services/raspi/...`                  | Raspberry Pi device                | **Yes**        |
+| Router           | `src/domain/services/router/...`                 | Network router                     | No             |
+| Nostrcheck       | Configured in ServiceRegistry                    | Nostr relay checker                | No             |
 
-| Service      | File                                              | Description                        |
-| ------------ | ------------------------------------------------- | ---------------------------------- |
-| AdGuard      | [[apps/backend/services/AdGuardService.js]]       | DNS-level ad blocker monitoring    |
-| Bitcoin      | [[apps/backend/services/BitcoinService.js]]       | Bitcoin full node RPC              |
-| Tor          | [[apps/backend/services/TorService.js]]           | Tor relay monitoring               |
-| qBittorrent  | [[apps/backend/services/QBittorrentService.js]]   | BitTorrent client (multi-instance) |
-| IPFS         | [[apps/backend/services/IpfsService.js]]          | IPFS node monitoring               |
-| Synology     | [[apps/backend/services/SynologyService.js]]      | Synology NAS (multi-instance)      |
-| Roon         | [[apps/backend/services/RoonService.js]]          | Music server (multi-instance)      |
-| Philips Hue  | [[apps/backend/services/PhilipsBridgeService.js]] | Smart lighting                     |
-| Homebridge   | [[apps/backend/services/HomebridgeService.js]]    | HomeKit bridge                     |
-| Mac Mini     | [[apps/backend/services/MacMiniService.js]]       | macOS server (multi-instance)      |
-| Alby Hub     | [[apps/backend/services/AlbyHubService.js]]       | Lightning wallet (multi-instance)  |
-| Raspberry Pi | [[apps/backend/services/RaspberryPiService.js]]   | Raspberry Pi (multi-instance)      |
-| Router       | [[apps/backend/services/RouterService.js]]        | Network router                     |
-| Nostrcheck   | (configured in config.js)                         | Nostr relay checker                |
+## Application Layer
 
-### Managers
+The application layer (`[[apps/backend/src/application/]]`) contains orchestration logic:
 
-| Manager               | File                                               | Purpose                        |
-| --------------------- | -------------------------------------------------- | ------------------------------ |
-| TorManager            | [[apps/backend/services/TorManager.js]]            | Tor proxy lifecycle management |
-| WebSocketManager      | [[apps/backend/services/WebSocketManager.js]]      | Real-time status broadcasting  |
-| FrontendConfigService | [[apps/backend/services/FrontendConfigService.js]] | Frontend config endpoint       |
+| UseCase                 | Purpose                                                  |
+| ----------------------- | -------------------------------------------------------- |
+| GetServiceStatus        | Fetch current health for one service with circuit check  |
+| GetAggregatedHealth     | Fetch health for all enabled services in parallel        |
+| ControlService          | Execute state-changing action (e.g., toggle protection)  |
+| ListInstances           | Return service instance configuration and metadata       |
 
-#### TorManager runtime notes
+Each UseCase:
+- Takes domain objects as input
+- Returns Result<T, E> (never throws)
+- Applies circuit breaker, timeout, caching logic
+- Emits events on status change
 
-- Default Tor runtime data directory is module-relative: `apps/backend/.tor-data` (not `process.cwd()` relative).
-- Runtime readiness and health checks use local TCP connect probing on `127.0.0.1:{socksPort}`.
-- Startup wait loop uses bounded exponential backoff (`250ms` → `500ms` → `1000ms` max) until `startupTimeout`.
-- Cleanup removes generated `torrc` only and preserves Tor cache/state artifacts for faster subsequent starts.
+## Transport Layer
 
-#### TorManager test coverage notes
+The transport layer (`[[apps/backend/src/transport/]]`) handles HTTP and WebSocket:
 
-- [[apps/backend/tests/TorManager.test.js]] now explicitly validates:
-  - `isInstalled()` fallback from `which tor` failure to Homebrew detection
-  - `installTor()` success and failure paths
-  - `startTor()` stdout/stderr bootstrap log handling and child-process `error` path
-  - `cleanup()` warning path when success logger invocation throws
-  - measured coverage for [[apps/backend/services/TorManager.js]]: **~95.90% lines / ~90.91% branches / ~90.63% functions**
+### HTTP Routes
 
-### Shared Utilities
+Fastify routes in `[[apps/backend/src/transport/http/routes/]]`:
 
-| Utility                      | File                                          | Purpose                                                                                                                                                               |
-| ---------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| auth token extraction        | [[apps/backend/utils/authToken.js]]           | Shared extraction/parsing for HTTP middleware, `/api/auth/me`, and WebSocket auth handshake                                                                           |
-| environment parsing helpers  | [[apps/backend/utils/env.js]]                 | Standardized parsing for ints/bools/lists/optional values used by config, service factory, and WebSocket manager                                                      |
-| origin normalization helpers | [[apps/backend/utils/origin.js]]              | Normalizes and validates configured/request origins so CORS and WebSocket origin checks use the same canonical allowlist logic                                        |
-| IP normalization helpers     | [[apps/backend/utils/ip.js]]                  | Normalizes request/client IPs and localhost detection for consistent behavior across IP control, account lockout, and auth routes                                     |
-| router ARP extraction        | [[apps/backend/services/RouterArpService.js]] | Encapsulated ARP neighbor lookup and LAN host filtering used by router ARP route, with short-lived in-memory TTL cache (3s) and bounded max-entry pruning             |
-| route context/error helpers  | [[apps/backend/routes/routeUtils.js]]         | Shared route helpers `getErrorMessage(error)` and `getServiceContext(getServiceManager, serviceName)` used by route modules to keep error/context handling consistent |
+1. **Auth**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
+2. **Meta**: `/health`, `/meta/health`, `/metrics`
+3. **Services**: `/api/services`, `/api/services/:kind`, `/api/services/:kind/stats`
+4. **Multi-Instance**: `/api/:kind_:num/status`, `/api/:kind_:num/stats`
+5. **Control**: Service-specific actions (e.g., `/api/adguard/protection`)
+6. **Special**: Homebridge accessories, router ARP, Tor relay info
+7. **WebSocket**: `GET /ws` (upgrade to WebSocket)
 
-## Route Architecture
+### WebSocket
 
-API route composition is orchestrated by [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]], called from [[apps/backend/bootstrap/registerRoutes.js]] (itself invoked by [[apps/backend/server.js|server.js]]).
+Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 
-`registerApiRoutes(...)` wires dedicated registration modules plus factory-generated service routes:
-
-- [[apps/backend/routes/authRoutes.js]]
-- [[apps/backend/routes/metaRoutes.js]]
-- [[apps/backend/routes/controlRoutes.js]]
-- [[apps/backend/routes/instanceRoutes.js]]
-- [[apps/backend/routes/serviceAliasRoutes.js]]
-- [[apps/backend/routes/homebridgeRoutes.js]]
-- [[apps/backend/routes/routerRoutes.js]]
-- [[apps/backend/routes/securityRoutes.js]]
-
-Auth route registration is dependency-driven: `AUTH_RETURN_TOKEN` is parsed in [[apps/backend/server.js]] and passed into [[apps/backend/routes/registerApiRoutes.js]], which then wires [[apps/backend/routes/authRoutes.js]] with cookie-first login behavior and optional legacy token-body compatibility.
-
-Route registration in [[apps/backend/routes/registerApiRoutes.js]] now centralizes canonical route lists with constants (`STANDARD_SERVICE_ROUTES`, `UPDATE_SERVICE_ROUTES`) to reduce registration duplication while preserving route contracts.
-
-`server.js` now delegates this full API registration block to `registerApiRoutes(...)`, reducing inline route composition surface without changing API contracts.
-
-1. **Auth routes**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
-2. **Health**: `/health`
-3. **Cache**: `/api/cache/clear`
-4. **Multi-instance pattern**: `/api/:serviceId(\w+_\d+)/status`, `/api/:serviceId(\w+_\d+)/stats` via [[apps/backend/routes/instanceRoutes.js]]
-5. **Service routes**: Generated via `createServiceRoutes()` in [[apps/backend/routes/serviceFactory.js]] for each service
-   - Canonical factory routes are used for standard stats/status (including Synology); no duplicate explicit Synology stats override route is maintained in `server.js`.
-   - Factory success logs were removed as a noise-reduction refactor; error logging remains.
-6. **Update routes**: Generated via `createUpdatesRoute()` for supported services
-7. **Homebridge special routes**: version/server-information/accessories via [[apps/backend/routes/homebridgeRoutes.js]]
-8. **Service alias/special routes**: Bitcoin/Tor alias health and relay endpoints plus IPFS updates route are registered via `registerServiceAliasRoutes()` in [[apps/backend/routes/serviceAliasRoutes.js]]
-   - Route modules use shared helpers from [[apps/backend/routes/routeUtils.js]] for service lookup context and error message normalization, reducing duplication while preserving existing response semantics.
-9. **Router ARP route**: `/api/router/arp` via [[apps/backend/routes/routerRoutes.js]], using [[apps/backend/services/RouterArpService.js]]
-10. **Security/admin routes**: security endpoints are registered via `registerSecurityRoutes()` in [[apps/backend/routes/securityRoutes.js]] (`/api/security/alerts`, `/api/security/stats` placeholder handlers), plus IP control endpoints from existing middleware/route flow
-
-Route modules updated to consume the shared route utilities include:
-
-- [[apps/backend/routes/serviceFactory.js]]
-- [[apps/backend/routes/serviceAliasRoutes.js]]
-- [[apps/backend/routes/routerRoutes.js]]
-- [[apps/backend/routes/metaRoutes.js]]
-- [[apps/backend/routes/controlRoutes.js]]
-- [[apps/backend/routes/homebridgeRoutes.js]]
-- [[apps/backend/routes/instanceRoutes.js]]
-- [[apps/backend/routes/authRoutes.js]]
-
-### WebSocket disconnect handling
-
-- [[apps/backend/services/WebSocketManager.js]] uses an idempotency guard for disconnect handling so close/error paths do not double-process a single client disconnect.
-- Broadcast cleanup now routes stale/disconnected sockets through `handleClientDisconnect()` so `connectionsByIp` remains consistent with `clients` set cleanup.
-- On WebSocket server close, internal tracking maps are explicitly reset (`clients.clear()` and `connectionsByIp.clear()`) to keep post-shutdown state consistent.
-- WebSocket handshake enforces an origin allowlist derived from `FRONTEND_URL`; disallowed origins are closed with code `1008` in [[apps/backend/services/WebSocketManager.js]].
-
-### Homebridge accessories normalization
-
-- Accessories extraction and normalization are centralized in `extractHomebridgeAccessories()` within [[apps/backend/routes/homebridgeRoutes.js]].
-- Existing warning passthrough semantics are preserved:
-  - if upstream accessories call fails and no list is available, API still returns paginated empty data with `warning` and `message` fields,
-  - cached/last-known accessories fallback behavior remains unchanged.
+| Class                | Responsibility                              |
+| -------------------- | ------------------------------------------- |
+| AuthGate             | CORS/origin validation on handshake        |
+| ConnectionManager    | Track client connections, IP tracking      |
+| HeartbeatScheduler   | Ping/pong keep-alives (30s interval)       |
+| Broadcaster          | Publish status changes to connected clients |
 
 ## Configuration
 
-[[apps/backend/config.js|config.js]] - Environment variable parsing:
+[[apps/backend/src/config/]]—Environment variable parsing and validation:
 
-- `validateEnvironment()` - Validates required env vars
-- `getConfig()` - Returns parsed configuration object
-- `cachedConfig` - Cached config for cross-module access
-- `parseServiceInstances()` - Multi-instance env var parsing
-- Uses shared helper functions from [[apps/backend/utils/env.js]] for consistent parsing semantics
-- `TRUST_PROXY` is parsed via shared env helpers and applied in [[apps/backend/server.js]] to configure Express proxy trust behavior per deployment.
-- CORS allowlist is precomputed from normalized frontend origins using [[apps/backend/utils/origin.js]] before middleware registration in [[apps/backend/server.js]].
+- `[[apps/backend/src/config/env.ts]]` – Zod schema for all env vars
+- `[[apps/backend/src/config/ServiceRegistry.ts]]` – Maps enabled services to BaseService implementations
+- Multi-instance discovery via numbered env vars: `SERVICE_KIND_1_*`, `SERVICE_KIND_2_*`, etc.
+- CORS allowlist precomputed from `FRONTEND_URL` during bootstrap
+- `TRUST_PROXY` applied to Fastify configuration per deployment
 
-## Circuit Breaker
+## In-Process State Management
 
-[[apps/backend/utils/circuitBreaker.js|circuitBreaker.js]] - Fault tolerance:
+### Circuit Breaker
 
-- Per-service circuit breakers
-- 5 failure threshold
-- 30 second reset timeout
-- 5 second request timeout
+`[[apps/backend/src/infra/circuitBreaker.ts]]` – Per-service fault tolerance:
+
+- Threshold: 5 consecutive failures
+- Reset timeout: 30 seconds
+- Request timeout: 5 seconds (per-request, not circuit-wide)
+- States: Closed → Open → Half-Open → Closed
+- Volatile state (lost on restart, acceptable for self-hosted)
+
+### Response Caching
+
+`[[apps/backend/src/infra/cache.ts]]` – LRU cache with SWR semantics:
+
+- Health checks: 30s TTL (serve stale while refetch in background)
+- Stats endpoints: 60s TTL
+- Bounded max entries (default: 1000, configurable)
+- Memory safe: LRU eviction prevents unbounded growth
+- No persistence (volatile, lost on restart)
+
+### Background Polling
+
+`[[apps/backend/src/infra/scheduler/]]` – Croner-based polling:
+
+- Interval: 15 seconds (configurable)
+- Jitter: ±2 seconds (prevents thundering herd)
+- Polls all enabled services in parallel (up to 10 concurrent)
+- AbortSignal propagation for graceful shutdown
+- Emits status changes via eventBus (triggers WebSocket broadcast)
+- Integrated with circuit breaker (skips poll if circuit open)
 
 ## PlantUML Diagrams
 

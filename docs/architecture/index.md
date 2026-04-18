@@ -2,19 +2,19 @@
 title: Architecture
 type: index
 status: active
-date: 2026-04-09
-tags: [architecture, index]
-description: Index of all architecture documentation for the Watchman project
+date: 2026-04-18
+tags: [architecture, index, fastify, typescript, layered]
+description: Index of all architecture documentation for the Watchman project - client-server with TypeScript backend
 aliases: [architecture index, system design, system architecture]
 ---
 
 # Architecture
 
 > [!abstract] Overview
-> Watchman uses a client-server architecture with a React frontend and Node.js/Express backend communicating via REST API and WebSocket.
+> Watchman uses a client-server architecture with a React 18 frontend and TypeScript + Fastify 4 backend. The backend uses a layered architecture (config → core → infra → domain → application → transport) with in-process LRU caching and croner-based background polling.
 
 > [!note]
-> Backend API route registration is orchestrated by [[apps/backend/routes/registerApiRoutes.js|registerApiRoutes.js]], called from [[apps/backend/server.js|server.js]].
+> The backend is bootstrapped from [[apps/backend/src/index.ts|index.ts]], which initializes the config, core, infra, and domain layers, then registers HTTP routes and WebSocket handlers via Fastify.
 
 ## Architecture Index
 
@@ -91,29 +91,33 @@ package "Frontend (React 18)" as FE {
     [WebSocket Hook]
 }
 
-package "Backend (Node.js/Express)" as BE {
-    package "Auth Layer" {
-        [JWT Auth]
-        [CSRF]
-        [Rate Limit]
-        [IP Control]
+package "Backend (TypeScript/Fastify 4)" as BE {
+    package "Transport Layer" {
+        [HTTP Routes]
+        [WebSocket (4 classes)]
     }
 
-    package "Middleware" {
-        [Logging]
-        [Cache]
-        [Validation]
-        [Performance]
+    package "Application Layer" {
+        [GetServiceStatus]
+        [GetAggregatedHealth]
+        [ControlService]
+        [ListInstances]
     }
 
-    package "API Routes" {
-        [/health]
-        [/api/auth/*]
-        [/api/services/*]
-        [/api/config/*]
+    package "Domain Layer" {
+        [BaseService]
+        [ServiceRegistry]
     }
 
-    package "ServiceManager" {
+    package "Infrastructure Layer" {
+        [HTTP Client]
+        [SSH Client]
+        [LRU Cache]
+        [Circuit Breaker]
+        [Poller]
+    }
+
+    package "Services" {
         [AdGuard]
         [Bitcoin]
         [Tor]
@@ -158,9 +162,10 @@ note right of FE
 end note
 
 note right of BE
-  Express 4.x + JWT
-  ESM modules
-  Circuit breaker pattern
+  TypeScript + Fastify 4
+  Layered architecture
+  In-process LRU cache
+  Croner-based polling
 end note
 @enduml
 ```

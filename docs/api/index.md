@@ -2,222 +2,219 @@
 title: API Documentation
 type: index
 status: active
-date: 2026-04-10
-tags: [api, index, backend, openapi, endpoint, rest]
-description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.0 specification
+date: 2026-04-18
+tags: [api, index, backend, openapi, endpoint, rest, fastify]
+description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.1 specification (regenerated from TypeScript backend)
 aliases: [api index, endpoints, rest api, swagger, openapi spec]
 ---
 
 # API Documentation
 
 > [!abstract] Overview
-> Watchman provides a RESTful API documented with **OpenAPI 3.0**. Interactive documentation is available at `/api/docs` (Swagger UI) when the backend is running.
+> Watchman provides a RESTful API with a TypeScript + Fastify 4 backend. The OpenAPI 3.1 specification is complete and reflects all current endpoints.
 >
 > **Base URL**: `http://localhost:3001` (development)
+>
+> **API Version**: 2.0.0  
+> **License**: AGPL-3.0-only
 
-## Authentication
+## Response Envelope
 
-Most endpoints require JWT authentication. Two methods are supported:
+All API responses use a consistent envelope format:
 
-| Method               | How to Use                                                        |
-| -------------------- | ----------------------------------------------------------------- |
-| **HTTP-Only Cookie** | Cookie is automatically set on login. Send requests from browser. |
-| **Bearer Token**     | Include `Authorization: Bearer <token>` header in API requests.   |
-
-**Public Endpoints** (no auth required):
-
-- `GET /health`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `GET /api/config/frontend`
-
-**Protected Endpoints**: Require valid JWT token. See [[docs/security/authentication|Authentication]] for details.
-
-## API Categories
-
-### Core Endpoints
-
-| Endpoint                   | Method | Description            | Auth Required | Rate Limit |
-| -------------------------- | ------ | ---------------------- | ------------- | ---------- |
-| `GET /health`              | GET    | Backend health check   | No            | 100/15min  |
-| `POST /api/auth/login`     | POST   | Authenticate user      | No            | 5/15min    |
-| `POST /api/auth/logout`    | POST   | End session            | Yes           | 5/15min    |
-| `GET /api/auth/me`         | GET    | Check auth status      | No            | 5/15min    |
-| `POST /api/cache/clear`    | POST   | Clear response cache   | Yes + CSRF    | 10/15min   |
-| `GET /api/config/frontend` | GET    | Frontend configuration | No            | 100/15min  |
-
-### Service Health Endpoints
-
-| Endpoint                          | Method | Description                 | Auth Required |
-| --------------------------------- | ------ | --------------------------- | ------------- |
-| `GET /api/services/health`        | GET    | All enabled services health | Yes           |
-| `POST /api/services/health-batch` | POST   | Batch health check          | Yes           |
-| `GET /api/services/instances`     | GET    | Service instance metadata   | Yes           |
-
-### Per-Service Endpoints
-
-Each service follows the standard pattern `{service}/status` and `{service}/stats`:
-
-```bash
-# Status (lightweight health check)
-GET /api/{service}/status
-
-# Stats (detailed metrics)
-GET /api/{service}/stats
-```
-
-#### Service Endpoint Matrix
-
-| Service         | Status Endpoint               | Stats Endpoint               | Special Endpoints                                                                                                                 | Multi-Instance |
-| --------------- | ----------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **adguard**     | `GET /api/adguard/status`     | `GET /api/adguard/stats`     | `POST /api/adguard/protection`, `GET /api/adguard/updates`                                                                        | No             |
-| **bitcoin**     | `GET /api/bitcoin/status`     | `GET /api/bitcoin/stats`     | `GET /api/bitcoin/health`, `GET /api/bitcoin/updates`                                                                             | No             |
-| **tor**         | `GET /api/tor/status`         | `GET /api/tor/stats`         | `GET /api/tor/health`, `GET /api/tor/relay/:nickname`, `GET /api/tor/updates`                                                     | No             |
-| **qbittorrent** | `GET /api/qbittorrent/status` | `GET /api/qbittorrent/stats` | -                                                                                                                                 | **Yes**        |
-| **ipfs**        | `GET /api/ipfs/status`        | `GET /api/ipfs/stats`        | `GET /api/ipfs/updates`                                                                                                           | No             |
-| **synology**    | `GET /api/synology/status`    | `GET /api/synology/stats`    | -                                                                                                                                 | **Yes**        |
-| **roon**        | `GET /api/roon/status`        | `GET /api/roon/stats`        | -                                                                                                                                 | **Yes**        |
-| **philips**     | `GET /api/philips/status`     | `GET /api/philips/stats`     | -                                                                                                                                 | **Yes**        |
-| **homebridge**  | `GET /api/homebridge/status`  | `GET /api/homebridge/stats`  | `GET /api/status/homebridge-version`, `GET /api/status/server-information`, `GET /api/accessories`, `GET /api/homebridge/updates` | No             |
-| **macmini**     | `GET /api/macmini/status`     | `GET /api/macmini/stats`     | -                                                                                                                                 | **Yes**        |
-| **albyhub**     | `GET /api/albyhub/status`     | `GET /api/albyhub/stats`     | -                                                                                                                                 | **Yes**        |
-| **raspi**       | `GET /api/raspi/status`       | `GET /api/raspi/stats`       | -                                                                                                                                 | **Yes**        |
-
-### Router Endpoints
-
-| Endpoint                                     | Method | Description         | Auth Required | CSRF |
-| -------------------------------------------- | ------ | ------------------- | ------------- | ---- |
-| `GET /api/router/arp?service=beryl\|telenet` | GET    | ARP/neighbor lookup | Yes           | Yes  |
-
-### Security Endpoints
-
-| Endpoint                   | Method | Description         | Auth Required | IP Control |
-| -------------------------- | ------ | ------------------- | ------------- | ---------- |
-| `GET /api/security/alerts` | GET    | Security alerts     | Yes           | Whitelist  |
-| `GET /api/security/stats`  | GET    | Security statistics | Yes           | Whitelist  |
-
-## Multi-Instance Pattern
-
-Services supporting multiple instances use the pattern:
-
-```
-/api/{serviceType}_{instanceNum}/status
-/api/{serviceType}_{instanceNum}/stats
-```
-
-**Example**: qBittorrent with 2 instances:
-
-```bash
-GET /api/qbittorrent_1/status
-GET /api/qbittorrent_1/stats
-GET /api/qbittorrent_2/status
-GET /api/qbittorrent_2/stats
-```
-
-## Request/Response Examples
-
-### Health Check Response
-
+**Success Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "status": "online",
-    "timestamp": "2026-04-02T12:00:00.000Z",
-    "service": "adguard",
-    "data": {
-      "protectionEnabled": true,
-      "version": "v0.107.8"
-    }
-  }
+  "data": { /* response payload */ }
 }
 ```
 
-### Stats Response
-
+**Error Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "timestamp": "2026-04-02T12:00:00.000Z",
-    "service": "adguard",
-    "data": {
-      "queriesTotal": 1250000,
-      "queriesBlocked": 345000,
-      "blockedPercentage": 27.6,
-      "filters": [
-        { "id": 1, "enabled": true, "rulesCount": 45000 },
-        { "id": 2, "enabled": true, "rulesCount": 23000 }
-      ]
-    }
-  }
-}
-```
-
-### Error Response
-
-```json
-{
-  "success": false,
   "error": {
-    "code": "SERVICE_OFFLINE",
-    "message": "Service is not available",
-    "statusCode": 503
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message"
   }
 }
 ```
 
-## Response Format
+### Error Codes
 
-All responses follow a standardized format via [[apps/backend/middleware/apiResponse.js|apiResponse middleware]]:
+| Code          | HTTP Status | Meaning                                      |
+| ------------- | ----------- | -------------------------------------------- |
+| `NOT_FOUND`   | 404         | Service instance or resource not found       |
+| `UNAVAILABLE` | 503         | Service is unreachable or unhealthy          |
+| `UNAUTHORIZED`| 401         | Missing or invalid authentication            |
+| `TIMEOUT`     | 408         | Request timeout while polling service        |
+| `CIRCUIT_OPEN`| 503         | Circuit breaker is open for the service      |
+| `VALIDATION`  | 400         | Invalid request parameters or body           |
 
-| Field     | Type    | Description                   |
-| --------- | ------- | ----------------------------- |
-| `success` | boolean | Whether the request succeeded |
-| `data`    | object  | Response data (if success)    |
-| `error`   | object  | Error details (if failure)    |
+## Endpoint Categories
 
-### Error Response Structure
+### Meta Endpoints
 
-| Field        | Type   | Description                                    |
-| ------------ | ------ | ---------------------------------------------- |
-| `code`       | string | Error code (e.g., `UNAUTHORIZED`, `NOT_FOUND`) |
-| `message`    | string | Human-readable error message                   |
-| `statusCode` | number | HTTP status code                               |
+Operational health and version information.
 
-See [[docs/reference/error-codes|Error Codes Reference]] for all error codes.
+| Endpoint            | Method | Description               |
+| ------------------- | ------ | ------------------------- |
+| `GET /meta/health`  | GET    | Liveness probe            |
+| `GET /meta/version` | GET    | API version and Node info |
+
+**Response Example** (`/meta/health`):
+```json
+{
+  "ok": true,
+  "service": "watchman-backend-v2",
+  "uptime": 3600,
+  "timestamp": "2026-04-18T12:00:00Z"
+}
+```
+
+### Services Endpoints
+
+Service health, stats, and control.
+
+| Endpoint                       | Method | Description                           | Query Parameters         |
+| ------------------------------ | ------ | ------------------------------------- | ------------------------ |
+| `GET /services`                | GET    | Aggregated health for all services    | -                        |
+| `GET /services/{kind}/health`  | GET    | Health for specific service instance  | `instance` (optional)    |
+| `GET /services/{kind}/stats`   | GET    | Stats for specific service instance   | `instance` (optional)    |
+| `POST /services/{kind}/control`| POST   | Issue control action to service       | `instance` (optional)    |
+
+**Path Parameters:**
+- `{kind}`: Service kind (e.g., `bitcoin`, `ipfs`, `homebridge`, etc.)
+
+**Query Parameters:**
+- `instance`: Instance ID. Omit to use first registered instance for the kind.
+
+**Health Response**:
+```json
+{
+  "data": {
+    "reachable": true,
+    "latencyMs": 45,
+    "message": "OK",
+    "details": { /* service-specific details */ },
+    "at": 1713446400000
+  }
+}
+```
+
+**Stats Response**:
+```json
+{
+  "data": {
+    "metrics": {
+      "key1": 123,
+      "key2": "value",
+      "key3": true
+    },
+    "at": 1713446400000
+  }
+}
+```
+
+**Control Request Body** (`/services/{kind}/control`):
+```json
+{
+  "action": "restart"
+}
+```
+
+### Instances Endpoints
+
+Service instance discovery and metadata.
+
+| Endpoint              | Method | Description                      |
+| --------------------- | ------ | -------------------------------- |
+| `GET /instances`      | GET    | All registered service instances |
+| `GET /instances/{kind}`| GET    | Instances for a given service    |
+| `GET /kinds`          | GET    | All registered service kinds     |
+
+**Instance Response**:
+```json
+{
+  "data": [
+    {
+      "id": "bitcoin:main",
+      "kind": "bitcoin",
+      "instanceId": "main"
+    }
+  ]
+}
+```
+
+### Metrics Endpoints
+
+Operational metrics (circuit breakers, background poller, cache, process).
+
+| Endpoint       | Method | Description                    |
+| -------------- | ------ | ------------------------------ |
+| `GET /metrics` | GET    | Operational metrics snapshot   |
+
+**Metrics Response**:
+```json
+{
+  "breakers": {
+    "bitcoin_main": {
+      "state": "CLOSED",
+      "successes": 150,
+      "failures": 2,
+      "rejects": 0,
+      "trips": 0
+    }
+  },
+  "poller": {
+    "polledAt": 1713446400000,
+    "nextPollAt": 1713446460000,
+    "totalPolls": 500,
+    "pollDuration": 45
+  },
+  "cache": {
+    "hits": 1200,
+    "misses": 50,
+    "size": 2048,
+    "maxSize": 10240
+  },
+  "process": {
+    "uptime": 3600,
+    "memory": {
+      "heapUsed": 52428800,
+      "heapTotal": 104857600
+    },
+    "cpu": { /* CPU usage */ }
+  }
+}
+```
 
 ## OpenAPI Specification
 
-The complete API specification is available in OpenAPI 3.0 format:
+The complete API specification is defined in OpenAPI 3.1 format:
 
-| Resource       | Location                         |
-| -------------- | -------------------------------- |
-| **Spec File**  | [[apps/backend/openapi.yaml]]    |
-| **Symlink**    | [[apps/backend/api-docs.yaml]]   |
-| **Swagger UI** | `http://localhost:3001/api/docs` |
+| Resource       | Location                         | Details                  |
+| -------------- | -------------------------------- | ------------------------ |
+| **Spec File**  | [[apps/backend/openapi.yaml]]    | OpenAPI 3.1 spec, v2.0.0 |
+| **Format**     | JSON/YAML                        | Machine-readable API contract |
+| **License**    | AGPL-3.0-only                    | Same as backend          |
 
-### Adding New Endpoints
+The specification is the canonical source for all endpoint definitions, request/response schemas, and error codes. All endpoints listed in the Endpoint Categories section above are reflected in the spec.
 
-When adding a new API endpoint:
+### Schema Definitions
 
-1. Add route in `apps/backend/server.js` or `apps/backend/routes/`
-   - Prefer dedicated registration modules under `apps/backend/routes/` for non-factory routes, wired through `[[apps/backend/routes/registerApiRoutes.js]]` and `[[apps/backend/bootstrap/registerRoutes.js]]`
-2. Apply appropriate middleware (auth, CSRF, rate limiting)
-3. Update [[apps/backend/openapi.yaml|OpenAPI spec]] with endpoint definition
-4. Create endpoint documentation in `docs/api/`
-5. Update this index with the new endpoint
+Key schemas defined in the OpenAPI spec:
 
-## Rate Limits
+- **HealthSnapshot** - Service reachability, latency, details, and timestamp
+- **StatsSnapshot** - Service metrics dictionary and timestamp
+- **AggregatedEntry** - Service result (success or error) with health snapshot
+- **InstanceInfo** - Service instance metadata (id, kind, instanceId)
+- **MetricsSnapshot** - Operational metrics (breakers, poller, cache, process)
+- **BreakerMetrics** - Circuit breaker state and counters
+- **CacheStats** - Cache hit/miss counts and size
+- **PollerStats** - Poll timing and frequency statistics
+- **DomainError** - Standard error envelope (code, message)
 
-| Tier    | Limit         | Endpoints                                                           |
-| ------- | ------------- | ------------------------------------------------------------------- |
-| Health  | 100 req/15min | `/health`, service status endpoints                                 |
-| Auth    | 5 req/15min   | Login, logout, auth status                                          |
-| Control | 20 req/15min  | Sensitive write routes (protection toggle, cache clear, router ARP) |
-| General | 100 req/15min | Most API endpoints                                                  |
-
-See [[docs/security/rate-limiting|Rate Limiting]] for details.
+See [[apps/backend/openapi.yaml]] for complete definitions with examples.
 
 ## Related Documentation
 

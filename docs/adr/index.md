@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 type: index
 status: active
-date: 2026-04-02
+date: 2026-04-18
 tags: [adr, architecture, index, decision, design]
 description: Index of all Architecture Decision Records for the Watchman project - why design choices were made
 aliases: [adr index, decisions, architecture decisions, design decisions]
@@ -40,6 +40,7 @@ SORT file.name ASC
 | [[docs/adr/010-graceful-shutdown-process-management.md | Graceful Shutdown]] | Process management            |
 | [[docs/adr/011-dynamic-route-generation.md             | Dynamic Routes]]    | Service route generation      |
 | [[docs/adr/012-backend-framework-module-system.md      | Module System]]     | ESM module system             |
+| [[docs/adr/013-backend-rewrite-typescript-fastify.md   | Backend Rewrite]]   | TypeScript + Fastify 4 + in-process state |
 
 ## Creating a New ADR
 

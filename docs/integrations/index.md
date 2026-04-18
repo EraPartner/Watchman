@@ -2,16 +2,16 @@
 title: Service Integrations
 type: index
 status: active
-date: 2026-04-09
-tags: [integration, index, services, backend]
-description: Index of all external service integration documentation for the Watchman project
+date: 2026-04-18
+tags: [integration, index, services, backend, fastify, typescript]
+description: Index of all external service integration documentation for the Watchman project - each implements BaseService
 aliases: [integrations index, services, service docs]
 ---
 
 # Service Integrations
 
 > [!abstract] Overview
-> Watchman integrates with 14+ self-hosted service types. Each integration provides health checks and statistics.
+> Watchman integrates with 14+ self-hosted service types. Each integration extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` and `getStats()` methods. Services are registered via [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry]] using keys like `${kind}:${instanceId}` (e.g., `qbittorrent:1`, `qbittorrent:2` for multi-instance support).
 
 ## Integration Index
 

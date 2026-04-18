@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-04-09
+date: 2026-04-18
 tags: [knowledge-base, index, project, overview, ai-agent-friendly]
 description: Main entry point to the Watchman project documentation - self-hosted service monitoring dashboard designed for developers, AI agents, and computer scientists
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -113,17 +113,18 @@ Watchman is a comprehensive **self-hosted service monitoring dashboard** support
 ### Tech Stack
 
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
-- **Backend**: Node.js + Express + JWT auth + OpenAPI/Swagger
+- **Backend**: Node.js 18+ + TypeScript + Fastify 4 + Zod validation + Pino logging
 - **Communication**: WebSocket for real-time updates
-- **Tooling**: ESLint, Prettier, Vitest
-- **Architecture**: npm workspaces monorepo
+- **State**: In-process LRU cache, croner-based polling, circuit breaker
+- **Tooling**: ESLint, Prettier, Vitest (237 tests across 33 files)
+- **Architecture**: npm workspaces monorepo, layered backend (config → core → infra → domain → application → transport)
 
 ### Project Structure
 
 ```
 Watchman/
 ├── apps/
-│   ├── frontend/          # React + TypeScript + Vite
+│   ├── frontend/          # React 18 + TypeScript + Vite
 │   │   ├── src/
 │   │   │   ├── components/ # React components (cards, UI)
 │   │   │   ├── hooks/     # Custom React hooks
@@ -131,13 +132,18 @@ Watchman/
 │   │   │   ├── services/  # API client
 │   │   │   └── lib/       # Utilities
 │   │   └── tests/         # Frontend tests
-│   └── backend/           # Node.js + Express
-│       ├── services/      # Service integrations
-│       ├── middleware/    # Express middleware
-│       ├── routes/       # API routes
-│       ├── utils/        # Utilities (circuit breaker, etc.)
-│       └── config.js     # Configuration
-├── docs/                   # This knowledge base
+│   └── backend/           # TypeScript + Fastify 4
+│       ├── src/
+│       │   ├── config/    # Env validation, service registry
+│       │   ├── core/      # Logger, errors, Result, eventBus
+│       │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller
+│       │   ├── domain/    # BaseService, ServiceRegistry
+│       │   ├── application/ # UseCases
+│       │   └── transport/ # Fastify routes, WebSocket
+│       ├── dist/          # Compiled JavaScript
+│       ├── vitest.config.ts
+│       └── package.json
+├── docs/                   # Obsidian knowledge base
 ├── packages/               # Shared packages
 └── tools/                 # Dev scripts
 ```
@@ -145,7 +151,7 @@ Watchman/
 ## Key Concepts
 
 > [!info] Service Pattern
-> Each service follows a standard pattern: `checkHealth()` for status checks and `getStats()` for detailed metrics. Services are registered in `serviceFactoryConfig.js`.
+> Each service extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` for status checks and `getStats()` for detailed metrics. Services are registered in [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry]] using `${kind}:${instanceId}` keys (e.g., `qbittorrent:1`, `qbittorrent:2`).
 
 > [!info] Multi-Instance Services
 > Services like qBittorrent support multiple instances via numbered env vars: `QBITTORRENT_1_URL`, `QBITTORRENT_2_URL`, etc. Legacy single-instance config is still supported. See [[docs/features/multi-instance|Multi-Instance Feature]].
@@ -164,15 +170,16 @@ Watchman/
 
 | Search For          | Location                                             |
 | ------------------- | ---------------------------------------------------- |
-| Service classes     | `apps/backend/services/*.js`                         |
+| Service classes     | `apps/backend/src/domain/services/*/`                |
 | Frontend components | `apps/frontend/src/components/*.tsx`                 |
-| API routes          | `apps/backend/server.js`, `apps/backend/routes/*.js` |
-| Middleware          | `apps/backend/middleware/*.js`                       |
-| Configuration       | `apps/backend/config.js`                             |
+| API routes          | `apps/backend/src/transport/http/routes/`            |
+| Core layer          | `apps/backend/src/core/`                             |
+| Infrastructure      | `apps/backend/src/infra/`                            |
+| Configuration       | `apps/backend/src/config/`                           |
 | Frontend hooks      | `apps/frontend/src/hooks/*.ts`                       |
 | API client          | `apps/frontend/src/services/ApiClient.ts`            |
 | Environment config  | `apps/backend/.env.example`                          |
-| Circuit breaker     | `apps/backend/utils/circuitBreaker.js`               |
+| Circuit breaker     | `apps/backend/src/infra/circuitBreaker.ts`           |
 
 ## Contributing
 
@@ -198,11 +205,13 @@ package "Frontend (React 18)" as FE {
     [WebSocket]
 }
 
-package "Backend (Node.js/Express)" as BE {
-    [ServiceManager]
-    [Service Classes]
-    [WebSocketManager]
-    [Middleware Stack]
+package "Backend (TypeScript/Fastify 4)" as BE {
+    [Config Layer]
+    [Core Layer]
+    [Infrastructure]
+    [Domain Services]
+    [Application]
+    [Transport]
 }
 
 package "Security Layer" as SEC {
@@ -232,8 +241,9 @@ note right of FE
 end note
 
 note right of BE
-  Express 4.x + JWT
-  ESM modules
+  TypeScript + Fastify 4
+  Layered architecture
+  In-process LRU cache
 end note
 @enduml
 ```

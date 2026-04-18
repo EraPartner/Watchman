@@ -2,54 +2,72 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-04-11
-tags: [feature, websocket, frontend, backend, real-time]
-description: WebSocket-based real-time status broadcasting for live dashboard updates
+date: 2026-04-18
+tags: [feature, websocket, frontend, backend, real-time, fastify]
+description: WebSocket-based real-time status broadcasting for live dashboard updates using split architecture
 aliases: [websocket, real-time, live updates, status broadcasting]
 ---
 
 # Real-Time Updates
 
 > [!abstract] Overview
-> Watchman uses WebSocket connections to broadcast service status changes to the frontend in real-time, eliminating the need for polling.
+> Watchman uses WebSocket connections to broadcast service status changes to the frontend in real-time. The TypeScript backend splits WebSocket logic into 4 focused classes for clarity and testability.
 
 ## Architecture
 
-### WebSocketManager
+The WebSocket layer is split into 4 classes in `[[apps/backend/src/transport/ws/]]`:
 
-The [[apps/backend/services/WebSocketManager.js|WebSocketManager]] handles:
+### AuthGate
 
-1. WebSocket server initialization on HTTP server
-2. Client connection management
-3. Status change broadcasting
-4. Graceful shutdown
-5. Idempotent disconnect handling (close/error paths are guarded to avoid double-processing a single disconnect)
-6. Broadcast cleanup routes stale sockets through disconnect handling so `connectionsByIp` tracking stays consistent
-7. WebSocket server-close cleanup clears both `clients` and `connectionsByIp` tracking maps
-8. Origin allowlist enforcement for handshake requests; disallowed origins are closed with policy violation code `1008`
+Handles CORS and origin validation on WebSocket handshake upgrade. Rejects disallowed origins with code `1008`.
 
-Origin validation uses normalized frontend origins from [[apps/backend/utils/origin.js]] and is enforced in [[apps/backend/services/WebSocketManager.js]].
+### ConnectionManager
+
+Manages active client connections:
+- Track each connection with unique ID
+- Track IP address per connection (for rate limiting, security alerts)
+- Clean up disconnected clients (idempotent handling)
+- Prevent double-processing on close/error
+
+### HeartbeatScheduler
+
+Maintains connection liveness:
+- Sends ping messages every 30 seconds
+- Tracks pong responses
+- Closes stale connections (no pong after 2 pings)
+- Graceful shutdown of all heartbeat intervals
+
+### Broadcaster
+
+Publishes status changes to connected clients:
+- Receives status-change events from domain layer via eventBus
+- Serializes events to JSON message format
+- Sends to all connected clients (or filtered by service type if needed)
+- Handles send errors gracefully (disconnected clients don't crash broadcaster)
 
 ### Data Flow
 
 ```
-ServiceManager polls services (interval)
+BackgroundPoller polls services (15s interval, croner-based)
   → Status change detected
-  → WebSocketManager.broadcast(statusUpdate)
-  → All connected clients receive update
-  → Frontend updates UI
+  → Emits event to eventBus
+  → Broadcaster receives event
+  → Sends WebSocket message to all connected clients
+  → Frontend useWebSocket hook invalidates React Query
+  → Components re-render with updated data
 ```
 
 ### Frontend Integration
 
 The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 
-1. WebSocket connection establishment
-2. Message parsing and dispatch
-3. Reconnection logic
-4. Connection state tracking
-5. Debounced invalidation flush with query-family deduplication and targeted `queryKeys` invalidation
-6. Hook-level observability via frontend logger (`logger.warn`/`logger.debug`) instead of high-noise per-message console logging
+1. WebSocket connection establishment (upgrade to `/ws` endpoint)
+2. Message parsing and dispatch (recognizes `service_update`, `metrics`, `connection` message types)
+3. Reconnection logic with exponential backoff (max 30 seconds)
+4. Connection state tracking (connected/disconnected/reconnecting)
+5. Batched query invalidation via React Query (deduped per service type)
+6. Toast notifications for errors and connection state changes
+7. Hook-level observability via frontend logger (`logger.warn`/`logger.debug`)
 
 ## Benefits
 
@@ -60,11 +78,16 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 
 ## Connection Lifecycle
 
-1. Frontend loads → establishes WebSocket connection
-2. ServiceManager polls services on configured interval
-3. On status change → broadcast to all connected clients
-4. Frontend receives update → re-renders affected components
-5. On disconnect → automatic reconnection with backoff
+1. Frontend loads → `useWebSocket` hook initializes
+2. Establishes WebSocket upgrade to `/ws` endpoint (via AuthGate)
+3. ConnectionManager registers client connection
+4. HeartbeatScheduler starts ping/pong keep-alives
+5. BackgroundPoller runs on 15s interval, emits status changes
+6. Broadcaster sends updates to all connected clients
+7. Frontend receives message → React Query invalidates
+8. Components re-render with fresh data from cache/API
+9. On disconnect → HeartbeatScheduler stops, ConnectionManager cleans up
+10. Frontend hook attempts reconnection with exponential backoff
 
 ## Test Coverage Notes
 
@@ -194,5 +217,9 @@ end
 
 - [[docs/features/service-monitoring|Service Monitoring]]
 - [[docs/architecture/data-flow|Data Flow]]
-- [[apps/backend/services/WebSocketManager.js|WebSocketManager]]
+- [[docs/architecture/backend-architecture|Backend Architecture]]
+- [[apps/backend/src/transport/ws/AuthGate.ts|AuthGate]]
+- [[apps/backend/src/transport/ws/ConnectionManager.ts|ConnectionManager]]
+- [[apps/backend/src/transport/ws/HeartbeatScheduler.ts|HeartbeatScheduler]]
+- [[apps/backend/src/transport/ws/Broadcaster.ts|Broadcaster]]
 - [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket Hook]]
