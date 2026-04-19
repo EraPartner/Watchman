@@ -45,15 +45,29 @@ export function ServiceDetailSheet({
   open,
   onOpenChange,
 }: ServiceDetailSheetProps) {
-  const serviceKey = instanceId ?? kind ?? "";
-  const healthQuery = useServiceHealth(serviceKey, { enabled: !!kind });
-  const statsQuery = useServiceStats(serviceKey, !!kind);
+  const healthQuery = useServiceHealth(kind ?? "", instanceId, {
+    enabled: !!kind,
+  });
+  const statsQuery = useServiceStats(kind ?? "", instanceId, !!kind);
 
   const renderer = kind ? getRenderer(kind) : undefined;
-  const stats = statsQuery.data as Record<string, unknown> | undefined;
-  const health = healthQuery.data as
-    | { status: "online" | "offline" | "warning" | "loading"; error?: string }
+  const statsSnapshot = statsQuery.data as
+    | { metrics?: Record<string, unknown> }
     | undefined;
+  const stats = statsSnapshot?.metrics as Record<string, unknown> | undefined;
+  const healthRaw = healthQuery.data as
+    | { reachable?: boolean; message?: string }
+    | undefined;
+  const health = healthRaw
+    ? {
+        status: (healthRaw.reachable ? "online" : "offline") as
+          | "online"
+          | "offline"
+          | "warning"
+          | "loading",
+        error: healthRaw.message,
+      }
+    : undefined;
 
   const tone = useMemo<Tone>(() => {
     if (!renderer) return "neutral";
@@ -66,6 +80,7 @@ export function ServiceDetailSheet({
 
   const [range, setRange] = useState<HistoryRange>("24h");
   const [events, setEvents] = useState<ServiceEvent[]>([]);
+  const serviceKey = instanceId ?? kind ?? "";
 
   const handleWsEvent = useCallback(
     (ev: WsEvent) => {

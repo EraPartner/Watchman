@@ -48,7 +48,7 @@ async function makeApp(registry: ServiceRegistry) {
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
     config: { store: fakeStore, lifecycle: fakeLifecycle, registry },
-    setup: { store: fakeStore, adminConfigured: true },
+    setup: { store: fakeStore },
   });
 }
 

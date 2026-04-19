@@ -1,4 +1,4 @@
-import type { ServiceHealth } from "@/services/ApiClient";
+import type { ServiceHealth } from "@/types/api";
 
 export type DashboardServiceStatus =
   | "online"

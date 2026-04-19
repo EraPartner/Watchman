@@ -29,6 +29,16 @@ export function unwrapApiResponse<T = unknown>(payload: unknown): T {
     }
     return payload.data as T;
   }
+  // v2 envelope: { data: T } with no success/error siblings
+  if (
+    payload !== null &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    "data" in (payload as Record<string, unknown>) &&
+    Object.keys(payload as Record<string, unknown>).length === 1
+  ) {
+    return (payload as { data: T }).data;
+  }
   return payload as T;
 }
 

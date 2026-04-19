@@ -1,29 +1,23 @@
-import { APP_CONFIG } from "../../lib/constants";
-import { csrfManager } from "../../lib/csrf";
 import { ApiClientCore } from "./core";
 import type {
-  AdGuardStats,
-  AuthMeResponse,
-  BitcoinStats,
-  FrontendConfig,
-  GenericServiceStats,
+  AggregatedEntry,
+  BackendHealth,
+  BackendVersion,
+  ControlRequest,
+  ControlResponse,
+  HealthSnapshot,
   HistoryPayload,
   HistoryQueryParams,
-  HomebridgeAccessoriesResponse,
-  HomebridgeServerInformationResponse,
-  HomebridgeVersionResponse,
-  LoginResponse,
-  LogoutResponse,
-  QBittorrentStats,
-  RoonStatus,
-  RouterArpResponse,
-  ServiceHealth,
-  ServiceInstancesResponse,
-  ServicesHealthResponse,
-  TorRelay,
-  UpdateInfo,
-  UpdateService,
+  InstanceInfo,
+  SetupStatus,
+  StatsSnapshot,
 } from "./types";
+
+function appendInstance(url: string, instance?: string): string {
+  if (!instance) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}instance=${encodeURIComponent(instance)}`;
+}
 
 export class ApiClientEndpoints {
   private core: ApiClientCore;
@@ -32,173 +26,32 @@ export class ApiClientEndpoints {
     this.core = core;
   }
 
-  async getAdGuardStatus(): Promise<ServiceHealth> {
-    return this.core.request("/api/adguard/status");
+  async getHealth(): Promise<BackendHealth> {
+    return this.core.request("/meta/health");
   }
 
-  async getAdGuardStats(): Promise<AdGuardStats> {
-    return this.core.request("/api/adguard/stats");
+  async getVersion(): Promise<BackendVersion> {
+    return this.core.request("/meta/version");
   }
 
-  async getIpfsStatus(): Promise<ServiceHealth> {
-    return this.core.request("/api/ipfs/status");
+  async getAggregatedServices(): Promise<AggregatedEntry[]> {
+    return this.core.request("/services");
   }
 
-  async getIpfsStats(): Promise<GenericServiceStats> {
-    return this.core.request("/api/ipfs/stats");
+  async getServiceHealth(
+    kind: string,
+    instance?: string
+  ): Promise<HealthSnapshot> {
+    const base = `/services/${encodeURIComponent(kind)}/health`;
+    return this.core.request(appendInstance(base, instance));
   }
 
-  async getBitcoinStatus(): Promise<ServiceHealth> {
-    return this.core.request(
-      "/api/bitcoin/status",
-      undefined,
-      APP_CONFIG.BITCOIN_API_TIMEOUT
-    );
-  }
-
-  async getBitcoinStats(): Promise<BitcoinStats> {
-    return this.core.request(
-      "/api/bitcoin/stats",
-      undefined,
-      APP_CONFIG.BITCOIN_API_TIMEOUT
-    );
-  }
-
-  async getQBittorrentStatus(): Promise<ServiceHealth> {
-    return this.core.request("/api/qbittorrent/status");
-  }
-
-  async getQBittorrentStats(): Promise<QBittorrentStats> {
-    return this.core.request("/api/qbittorrent/stats");
-  }
-
-  async getTorRelay(nickname?: string): Promise<TorRelay> {
-    const endpoint = nickname ? `/api/tor/relay/${nickname}` : "/api/tor/relay";
-    return this.core.request(endpoint);
-  }
-
-  async getTorHealth(): Promise<ServiceHealth> {
-    return this.core.request("/api/tor/health");
-  }
-
-  async getSynologyStatus(): Promise<ServiceHealth> {
-    return this.core.request("/api/synology/status");
-  }
-
-  async getSynologyStats(): Promise<GenericServiceStats> {
-    return this.core.request("/api/synology/stats");
-  }
-
-  async getRoonStatus(): Promise<RoonStatus> {
-    return this.core.request("/api/roon/status");
-  }
-
-  async getRoonStats(): Promise<RoonStatus> {
-    return this.core.request("/api/roon/stats");
-  }
-
-  async getPhilipsStatus(): Promise<GenericServiceStats> {
-    return this.core.request("/api/philips/status");
-  }
-
-  async getPhilipsStats(): Promise<GenericServiceStats> {
-    return this.core.request("/api/philips/stats");
-  }
-
-  /** @deprecated Use getHomebridgeServerInformation() */
-  async getHomebridgeStatus(): Promise<HomebridgeServerInformationResponse> {
-    return this.getHomebridgeServerInformation();
-  }
-
-  /** @deprecated Use getHomebridgeServerInformation() */
-  async getHomebridgeStats(): Promise<HomebridgeServerInformationResponse> {
-    return this.getHomebridgeServerInformation();
-  }
-
-  /** @deprecated Use getHomebridgeServerInformation() */
-  async getStatusHomebridge(): Promise<HomebridgeServerInformationResponse> {
-    return this.getHomebridgeServerInformation();
-  }
-
-  async getHomebridgeVersion(): Promise<HomebridgeVersionResponse> {
-    return this.core.request("/api/status/homebridge-version");
-  }
-
-  async getHomebridgeServerInformation(): Promise<HomebridgeServerInformationResponse> {
-    return this.core.request("/api/status/server-information");
-  }
-
-  async getHomebridgeAccessories(): Promise<HomebridgeAccessoriesResponse> {
-    return this.core.request("/api/accessories");
-  }
-
-  async getServiceUpdates(serviceKey: UpdateService): Promise<UpdateInfo> {
-    return this.core.request(`/api/${serviceKey}/updates`);
-  }
-
-  async getAlbyStatus(): Promise<ServiceHealth> {
-    return this.core.request("/api/albyhub/status");
-  }
-
-  async getAlbyStats(): Promise<GenericServiceStats> {
-    return this.core.request("/api/albyhub/stats");
-  }
-
-  async getServicesHealth(): Promise<ServicesHealthResponse> {
-    return this.core.request("/api/services/health");
-  }
-
-  async setAdGuardProtection(
-    enabled: boolean,
-    duration?: number
-  ): Promise<{ success: boolean; [key: string]: unknown }> {
-    return this.core.request("/api/adguard/protection", {
-      method: "POST",
-      body: JSON.stringify({ enabled, duration }),
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  async clearBackendCache(
-    type = "all"
-  ): Promise<{ success: boolean; message?: string; [key: string]: unknown }> {
-    return this.core.request("/api/cache/clear", {
-      method: "POST",
-      body: JSON.stringify({ type }),
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  async getBackendHealth(): Promise<{
-    status: string;
-    timestamp: string;
-    service: string;
-    version: string;
-  }> {
-    return this.core.request("/health");
-  }
-
-  async getFrontendConfig(): Promise<FrontendConfig> {
-    const config = await this.core.request<FrontendConfig>(
-      "/api/config/frontend"
-    );
-    csrfManager.configure({
-      cookieName: config.security?.csrf?.cookieName,
-      headerName: config.security?.csrf?.headerName,
-    });
-    return config;
-  }
-
-  async getServiceInstances(): Promise<ServiceInstancesResponse> {
-    return this.core.request("/api/services/instances");
-  }
-
-  async getServiceHealth(serviceKey: string): Promise<ServiceHealth> {
-    return this.core.request(`/api/${serviceKey}/status`);
-  }
-
-  async getServiceStats(serviceKey: string): Promise<GenericServiceStats> {
-    return this.core.request(`/api/${serviceKey}/stats`);
+  async getServiceStats(
+    kind: string,
+    instance?: string
+  ): Promise<StatsSnapshot> {
+    const base = `/services/${encodeURIComponent(kind)}/stats`;
+    return this.core.request(appendInstance(base, instance));
   }
 
   async getServiceHistory(
@@ -213,39 +66,39 @@ export class ApiClientEndpoints {
     if (params.resolution) q.set("resolution", params.resolution);
     if (params.agg) q.set("agg", params.agg);
     if (params.limit != null) q.set("limit", String(params.limit));
-    return this.core.request(`/api/services/${kind}/history?${q.toString()}`);
+    return this.core.request(
+      `/services/${encodeURIComponent(kind)}/history?${q.toString()}`
+    );
   }
 
-  async getRouterArp(serviceName: string): Promise<RouterArpResponse> {
-    const endpoint = `/api/router/arp?service=${encodeURIComponent(
-      String(serviceName)
-    )}`;
-    return this.core.request(endpoint);
-  }
-
-  async login(
-    username: string,
-    password: string,
-    remember = false
-  ): Promise<LoginResponse> {
-    const res = await this.core.request<LoginResponse>("/api/auth/login", {
+  async controlService(
+    kind: string,
+    action: string,
+    params?: Record<string, unknown>,
+    instance?: string
+  ): Promise<ControlResponse> {
+    const base = `/services/${encodeURIComponent(kind)}/control`;
+    const body: ControlRequest = params ? { action, params } : { action };
+    return this.core.request(appendInstance(base, instance), {
       method: "POST",
-      body: JSON.stringify({ username, password, remember }),
+      body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
     });
-
-    const compatibilityToken = this.core.extractCompatibilityAuthToken(res);
-    this.core.setFallbackAuthToken(compatibilityToken || null);
-
-    return res;
   }
 
-  async logout(): Promise<LogoutResponse> {
-    this.core.setFallbackAuthToken(null);
-    return this.core.request("/api/auth/logout", { method: "POST" });
+  async getInstances(): Promise<InstanceInfo[]> {
+    return this.core.request("/instances");
   }
 
-  async getAuthMe(): Promise<AuthMeResponse> {
-    return this.core.request("/api/auth/me");
+  async getInstancesByKind(kind: string): Promise<InstanceInfo[]> {
+    return this.core.request(`/instances/${encodeURIComponent(kind)}`);
+  }
+
+  async getKinds(): Promise<string[]> {
+    return this.core.request("/kinds");
+  }
+
+  async getSetupStatus(): Promise<SetupStatus> {
+    return this.core.request("/setup/status");
   }
 }

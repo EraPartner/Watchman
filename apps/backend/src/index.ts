@@ -97,8 +97,6 @@ async function main(): Promise<void> {
     history = { getHistory: new GetServiceHistory({ registry, reader }) };
   }
 
-  const adminConfigured = Boolean(env.AUTH_USERNAME && env.AUTH_PASSWORD_HASH);
-
   const app = await buildServer({
     logger,
     services: {
@@ -110,7 +108,7 @@ async function main(): Promise<void> {
     listInstances: new ListInstances(registry),
     metrics,
     config: { store, lifecycle, registry },
-    setup: { store, adminConfigured },
+    setup: { store },
   });
 
   await app.register(wsPlugin, {

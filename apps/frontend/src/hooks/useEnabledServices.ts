@@ -3,24 +3,21 @@ import { apiClient } from "../services/ApiClient";
 import { queryKeys } from "../lib/queryKeys";
 
 /**
- * Hook to check which services are enabled via ENABLED_SERVICES environment variable
- * @returns Object with enabledServices array and isServiceEnabled helper function
+ * Hook to check which service kinds are configured in the v2 backend.
+ * Derived from /kinds (list of registered service kinds).
  */
 export function useEnabledServices() {
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.frontendConfig(),
-    queryFn: () => apiClient.getFrontendConfig(),
-    staleTime: Infinity, // Config rarely changes
+    queryFn: () => apiClient.getKinds(),
+    staleTime: Infinity,
     retry: 2,
   });
 
-  const enabledServices = data?.enabledServices || [];
+  const enabledServices = data ?? [];
 
   const isServiceEnabled = (serviceName: string): boolean => {
-    if (!data?.enabledServices) {
-      // If data not loaded yet, default to disabled to avoid premature requests
-      return false;
-    }
+    if (!data) return false;
     return enabledServices.includes(serviceName.toLowerCase());
   };
 

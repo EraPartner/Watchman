@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
 import { queryKeys } from "../lib/queryKeys";
+import type { InstanceInfo } from "../services/ApiClient";
 
 export interface ServiceInstance {
   id: string;
@@ -18,11 +19,25 @@ export interface ServiceInstancesData {
   timestamp: string;
 }
 
+function groupByKind(list: InstanceInfo[]): ServiceInstancesData {
+  const instances: ServiceInstancesData["instances"] = {};
+  for (const info of list) {
+    const bucket = instances[info.kind] ?? { count: 0, instances: [] };
+    bucket.instances = [
+      ...bucket.instances,
+      { id: info.instanceId, type: info.kind },
+    ];
+    bucket.count = bucket.instances.length;
+    instances[info.kind] = bucket;
+  }
+  return { instances, timestamp: new Date().toISOString() };
+}
+
 export const useServiceInstances = () => {
   const query = useQuery<ServiceInstancesData>({
     queryKey: queryKeys.servicesInstances(),
-    queryFn: () => apiClient.getServiceInstances(),
-    refetchInterval: 60000, // Refresh every minute
+    queryFn: async () => groupByKind(await apiClient.getInstances()),
+    refetchInterval: 60000,
     retry: 1,
   });
 

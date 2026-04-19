@@ -596,10 +596,9 @@ components:
             heapUsed: { type: integer }
     SetupStatus:
       type: object
-      required: [needsSetup, adminConfigured, serviceCount]
+      required: [needsSetup, serviceCount]
       properties:
         needsSetup: { type: boolean }
-        adminConfigured: { type: boolean }
         serviceCount: { type: integer }
     FieldMeta:
       type: object

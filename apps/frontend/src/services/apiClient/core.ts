@@ -1,5 +1,4 @@
 import { APP_CONFIG } from "../../lib/constants";
-import { csrfManager } from "../../lib/csrf";
 import { getBackendUrl } from "../../lib/backendUrl";
 import { extractApiError, unwrapApiResponse } from "../../lib/apiResponse";
 import type { ApiRequestOptions } from "./types";
@@ -8,28 +7,10 @@ const backendUrl = getBackendUrl();
 
 export class ApiClientCore {
   private baseUrl: string;
-  private authToken: string | null = null;
   private inFlightRequests: Map<string, Promise<unknown>> = new Map();
 
   constructor() {
     this.baseUrl = backendUrl;
-  }
-
-  public setFallbackAuthToken(token: string | null) {
-    this.authToken = token;
-  }
-
-  public extractCompatibilityAuthToken(response: unknown): string | undefined {
-    if (!response || typeof response !== "object" || !("token" in response)) {
-      return undefined;
-    }
-
-    const token = (response as { token?: unknown }).token;
-    if (typeof token !== "string" || token.length === 0) {
-      return undefined;
-    }
-
-    return token;
   }
 
   public async request<T>(
@@ -172,19 +153,12 @@ export class ApiClientCore {
       headers["Content-Type"] = "application/json";
     }
 
-    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-      csrfManager.addTokenToHeaders(headers);
-    }
-
-    if (this.authToken && !this.hasHeader(headers, "authorization")) {
-      headers.Authorization = `Bearer ${this.authToken}`;
-    }
-
-    const fetchOptions = Object.assign({}, options, {
+    const fetchOptions: RequestInit = {
+      method,
       headers,
-      credentials: "include",
       signal,
-    });
+      body: options?.body as BodyInit | null | undefined,
+    };
 
     const promise = (async () => {
       try {

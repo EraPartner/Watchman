@@ -4,7 +4,7 @@ import { Button } from "../components/primitives";
 import { useSetupStatus, useCreateService } from "./Settings/useConfigQueries";
 import ServiceEditor from "./Settings/ServiceEditor";
 
-type Step = "welcome" | "admin" | "service" | "done";
+type Step = "welcome" | "service" | "done";
 
 export default function SetupWizard() {
   const { data: status, isLoading } = useSetupStatus();
@@ -25,43 +25,11 @@ export default function SetupWizard() {
           <>
             <h1 className="text-2xl font-semibold">Welcome to Watchman</h1>
             <p className="text-sm text-muted-foreground">
-              Let's configure your dashboard. We'll set up admin access and add
-              your first monitored service.
+              Let's configure your dashboard. Add your first monitored service
+              to get started.
             </p>
             <div className="flex justify-end">
-              <Button variant="accent" onClick={() => setStep("admin")}>
-                Continue
-              </Button>
-            </div>
-          </>
-        )}
-
-        {step === "admin" && (
-          <>
-            <h1 className="text-2xl font-semibold">Admin credentials</h1>
-            {status?.adminConfigured ? (
-              <p className="text-sm">
-                Admin credentials are configured via environment variables.
-              </p>
-            ) : (
-              <div className="text-sm text-red-500 space-y-2">
-                <p>
-                  Admin is not configured. Set{" "}
-                  <code>AUTH_USERNAME</code> and{" "}
-                  <code>AUTH_PASSWORD_HASH</code> in your <code>.env</code>,
-                  then restart the backend.
-                </p>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <Button variant="ghost" onClick={() => setStep("welcome")}>
-                Back
-              </Button>
-              <Button
-                variant="accent"
-                onClick={() => setStep("service")}
-                disabled={!status?.adminConfigured}
-              >
+              <Button variant="accent" onClick={() => setStep("service")}>
                 Continue
               </Button>
             </div>
@@ -72,7 +40,7 @@ export default function SetupWizard() {
           <>
             <h1 className="text-2xl font-semibold">Add your first service</h1>
             <ServiceEditor
-              onCancel={() => setStep("admin")}
+              onCancel={() => setStep("welcome")}
               submitting={createMut.isPending}
               onSubmit={async (input) => {
                 await createMut.mutateAsync(input);

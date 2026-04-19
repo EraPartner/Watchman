@@ -66,10 +66,10 @@ export interface AuditEntry {
 
 export interface SetupStatus {
   needsSetup: boolean;
-  adminConfigured: boolean;
+  serviceCount: number;
 }
 
-const BASE = "/api/v1";
+const BASE = "";
 
 function jsonBody(payload: unknown): {
   method: "POST" | "PUT";

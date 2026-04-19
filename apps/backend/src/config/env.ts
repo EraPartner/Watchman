@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  BACKEND_V2_PORT: z.coerce.number().int().positive().default(3101),
+  BACKEND_V2_PORT: z.coerce.number().int().positive().default(3001),
   BACKEND_V2_HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATA_DIR: z.string().default('./data'),
@@ -11,8 +11,6 @@ const EnvSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   WATCHMAN_MASTER_KEY: z.string().optional(),
-  AUTH_USERNAME: z.string().optional(),
-  AUTH_PASSWORD_HASH: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

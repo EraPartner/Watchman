@@ -3,18 +3,16 @@ import type { ConfigStore } from '../../../config/store/ConfigStore.js';
 
 export interface SetupRouteDeps {
   store: ConfigStore;
-  adminConfigured: boolean;
 }
 
 export function setupRoutes(deps: SetupRouteDeps): FastifyPluginAsync {
   return async (app) => {
     app.get('/setup/status', async () => {
       const services = await deps.store.loadAll();
-      const needsSetup = services.length === 0 || !deps.adminConfigured;
+      const needsSetup = services.length === 0;
       return {
         data: {
           needsSetup,
-          adminConfigured: deps.adminConfigured,
           serviceCount: services.length,
         },
       };

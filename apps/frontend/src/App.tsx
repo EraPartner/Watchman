@@ -4,8 +4,6 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { lazy, Suspense } from "react";
-import AuthGuard from "./components/AuthGuard";
-import { AuthProvider } from "./hooks/useAuth";
 import { WebSocketProvider } from "./providers/WebSocketProvider";
 
 function shouldRetryQuery(failureCount: number, error: unknown): boolean {
@@ -22,7 +20,6 @@ function shouldRetryQuery(failureCount: number, error: unknown): boolean {
 }
 
 const NotFoundPage = lazy(() => import("./pages/NotFound"));
-const LoginPage = lazy(() => import("./pages/Login"));
 const BentoDashboardPage = lazy(
   () => import("./components/dashboard/BentoDashboard")
 );
@@ -30,14 +27,6 @@ const SetupWizardPage = lazy(() => import("./pages/SetupWizard"));
 const SettingsServicesPage = lazy(() => import("./pages/Settings/Services"));
 const SettingsAuditPage = lazy(() => import("./pages/Settings/Audit"));
 const SettingsBackupPage = lazy(() => import("./pages/Settings/BackupRestore"));
-
-function RootRoute() {
-  return (
-    <AuthGuard>
-      <BentoDashboardPage />
-    </AuthGuard>
-  );
-}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,47 +57,32 @@ const PageLoader = () => (
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <WebSocketProvider>
-          <Toaster theme="dark" position="top-right" />
-          <BrowserRouter>
-            <ErrorBoundary>
-              <Suspense fallback={<PageLoader />}>
-                <Routes>
-                  <Route path="/" element={<RootRoute />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/setup" element={<SetupWizardPage />} />
-                  <Route
-                    path="/settings/services"
-                    element={
-                      <AuthGuard>
-                        <SettingsServicesPage />
-                      </AuthGuard>
-                    }
-                  />
-                  <Route
-                    path="/settings/audit"
-                    element={
-                      <AuthGuard>
-                        <SettingsAuditPage />
-                      </AuthGuard>
-                    }
-                  />
-                  <Route
-                    path="/settings/backup"
-                    element={
-                      <AuthGuard>
-                        <SettingsBackupPage />
-                      </AuthGuard>
-                    }
-                  />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
-              </Suspense>
-            </ErrorBoundary>
-          </BrowserRouter>
-        </WebSocketProvider>
-      </AuthProvider>
+      <WebSocketProvider>
+        <Toaster theme="dark" position="top-right" />
+        <BrowserRouter>
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<BentoDashboardPage />} />
+                <Route path="/setup" element={<SetupWizardPage />} />
+                <Route
+                  path="/settings/services"
+                  element={<SettingsServicesPage />}
+                />
+                <Route
+                  path="/settings/audit"
+                  element={<SettingsAuditPage />}
+                />
+                <Route
+                  path="/settings/backup"
+                  element={<SettingsBackupPage />}
+                />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </BrowserRouter>
+      </WebSocketProvider>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   );

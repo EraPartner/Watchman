@@ -47,16 +47,28 @@ export function ServiceTile({
   className,
 }: ServiceTileProps) {
   const renderer = getRenderer(kind);
-  const serviceKey = instanceId ?? kind;
 
-  const healthQuery = useServiceHealth(serviceKey);
-  const statsQuery = useServiceStats(serviceKey);
+  const healthQuery = useServiceHealth(kind, instanceId);
+  const statsQuery = useServiceStats(kind, instanceId);
 
   const loading = healthQuery.isLoading || statsQuery.isLoading;
-  const health = healthQuery.data as
-    | { status: "online" | "offline" | "warning" | "loading"; error?: string }
+  const healthRaw = healthQuery.data as
+    | { reachable?: boolean; message?: string }
     | undefined;
-  const stats = statsQuery.data as Record<string, unknown> | undefined;
+  const health = healthRaw
+    ? {
+        status: (healthRaw.reachable ? "online" : "offline") as
+          | "online"
+          | "offline"
+          | "warning"
+          | "loading",
+        error: healthRaw.message,
+      }
+    : undefined;
+  const statsSnapshot = statsQuery.data as
+    | { metrics?: Record<string, unknown> }
+    | undefined;
+  const stats = statsSnapshot?.metrics as Record<string, unknown> | undefined;
 
   const tone = useMemo<Tone>(() => {
     if (!renderer) return "neutral";

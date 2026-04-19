@@ -1,6 +1,10 @@
 import type { AdGuardServerStats, TorServerStats } from "@/types/server";
-import type { FrontendConfig } from "@/services/ApiClient";
 import type { ReactElement } from "react";
+
+export interface TorConnectionOverride {
+  torIp?: string;
+  torPort?: number;
+}
 
 export interface DashboardServiceInstance {
   id: string;
@@ -100,13 +104,12 @@ export function buildTorCardStats(
 }
 
 export function getTorConnectionInfo(
-  frontendConfig: FrontendConfig | undefined,
+  override: TorConnectionOverride | undefined,
   torCardStats: TorServerStats | undefined
 ) {
   return {
-    torIp: frontendConfig?.services?.tor?.ip ?? undefined,
-    torPortValue:
-      frontendConfig?.services?.tor?.port ?? torCardStats?.orPort ?? undefined,
+    torIp: override?.torIp ?? undefined,
+    torPortValue: override?.torPort ?? torCardStats?.orPort ?? undefined,
   };
 }
 

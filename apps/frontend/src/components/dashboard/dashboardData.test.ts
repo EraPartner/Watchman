@@ -90,17 +90,8 @@ describe("dashboardData", () => {
 
   it("getTorConnectionInfo prefers frontend config port over tor stats", () => {
     const result = getTorConnectionInfo(
-      {
-        services: {
-          tor: {
-            ip: "10.0.0.5",
-            port: 9050,
-          },
-        },
-      } as never,
-      {
-        orPort: 9001,
-      } as never
+      { torIp: "10.0.0.5", torPort: 9050 },
+      { orPort: 9001 } as never
     );
 
     expect(result).toEqual({
