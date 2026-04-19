@@ -7,11 +7,27 @@
 
 import { env } from "./env";
 
+interface DesktopBridge {
+  apiUrl?: string;
+  wsUrl?: string;
+  isDesktop?: boolean;
+}
+
+function getDesktopBridge(): DesktopBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as unknown as { __WATCHMAN__?: DesktopBridge }).__WATCHMAN__;
+}
+
 /**
  * Get the backend URL
  * @returns {string} The backend URL
  */
 export function getBackendUrl(): string {
+  const desktopUrl = getDesktopBridge()?.apiUrl;
+  if (desktopUrl) {
+    return desktopUrl;
+  }
+
   const envUrl = env.get("VITE_BACKEND_URL");
 
   // If explicitly set, use it
@@ -38,6 +54,17 @@ export function getBackendUrl(): string {
 
 export function getWebSocketUrl(path = "/ws"): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  const desktopWsBase = getDesktopBridge()?.wsUrl;
+  if (desktopWsBase) {
+    try {
+      const parsed = new URL(desktopWsBase);
+      return `${parsed.protocol}//${parsed.host}${normalizedPath}`;
+    } catch {
+      // fall through
+    }
+  }
+
   const envUrl = env.get("VITE_BACKEND_URL");
   const preferredProtocol =
     typeof window !== "undefined" && window.location.protocol === "https:"

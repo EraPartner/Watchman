@@ -34,6 +34,25 @@ export async function buildServer(deps: BuildServerDeps) {
     bodyLimit: 1 * 1024 * 1024,
   });
 
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin;
+    if (typeof origin === 'string' && origin.startsWith('watchman://')) {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Credentials', 'true');
+      reply.header(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, X-CSRF-Token',
+      );
+      reply.header(
+        'Access-Control-Allow-Methods',
+        'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+      );
+      if (request.method === 'OPTIONS') {
+        reply.code(204).send();
+      }
+    }
+  });
+
   await app.register(logSamplingPlugin, { healthSampleRate: deps.healthLogSampleRate ?? 20 });
   await app.register(requestTimeoutPlugin, { timeoutMs: deps.requestTimeoutMs ?? 15_000 });
   await app.register(compress, { global: true, threshold: 1024, encodings: ['br', 'gzip'] });

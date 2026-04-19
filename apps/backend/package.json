@@ -19,8 +19,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write '**/*.{ts,js,json}'",
     "format:check": "prettier --check '**/*.{ts,js,json}'",
-    "security-audit": "npm audit --audit-level moderate",
-    "security:check": "npm audit && npm run security:secrets",
+    "security:check": "npm audit --audit-level moderate && npm run security:secrets",
     "security:fix": "npm audit fix",
     "security:secrets": "echo 'Checking for exposed secrets...' && ! grep -r -E '(password|secret|token|key)\\s*[:=]\\s*['\"]?[A-Za-z0-9]{20,}' --exclude-dir=node_modules --exclude-dir=dist --exclude=package*.json --exclude='*.md' --exclude='*.map' . || (echo '⚠️  Possible secrets found!' && exit 1)",
     "precommit": "npm run typecheck && npm run lint"

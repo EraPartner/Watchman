@@ -7,6 +7,7 @@
   "workspaces": [
     "apps/frontend",
     "apps/backend",
+    "apps/desktop",
     "packages/*"
   ],
   "scripts": {
@@ -16,15 +17,20 @@
     "build": "npm run build:frontend && npm run build:backend",
     "build:frontend": "npm run build --workspace=apps/frontend",
     "build:backend": "npm run build --workspace=apps/backend",
-    "start": "npm run start:backend",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:backend": "npm run start --workspace=apps/backend",
+    "start:frontend": "npm run preview --workspace=apps/frontend",
+    "dev:desktop": "npm run build:backend && npm run build:frontend && npm run dev --workspace=apps/desktop",
+    "start:desktop": "npm run build:backend && npm run build:frontend && npm run start --workspace=apps/desktop",
+    "package:desktop": "npm run build:backend && npm run build:frontend && npm run package --workspace=apps/desktop",
+    "typecheck": "npm run typecheck --workspace=apps/backend && npm run typecheck --workspace=apps/frontend",
     "lint": "npm run lint --workspaces --if-present",
     "lint:fix": "npm run lint:fix --workspaces --if-present",
     "format": "npm run format --workspaces --if-present && prettier --write .",
     "format:check": "npm run format:check --workspaces --if-present && prettier --check .",
     "test": "npm run test --workspaces --if-present",
-    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules",
-    "setup": "npm install"
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
