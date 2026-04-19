@@ -6,7 +6,7 @@ info:
     All endpoints return JSON. Envelope: `{ data: ... }` on success,
     `{ error: { code, message } }` on failure. Polling is server-owned;
     HTTP reads serve cached/poller-published state.
-  version: 2.0.0
+  version: 2.1.0
   license:
     name: AGPL-3.0-only
 servers:
@@ -104,6 +104,56 @@ paths:
                   data: { $ref: '#/components/schemas/StatsSnapshot' }
         '404': { $ref: '#/components/responses/DomainError' }
         '503': { $ref: '#/components/responses/DomainError' }
+  /services/{kind}/history:
+    get:
+      tags: [services]
+      summary: Time-series history for a service metric
+      parameters:
+        - $ref: '#/components/parameters/Kind'
+        - $ref: '#/components/parameters/Instance'
+        - name: metric
+          in: query
+          required: true
+          schema: { type: string }
+          description: Metric key (as emitted in StatsSnapshot.metrics)
+        - name: from
+          in: query
+          required: true
+          schema: { type: string }
+          description: ISO-8601 timestamp or epoch ms (inclusive)
+        - name: to
+          in: query
+          required: true
+          schema: { type: string }
+          description: ISO-8601 timestamp or epoch ms (exclusive)
+        - name: resolution
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Resolution' }
+          description: Rollup tier. Defaults to auto by window width.
+        - name: agg
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [avg, min, max, last]
+          description: Aggregate for non-raw tiers. Default avg.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 20000 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/HistoryPayload' }
+        '400': { $ref: '#/components/responses/DomainError' }
+        '404': { $ref: '#/components/responses/DomainError' }
   /services/{kind}/control:
     post:
       tags: [services]
@@ -199,6 +249,191 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MetricsSnapshot' }
+  /setup/status:
+    get:
+      tags: [setup]
+      summary: Setup mode status (needs wizard?)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SetupStatus' }
+  /config/kinds:
+    get:
+      tags: [config]
+      summary: Registered service kinds with Zod-derived field metadata for form rendering
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/KindSchema' }
+  /config/services:
+    get:
+      tags: [config]
+      summary: All configured service instances (secrets redacted)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ServiceInstance' }
+    post:
+      tags: [config]
+      summary: Create a service instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceInstanceInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ServiceInstance' }
+        '400': { $ref: '#/components/responses/DomainError' }
+        '409': { $ref: '#/components/responses/DomainError' }
+  /config/services/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [config]
+      summary: Single service instance (secrets redacted)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ServiceInstance' }
+        '404': { $ref: '#/components/responses/DomainError' }
+    put:
+      tags: [config]
+      summary: Update service instance. Secret fields sent as "***" preserve existing value.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceInstanceInput' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ServiceInstance' }
+        '400': { $ref: '#/components/responses/DomainError' }
+        '404': { $ref: '#/components/responses/DomainError' }
+    delete:
+      tags: [config]
+      summary: Delete a service instance
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/DomainError' }
+  /config/services/{id}/test:
+    post:
+      tags: [config]
+      summary: Run test-connection probe against a live service instance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TestConnectionResult' }
+        '404': { $ref: '#/components/responses/DomainError' }
+        '409': { $ref: '#/components/responses/DomainError' }
+  /config/audit:
+    get:
+      tags: [config]
+      summary: Config audit timeline (most recent first)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEntry' }
+  /config/export:
+    get:
+      tags: [config]
+      summary: Export all service configurations as encrypted bundle
+      responses:
+        '200':
+          description: Encrypted bundle (payload is base64 AES-256-GCM of plaintext services)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportBundle' }
+  /config/import:
+    post:
+      tags: [config]
+      summary: Import a previously exported bundle; upserts by (kind, instanceId)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExportBundle' }
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ImportResult' }
+        '400':
+          description: Invalid bundle
 components:
   parameters:
     Kind:
@@ -316,6 +551,28 @@ components:
       required: [tracked]
       properties:
         tracked: { type: integer }
+    Resolution:
+      type: string
+      enum: [raw, 1m, 5m, 1h]
+    HistoryPoint:
+      type: object
+      required: [t, v]
+      properties:
+        t: { type: number, description: Epoch ms bucket start }
+        v: { type: [number, 'null'] }
+        min: { type: [number, 'null'] }
+        max: { type: [number, 'null'] }
+    HistoryPayload:
+      type: object
+      required: [kind, instance, metric, resolution, points]
+      properties:
+        kind: { type: string }
+        instance: { type: [string, 'null'] }
+        metric: { type: string }
+        resolution: { $ref: '#/components/schemas/Resolution' }
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/HistoryPoint' }
     MetricsSnapshot:
       type: object
       required: [breakers, poller, cache, process]
@@ -337,3 +594,111 @@ components:
             uptimeSec: { type: integer }
             rss: { type: integer }
             heapUsed: { type: integer }
+    SetupStatus:
+      type: object
+      required: [needsSetup, adminConfigured, serviceCount]
+      properties:
+        needsSetup: { type: boolean }
+        adminConfigured: { type: boolean }
+        serviceCount: { type: integer }
+    FieldMeta:
+      type: object
+      required: [name, label, type]
+      properties:
+        name: { type: string }
+        label: { type: string }
+        type:
+          type: string
+          enum: [string, number, boolean, secret, url, enum]
+        required: { type: boolean }
+        secret: { type: boolean }
+        placeholder: { type: string }
+        help: { type: string }
+        options:
+          type: array
+          items: { type: string }
+    KindSchema:
+      type: object
+      required: [kind, label, fields]
+      properties:
+        kind: { type: string }
+        label: { type: string }
+        description: { type: string }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/FieldMeta' }
+    ServiceInstance:
+      type: object
+      required: [id, kind, instanceId, enabled, config, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        instanceId: { type: string }
+        enabled: { type: boolean }
+        config:
+          type: object
+          additionalProperties: true
+          description: Full service config. Secret field values returned as "***".
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ServiceInstanceInput:
+      type: object
+      required: [kind, instanceId, enabled]
+      additionalProperties: true
+      description: Full service-instance config (kind-discriminated). Secrets sent as "***" preserve existing value on update.
+      properties:
+        kind: { type: string }
+        instanceId: { type: string }
+        enabled: { type: boolean }
+        pollPolicy:
+          type: object
+          additionalProperties: true
+        cacheTtlMs: { type: integer }
+        timeoutMs: { type: integer }
+    TestConnectionResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        latencyMs: { type: number }
+        error: { type: string }
+    AuditEntry:
+      type: object
+      required: [id, ts, action, targetKind, targetId]
+      properties:
+        id: { type: integer }
+        ts: { type: string, format: date-time }
+        action:
+          type: string
+          enum: [create, update, delete, import, export]
+        targetKind: { type: string }
+        targetId: { type: string }
+        actor: { type: string }
+        diff:
+          type: object
+          additionalProperties: true
+    ExportBundle:
+      type: object
+      required: [version, exportedAt, payload]
+      properties:
+        version: { type: integer, enum: [1] }
+        exportedAt: { type: string, format: date-time }
+        payload:
+          type: string
+          description: Base64 AES-256-GCM ciphertext of JSON service array
+    ImportResult:
+      type: object
+      required: [imported, updated, skipped, errors]
+      properties:
+        imported: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [kind, instanceId, message]
+            properties:
+              kind: { type: string }
+              instanceId: { type: string }
+              message: { type: string }

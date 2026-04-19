@@ -7,6 +7,8 @@ import type {
   BitcoinStats,
   FrontendConfig,
   GenericServiceStats,
+  HistoryPayload,
+  HistoryQueryParams,
   HomebridgeAccessoriesResponse,
   HomebridgeServerInformationResponse,
   HomebridgeVersionResponse,
@@ -197,6 +199,21 @@ export class ApiClientEndpoints {
 
   async getServiceStats(serviceKey: string): Promise<GenericServiceStats> {
     return this.core.request(`/api/${serviceKey}/stats`);
+  }
+
+  async getServiceHistory(
+    kind: string,
+    params: HistoryQueryParams
+  ): Promise<HistoryPayload> {
+    const q = new URLSearchParams();
+    q.set("metric", params.metric);
+    q.set("from", String(params.from));
+    q.set("to", String(params.to));
+    if (params.instance) q.set("instance", params.instance);
+    if (params.resolution) q.set("resolution", params.resolution);
+    if (params.agg) q.set("agg", params.agg);
+    if (params.limit != null) q.set("limit", String(params.limit));
+    return this.core.request(`/api/services/${kind}/history?${q.toString()}`);
   }
 
   async getRouterArp(serviceName: string): Promise<RouterArpResponse> {

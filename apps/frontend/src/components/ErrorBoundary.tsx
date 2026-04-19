@@ -1,7 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Button, Surface } from "./primitives";
 import { logger } from "../lib/logger";
 
 interface Props {
@@ -46,35 +45,32 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <Card className="w-full max-w-2xl mx-auto mt-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              Something went wrong
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              An unexpected error occurred. Please try refreshing the page or
-              contact support if the problem persists.
-            </p>
-            {import.meta.env.MODE === "development" && this.state.error && (
-              <div className="p-4 bg-muted rounded-md">
-                <pre className="text-xs overflow-auto">
-                  {this.state.error.message}
-                  {this.state.errorInfo?.componentStack}
-                </pre>
-              </div>
-            )}
-            <Button
-              onClick={this.handleReset}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
+        <Surface className="w-full max-w-2xl mx-auto mt-8 p-s-6 space-y-s-4">
+          <div className="flex items-center gap-s-2 text-[var(--crit)] text-fs-h3 font-[600]">
+            <AlertTriangle className="h-5 w-5" />
+            Something went wrong
+          </div>
+          <p className="text-fs-body text-[var(--text-md)]">
+            An unexpected error occurred. Please try refreshing the page or
+            contact support if the problem persists.
+          </p>
+          {import.meta.env.MODE === "development" && this.state.error && (
+            <div className="p-s-3 bg-[var(--surface-1)] rounded-r-2">
+              <pre className="text-fs-label overflow-auto font-mono">
+                {this.state.error.message}
+                {this.state.errorInfo?.componentStack}
+              </pre>
+            </div>
+          )}
+          <Button
+            onClick={this.handleReset}
+            variant="accent"
+            className="inline-flex items-center gap-s-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try Again
+          </Button>
+        </Surface>
       );
     }
 

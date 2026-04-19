@@ -13,8 +13,12 @@ export interface PollerOptions {
 
 export interface Poller {
   track(svc: BaseService): void;
+  untrack(id: string): void;
+  pause(): void;
+  resume(): void;
   stop(): Promise<void>;
   isRunning(id: string): boolean;
+  isPaused(): boolean;
 }
 
 type Task = { cancel: () => void };
@@ -23,6 +27,8 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
   const { clock, bus, logger } = opts;
   const timeoutMs = opts.defaultTimeoutMs ?? 10_000;
   const tasks = new Map<string, Task[]>();
+  const services = new Map<string, BaseService>();
+  let paused = false;
 
   const jitter = (ms: number, ratio: number): number => {
     const delta = ms * ratio;
@@ -40,10 +46,12 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
 
     const tick = async (): Promise<void> => {
       if (cancelled) return;
-      try {
-        await runner();
-      } catch (e) {
-        logger.error({ err: e, id: svc.id }, 'poller tick failed');
+      if (!paused) {
+        try {
+          await runner();
+        } catch (e) {
+          logger.error({ err: e, id: svc.id }, 'poller tick failed');
+        }
       }
       if (cancelled) return;
       cancelTimer = clock.setTimeout(() => {
@@ -66,6 +74,7 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
   return {
     track(svc) {
       if (tasks.has(svc.id)) return;
+      services.set(svc.id, svc);
       const healthTask = schedule(svc, svc.pollPolicy.healthMs, async () => {
         const signal = withTimeout(timeoutMs);
         const res = await svc.checkHealth(signal);
@@ -75,6 +84,7 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
             kind: svc.kind,
             instanceId: svc.instanceId,
             at: clock.now(),
+            snapshot: res.value,
           });
         } else {
           bus.emit('service.error', { id: svc.id, error: res.error, at: clock.now() });
@@ -89,6 +99,7 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
             kind: svc.kind,
             instanceId: svc.instanceId,
             at: clock.now(),
+            snapshot: res.value,
           });
         } else {
           bus.emit('service.error', { id: svc.id, error: res.error, at: clock.now() });
@@ -96,12 +107,29 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
       });
       tasks.set(svc.id, [healthTask, statsTask]);
     },
+    untrack(id) {
+      const list = tasks.get(id);
+      if (!list) return;
+      list.forEach((t) => t.cancel());
+      tasks.delete(id);
+      services.delete(id);
+    },
+    pause() {
+      paused = true;
+    },
+    resume() {
+      paused = false;
+    },
+    isPaused() {
+      return paused;
+    },
     isRunning(id) {
       return tasks.has(id);
     },
     async stop() {
       for (const list of tasks.values()) list.forEach((t) => t.cancel());
       tasks.clear();
+      services.clear();
     },
   };
 }

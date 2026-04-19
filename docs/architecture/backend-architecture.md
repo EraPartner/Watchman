@@ -2,8 +2,8 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-04-18
-tags: [architecture, backend, fastify, typescript, nodejs, services]
+date: 2026-04-19
+tags: [architecture, backend, fastify, typescript, nodejs, services, configuration, duckdb]
 description: Backend architecture documentation for the Watchman TypeScript/Fastify server - includes layered architecture, services, routes, and in-process state
 aliases:
   [backend, server architecture, fastify architecture, backend docs, api server]
@@ -19,16 +19,17 @@ aliases:
 The backend uses a clean layered architecture where dependencies flow downward only:
 
 ```
-config/        → Environment validation (Zod), service registry
+config/        → Environment validation (Zod), service registry, feature flags
 ↓
 core/          → Logger (Pino), DomainError hierarchy, Result<T>, clock, eventBus, container
 ↓
 infra/         → HTTP (Undici), SSH (ssh2), GPIO (pigpio-client), SNMP (net-snmp)
                 → Cache (LRU with SWR), Scheduler (croner), CircuitBreaker, Metrics
+                → TimeSeries (DuckDB @duckdb/node-api, Writer, Reader, RollupWorker, Migrations)
 ↓
 domain/        → BaseService abstract, ServiceRegistry keyed by ${kind}:${instanceId}
 ↓
-application/   → UseCases: GetServiceStatus, GetAggregatedHealth, ControlService, ListInstances
+application/   → UseCases: GetServiceStatus, GetAggregatedHealth, GetServiceHistory, ControlService, ListInstances
 ↓
 transport/     → HTTP (Fastify routes), WebSocket (AuthGate, ConnectionManager, Broadcaster)
 ```
@@ -77,7 +78,7 @@ The core layer (`[[apps/backend/src/core/]]`) provides shared foundations:
 | errors              | DomainError hierarchy (NotFound, Unavailable, Unauthorized, Timeout, etc.)   |
 | Result              | Result<T, E> type for explicit success/failure semantics (no thrown errors)   |
 | clock               | Clock interface with real and test implementations for time-dependent logic   |
-| eventBus            | Pub/sub event emission for status change notifications (WebSocket broadcast) |
+| eventBus            | Typed pub/sub event emission with handler safety (see [[docs/architecture/core-systems\|Core Systems]]) |
 | container           | Simple service container for dependency injection (no external DI library)   |
 
 ## Infrastructure Layer
@@ -94,6 +95,7 @@ The infra layer (`[[apps/backend/src/infra/]]`) provides protocol-agnostic adapt
 | scheduler       | croner, AbortSignal | Background poller with configurable interval + jitter   |
 | circuitBreaker  | -                  | Per-service fault tolerance (5 failures, 30s reset)     |
 | metrics         | -                  | Metrics snapshot (circuit state, poller stats, memory)  |
+| timeseries      | DuckDB             | Time-series storage, rollups, and querying (opt-in, TIMESERIES_ENABLED) |
 
 ## Domain Layer
 
@@ -140,6 +142,7 @@ The application layer (`[[apps/backend/src/application/]]`) contains orchestrati
 | GetAggregatedHealth     | Fetch health for all enabled services in parallel        |
 | ControlService          | Execute state-changing action (e.g., toggle protection)  |
 | ListInstances           | Return service instance configuration and metadata       |
+| GetServiceHistory       | Query time-series metrics (optional; requires TIMESERIES_ENABLED) |
 
 Each UseCase:
 - Takes domain objects as input
@@ -158,10 +161,11 @@ Fastify routes in `[[apps/backend/src/transport/http/routes/]]`:
 1. **Auth**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
 2. **Meta**: `/health`, `/meta/health`, `/metrics`
 3. **Services**: `/api/services`, `/api/services/:kind`, `/api/services/:kind/stats`
-4. **Multi-Instance**: `/api/:kind_:num/status`, `/api/:kind_:num/stats`
-5. **Control**: Service-specific actions (e.g., `/api/adguard/protection`)
-6. **Special**: Homebridge accessories, router ARP, Tor relay info
-7. **WebSocket**: `GET /ws` (upgrade to WebSocket)
+4. **History**: `/services/:kind/history` (time-series metrics; opt-in via TIMESERIES_ENABLED)
+5. **Multi-Instance**: `/api/:kind_:num/status`, `/api/:kind_:num/stats`
+6. **Control**: Service-specific actions (e.g., `/api/adguard/protection`)
+7. **Special**: Homebridge accessories, router ARP, Tor relay info
+8. **WebSocket**: `GET /ws` (upgrade to WebSocket)
 
 ### WebSocket
 
@@ -174,27 +178,42 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 | HeartbeatScheduler   | Ping/pong keep-alives (30s interval)       |
 | Broadcaster          | Publish status changes to connected clients |
 
-## Configuration
+## Configuration Layer
 
-[[apps/backend/src/config/]]—Environment variable parsing and validation:
+[[apps/backend/src/config/]]—Bootstrap and runtime configuration:
 
-- `[[apps/backend/src/config/env.ts]]` – Zod schema for all env vars
-- `[[apps/backend/src/config/ServiceRegistry.ts]]` – Maps enabled services to BaseService implementations
-- Multi-instance discovery via numbered env vars: `SERVICE_KIND_1_*`, `SERVICE_KIND_2_*`, etc.
+### Bootstrap Configuration
+
+- `[[apps/backend/src/config/env.ts]]` – Zod schema for required env vars (ports, auth, master key, etc.)
 - CORS allowlist precomputed from `FRONTEND_URL` during bootstrap
 - `TRUST_PROXY` applied to Fastify configuration per deployment
+
+### Service Configuration (UI-Driven, v2.2+)
+
+- `[[apps/backend/src/config/store/ConfigStore.ts]]` – DuckDB-backed CRUD for service instances; **per-operation connection pattern**: each method acquires a pool connection and releases via `closeSync()` in finally block (no persistent singleton connection). This ensures connections are always freed even on error.
+- `[[apps/backend/src/config/store/encryption.ts]]` – AES-256-GCM encryption/decryption (keyed by `WATCHMAN_MASTER_KEY`)
+- `[[apps/backend/src/config/store/migrations.ts]]` – DuckDB schema setup (tables: `app_service_instance`, `app_config_audit`)
+- `[[apps/backend/src/config/store/envMigrator.ts]]` – One-shot legacy env var import on first boot
+- `[[apps/backend/src/config/schemas/`* – Per-kind Zod schema + field metadata (one file per service kind)
+
+### Service Instantiation
+
+- `[[apps/backend/src/config/ServiceFactory.ts]]` – Pure function to create a service instance from config (no env reading)
+- `[[apps/backend/src/application/ServiceLifecycle.ts]]` – Orchestrates hot-reload on config change: pause poller → stop old service → create new → start new → retrack → resume
+- Services are registered by `${kind}:${instanceId}` in `[[apps/backend/src/domain/ServiceRegistry.ts]]`
 
 ## In-Process State Management
 
 ### Circuit Breaker
 
-`[[apps/backend/src/infra/circuitBreaker.ts]]` – Per-service fault tolerance:
+`[[apps/backend/src/infra/circuitBreaker/breaker.ts]]` – Per-service fault tolerance:
 
 - Threshold: 5 consecutive failures
 - Reset timeout: 30 seconds
 - Request timeout: 5 seconds (per-request, not circuit-wide)
 - States: Closed → Open → Half-Open → Closed
 - Volatile state (lost on restart, acceptable for self-hosted)
+- **Half-open slot management**: `tryAcquire()` atomically reserves a slot at the start of `exec()`; slot is decremented only on failure in catch-finally. This prevents concurrent callers from slipping through the half-open gate. Max concurrent half-open calls controlled by `halfOpenMaxCalls` policy (default 1).
 
 ### Response Caching
 
@@ -208,7 +227,7 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 
 ### Background Polling
 
-`[[apps/backend/src/infra/scheduler/]]` – Croner-based polling:
+`[[apps/backend/src/infra/scheduler/poller.ts]]` – Croner-based polling with hot-reload support:
 
 - Interval: 15 seconds (configurable)
 - Jitter: ±2 seconds (prevents thundering herd)
@@ -216,6 +235,18 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 - AbortSignal propagation for graceful shutdown
 - Emits status changes via eventBus (triggers WebSocket broadcast)
 - Integrated with circuit breaker (skips poll if circuit open)
+- **Hot-reload support**: `pause()`, `resume()`, `untrack(id)`, `retrack(service)` methods for runtime service reconfiguration
+
+### Time-Series Storage (Optional)
+
+`[[apps/backend/src/infra/timeseries/]]` – DuckDB time-series metrics (gated by `TIMESERIES_ENABLED`):
+
+- **Writer** (`TimeSeriesWriter`): Subscribes to `service.stats.updated` events; batches raw metrics into DuckDB `metric_raw` table
+- **Rollup Worker** (`RollupWorker`): Background jobs (setTimeout-based, ~30s/2min/10min cadence) roll raw → 1m/5m/1h tiers with aggregations (min/max/avg/last)
+- **Reader** (`TimeSeriesReader`): Query builder with auto-resolution based on time window; supports kind/instance/metric/from/to/resolution filters
+- **Connection Pool** (`DuckDbPool`): Wraps DuckDBInstance, manages connections
+- **Schema**: 5 tables (metric_raw, metric_1m, metric_5m, metric_1h, rollup_state) with retention: raw 6h, 1m 48h, 5m 14d, 1h 30d
+- See [[docs/features/time-series-history|Time-Series Feature Doc]] for details
 
 ## PlantUML Diagrams
 
@@ -355,6 +386,7 @@ end note
 ## Related
 
 - [[docs/architecture/data-flow|Data Flow]]
+- [[docs/architecture/core-systems|Core Systems]] — Event Bus and Service Lifecycle
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/security/index|Security]]
 - [[docs/api/index|API Documentation]]

@@ -2,8 +2,8 @@
 title: Code Patterns
 type: reference
 status: active
-date: 2026-04-10
-tags: [reference, code-patterns, backend, frontend]
+date: 2026-04-19
+tags: [reference, code-patterns, backend, frontend, configuration, zod, mutex]
 description: Standard code patterns and conventions used across the Watchman codebase
 aliases: [patterns, conventions, code style, best practices]
 ---
@@ -140,22 +140,63 @@ Redaction behavior note: in `[[apps/frontend/src/lib/logger.ts]]`, when a redact
 
 Coverage reference: `[[apps/frontend/src/lib/logger.test.ts]]` validates this fallback branch and standard redaction behavior.
 
-### Service Card Pattern
+### ServiceRenderer Registry Pattern (Phase 3 — Bento Dashboard)
 
-```tsx
-import { OptimizedServiceCard } from "./OptimizedServiceCard";
+The bento dashboard uses a **service-renderer registry** to drive customization per service without duplicating the `<ServiceTile>` component. Each service has one file in `apps/frontend/src/services/renderers/` that exports a `ServiceRenderer` object:
 
-export function ServiceCard() {
-  return (
-    <OptimizedServiceCard
-      serviceName="service-name"
-      title="Service Display Name"
-      icon={<Icon />}
-      renderStats={(stats) => <div>{/* Render stats */}</div>}
-    />
-  );
-}
+```typescript
+// apps/frontend/src/services/renderers/bitcoin.ts
+import type { ServiceRenderer } from "./types";
+
+export const bitcoinRenderer: ServiceRenderer<BitcoinStats> = {
+  // Summary metrics displayed in the tile
+  summaryMetrics: ["block_height", "peers", "mempool_size"],
+
+  // Detailed view groups and charts
+  detailGroups: [
+    {
+      title: "Blockchain",
+      metrics: ["block_height", "difficulty"],
+      charts: ["block_height"],
+    },
+    {
+      title: "Network",
+      metrics: ["peers", "version"],
+    },
+  ],
+
+  // Tile styling
+  tone: "luxury",
+  size: "xl", // xl, l, m, s
+  density: "compact",
+
+  // Format specific metrics
+  formatters: {
+    block_height: (v) => `#${v.toLocaleString()}`,
+    peers: (v) => `${v} peers`,
+  },
+};
 ```
+
+The registry index (`apps/frontend/src/services/renderers/index.ts`) maps service kinds to renderers:
+
+```typescript
+import { bitcoinRenderer } from "./bitcoin";
+import { synologyRenderer } from "./synology";
+// ... 12 more services
+
+export const RENDERERS: Record<string, ServiceRenderer> = {
+  bitcoin: bitcoinRenderer,
+  synology: synologyRenderer,
+  // ...
+};
+```
+
+**Why this pattern:**
+- **No duplication**: One tile component reused for all services
+- **Extensibility**: Add new service without touching tile code
+- **Consistency**: All services share the same layout, behavior, and styling constraints
+- **Rule of 3+**: Used across 14+ services (violated by 18 inline `*Card.tsx` files)
 
 ### Custom Hook Pattern
 
@@ -181,6 +222,142 @@ export function useServiceName() {
 const response = await apiClient.get("/api/service/status");
 return response.data;
 ```
+
+### DuckDB Time Conversion Pattern
+
+When passing JavaScript `Date` objects as bound parameters to DuckDB queries, use the `toTs()` helper to avoid int32 overflow on timestamp values:
+
+```typescript
+import { toTs } from "@/infra/timeseries/duckdbTime";
+
+const fromTime = toTs(new Date("2026-04-18T12:00:00Z"));
+const query = db.prepare(
+  "SELECT * FROM metric_raw WHERE ts >= ? AND ts < ?"
+);
+const rows = await query.run(fromTime, toTs(new Date()));
+```
+
+This pattern is defined in [[apps/backend/src/infra/timeseries/duckdbTime.ts|duckdbTime.ts]] and ensures correct handling of `DuckDBTimestampValue` when working with time-series data.
+
+### Per-Kind Zod Schema + UI Field Metadata Pattern
+
+Service configurations are defined as Zod schemas with attached field metadata for dynamic UI form generation. One file per service kind under `apps/backend/src/config/schemas/`:
+
+```typescript
+// apps/backend/src/config/schemas/bitcoin.ts
+import { z } from "zod";
+
+export const BitcoinConfigSchema = z.object({
+  onionUrl: z.string().url(),
+  rpcUser: z.string(),
+  rpcPassword: z.string(),
+  rpcPort: z.number().int().default(8332),
+});
+
+export const BitcoinFieldMeta: FieldMeta[] = [
+  {
+    name: "onionUrl",
+    label: "Onion Address",
+    type: "text",
+    required: true,
+    help: "Tor hidden service URL",
+  },
+  {
+    name: "rpcUser",
+    label: "RPC User",
+    type: "text",
+    required: true,
+  },
+  {
+    name: "rpcPassword",
+    label: "RPC Password",
+    type: "password",
+    secret: true, // Encrypted at rest; masked in GET responses
+    required: true,
+  },
+  {
+    name: "rpcPort",
+    label: "RPC Port",
+    type: "number",
+    required: false,
+    placeholder: "8332",
+  },
+];
+
+export type BitcoinConfig = z.infer<typeof BitcoinConfigSchema>;
+```
+
+**Why this pattern:**
+- **Single source of truth**: Zod schema defines both validation and field metadata
+- **Type safety**: `z.infer<>` generates TypeScript types automatically
+- **Dynamic UI**: Frontend generates forms from field metadata without hardcoding
+- **Server validation**: Same schema validates on both client (partial) and server (full)
+- **Secret handling**: Metadata `secret: true` flag marks fields for encryption and redaction
+
+Re-export all schemas from `[[apps/backend/src/config/schemas/index.ts]]` for API endpoint to serve to frontend.
+
+### Mutex-Serialized Lifecycle Pattern
+
+Hot-reload of service configurations requires serialized state transitions to avoid race conditions. Use `Async.Mutex` from the `async` package:
+
+```typescript
+// apps/backend/src/application/ServiceLifecycle.ts
+import { Mutex } from "async";
+
+export class ServiceLifecycle {
+  private configMutex = new Mutex();
+
+  constructor(private poller: BackgroundPoller, private eventBus: EventBus) {
+    this.eventBus.on("config:service.created", (event) => this.onCreated(event));
+    this.eventBus.on("config:service.updated", (event) => this.onUpdated(event));
+    this.eventBus.on("config:service.deleted", (event) => this.onDeleted(event));
+  }
+
+  private async onUpdated(event: ConfigServiceUpdatedEvent) {
+    // Lock prevents concurrent mutations
+    await this.configMutex.runExclusive(async () => {
+      const oldService = ServiceRegistry.get(event.id);
+      if (!oldService) return;
+
+      // Pause polling to allow in-flight requests to drain
+      this.poller.pause();
+      try {
+        // Clean up old service
+        await oldService.onStop?.();
+
+        // Create and start new service
+        const newService = ServiceFactory.createService(
+          event.kind,
+          event.config,
+          this.infra
+        );
+        await newService.onStart?.();
+
+        // Update registry
+        ServiceRegistry.update(newService);
+
+        // Retrack in poller
+        this.poller.untrack(oldService.id);
+        this.poller.retrack(newService);
+      } finally {
+        // Always resume even on error
+        this.poller.resume();
+      }
+
+      // Emit applied event for WebSocket broadcast
+      this.eventBus.emit("service.config.applied", {
+        id: newService.id,
+      });
+    });
+  }
+}
+```
+
+**Why this pattern:**
+- **Prevents race conditions**: Mutex ensures only one config change executes at a time
+- **Graceful poller coordination**: Pause allows in-flight polls to finish before state change
+- **Error safety**: `finally` block ensures poller resumes even if intermediate steps fail
+- **WebSocket-friendly**: Emits reduced events for broadcast (no secrets)
 
 ## Naming Conventions
 

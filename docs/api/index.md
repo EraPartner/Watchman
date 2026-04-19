@@ -2,10 +2,10 @@
 title: API Documentation
 type: index
 status: active
-date: 2026-04-18
-tags: [api, index, backend, openapi, endpoint, rest, fastify]
+date: 2026-04-19
+tags: [api, index, backend, openapi, endpoint, rest, fastify, backup, export, import]
 description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.1 specification (regenerated from TypeScript backend)
-aliases: [api index, endpoints, rest api, swagger, openapi spec]
+aliases: [api index, endpoints, rest api, swagger, openapi spec, backup api]
 ---
 
 # API Documentation
@@ -73,20 +73,28 @@ Operational health and version information.
 
 ### Services Endpoints
 
-Service health, stats, and control.
+Service health, stats, control, and time-series history.
 
-| Endpoint                       | Method | Description                           | Query Parameters         |
-| ------------------------------ | ------ | ------------------------------------- | ------------------------ |
-| `GET /services`                | GET    | Aggregated health for all services    | -                        |
-| `GET /services/{kind}/health`  | GET    | Health for specific service instance  | `instance` (optional)    |
-| `GET /services/{kind}/stats`   | GET    | Stats for specific service instance   | `instance` (optional)    |
-| `POST /services/{kind}/control`| POST   | Issue control action to service       | `instance` (optional)    |
+| Endpoint                       | Method | Description                           | Query Parameters         | Since |
+| ------------------------------ | ------ | ------------------------------------- | ------------------------ | ----- |
+| `GET /services`                | GET    | Aggregated health for all services    | -                        | v1.0  |
+| `GET /services/{kind}/health`  | GET    | Health for specific service instance  | `instance` (optional)    | v1.0  |
+| `GET /services/{kind}/stats`   | GET    | Stats for specific service instance   | `instance` (optional)    | v1.0  |
+| `POST /services/{kind}/control`| POST   | Issue control action to service       | `instance` (optional)    | v1.0  |
+| `GET /services/{kind}/history` | GET    | Time-series history for metric (Phase 1) | `instance`, `metric`, `from`, `to`, `resolution`, `agg`, `limit` | v2.1  |
 
 **Path Parameters:**
 - `{kind}`: Service kind (e.g., `bitcoin`, `ipfs`, `homebridge`, etc.)
 
 **Query Parameters:**
 - `instance`: Instance ID. Omit to use first registered instance for the kind.
+
+**History Endpoint** (`v2.1+`):
+
+The `/services/{kind}/history` endpoint supports time-series queries with auto-resolution. See [[docs/api/history|History API Documentation]] for full details, including:
+- Query parameters: `metric` (required), `from` and `to` (timestamps), `resolution` (auto-selected if omitted), `agg`, `limit`
+- Auto-resolution: `≤1h` → raw · `≤24h` → 1m · `≤7d` → 5m · `≤30d` → 1h
+- Response: Array of `{t, v, min, max}` points
 
 **Health Response**:
 ```json
@@ -122,9 +130,29 @@ Service health, stats, and control.
 }
 ```
 
+### Configuration Endpoints
+
+Runtime service configuration CRUD with encryption, audit trail, and backup/restore.
+
+| Endpoint                         | Method | Description                                | Since |
+| -------------------------------- | ------ | ------------------------------------------ | ----- |
+| `GET /setup/status`              | GET    | Setup wizard status                        | v2.2  |
+| `GET /config/kinds`              | GET    | Service kind schemas with field metadata   | v2.2  |
+| `GET /config/services`           | GET    | List all configured services               | v2.2  |
+| `POST /config/services`          | POST   | Create new service instance                | v2.2  |
+| `GET /config/services/{id}`      | GET    | Fetch single service instance              | v2.2  |
+| `PUT /config/services/{id}`      | PUT    | Update service instance (hot-reload)       | v2.2  |
+| `DELETE /config/services/{id}`   | DELETE | Delete service instance                    | v2.2  |
+| `POST /config/services/{id}/test`| POST   | Test connection with credentials           | v2.2  |
+| `GET /config/audit`              | GET    | Configuration audit trail                  | v2.2  |
+| `GET /config/export`             | GET    | Export all configs as encrypted bundle     | v2.3  |
+| `POST /config/import`            | POST   | Import encrypted bundle (backup restore)   | v2.3  |
+
+Full reference: [[docs/api/config|Configuration API Documentation]]
+
 ### Instances Endpoints
 
-Service instance discovery and metadata.
+Service instance discovery and metadata (legacy; use `/config/services` instead).
 
 | Endpoint              | Method | Description                      |
 | --------------------- | ------ | -------------------------------- |

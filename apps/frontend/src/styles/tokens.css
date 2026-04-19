@@ -1,0 +1,105 @@
+/* Watchman design tokens — dark-luxury bento. OKLCH throughout.
+ * Imported from src/index.css. Consumed by primitives + Tailwind theme.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Surfaces (dark-luxury depth ladder) ─────────────────────── */
+  --surface-0: oklch(14% 0.008 270);
+  --surface-1: oklch(17% 0.01 270);
+  --surface-2: oklch(20% 0.012 270);
+  --surface-3: oklch(24% 0.014 270);
+
+  --hairline: oklch(30% 0.01 270 / 0.5);
+  --hairline-strong: oklch(42% 0.015 270 / 0.7);
+
+  /* ── Text hierarchy ───────────────────────────────────────────── */
+  --text-hi: oklch(96% 0.005 90);
+  --text-md: oklch(78% 0.01 90);
+  --text-lo: oklch(56% 0.012 90);
+  --text-dim: oklch(42% 0.01 90);
+
+  /* ── Accent (cold gold) ───────────────────────────────────────── */
+  --accent: oklch(80% 0.13 85);
+  --accent-soft: oklch(70% 0.11 85 / 0.18);
+  --accent-contrast: oklch(18% 0.02 85);
+
+  /* ── Status ───────────────────────────────────────────────────── */
+  --ok: oklch(72% 0.13 155);
+  --ok-soft: oklch(68% 0.12 155 / 0.16);
+  --warn: oklch(78% 0.15 78);
+  --warn-soft: oklch(72% 0.13 78 / 0.16);
+  --crit: oklch(66% 0.21 22);
+  --crit-soft: oklch(60% 0.19 22 / 0.18);
+
+  /* ── Spacing (4 px base) ──────────────────────────────────────── */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+
+  /* ── Radii ────────────────────────────────────────────────────── */
+  --r-1: 4px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 16px;
+  --r-pill: 999px;
+
+  /* ── Typography ───────────────────────────────────────────────── */
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --fs-mono: 12px;
+  --fs-label: 11px;
+  --fs-body: 14px;
+  --fs-h3: 16px;
+  --fs-h2: 20px;
+  --fs-h1: 28px;
+  --fs-display: 40px;
+
+  --lh-tight: 1.1;
+  --lh-snug: 1.25;
+  --lh-body: 1.5;
+
+  --fw-dim: 300;
+  --fw-body: 400;
+  --fw-label: 500;
+  --fw-title: 600;
+  --fw-metric: 700;
+
+  --tracking-tight: -0.01em;
+  --tracking-label: 0.06em;
+  --tracking-mono: 0;
+
+  /* ── Motion ───────────────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 420ms;
+
+  /* ── Elevation (layered, not generic) ─────────────────────────── */
+  --elev-1:
+    inset 0 0 0 1px var(--hairline),
+    0 1px 2px oklch(0% 0 0 / 0.35);
+  --elev-2:
+    inset 0 0 0 1px var(--hairline),
+    0 4px 16px -4px oklch(0% 0 0 / 0.5);
+  --elev-3:
+    inset 0 0 0 1px var(--hairline-strong),
+    0 10px 40px -10px oklch(0% 0 0 / 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur-med: 1ms;
+    --dur-slow: 1ms;
+  }
+}

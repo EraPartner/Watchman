@@ -1,0 +1,21 @@
+/* Geist Variable + Geist Mono Variable — self-hosted via npm `geist` package.
+ * Variable axis weight 100..900. Tabular-nums hardcoded on mono for dashboard alignment.
+ * Paths relative to this file: src/styles → repo root node_modules = four levels up.
+ */
+
+@font-face {
+  font-family: 'Geist Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../../../../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Geist Mono Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../../../../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2-variations');
+  font-feature-settings: 'tnum' 1, 'zero' 1, 'ss01' 1;
+}

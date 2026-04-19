@@ -30,6 +30,23 @@ export class ServiceRegistry {
     return match;
   }
 
+  unregister(id: string): BaseService | undefined {
+    const svc = this.byId.get(id);
+    if (!svc) return undefined;
+    this.byId.delete(id);
+    const list = this.byKind.get(svc.kind);
+    if (list) {
+      const idx = list.indexOf(svc);
+      if (idx >= 0) list.splice(idx, 1);
+      if (list.length === 0) this.byKind.delete(svc.kind);
+    }
+    return svc;
+  }
+
+  has(id: string): boolean {
+    return this.byId.has(id);
+  }
+
   listKind(kind: string): readonly BaseService[] {
     return this.byKind.get(kind) ?? [];
   }

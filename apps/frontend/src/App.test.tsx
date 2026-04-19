@@ -8,26 +8,34 @@ const queryClientConfigRef = vi.hoisted(() => ({
   config: undefined as unknown,
 }));
 
-vi.mock("@/components/ui/toaster", () => ({
-  Toaster: () => <div data-testid="toaster" />,
-}));
-
-vi.mock("@/components/ui/sonner", () => ({
+vi.mock("sonner", () => ({
   Toaster: () => <div data-testid="sonner" />,
+  toast: Object.assign(() => {}, {
+    success: () => {},
+    error: () => {},
+    info: () => {},
+    warning: () => {},
+  }),
 }));
 
-vi.mock("@/components/ui/tooltip", () => ({
-  TooltipProvider: ({ children }: { children: ReactNode }) => children,
-}));
-
-vi.mock("@tanstack/react-query", () => ({
-  QueryClient: class QueryClient {
-    constructor(config?: unknown) {
-      queryClientConfigRef.config = config;
-    }
-  },
-  QueryClientProvider: ({ children }: { children: ReactNode }) => children,
-}));
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    QueryClient: class QueryClient {
+      constructor(config?: unknown) {
+        queryClientConfigRef.config = config;
+      }
+    },
+    QueryClientProvider: ({ children }: { children: ReactNode }) => children,
+    useQueryClient: () => ({
+      invalidateQueries: () => {},
+      setQueryData: () => {},
+      getQueryData: () => undefined,
+    }),
+  };
+});
 
 vi.mock("@tanstack/react-query-devtools", () => ({
   ReactQueryDevtools: () => null,
@@ -45,8 +53,12 @@ vi.mock("./hooks/useAuth", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
-vi.mock("./pages/Index", () => ({
-  default: () => <div>Index Page</div>,
+vi.mock("./providers/WebSocketProvider", () => ({
+  WebSocketProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
+vi.mock("./components/dashboard/BentoDashboard", () => ({
+  default: () => <div>Bento Dashboard</div>,
 }));
 
 vi.mock("./pages/Login", () => ({

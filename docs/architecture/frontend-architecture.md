@@ -2,16 +2,16 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-04-11
-tags: [architecture, frontend, react, typescript]
-description: Frontend architecture documentation for the Watchman React application
+date: 2026-04-19
+tags: [architecture, frontend, react, typescript, design-system, primitives, configuration, settings, api-client]
+description: Frontend architecture documentation for the Watchman React application with design system, primitives, and UI-driven configuration
 aliases: [frontend, react architecture, frontend design]
 ---
 
 # Frontend Architecture
 
 > [!abstract] Overview
-> The Watchman frontend is a React 18 + TypeScript application built with Vite, styled with Tailwind CSS and shadcn/ui components.
+> The Watchman frontend is a React 18 + TypeScript application built with Vite, styled with Tailwind CSS. **Phase 2** introduces a dark-luxury design system with OKLCH tokens, Geist typography, and 14 typed primitives. **Phase 3** adds the bento dashboard with a renderer registry pattern driving all service tiles.
 
 ## Entry Point
 
@@ -20,13 +20,18 @@ aliases: [frontend, react architecture, frontend design]
 
 ## Pages
 
-| Page      | File                                       | Description               |
-| --------- | ------------------------------------------ | ------------------------- |
-| Dashboard | `[[apps/frontend/src/pages/Index.tsx]]`    | Main monitoring dashboard |
-| Login     | `[[apps/frontend/src/pages/Login.tsx]]`    | Authentication page       |
-| Not Found | `[[apps/frontend/src/pages/NotFound.tsx]]` | 404 fallback page         |
+| Page      | File                                          | Description                                   |
+| --------- | --------------------------------------------- | --------------------------------------------- |
+| Dashboard (Legacy) | `[[apps/frontend/src/pages/Index.tsx]]`       | Main monitoring dashboard (LiveServerDashboard) |
+| Dashboard (Bento, Phase 3)  | `[[apps/frontend/src/components/dashboard/BentoDashboard.tsx]]` | New bento dashboard (behind `?bento=1` flag) |
+| Setup Wizard | `[[apps/frontend/src/pages/SetupWizard.tsx]]` | First-boot configuration wizard (served when no services configured) |
+| Settings — Services | `[[apps/frontend/src/pages/Settings/Services.tsx]]` | Service CRUD interface with list, edit, delete |
+| Settings — Editor | `[[apps/frontend/src/pages/Settings/ServiceEditor.tsx]]` | Dynamic form driven by `/config/kinds` schemas |
+| Settings — Audit | `[[apps/frontend/src/pages/Settings/Audit.tsx]]` | Timeline of configuration changes and migrations |
+| Login     | `[[apps/frontend/src/pages/Login.tsx]]`       | Authentication page                           |
+| Not Found | `[[apps/frontend/src/pages/NotFound.tsx]]`   | 404 fallback page                             |
 
-## Component Hierarchy
+## Component Hierarchy: Legacy (Phase 1–2)
 
 ```
 App
@@ -41,8 +46,32 @@ App
 │   │   │   └── Service Cards (grid)
 │   │   │       ├── ServiceLink
 │   │   │       ├── UpdateBadge
-│   │   │       └── [Service-specific Card]
+│   │   │       └── [Service-specific Card] (18 total)
 │   │   └── ErrorBoundary
+│   ├── Login
+│   │   └── AuthGuard
+│   └── NotFound
+```
+
+## Component Hierarchy: Bento (Phase 3+, behind `?bento=1`)
+
+```
+App
+├── Router
+│   ├── BentoDashboard (Phase 3)
+│   │   ├── TooltipProvider
+│   │   ├── DashboardGrid (12-col)
+│   │   │   └── ServiceTile[] (filtered by renderer)
+│   │   │       ├── Surface (tone-aware)
+│   │   │       ├── StatusDot (health indicator)
+│   │   │       ├── Badge (status label)
+│   │   │       ├── MetricValue (primary stat)
+│   │   │       └── 2-col dl (secondary metrics)
+│   │   └── ServiceDetailSheet (on tile click)
+│   │       ├── Tabs
+│   │       │   ├── Metrics Tab (detail groups from renderer)
+│   │       │   └── Charts Tab (Phase 5 placeholder)
+│   │       └── History (Phase 5: visx charts)
 │   ├── Login
 │   │   └── AuthGuard
 │   └── NotFound
@@ -78,6 +107,8 @@ Each service has a dedicated card component with service-specific queries/render
 
 - **TanStack Query (React Query)** - Server state management
 - **ApiClient** - public HTTP client wrapper (`[[apps/frontend/src/services/ApiClient.ts]]`) backed by decomposed internals in `[[apps/frontend/src/services/apiClient/core.ts]]`, `[[apps/frontend/src/services/apiClient/endpoints.ts]]`, and `[[apps/frontend/src/services/apiClient/types.ts]]`
+  - **Timeout handling**: Uses native `AbortSignal.timeout(timeoutMs)` combined with optional caller signal via `AbortSignal.any()` (removes manual timer leak)
+  - **Catch branch**: Handles both `TimeoutError` and `AbortError` (native abort signal errors)
 - **queryKeys** - Centralized query key factory (`[[apps/frontend/src/lib/queryKeys.ts]]`)
 - **UpdateBadge query path** - `[[apps/frontend/src/components/UpdateBadge.tsx]]` uses `useQuery` with `queryKeys.serviceUpdates(service)` and `apiClient.getServiceUpdates(service)` for update checks
 - **Dashboard query orchestration** - `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` centralizes LiveServerDashboard queries and refresh behavior, with `torRelay` and `frontendConfig` fetched as separate queries
@@ -101,6 +132,29 @@ Each service has a dedicated card component with service-specific queries/render
 ### Dashboard Re-render Isolation
 
 - `Updated Xs ago` display in `[[apps/frontend/src/components/LiveServerDashboard.tsx]]` is isolated into memoized `LastUpdatedText` so the 1-second timer does not force full dashboard re-render
+
+### Service Renderer Registry (Phase 3)
+
+The bento dashboard uses a pluggable renderer registry to drive tile summaries, detail sheets, and charts. Each service kind has a `ServiceRenderer` that defines:
+
+- **summary** — 1–3 key metrics for the tile view
+- **detail** — Metric groups for the detail sheet
+- **charts** — Chart specs for Phase 5 visualization
+- **tone()** — Function to derive status (ok/warn/crit) from health + stats
+- **quickLink()** — Optional URL to native service UI
+- **subtitle()** — Optional custom text for context
+
+Location: `[[apps/frontend/src/services/renderers/]]`
+
+| Service          | Status      | Location                                    |
+| ---------------- | ----------- | ------------------------------------------- |
+| Bitcoin          | ✅ Phase 3  | `[[apps/frontend/src/services/renderers/bitcoin.ts]]`   |
+| Synology         | ✅ Phase 3  | `[[apps/frontend/src/services/renderers/synology.ts]]`  |
+| 14 remaining     | ⏳ Phase 4  | Stubbed in `index.ts`                       |
+
+**Registry API**: `getRenderer(kind: ServiceKind)` returns the renderer or undefined if not yet implemented.
+
+See [[docs/services/renderers/index|Renderer Registry Documentation]] for complete specification and implementation guide.
 
 ### Custom Hooks
 
@@ -127,10 +181,12 @@ React Router v6 with the following structure:
 - `*` → Not Found page
 - AuthGuard wraps protected routes
 
-## Styling
+## Styling & Design System
 
-- **Tailwind CSS** - Utility-first CSS framework
-- **shadcn/ui** - Component library (`[[apps/frontend/src/components/ui/]]`)
+- **Design System** - Dark-luxury OKLCH tokens, Geist typography, motion foundations (see [[docs/architecture/frontend-design-system|Frontend Design System]])
+- **Primitives** - 14 typed components <150 LOC each (see [[docs/components/primitives/index|Primitives Index]])
+- **Tailwind CSS** - Utility-first CSS framework with extended token utilities
+- **shadcn/ui** - Component library (`[[apps/frontend/src/components/ui/]]`, legacy, scheduled for gradual replacement)
 - **PostCSS** - CSS processing
 
 ## PlantUML Diagrams
@@ -305,6 +361,9 @@ Card -> Card : Update UI with new data
 
 ## Related
 
+- [[docs/architecture/frontend-design-system|Frontend Design System]] — Tokens, typography, motion, elevation
 - [[docs/architecture/data-flow|Data Flow]]
+- [[docs/architecture/core-systems|Core Systems]] — Event Bus and Service Lifecycle
 - [[docs/components/index|Components Index]]
+- [[docs/components/primitives/index|Primitives Index]] — 14 core primitives
 - [[docs/performance/request-optimization|Request Optimization]]

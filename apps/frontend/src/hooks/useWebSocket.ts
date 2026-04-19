@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { logger } from "../lib/logger";
 import { queryKeys } from "../lib/queryKeys";
 import { getWebSocketUrl } from "../lib/backendUrl";
+import { publishWsEvent } from "../lib/wsEventBus";
 
 interface WebSocketMessage {
   type: "connection" | "service_update" | "alert" | "metrics";
@@ -164,6 +165,15 @@ export const useWebSocket = (url?: string) => {
     (event: MessageEvent) => {
       try {
         const message: WebSocketMessage = JSON.parse(event.data);
+
+        publishWsEvent({
+          type: message.type,
+          service: message.service,
+          level: message.level,
+          message: message.message,
+          data: message.data,
+          timestamp: message.timestamp,
+        });
 
         switch (message.type) {
           case "connection":

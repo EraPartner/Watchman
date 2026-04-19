@@ -2,7 +2,7 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-04-18
+date: 2026-04-19
 tags: [feature, websocket, frontend, backend, real-time, fastify]
 description: WebSocket-based real-time status broadcasting for live dashboard updates using split architecture
 aliases: [websocket, real-time, live updates, status broadcasting]
@@ -11,9 +11,11 @@ aliases: [websocket, real-time, live updates, status broadcasting]
 # Real-Time Updates
 
 > [!abstract] Overview
-> Watchman uses WebSocket connections to broadcast service status changes to the frontend in real-time. The TypeScript backend splits WebSocket logic into 4 focused classes for clarity and testability.
+> Watchman uses WebSocket connections to broadcast service status changes to the frontend in real-time. The backend emits service status updates via EventBus; the frontend maintains a singleton WebSocket connection wrapped in a `<WebSocketProvider>` that invalidates React Query when messages arrive.
 
 ## Architecture
+
+### Backend WebSocket Layer
 
 The WebSocket layer is split into 4 classes in `[[apps/backend/src/transport/ws/]]`:
 
@@ -36,6 +38,7 @@ Maintains connection liveness:
 - Tracks pong responses
 - Closes stale connections (no pong after 2 pings)
 - Graceful shutdown of all heartbeat intervals
+- **Snapshot iteration**: Creates a snapshot via spread (`[...manager.entries()]`) to prevent breakage if the underlying connection view becomes live (e.g., concurrent add/remove during iteration)
 
 ### Broadcaster
 
@@ -59,14 +62,24 @@ BackgroundPoller polls services (15s interval, croner-based)
 
 ### Frontend Integration
 
+**WebSocket Provider Pattern:**
+
+The [[apps/frontend/src/providers/WebSocketProvider.tsx|WebSocketProvider]] wraps the entire React tree and manages a singleton WebSocket connection:
+
+1. **Singleton Connection** — Mounts exactly once (via context + hook)
+2. **Connection State** — Exposes `isConnected` and `reconnectAttempts` via `useWebSocketContext()`
+3. **Raw Events** — Provides `useWebSocketEvent(type)` hook for consuming specific message types
+
+**Hook-Level Details:**
+
 The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 
 1. WebSocket connection establishment (upgrade to `/ws` endpoint)
 2. Message parsing and dispatch (recognizes `service_update`, `metrics`, `connection` message types)
 3. Reconnection logic with exponential backoff (max 30 seconds)
-4. Connection state tracking (connected/disconnected/reconnecting)
-5. Batched query invalidation via React Query (deduped per service type)
-6. Toast notifications for errors and connection state changes
+4. Connection state tracking (connected/disconnecting/reconnecting)
+5. Debounced React Query invalidation on service.stats.updated events (prevents thundering herd)
+6. Error handling and recovery
 7. Hook-level observability via frontend logger (`logger.warn`/`logger.debug`)
 
 ## Benefits

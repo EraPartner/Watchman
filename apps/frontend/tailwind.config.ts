@@ -70,11 +70,88 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // ── Bento dark-luxury tokens (OKLCH, see styles/tokens.css) ──
+        surface: {
+          0: "var(--surface-0)",
+          1: "var(--surface-1)",
+          2: "var(--surface-2)",
+          3: "var(--surface-3)",
+        },
+        hairline: {
+          DEFAULT: "var(--hairline)",
+          strong: "var(--hairline-strong)",
+        },
+        text: {
+          hi: "var(--text-hi)",
+          md: "var(--text-md)",
+          lo: "var(--text-lo)",
+          dim: "var(--text-dim)",
+        },
+        gold: {
+          DEFAULT: "var(--accent)",
+          soft: "var(--accent-soft)",
+          contrast: "var(--accent-contrast)",
+        },
+        ok: {
+          DEFAULT: "var(--ok)",
+          soft: "var(--ok-soft)",
+        },
+        warn: {
+          DEFAULT: "var(--warn)",
+          soft: "var(--warn-soft)",
+        },
+        crit: {
+          DEFAULT: "var(--crit)",
+          soft: "var(--crit-soft)",
+        },
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)"],
+        mono: ["var(--font-mono)"],
+      },
+      fontSize: {
+        "fs-mono": "var(--fs-mono)",
+        "fs-label": "var(--fs-label)",
+        "fs-body": "var(--fs-body)",
+        "fs-h3": "var(--fs-h3)",
+        "fs-h2": "var(--fs-h2)",
+        "fs-h1": "var(--fs-h1)",
+        "fs-display": "var(--fs-display)",
+      },
+      spacing: {
+        "s-1": "var(--s-1)",
+        "s-2": "var(--s-2)",
+        "s-3": "var(--s-3)",
+        "s-4": "var(--s-4)",
+        "s-5": "var(--s-5)",
+        "s-6": "var(--s-6)",
+        "s-8": "var(--s-8)",
+        "s-10": "var(--s-10)",
+        "s-12": "var(--s-12)",
+      },
+      boxShadow: {
+        "elev-1": "var(--elev-1)",
+        "elev-2": "var(--elev-2)",
+        "elev-3": "var(--elev-3)",
+      },
+      transitionTimingFunction: {
+        "out-q": "var(--ease-out)",
+        "in-out-q": "var(--ease-in-out)",
+      },
+      transitionDuration: {
+        fast: "var(--dur-fast)",
+        med: "var(--dur-med)",
+        slow: "var(--dur-slow)",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        "r-1": "var(--r-1)",
+        "r-2": "var(--r-2)",
+        "r-3": "var(--r-3)",
+        "r-4": "var(--r-4)",
+        "r-pill": "var(--r-pill)",
       },
       keyframes: {
         "accordion-down": {

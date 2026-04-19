@@ -2,8 +2,8 @@
 title: Architecture
 type: index
 status: active
-date: 2026-04-18
-tags: [architecture, index, fastify, typescript, layered]
+date: 2026-04-19
+tags: [architecture, index, fastify, typescript, layered, duckdb, configuration]
 description: Index of all architecture documentation for the Watchman project - client-server with TypeScript backend
 aliases: [architecture index, system design, system architecture]
 ---
@@ -29,8 +29,10 @@ SORT file.name ASC
 
 | Document                                  | Description             |
 | ----------------------------------------- | ----------------------- | ----------------------------------------------- |
+| [[docs/architecture/frontend-design-system | Frontend Design System]] | OKLCH tokens, typography, motion, primitives |
 | [[docs/architecture/backend-architecture  | Backend Architecture]]  | Services, middleware, routes, and orchestration |
 | [[docs/architecture/frontend-architecture | Frontend Architecture]] | Pages, components, hooks, and state management  |
+| [[docs/architecture/core-systems          | Core Systems]]          | Event Bus and Service Lifecycle orchestration  |
 | [[docs/architecture/data-flow             | Data Flow]]             | Authentication, monitoring, and WebSocket flows |
 
 ## System Overview
@@ -73,6 +75,9 @@ SORT file.name ASC
 ## Related
 
 - [[docs/adr/index|Architecture Decision Records]]
+- [[docs/adr/014-time-series-duckdb-and-bento-design-system|ADR-014]] — Time-series + bento design system
+- [[docs/adr/015-ui-driven-service-configuration|ADR-015]] — UI-driven service configuration with DuckDB + encryption
+- [[docs/components/primitives/index|Primitive Components Index]]
 - [[docs/features/index|Features]]
 
 ## PlantUML Diagrams

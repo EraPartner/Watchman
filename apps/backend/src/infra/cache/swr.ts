@@ -1,10 +1,12 @@
 import { LRUCache } from 'lru-cache';
 import type { Clock } from '../../core/clock.js';
+import type { EventBus } from '../../core/eventBus.js';
 
 export interface SwrPolicy {
   ttlMs: number;
   staleMs: number;
   max?: number;
+  failureEmitDebounceMs?: number;
 }
 
 export interface SwrCache<V> {
@@ -22,9 +24,16 @@ interface Entry<V> {
   staleUntil: number;
 }
 
-export function createSwrCache<V extends {}>(policy: SwrPolicy, clock: Clock): SwrCache<V> {
-  const store = new LRUCache<string, Entry<V>>({ max: policy.max ?? 500 });
+export function createSwrCache<V extends NonNullable<unknown>>(
+  policy: SwrPolicy,
+  clock: Clock,
+  bus?: EventBus,
+): SwrCache<V> {
+  const max = policy.max ?? 500;
+  const store = new LRUCache<string, Entry<V>>({ max });
   const inflight = new Map<string, Promise<V>>();
+  const lastFailureEmit = new LRUCache<string, number>({ max });
+  const failureDebounceMs = policy.failureEmitDebounceMs ?? 30_000;
   const counters = { hits: 0, misses: 0, stale: 0, revalidations: 0 };
 
   const fetchAndStore = async (
@@ -63,7 +72,17 @@ export function createSwrCache<V extends {}>(policy: SwrPolicy, clock: Clock): S
       if (entry && entry.staleUntil > now) {
         counters.stale++;
         counters.revalidations++;
-        fetchAndStore(key, fetcher).catch(() => undefined);
+        fetchAndStore(key, fetcher).catch((err) => {
+          if (!bus) return;
+          const nowTs = clock.now();
+          const prev = lastFailureEmit.get(key);
+          if (prev !== undefined && nowTs - prev < failureDebounceMs) return;
+          lastFailureEmit.set(key, nowTs);
+          bus.emit('cache:revalidate.failed', {
+            key,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
         return entry.value;
       }
       counters.misses++;

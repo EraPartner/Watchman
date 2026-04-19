@@ -10,6 +10,8 @@ import { createMetricsRegistry } from '../../core/metrics.js';
 import { BaseService, type Controllable, type HealthResult, type StatsResult, type PollPolicy } from '../../domain/BaseService.js';
 import { ok, err } from '../../core/result.js';
 import { UnavailableError } from '../../core/errors.js';
+import type { ConfigStore } from '../../config/store/ConfigStore.js';
+import type { ServiceLifecycle } from '../../application/ServiceLifecycle.js';
 
 class FakeSvc extends BaseService implements Controllable {
   readonly kind: string;
@@ -34,6 +36,8 @@ class FakeSvc extends BaseService implements Controllable {
 
 async function makeApp(registry: ServiceRegistry) {
   const logger = pino({ level: 'silent' });
+  const fakeStore = { loadAll: async () => [] } as unknown as ConfigStore;
+  const fakeLifecycle = {} as ServiceLifecycle;
   return buildServer({
     logger,
     services: {
@@ -43,6 +47,8 @@ async function makeApp(registry: ServiceRegistry) {
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
+    config: { store: fakeStore, lifecycle: fakeLifecycle, registry },
+    setup: { store: fakeStore, adminConfigured: true },
   });
 }
 

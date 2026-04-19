@@ -1,0 +1,89 @@
+/* Motion utilities — compositor-friendly (transform + opacity only).
+ * Honors prefers-reduced-motion via token overrides (see tokens.css).
+ */
+
+@keyframes tile-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sheet-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes skeleton {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+.motion-tile {
+  animation: tile-enter var(--dur-med) var(--ease-out) both;
+}
+
+/* Tile stagger: 20ms steps, applied via :nth-child up to 16 tiles. */
+.motion-tile:nth-child(1)  { animation-delay: 0ms; }
+.motion-tile:nth-child(2)  { animation-delay: 20ms; }
+.motion-tile:nth-child(3)  { animation-delay: 40ms; }
+.motion-tile:nth-child(4)  { animation-delay: 60ms; }
+.motion-tile:nth-child(5)  { animation-delay: 80ms; }
+.motion-tile:nth-child(6)  { animation-delay: 100ms; }
+.motion-tile:nth-child(7)  { animation-delay: 120ms; }
+.motion-tile:nth-child(8)  { animation-delay: 140ms; }
+.motion-tile:nth-child(9)  { animation-delay: 160ms; }
+.motion-tile:nth-child(10) { animation-delay: 180ms; }
+.motion-tile:nth-child(11) { animation-delay: 200ms; }
+.motion-tile:nth-child(12) { animation-delay: 220ms; }
+.motion-tile:nth-child(13) { animation-delay: 240ms; }
+.motion-tile:nth-child(14) { animation-delay: 260ms; }
+.motion-tile:nth-child(15) { animation-delay: 280ms; }
+.motion-tile:nth-child(16) { animation-delay: 300ms; }
+
+.motion-sheet-in  { animation: sheet-enter var(--dur-med) var(--ease-out) both; }
+.motion-sheet-out { animation: sheet-exit  var(--dur-fast) var(--ease-in-out) both; }
+.motion-fade-in   { animation: fade-in     var(--dur-fast) var(--ease-out) both; }
+.motion-fade-out  { animation: fade-out    var(--dur-fast) var(--ease-out) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-tile,
+  .motion-sheet-in,
+  .motion-sheet-out,
+  .motion-fade-in,
+  .motion-fade-out {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}

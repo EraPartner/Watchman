@@ -8,14 +8,14 @@ import react from "eslint-plugin-react";
 
 export default [
   {
-    ignores: ["dist", "**/dist/**", "backend/", "hardware/", "public/"],
+    ignores: ["dist", "**/dist/**", "coverage", "**/coverage/**", "backend/", "hardware/", "public/"],
   },
   // include the recommended config first
   js.configs.recommended,
 
   // project-specific rules and settings
   {
-    ignores: ["dist", "**/dist/**", "backend/", "hardware/", "public/"],
+    ignores: ["dist", "**/dist/**", "coverage", "**/coverage/**", "backend/", "hardware/", "public/"],
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
@@ -69,6 +69,7 @@ export default [
     files: ["**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
+      "no-undef": "off",
     },
   },
   {

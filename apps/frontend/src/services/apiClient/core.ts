@@ -153,9 +153,13 @@ export class ApiClientCore {
       return this.inFlightRequests.get(key) as Promise<T>;
     }
 
-    const controller = new AbortController();
     const timeoutMs = customTimeout || APP_CONFIG.API_TIMEOUT || 10000;
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const callerSignal =
+      options?.signal instanceof AbortSignal ? options.signal : undefined;
+    const signal = callerSignal
+      ? AbortSignal.any([timeoutSignal, callerSignal])
+      : timeoutSignal;
 
     const method = (options?.method || "GET").toUpperCase();
     const headers = this.normalizeHeaders(options?.headers);
@@ -179,13 +183,12 @@ export class ApiClientCore {
     const fetchOptions = Object.assign({}, options, {
       headers,
       credentials: "include",
-      signal: controller.signal,
+      signal,
     });
 
     const promise = (async () => {
       try {
         const response = await fetch(url, fetchOptions);
-        clearTimeout(timeout);
 
         const responseBody = await response
           .json()
@@ -204,8 +207,10 @@ export class ApiClientCore {
 
         return unwrapApiResponse<T>(responseBody);
       } catch (error) {
-        clearTimeout(timeout);
-        if (error instanceof Error && error.name === "AbortError") {
+        if (
+          error instanceof Error &&
+          (error.name === "TimeoutError" || error.name === "AbortError")
+        ) {
           const timeoutError = new Error(
             `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`
           );

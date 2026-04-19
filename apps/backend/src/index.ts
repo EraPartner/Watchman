@@ -1,9 +1,7 @@
 import { loadEnv } from './config/env.js';
-import { loadServicesConfigFromEnv } from './config/loadServices.js';
 import { createLogger } from './core/logger.js';
 import { buildServer } from './transport/http/server.js';
 import { registerShutdown } from './bootstrap/shutdown.js';
-import { registerServices } from './bootstrap/registerServices.js';
 import { GetServiceStatus } from './application/GetServiceStatus.js';
 import { GetAggregatedHealth } from './application/GetAggregatedHealth.js';
 import { ControlService } from './application/ControlService.js';
@@ -19,6 +17,20 @@ import { createSshExecutor } from './infra/ssh/sshExecutorImpl.js';
 import { createSnmpGetter } from './infra/snmp/snmpGetterImpl.js';
 import { createPigpioClient } from './infra/gpio/pigpioClientImpl.js';
 import { wsPlugin } from './transport/ws/wsPlugin.js';
+import { mkdir } from 'node:fs/promises';
+import { dirname, join, isAbsolute, resolve } from 'node:path';
+import { createDuckDbPool } from './infra/timeseries/DuckDbPool.js';
+import { runMigrations } from './infra/timeseries/migrations.js';
+import { createTimeSeriesWriter } from './infra/timeseries/TimeSeriesWriter.js';
+import { createTimeSeriesReader } from './infra/timeseries/TimeSeriesReader.js';
+import { createRollupWorker } from './infra/timeseries/RollupWorker.js';
+import { GetServiceHistory } from './application/GetServiceHistory.js';
+import { ServiceRegistry } from './domain/ServiceRegistry.js';
+import { loadEncryptorFromEnv } from './config/store/encryption.js';
+import { runConfigMigrations } from './config/store/migrations.js';
+import { createConfigStore } from './config/store/ConfigStore.js';
+import { migrateEnvServicesIfNeeded } from './config/store/envMigrator.js';
+import { createServiceLifecycle } from './application/ServiceLifecycle.js';
 
 const SERVER_VERSION = '2.0.0';
 
@@ -28,7 +40,6 @@ async function main(): Promise<void> {
 
   logger.info({ env: env.NODE_ENV, port: env.BACKEND_V2_PORT }, 'starting watchman backend v2');
 
-  const servicesConfig = loadServicesConfigFromEnv();
   const bus = createEventBus((err) => logger.error({ err }, 'eventBus handler error'));
   const metrics = createMetricsRegistry();
 
@@ -42,16 +53,51 @@ async function main(): Promise<void> {
     now: () => systemClock.now(),
   };
 
-  const registry = registerServices(servicesConfig, infra);
-  const poller = createBackgroundPoller({ clock: systemClock, bus, logger });
-
-  for (const svc of registry.all()) {
-    poller.track(svc);
-    if (svc.onStart) {
-      try { await svc.onStart(); } catch (err) { logger.error({ err, id: svc.id }, 'service onStart failed'); }
+  const dataDir = isAbsolute(env.DATA_DIR) ? env.DATA_DIR : resolve(process.cwd(), env.DATA_DIR);
+  const dbPath = join(dataDir, 'watchman.duckdb');
+  await mkdir(dirname(dbPath), { recursive: true });
+  const dbPool = await createDuckDbPool({ path: dbPath });
+  const migConn = await dbPool.connect();
+  try {
+    await runConfigMigrations(migConn);
+    if (env.TIMESERIES_ENABLED) {
+      await runMigrations(migConn);
+    }
+  } finally {
+    try {
+      migConn.closeSync();
+    } catch {
+      // ignore close errors
     }
   }
+
+  const encryptor = loadEncryptorFromEnv(env.WATCHMAN_MASTER_KEY);
+  const store = createConfigStore(dbPool, encryptor, bus);
+  const migResult = await migrateEnvServicesIfNeeded(store, logger);
+  if (migResult.migrated > 0) {
+    logger.info({ migrated: migResult.migrated, skipped: migResult.skipped }, 'env migration complete');
+  }
+
+  const registry = new ServiceRegistry();
+  const poller = createBackgroundPoller({ clock: systemClock, bus, logger });
+  const lifecycle = createServiceLifecycle({ store, registry, poller, bus, infra, logger });
+  await lifecycle.start();
+
   metrics.setPollerStats({ snapshot: () => ({ tracked: registry.all().length }) });
+
+  let tsWriter: ReturnType<typeof createTimeSeriesWriter> | null = null;
+  let tsRollup: ReturnType<typeof createRollupWorker> | null = null;
+  let history: { getHistory: GetServiceHistory } | undefined;
+  if (env.TIMESERIES_ENABLED) {
+    tsWriter = createTimeSeriesWriter({ pool: dbPool, bus, clock: systemClock, logger });
+    tsRollup = createRollupWorker({ pool: dbPool, clock: systemClock, logger });
+    await tsWriter.start();
+    await tsRollup.start();
+    const reader = createTimeSeriesReader(dbPool);
+    history = { getHistory: new GetServiceHistory({ registry, reader }) };
+  }
+
+  const adminConfigured = Boolean(env.AUTH_USERNAME && env.AUTH_PASSWORD_HASH);
 
   const app = await buildServer({
     logger,
@@ -60,8 +106,11 @@ async function main(): Promise<void> {
       aggregated: new GetAggregatedHealth(registry),
       control: new ControlService(registry),
     },
+    history,
     listInstances: new ListInstances(registry),
     metrics,
+    config: { store, lifecycle, registry },
+    setup: { store, adminConfigured },
   });
 
   await app.register(wsPlugin, {
@@ -74,11 +123,10 @@ async function main(): Promise<void> {
   registerShutdown({
     close: async () => {
       await poller.stop();
-      for (const svc of registry.all()) {
-        if (svc.onStop) {
-          try { await svc.onStop(); } catch (err) { logger.error({ err, id: svc.id }, 'service onStop failed'); }
-        }
-      }
+      await lifecycle.stop();
+      if (tsRollup) await tsRollup.stop();
+      if (tsWriter) await tsWriter.stop();
+      await dbPool.close();
       await app.close();
     },
   }, logger);
@@ -92,7 +140,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  // eslint-disable-next-line no-console
   console.error('fatal bootstrap error', err);
   process.exit(1);
 });

@@ -2,9 +2,9 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-04-18
-tags: [knowledge-base, index, project, overview, ai-agent-friendly]
-description: Main entry point to the Watchman project documentation - self-hosted service monitoring dashboard designed for developers, AI agents, and computer scientists
+date: 2026-04-19
+tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives]
+description: Main entry point to the Watchman project documentation - self-hosted service monitoring dashboard with dark-luxury bento design system
 aliases: [KB, docs, documentation, knowledge base, home, README]
 ---
 
@@ -39,14 +39,15 @@ aliases: [KB, docs, documentation, knowledge base, home, README]
 
 | Area                         | Description              | Documents                            |
 | ---------------------------- | ------------------------ | ------------------------------------ | ------------------- |
-| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 12 ADRs             |
-| 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 7 endpoints         |
+| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 16 ADRs             |
+| 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 9 endpoints         |
 | 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, and contributing  | 5 guides            |
-| ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 3 features          |
+| ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 5 features          |
 | 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 14 integrations     |
 | 🔒 [[docs/security/index     | Security]]               | Security policies and practices      | 4 security docs     |
 | 🚀 [[docs/performance/index  | Performance]]            | Performance optimizations            | 2 docs              |
-| 🧩 [[docs/components/index   | Components]]             | Frontend React components and hooks  | 28 components/hooks |
+| 🎨 [[docs/architecture/frontend-design-system | Design System]] | Dark-luxury tokens, primitives, motion | Complete reference |
+| 🧩 [[docs/components/index   | Components]]             | Frontend React components and hooks  | 28 components + 14 primitives |
 | 🧪 [[docs/testing/index      | Testing]]                | Testing strategies and patterns      | 2 testing docs      |
 | 📐 [[docs/architecture/index | Architecture]]           | System diagrams and architecture     | 3 architecture docs |
 
@@ -112,11 +113,11 @@ Watchman is a comprehensive **self-hosted service monitoring dashboard** support
 
 ### Tech Stack
 
-- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
-- **Backend**: Node.js 18+ + TypeScript + Fastify 4 + Zod validation + Pino logging
-- **Communication**: WebSocket for real-time updates
-- **State**: In-process LRU cache, croner-based polling, circuit breaker
-- **Tooling**: ESLint, Prettier, Vitest (237 tests across 33 files)
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + OKLCH tokens + Geist typography + 14 custom primitives
+- **Backend**: Node.js 18+ + TypeScript + Fastify 4 + Zod validation + Pino logging + DuckDB time-series
+- **Communication**: WebSocket for real-time updates (WebSocketProvider singleton + useWebSocket hook)
+- **State**: In-process LRU cache, croner-based polling, circuit breaker, DuckDB time-series (raw/1m/5m/1h rollups)
+- **Tooling**: ESLint, Prettier, Vitest (396 tests across backend+frontend)
 - **Architecture**: npm workspaces monorepo, layered backend (config → core → infra → domain → application → transport)
 
 ### Project Structure
@@ -124,31 +125,37 @@ Watchman is a comprehensive **self-hosted service monitoring dashboard** support
 ```
 Watchman/
 ├── apps/
-│   ├── frontend/          # React 18 + TypeScript + Vite
+│   ├── frontend/          # React 18 + TypeScript + Vite + Tailwind
 │   │   ├── src/
-│   │   │   ├── components/ # React components (cards, UI)
-│   │   │   ├── hooks/     # Custom React hooks
+│   │   │   ├── components/ # Bento tiles, detail sheets, primitives
+│   │   │   ├── hooks/     # useServiceHealth, useWebSocket, useServiceHistory
 │   │   │   ├── pages/     # Page components
-│   │   │   ├── services/  # API client
+│   │   │   ├── services/  # API client, WebSocket, renderer registry
+│   │   │   ├── styles/    # OKLCH tokens, Geist fonts
+│   │   │   ├── providers/ # WebSocketProvider
 │   │   │   └── lib/       # Utilities
-│   │   └── tests/         # Frontend tests
-│   └── backend/           # TypeScript + Fastify 4
+│   │   └── tests/         # Frontend tests (150+)
+│   └── backend/           # TypeScript + Fastify 4 + DuckDB
 │       ├── src/
 │       │   ├── config/    # Env validation, service registry
 │       │   ├── core/      # Logger, errors, Result, eventBus
-│       │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller
+│       │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller, timeseries (DuckDB)
 │       │   ├── domain/    # BaseService, ServiceRegistry
-│       │   ├── application/ # UseCases
+│       │   ├── application/ # UseCases (GetServiceHistory, etc.)
 │       │   └── transport/ # Fastify routes, WebSocket
+│       ├── openapi.yaml   # OpenAPI 3.1 spec (includes /history)
 │       ├── dist/          # Compiled JavaScript
 │       ├── vitest.config.ts
 │       └── package.json
-├── docs/                   # Obsidian knowledge base
+├── docs/                   # Obsidian knowledge base (117+ docs)
 ├── packages/               # Shared packages
 └── tools/                 # Dev scripts
 ```
 
 ## Key Concepts
+
+> [!info] Time-Series (Phase 1), Design System (Phase 2) & Bento Dashboard (Phase 3)
+> **Phase 1** (LIVE) adds embedded DuckDB time-series storage with tiered rollups (raw/1m/5m/1h) and a `/services/:kind/history` endpoint for querying historical metrics. **Phase 2** (LIVE) ships dark-luxury OKLCH tokens, Geist Variable typography, and 14 custom primitives. **Phase 3** (LIVE — pilot) adds the bento dashboard with a generic `ServiceTile` driven by a `ServiceRenderer` registry. Live behind `?bento=1` flag with Bitcoin and Synology pilot services. See [[docs/features/time-series-history|Time-Series Feature]], [[docs/architecture/frontend-design-system|Frontend Design System]], [[docs/components/primitives/index|Primitives Index]], and [[docs/components/bento-dashboard|Bento Dashboard]].
 
 > [!info] Service Pattern
 > Each service extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` for status checks and `getStats()` for detailed metrics. Services are registered in [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry]] using `${kind}:${instanceId}` keys (e.g., `qbittorrent:1`, `qbittorrent:2`).

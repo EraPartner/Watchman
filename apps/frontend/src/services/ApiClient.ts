@@ -28,11 +28,13 @@ export type {
   UpdateService,
 } from "./apiClient/types";
 
+const sharedCore = new ApiClientCore();
+
 class ApiClient extends ApiClientEndpoints {
   constructor() {
-    super(new ApiClientCore());
+    super(sharedCore);
   }
 }
 
 export const apiClient = new ApiClient();
-export { ApiClient };
+export { ApiClient, sharedCore };

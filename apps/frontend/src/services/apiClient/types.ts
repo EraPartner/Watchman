@@ -305,6 +305,33 @@ export interface RouterArpResponse {
   raw?: string;
 }
 
+export type HistoryResolution = "raw" | "1m" | "5m" | "1h";
+
+export interface HistoryPoint {
+  t: number;
+  v: number | null;
+  min?: number | null;
+  max?: number | null;
+}
+
+export interface HistoryPayload {
+  kind: string;
+  instance: string | null;
+  metric: string;
+  resolution: HistoryResolution;
+  points: HistoryPoint[];
+}
+
+export interface HistoryQueryParams {
+  metric: string;
+  from: number | string;
+  to: number | string;
+  instance?: string;
+  resolution?: HistoryResolution;
+  agg?: "avg" | "min" | "max" | "last";
+  limit?: number;
+}
+
 export type ApiRequestOptions = {
   method?: string;
   headers?: unknown;

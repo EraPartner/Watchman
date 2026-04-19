@@ -70,8 +70,8 @@ export default defineConfig(({ mode }) => {
             // Vendor chunk for better caching
             vendor: ["react", "react-dom", "react-router-dom"],
             ui: [
-              "@radix-ui/react-progress",
-              "@radix-ui/react-toast",
+              "@radix-ui/react-dialog",
+              "@radix-ui/react-tabs",
               "@radix-ui/react-tooltip",
             ],
             query: ["@tanstack/react-query"],

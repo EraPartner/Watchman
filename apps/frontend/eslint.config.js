@@ -84,6 +84,7 @@ export default [
     files: ["**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
+      "no-undef": "off",
     },
   },
 ];

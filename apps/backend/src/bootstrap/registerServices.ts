@@ -32,6 +32,10 @@ export interface ServiceInfra {
   now: () => number;
 }
 
+export function createService(instance: ServiceInstance, infra: ServiceInfra): BaseService {
+  return buildService(instance, infra);
+}
+
 function buildService(instance: ServiceInstance, infra: ServiceInfra): BaseService {
   const { http, ping, tcp, ssh, snmp, pigpio, now } = infra;
   switch (instance.kind) {

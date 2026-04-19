@@ -38,27 +38,29 @@ export function createBreaker(name: string, policy: BreakerPolicy, clock: Clock)
     m.trips++;
   };
 
-  const canAttempt = (): boolean => {
+  const tryAcquire = (): boolean => {
     if (state === 'closed') return true;
     if (state === 'open') {
       if (openedAt !== null && clock.now() - openedAt >= policy.resetAfterMs) {
         state = 'half-open';
         halfOpenInFlight = 0;
-        return halfOpenInFlight < halfOpenMax;
+      } else {
+        return false;
       }
-      return false;
     }
-    return halfOpenInFlight < halfOpenMax;
+    if (halfOpenInFlight >= halfOpenMax) return false;
+    halfOpenInFlight++;
+    return true;
   };
 
   return {
     name,
     async exec(fn, signal) {
-      if (!canAttempt()) {
+      if (!tryAcquire()) {
         m.rejects++;
         throw new CircuitOpenError(`circuit open: ${name}`);
       }
-      if (state === 'half-open') halfOpenInFlight++;
+      const acquiredHalfOpen = state === 'half-open';
       try {
         const result = await fn(signal);
         m.successes++;
@@ -79,11 +81,13 @@ export function createBreaker(name: string, policy: BreakerPolicy, clock: Clock)
           halfOpenInFlight = 0;
         } else if (consecutiveFailures >= policy.failureThreshold) {
           trip();
+        } else if (acquiredHalfOpen && halfOpenInFlight > 0) {
+          halfOpenInFlight--;
         }
         throw e;
       }
     },
-    metrics() {
+    metrics(): BreakerMetrics {
       return {
         state,
         failures: m.failures,

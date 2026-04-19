@@ -2,7 +2,7 @@
 title: Features
 type: index
 status: active
-date: 2026-04-09
+date: 2026-04-19
 tags: [feature, index]
 description: Index of all feature documentation for the Watchman project
 aliases: [features index, feature docs]
@@ -29,6 +29,8 @@ SORT file.name ASC
 | [[docs/features/service-monitoring | Service Monitoring]]     | Health checks and statistics for external services |
 | [[docs/features/multi-instance     | Multi-Instance Support]] | Run multiple nodes of the same service type        |
 | [[docs/features/real-time-updates  | Real-Time Updates]]      | WebSocket-based status broadcasting                |
+| [[docs/features/time-series-history | Time-Series History]]    | Historical metrics with DuckDB storage and rollups |
+| [[docs/features/ui-configuration   | UI Configuration]]       | Runtime service CRUD from UI with encryption and hot-reload |
 
 ## Related
 

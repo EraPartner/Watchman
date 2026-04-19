@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 type: index
 status: active
-date: 2026-04-18
+date: 2026-04-19
 tags: [adr, architecture, index, decision, design]
 description: Index of all Architecture Decision Records for the Watchman project - why design choices were made
 aliases: [adr index, decisions, architecture decisions, design decisions]
@@ -41,11 +41,13 @@ SORT file.name ASC
 | [[docs/adr/011-dynamic-route-generation.md             | Dynamic Routes]]    | Service route generation      |
 | [[docs/adr/012-backend-framework-module-system.md      | Module System]]     | ESM module system             |
 | [[docs/adr/013-backend-rewrite-typescript-fastify.md   | Backend Rewrite]]   | TypeScript + Fastify 4 + in-process state |
+| [[docs/adr/014-time-series-duckdb-and-bento-design-system.md | Time-Series + Bento]] | DuckDB + time-series backend + bento design frontend |
+| [[docs/adr/015-ui-driven-service-configuration.md | UI Configuration]] | UI-driven CRUD with DuckDB + encrypted secrets + hot-reload |
 
 ## Creating a New ADR
 
 1. Copy [[docs/adr/template|ADR Template]]
-2. Name it `NNN-short-title.md` (next sequential number)
+2. Name it `NNN-short-title.md` (next sequential number after 015)
 3. Fill in all sections:
    - **Status**: Proposed | Accepted | Deprecated | Superseded
    - **Context**: The problem being solved

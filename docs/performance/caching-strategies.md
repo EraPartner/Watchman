@@ -2,7 +2,7 @@
 title: Caching Strategies
 type: performance
 status: active
-date: 2026-04-09
+date: 2026-04-19
 tags: [performance, caching, backend]
 description: In-memory response caching strategies with TTL for the Watchman backend
 aliases: [caching, cache, response cache, ttl]
@@ -11,57 +11,61 @@ aliases: [caching, cache, response cache, ttl]
 # Caching Strategies
 
 > [!abstract] Overview
-> Watchman uses in-memory caching with TTL to reduce load on external services and improve response times.
+> Watchman uses in-memory LRU caching with stale-while-revalidate (SWR) semantics to reduce load on external services and improve response times.
 
 ## Implementation
 
-[[apps/backend/middleware/cache.js|cache.js]]
+[[apps/backend/src/infra/cache/swr.ts|swr.ts]]
 
-Uses `node-cache` for in-memory caching.
+Uses `lru-cache` for in-memory caching with SWR pattern: serve stale data immediately while revalidating in the background.
 
-## Cache Tiers
+## SWR Cache Policy
 
-| Cache Type | TTL        | Applied To                        |
-| ---------- | ---------- | --------------------------------- |
-| Health     | 30 seconds | `/api/{service}/status` endpoints |
-| Stats      | 60 seconds | `/api/{service}/stats` endpoints  |
+| Parameter   | Default | Description                                      |
+| ----------- | ------- | ------------------------------------------------ |
+| `ttlMs`     | 30000   | Fresh data TTL (milliseconds)                   |
+| `staleMs`   | 30000   | Stale window after TTL expires                  |
+| `max`       | 500     | Max cache entries (LRU eviction when exceeded)  |
 
-## Middleware
+### SWR Behavior
 
-| Middleware              | Purpose                       |
-| ----------------------- | ----------------------------- |
-| `healthCacheMiddleware` | Caches health check responses |
-| `statsCacheMiddleware`  | Caches statistics responses   |
-| `clearCache(type)`      | Clears cache by type or all   |
+- **Fresh**: Return cached value immediately (hit counter)
+- **Stale**: Return cached value AND revalidate in background; revalidation errors emit `cache:revalidate.failed` event (stale counter)
+- **Expired**: Fetch fresh value; block on result (miss counter)
 
-Behavior notes (from [[apps/backend/middleware/cache.js]]):
+## EventBus Integration
 
-- Default cacheable methods are `GET` and `HEAD`
-- Allowed methods are configurable via middleware `methods` option
-- Middleware exits early (safe pass-through) when a cache key cannot be derived
-- `X-Cache-TTL` reports remaining TTL in seconds (not epoch milliseconds)
+`createSwrCache` accepts an optional `EventBus` parameter. When provided, revalidation failures (stale-branch fetches) emit the `cache:revalidate.failed` event:
 
-## Cache Invalidation
+```typescript
+{
+  key: string;      // Cache key
+  error: string;    // Error message (from Error.message or String(err))
+}
+```
 
-Cache is cleared on control actions:
+> [!note]
+> No call sites currently use this integration, but it is available for future observability or remediation logic.
 
-- After `POST /api/adguard/protection`
-- After `POST /api/cache/clear`
-- Manual cache clear endpoint
+## Cache Statistics
 
-## Cache Key Strategy
+`SwrCache.stats()` returns:
 
-Cache keys are derived from:
-
-- Request path
-- Query parameters
-- Service identifier
+```typescript
+{
+  hits: number;           // Fresh requests served from cache
+  misses: number;         // Requests that missed and fetched new data
+  stale: number;          // Requests served stale data with background revalidation
+  revalidations: number;  // Background revalidation attempts from stale state
+}
+```
 
 ## Considerations
 
 - In-memory cache is per-process (not shared across instances)
-- Cache size is unbounded (monitor in production)
-- For multi-instance deployments, consider Redis
+- LRU eviction is bounded by `max` (default 500 entries)
+- For multi-instance deployments, consider shared cache (e.g., Redis) to avoid stale divergence
+- Stale-branch revalidation failures do not block the caller; the error is emitted to the EventBus
 
 ## PlantUML Diagrams
 

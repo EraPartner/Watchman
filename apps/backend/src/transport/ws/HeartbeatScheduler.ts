@@ -26,7 +26,7 @@ export class HeartbeatScheduler {
   }
 
   tick(): void {
-    for (const [ws, meta] of this.deps.manager.entries()) {
+    for (const [ws, meta] of [...this.deps.manager.entries()]) {
       if (!meta.alive) {
         ws.terminate();
         this.deps.manager.remove(ws);

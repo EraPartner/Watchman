@@ -26,6 +26,7 @@
     "precommit": "npm run typecheck && npm run lint"
   },
   "dependencies": {
+    "@duckdb/node-api": "^1.4.0-r.2",
     "@fastify/compress": "^7.0.3",
     "@fastify/websocket": "^10.0.1",
     "croner": "^10.0.1",

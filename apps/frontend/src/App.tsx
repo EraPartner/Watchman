@@ -1,6 +1,4 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
@@ -8,6 +6,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { lazy, Suspense } from "react";
 import AuthGuard from "./components/AuthGuard";
 import { AuthProvider } from "./hooks/useAuth";
+import { WebSocketProvider } from "./providers/WebSocketProvider";
 
 function shouldRetryQuery(failureCount: number, error: unknown): boolean {
   const status =
@@ -15,7 +14,6 @@ function shouldRetryQuery(failureCount: number, error: unknown): boolean {
       ? Number((error as { status?: unknown }).status)
       : undefined;
 
-  // Never retry 4xx client errors.
   if (status !== undefined && status >= 400 && status < 500) {
     return false;
   }
@@ -23,17 +21,30 @@ function shouldRetryQuery(failureCount: number, error: unknown): boolean {
   return failureCount < 3;
 }
 
-// Lazy load pages for better code splitting
-const IndexPage = lazy(() => import("./pages/Index"));
 const NotFoundPage = lazy(() => import("./pages/NotFound"));
 const LoginPage = lazy(() => import("./pages/Login"));
+const BentoDashboardPage = lazy(
+  () => import("./components/dashboard/BentoDashboard")
+);
+const SetupWizardPage = lazy(() => import("./pages/SetupWizard"));
+const SettingsServicesPage = lazy(() => import("./pages/Settings/Services"));
+const SettingsAuditPage = lazy(() => import("./pages/Settings/Audit"));
+const SettingsBackupPage = lazy(() => import("./pages/Settings/BackupRestore"));
+
+function RootRoute() {
+  return (
+    <AuthGuard>
+      <BentoDashboardPage />
+    </AuthGuard>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: shouldRetryQuery,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -45,12 +56,11 @@ const queryClient = new QueryClient({
   },
 });
 
-// Loading component for Suspense
 const PageLoader = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center">
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-      <p className="text-muted-foreground">Loading...</p>
+  <div className="min-h-screen flex items-center justify-center bg-[var(--surface-0)]">
+    <div className="text-center text-[var(--text-md)]">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)] mx-auto mb-4"></div>
+      <p>Loading…</p>
     </div>
   </div>
 );
@@ -58,30 +68,47 @@ const PageLoader = () => (
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <Toaster />
-          <Sonner />
+      <AuthProvider>
+        <WebSocketProvider>
+          <Toaster theme="dark" position="top-right" />
           <BrowserRouter>
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
+                  <Route path="/" element={<RootRoute />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/setup" element={<SetupWizardPage />} />
                   <Route
-                    path="/"
+                    path="/settings/services"
                     element={
                       <AuthGuard>
-                        <IndexPage />
+                        <SettingsServicesPage />
                       </AuthGuard>
                     }
                   />
-                  <Route path="/login" element={<LoginPage />} />
+                  <Route
+                    path="/settings/audit"
+                    element={
+                      <AuthGuard>
+                        <SettingsAuditPage />
+                      </AuthGuard>
+                    }
+                  />
+                  <Route
+                    path="/settings/backup"
+                    element={
+                      <AuthGuard>
+                        <SettingsBackupPage />
+                      </AuthGuard>
+                    }
+                  />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
               </Suspense>
             </ErrorBoundary>
           </BrowserRouter>
-        </AuthProvider>
-      </TooltipProvider>
+        </WebSocketProvider>
+      </AuthProvider>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   );
