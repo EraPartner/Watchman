@@ -3,9 +3,13 @@ info:
   title: Watchman Backend API
   description: |
     Self-hosted service monitoring dashboard backend (TypeScript + Fastify 4).
+    **Single-user design**: No authentication required. Intended for trusted networks only.
     All endpoints return JSON. Envelope: `{ data: ... }` on success,
     `{ error: { code, message } }` on failure. Polling is server-owned;
     HTTP reads serve cached/poller-published state.
+
+    **CORS**: Requests from `watchman://` origin (Electron desktop app) receive permissive CORS headers.
+    Web deployments use standard CORS policies configured via `FRONTEND_URL` env var.
   version: 2.1.0
   license:
     name: AGPL-3.0-only
@@ -644,16 +648,27 @@ components:
       type: object
       required: [kind, instanceId, enabled]
       additionalProperties: true
-      description: Full service-instance config (kind-discriminated). Secrets sent as "***" preserve existing value on update.
+      description: Full service-instance config (kind-discriminated). Secrets sent as "***" preserve existing value on update. Request is flat (not nested under "config"); kind determines which additional fields are present.
       properties:
-        kind: { type: string }
-        instanceId: { type: string }
-        enabled: { type: boolean }
+        kind: { type: string, example: bitcoin }
+        instanceId: { type: string, example: main }
+        enabled: { type: boolean, example: true }
         pollPolicy:
           type: object
           additionalProperties: true
-        cacheTtlMs: { type: integer }
-        timeoutMs: { type: integer }
+          description: Per-kind polling behavior (optional)
+        cacheTtlMs: { type: integer, example: 10000, description: Cache TTL in milliseconds (optional; default 10000) }
+        timeoutMs: { type: integer, example: 5000, description: Request timeout in milliseconds (optional; default 5000) }
+      example:
+        kind: bitcoin
+        instanceId: main
+        enabled: true
+        cacheTtlMs: 10000
+        timeoutMs: 5000
+        onionUrl: "http://example.onion"
+        rpcUser: "bitcoinrpc"
+        rpcPassword: "secret123"
+        rpcPort: 8332
     TestConnectionResult:
       type: object
       required: [ok]

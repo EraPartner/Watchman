@@ -15,7 +15,7 @@ aliases: [config api, configuration endpoints, setup api]
 >
 > **Base URL**: `http://localhost:3001`
 >
-> **Auth**: All endpoints except `GET /setup/status` require JWT authentication
+> **Auth**: None required (single-user home-lab design). See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]].
 >
 > **Response Format**: Standard [[docs/api/index|API response envelope]]
 
@@ -196,16 +196,19 @@ Create a new service instance.
 
 **Request Body:**
 
+Request is a **flat discriminated union** — service kind determines which additional fields are required/optional.
+
 ```json
 {
   "kind": "bitcoin",
-  "name": "Main Bitcoin Node",
-  "config": {
-    "onionUrl": "http://example.onion",
-    "rpcUser": "bitcoinrpc",
-    "rpcPassword": "secret123",
-    "rpcPort": 8332
-  }
+  "instanceId": "main",
+  "enabled": true,
+  "cacheTtlMs": 10000,
+  "timeoutMs": 5000,
+  "onionUrl": "http://example.onion",
+  "rpcUser": "bitcoinrpc",
+  "rpcPassword": "secret123",
+  "rpcPort": 8332
 }
 ```
 
@@ -213,11 +216,19 @@ Create a new service instance.
 
 ```typescript
 {
-  kind: string                  // Service kind
-  name: string                  // User-friendly name (optional; defaults to kind)
-  config: Record<string, any>   // Per-kind config; validate against kind schema
+  kind: string                  // Service kind (bitcoin, adguard, etc.)
+  instanceId: string            // Unique instance ID (e.g., "main", "secondary")
+  enabled: boolean              // Enabled/disabled status
+  cacheTtlMs?: number           // Cache TTL in milliseconds (optional; default 10000)
+  timeoutMs?: number            // Request timeout in milliseconds (optional; default 5000)
+  pollPolicy?: Record<string, any> // Per-kind poll behavior (optional)
+  // ... additional fields depend on kind (onionUrl, rpcUser, rpcPassword, etc.)
 }
 ```
+
+**Kind-Specific Fields:**
+
+Per-kind schema defines additional required/optional fields (e.g., `onionUrl`, `rpcUser`, `rpcPassword` for bitcoin). These are sent at the top level of the request, not nested under a `config` key. See `GET /config/kinds` for per-kind schema details.
 
 **Response:**
 
@@ -273,13 +284,15 @@ Update a service instance. Secret fields can be omitted to preserve existing val
 
 **Request Body:**
 
+Request is a **partial flat discriminated union** — send only the fields you want to update.
+
 ```json
 {
-  "config": {
-    "onionUrl": "http://new-onion.onion",
-    "rpcUser": "newuser",
-    "rpcPassword": ""
-  }
+  "cacheTtlMs": 10000,
+  "timeoutMs": 6000,
+  "onionUrl": "http://new-onion.onion",
+  "rpcUser": "newuser",
+  "rpcPassword": ""
 }
 ```
 
@@ -287,7 +300,13 @@ Update a service instance. Secret fields can be omitted to preserve existing val
 
 ```typescript
 {
-  config: Partial<Record<string, any>>  // Partial config; unknown fields preserved
+  kind?: string                 // Do not include (kind is immutable)
+  instanceId?: string           // Do not include (instanceId is immutable)
+  enabled?: boolean             // Enabled/disabled status (optional to update)
+  cacheTtlMs?: number           // Cache TTL (optional to update)
+  timeoutMs?: number            // Request timeout (optional to update)
+  pollPolicy?: Record<string, any> // Poll behavior (optional to update)
+  // ... additional fields depend on kind (partial; unspecified fields unchanged)
 }
 ```
 
@@ -295,7 +314,7 @@ Update a service instance. Secret fields can be omitted to preserve existing val
 
 - If a secret field is omitted: existing encrypted value preserved
 - If a secret field is `""` (empty string): existing value preserved
-- If a secret field has a value: encrypted and stored
+- If a secret field has a value: encrypted and stored (e.g., send `"***"` to preserve, or omit entirely)
 
 **Response:**
 
@@ -336,13 +355,13 @@ Validate credentials by attempting a health check with provided (or existing) co
 
 **Request Body:**
 
+Request is a **flat discriminated union** of the service's kind-specific config. If omitted, uses the current saved config.
+
 ```json
 {
-  "config": {
-    "onionUrl": "http://example.onion",
-    "rpcUser": "bitcoinrpc",
-    "rpcPassword": "secret123"
-  }
+  "onionUrl": "http://example.onion",
+  "rpcUser": "bitcoinrpc",
+  "rpcPassword": "secret123"
 }
 ```
 
@@ -350,7 +369,8 @@ Validate credentials by attempting a health check with provided (or existing) co
 
 ```typescript
 {
-  config?: Record<string, any>  // If omitted, uses current saved config
+  // Send any combination of kind-specific config fields
+  // If omitted entirely, uses current saved config
 }
 ```
 
@@ -629,8 +649,7 @@ All errors follow the standard [[docs/api/index|API error envelope]]:
 |--------------|------|--------------------------------------------|
 | `VALIDATION` | 400  | Config fails per-kind schema validation    |
 | `NOT_FOUND`  | 404  | Service instance not found                 |
-| `UNAUTHORIZED` | 401 | Missing or invalid JWT token              |
-| `CONFLICT`   | 409  | Duplicate name or kind+instanceId          |
+| `CONFLICT`   | 409  | Duplicate kind+instanceId combination      |
 | `UNAVAILABLE`| 503  | Service unreachable (test-connection only)|
 
 ---
@@ -642,30 +661,29 @@ All errors follow the standard [[docs/api/index|API error envelope]]:
 ```bash
 curl -X POST http://localhost:3001/config/services \
   -H "Content-Type: application/json" \
-  -H "Cookie: token=<JWT>" \
   -d '{
     "kind": "bitcoin",
-    "name": "Main Bitcoin Node",
-    "config": {
-      "onionUrl": "http://example.onion",
-      "rpcUser": "bitcoinrpc",
-      "rpcPassword": "secret123"
-    }
+    "instanceId": "main",
+    "enabled": true,
+    "cacheTtlMs": 10000,
+    "timeoutMs": 5000,
+    "onionUrl": "http://example.onion",
+    "rpcUser": "bitcoinrpc",
+    "rpcPassword": "secret123"
   }'
 ```
+
+(Setup wizard and UI endpoints do not require authentication; single-user design.)
 
 ### Test Connection Before Saving
 
 ```bash
 curl -X POST http://localhost:3001/config/services/bitcoin:main/test \
   -H "Content-Type: application/json" \
-  -H "Cookie: token=<JWT>" \
   -d '{
-    "config": {
-      "onionUrl": "http://example.onion",
-      "rpcUser": "bitcoinrpc",
-      "rpcPassword": "secret123"
-    }
+    "onionUrl": "http://example.onion",
+    "rpcUser": "bitcoinrpc",
+    "rpcPassword": "secret123"
   }'
 ```
 
@@ -674,21 +692,17 @@ curl -X POST http://localhost:3001/config/services/bitcoin:main/test \
 ```bash
 curl -X PUT http://localhost:3001/config/services/bitcoin:main \
   -H "Content-Type: application/json" \
-  -H "Cookie: token=<JWT>" \
   -d '{
-    "config": {
-      "rpcPort": 8333
-    }
+    "rpcPort": 8333
   }'
 ```
 
-The `rpcPassword` is preserved since it's not included in the PATCH.
+The `rpcPassword` is preserved since it's not included in the request body.
 
 ### View Audit Log
 
 ```bash
-curl http://localhost:3001/config/audit \
-  -H "Cookie: token=<JWT>"
+curl http://localhost:3001/config/audit
 ```
 
 ---

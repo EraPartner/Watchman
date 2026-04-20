@@ -3,8 +3,8 @@ title: Watchman Project Knowledge Base
 type: index
 status: active
 date: 2026-04-19
-tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives]
-description: Main entry point to the Watchman project documentation - self-hosted service monitoring dashboard with dark-luxury bento design system
+tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2]
+description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
 ---
 
@@ -20,6 +20,8 @@ aliases: [KB, docs, documentation, knowledge base, home, README]
 | If you're...                         | Start here                      |
 | ------------------------------------ | ------------------------------- | ------------------------------------------- | ---------------------- |
 | **New developer**                    | [[docs/getting-started          | Getting Started MOC]] → [[docs/guides/setup | Setup Guide]]          |
+| **Running the desktop app**          | [[docs/guides/running-the-desktop-app | Desktop App Guide]]       |
+| **Deploying backend to Pi**          | [[docs/guides/deploying-to-raspberry-pi | Pi Deploy Guide]]         |
 | **Looking for an API**               | [[docs/api/index                | API Overview]] or [[docs/integrations/index | Service Integrations]] |
 | **Making an architectural decision** | [[docs/adr/index                | ADR Index]] → [[docs/adr/template           | ADR Template]]         |
 | **Understanding the architecture**   | [[docs/architecture/index       | Architecture Overview]]                     |
@@ -39,15 +41,15 @@ aliases: [KB, docs, documentation, knowledge base, home, README]
 
 | Area                         | Description              | Documents                            |
 | ---------------------------- | ------------------------ | ------------------------------------ | ------------------- |
-| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 16 ADRs             |
+| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 18 ADRs             |
 | 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 9 endpoints         |
-| 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, and contributing  | 5 guides            |
+| 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, Pi deploy, contributing, and wizard  | 7 guides            |
 | ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 5 features          |
 | 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 14 integrations     |
 | 🔒 [[docs/security/index     | Security]]               | Security policies and practices      | 4 security docs     |
 | 🚀 [[docs/performance/index  | Performance]]            | Performance optimizations            | 2 docs              |
 | 🎨 [[docs/architecture/frontend-design-system | Design System]] | Dark-luxury tokens, primitives, motion | Complete reference |
-| 🧩 [[docs/components/index   | Components]]             | Frontend React components and hooks  | 28 components + 14 primitives |
+| 🧩 [[docs/components/index   | Components]]             | Frontend React components and hooks  | 30+ components + 14 primitives |
 | 🧪 [[docs/testing/index      | Testing]]                | Testing strategies and patterns      | 2 testing docs      |
 | 📐 [[docs/architecture/index | Architecture]]           | System diagrams and architecture     | 3 architecture docs |
 
@@ -107,8 +109,9 @@ Watchman is a comprehensive **self-hosted service monitoring dashboard** support
 - **Service Monitoring**: Health checks and statistics for 14+ service types
 - **Multi-Instance Support**: Run multiple nodes of the same service type
 - **Real-Time Updates**: WebSocket-based status broadcasting
-- **Authentication**: JWT-based auth with CSRF protection
-- **Security**: Rate limiting, IP control, account lockout, structured logging
+- **Single-User Design**: Simplified for home-lab deployments (no authentication)
+- **Time-Series Metrics**: DuckDB-backed historical data with auto-rollups
+- **UI-Driven Configuration**: Service management via web UI with encrypted secrets
 - **OpenAPI**: Full API documentation with Swagger UI
 
 ### Tech Stack
@@ -135,36 +138,50 @@ Watchman/
 │   │   │   ├── providers/ # WebSocketProvider
 │   │   │   └── lib/       # Utilities
 │   │   └── tests/         # Frontend tests (150+)
-│   └── backend/           # TypeScript + Fastify 4 + DuckDB
+│   ├── backend/           # TypeScript + Fastify 4 + DuckDB
+│   │   ├── src/
+│   │   │   ├── config/    # Env validation, service registry
+│   │   │   ├── core/      # Logger, errors, Result, eventBus
+│   │   │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller, timeseries (DuckDB)
+│   │   │   ├── domain/    # BaseService, ServiceRegistry
+│   │   │   ├── application/ # UseCases (GetServiceHistory, etc.)
+│   │   │   └── transport/ # Fastify routes, WebSocket
+│   │   ├── openapi.yaml   # OpenAPI 3.1 spec (includes /history)
+│   │   ├── dist/          # Compiled JavaScript
+│   │   └── package.json
+│   └── desktop/           # Electron 33 wrapper
 │       ├── src/
-│       │   ├── config/    # Env validation, service registry
-│       │   ├── core/      # Logger, errors, Result, eventBus
-│       │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller, timeseries (DuckDB)
-│       │   ├── domain/    # BaseService, ServiceRegistry
-│       │   ├── application/ # UseCases (GetServiceHistory, etc.)
-│       │   └── transport/ # Fastify routes, WebSocket
-│       ├── openapi.yaml   # OpenAPI 3.1 spec (includes /history)
-│       ├── dist/          # Compiled JavaScript
-│       ├── vitest.config.ts
+│       │   ├── main.ts    # Electron main process
+│       │   ├── preload.ts # Sandboxed preload script
+│       │   ├── backend.ts # Backend process spawner
+│       │   ├── frontendProtocol.ts # Custom watchman:// protocol
+│       │   └── freePort.ts # Port acquisition
+│       ├── electron-builder.yml # Distribution targets
 │       └── package.json
-├── docs/                   # Obsidian knowledge base (117+ docs)
+├── docs/                   # Obsidian knowledge base (157 docs)
 ├── packages/               # Shared packages
 └── tools/                 # Dev scripts
 ```
 
 ## Key Concepts
 
+> [!info] Desktop Distribution
+> Watchman ships as a standalone Electron desktop application (macOS dmg, Windows NSIS, Linux AppImage+deb) that auto-spawns the Node.js backend on a loopback port and serves the React frontend via a custom `watchman://` protocol. Each installation gets a unique master key for encrypting service credentials. See [[docs/adr/016-electron-desktop-wrapper|ADR-016]] and [[docs/guides/running-the-desktop-app|Desktop App Guide]].
+
+> [!info] Split Deploy — Pi Backend + Mac Electron Client
+> For always-on polling without Mac-sleep gaps, the backend can run natively on a Raspberry Pi under systemd while the Mac Electron app becomes a pure client paired via setup-wizard URL entry. LAN-only, no auth, no TLS. Offline banner surfaces when the Pi is unreachable. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] and [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]].
+
 > [!info] Time-Series (Phase 1), Design System (Phase 2) & Bento Dashboard (Phase 3)
 > **Phase 1** (LIVE) adds embedded DuckDB time-series storage with tiered rollups (raw/1m/5m/1h) and a `/services/:kind/history` endpoint for querying historical metrics. **Phase 2** (LIVE) ships dark-luxury OKLCH tokens, Geist Variable typography, and 14 custom primitives. **Phase 3** (LIVE — pilot) adds the bento dashboard with a generic `ServiceTile` driven by a `ServiceRenderer` registry. Live behind `?bento=1` flag with Bitcoin and Synology pilot services. See [[docs/features/time-series-history|Time-Series Feature]], [[docs/architecture/frontend-design-system|Frontend Design System]], [[docs/components/primitives/index|Primitives Index]], and [[docs/components/bento-dashboard|Bento Dashboard]].
 
 > [!info] Service Pattern
-> Each service extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` for status checks and `getStats()` for detailed metrics. Services are registered in [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry]] using `${kind}:${instanceId}` keys (e.g., `qbittorrent:1`, `qbittorrent:2`).
+> Each service extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` for status checks and `getStats()` for detailed metrics. Services are registered in [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]] using `${kind}:${instanceId}` keys (e.g., `qbittorrent:1`, `qbittorrent:2`).
 
 > [!info] Multi-Instance Services
 > Services like qBittorrent support multiple instances via numbered env vars: `QBITTORRENT_1_URL`, `QBITTORRENT_2_URL`, etc. Legacy single-instance config is still supported. See [[docs/features/multi-instance|Multi-Instance Feature]].
 
-> [!info] Authentication
-> JWT tokens are stored in HTTP-only cookies. CSRF protection uses the double-submit cookie pattern. Most API endpoints require authentication. See [[docs/security/authentication|Authentication]].
+> [!info] Single-User Design
+> Watchman is a single-user home-lab monitoring application with no built-in authentication. Network isolation (firewall, VPN, or closed LAN) is the operator's responsibility. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
 
 > [!info] Rate Limiting Tiers
 >
@@ -179,6 +196,7 @@ Watchman/
 | ------------------- | ---------------------------------------------------- |
 | Service classes     | `apps/backend/src/domain/services/*/`                |
 | Frontend components | `apps/frontend/src/components/*.tsx`                 |
+| Desktop app (Electron) | `apps/desktop/src/`                               |
 | API routes          | `apps/backend/src/transport/http/routes/`            |
 | Core layer          | `apps/backend/src/core/`                             |
 | Infrastructure      | `apps/backend/src/infra/`                            |

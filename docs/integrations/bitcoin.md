@@ -34,7 +34,7 @@ BITCOIN_TOR_PROXY=socks5h://127.0.0.1:9050  # default
 
 ## Service Class
 
-[[apps/backend/services/BitcoinService.js|BitcoinService.js]]
+`apps/backend/services/BitcoinService.js`
 
 ### Methods
 
@@ -44,7 +44,7 @@ BITCOIN_TOR_PROXY=socks5h://127.0.0.1:9050  # default
 
 ## Frontend Component
 
-[[apps/frontend/src/components/BitcoinCard.tsx|BitcoinCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` with `bitcoinRenderer` from the renderer registry.
 
 ## Related
 

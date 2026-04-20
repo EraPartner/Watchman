@@ -1,9 +1,12 @@
 import { Toaster } from "sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useSetupStatus } from "./pages/Settings/useConfigQueries";
+import { useSetupDismissal } from "./hooks/useSetupDismissal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { lazy, Suspense } from "react";
+import { OfflineBanner } from "./components/OfflineBanner";
+import { lazy, Suspense, type ReactNode } from "react";
 import { WebSocketProvider } from "./providers/WebSocketProvider";
 
 function shouldRetryQuery(failureCount: number, error: unknown): boolean {
@@ -23,7 +26,7 @@ const NotFoundPage = lazy(() => import("./pages/NotFound"));
 const BentoDashboardPage = lazy(
   () => import("./components/dashboard/BentoDashboard")
 );
-const SetupWizardPage = lazy(() => import("./pages/SetupWizard"));
+const SetupWizardPage = lazy(() => import("./pages/setup/SetupWizard"));
 const SettingsServicesPage = lazy(() => import("./pages/Settings/Services"));
 const SettingsAuditPage = lazy(() => import("./pages/Settings/Audit"));
 const SettingsBackupPage = lazy(() => import("./pages/Settings/BackupRestore"));
@@ -45,6 +48,14 @@ const queryClient = new QueryClient({
   },
 });
 
+function SetupGate({ children }: { children: ReactNode }) {
+  const { data, isLoading } = useSetupStatus();
+  const { dismissed } = useSetupDismissal();
+  if (isLoading) return <PageLoader />;
+  if (data?.needsSetup && !dismissed) return <Navigate to="/setup" replace />;
+  return <>{children}</>;
+}
+
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-[var(--surface-0)]">
     <div className="text-center text-[var(--text-md)]">
@@ -59,11 +70,19 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <WebSocketProvider>
         <Toaster theme="dark" position="top-right" />
+        <OfflineBanner />
         <BrowserRouter>
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={<BentoDashboardPage />} />
+                <Route
+                  path="/"
+                  element={
+                    <SetupGate>
+                      <BentoDashboardPage />
+                    </SetupGate>
+                  }
+                />
                 <Route path="/setup" element={<SetupWizardPage />} />
                 <Route
                   path="/settings/services"

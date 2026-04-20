@@ -1,14 +1,20 @@
 ---
 title: useAuth Hook
 type: component
-status: active
+status: superseded
 date: 2026-04-10
+superseded_by: docs/adr/017-remove-authentication-frontend-v2-migration
+superseded_date: 2026-04-19
 tags: [hook, frontend, react, auth, authentication]
 description: Authentication state management hook providing login, logout, and session checking via cookie-based backend auth
 aliases: [auth hook, authentication hook, login hook]
 ---
 
 # useAuth
+
+> [!danger] Superseded — No Longer Implemented
+> The `useAuth` hook was **removed in v2.3** when all authentication was removed from Watchman (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]). The `AuthGuard` component and Login page were also removed. Content retained for archival reference only.
+
 
 > [!abstract] Summary
 > A React context-backed hook that manages authentication state, providing login, logout, and session checking via the backend's cookie-based authentication endpoints.

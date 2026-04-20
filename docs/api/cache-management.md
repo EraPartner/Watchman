@@ -1,14 +1,20 @@
 ---
 title: "API: Cache Management"
 type: api
-status: active
+status: superseded
 date: 2026-04-10
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [api, cache, backend, endpoints]
 description: POST /api/cache/clear - Response cache management endpoint
 aliases: [cache clear, cache management, clear cache]
 ---
 
 # Cache Management Endpoint
+
+> [!danger] Superseded — No Longer Implemented
+> This document describes **v1 cache-clear endpoint** (requires auth + CSRF). The backend was rewritten to TypeScript + Fastify 4 in v2.0 without auth; current API in OpenAPI spec (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Clears the response cache for health checks, stats, or all cached responses. Requires authentication and CSRF verification.
@@ -21,7 +27,7 @@ aliases: [cache clear, cache management, clear cache]
 | **Path**   | `/api/cache/clear`                       |
 | **Auth**   | Yes + CSRF                               |
 | **Rate**   | `controlLimiter`                         |
-| **Source** | [[apps/backend/routes/controlRoutes.js]] |
+| **Source** | `apps/backend/routes/controlRoutes.js` |
 
 ## Request
 
@@ -75,9 +81,9 @@ aliases: [cache clear, cache management, clear cache]
 
 ## Source
 
-- Route module: [[apps/backend/routes/controlRoutes.js]]
-- Registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]], [[apps/backend/server.js]]
-- Cache middleware: [[apps/backend/middleware/cache.js]]
+- Route module: `apps/backend/routes/controlRoutes.js`
+- Registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`, `apps/backend/server.js`
+- Cache middleware: `apps/backend/middleware/cache.js`
 
 ## Related
 

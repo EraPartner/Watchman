@@ -43,7 +43,7 @@ Each layer has clear responsibilities and minimal coupling.
 1. Loads and validates environment (Zod schema)
 2. Initializes core layer (logger, errorHandler, eventBus)
 3. Sets up infra layer (cache, circuitBreaker, httpClient, sshClient)
-4. Loads services from [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry]]
+4. Loads services from [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]]
 5. Registers domain layer (BaseService instances in ServiceRegistry)
 6. Mounts HTTP routes and WebSocket handlers via Fastify
 7. Attaches graceful shutdown handler (SIGTERM, SIGINT)
@@ -180,7 +180,7 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 
 ## Configuration Layer
 
-[[apps/backend/src/config/]]—Bootstrap and runtime configuration:
+`apps/backend/src/config/`—Bootstrap and runtime configuration:
 
 ### Bootstrap Configuration
 

@@ -1,14 +1,20 @@
 ---
 title: "API: AdGuard Service"
 type: api
-status: active
+status: superseded
 date: 2026-04-09
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [api, adguard, service, dns, backend]
 description: AdGuard Home monitoring API endpoints plus a limited filtering toggle endpoint
 aliases: [adguard api, adguard endpoints]
 ---
 
 # AdGuard API Endpoints
+
+> [!danger] Superseded — No Longer Implemented
+> This document describes **v1 AdGuard API endpoints** with Express.js auth/rate-limit annotations. The backend was rewritten to TypeScript + Fastify 4 in v2.0; current API is defined in the OpenAPI spec (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Monitoring-focused AdGuard Home API endpoints. Includes a limited DNS protection toggle and real-time update streaming via WebSocket.
@@ -89,7 +95,7 @@ Responses are cached via `statsCacheMiddleware`.
 
 ### Source
 
-- Service class: [[apps/backend/services/AdGuardService.js]]
+- Service class: `apps/backend/services/AdGuardService.js`
 
 ---
 
@@ -149,8 +155,8 @@ Toggle AdGuard Home DNS filtering protection on or off.
 
 ### Source
 
-- Route: [[apps/backend/server.js]]
-- Service class: [[apps/backend/services/AdGuardService.js]]
+- Route: `apps/backend/server.js`
+- Service class: `apps/backend/services/AdGuardService.js`
 
 ---
 
@@ -166,8 +172,8 @@ Server-Sent Events / WebSocket endpoint for real-time AdGuard status updates.
 
 ### Source
 
-- Route factory: [[apps/backend/routes/serviceFactory.js]]
-- WebSocket manager: [[apps/backend/services/WebSocketManager.js]]
+- Route factory: `apps/backend/routes/serviceFactory.js`
+- WebSocket manager: `apps/backend/services/WebSocketManager.js`
 
 ---
 

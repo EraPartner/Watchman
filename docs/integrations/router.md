@@ -41,7 +41,7 @@ TELENET_PORTS=80
 
 ## Service Class
 
-[[apps/backend/services/RouterService.js|RouterService.js]]
+`RouterService` (`apps/backend/src/domain/services/`)
 
 ### Methods
 
@@ -53,7 +53,7 @@ TELENET_PORTS=80
 The `/api/router/arp` endpoint performs network neighbor discovery:
 
 - Uses `ip neigh` (Linux) or `arp -a` (macOS)
-- Uses a short-lived in-memory TTL cache (3s) in `[[apps/backend/services/RouterArpService.js]]` to reduce repeated ARP command executions during rapid refreshes
+- Uses a short-lived in-memory TTL cache (3s) in `RouterArpService` to reduce repeated ARP command executions during rapid refreshes
 - Cache pruning is bounded with a max-entry limit to avoid unbounded memory growth while preserving TTL behavior
 - Filters by router's interface or subnet
 - Returns paginated results with LAN-specific subset
@@ -68,7 +68,7 @@ The `/api/router/arp` endpoint performs network neighbor discovery:
 
 ## Frontend Component
 
-[[apps/frontend/src/components/RouterCard.tsx|RouterCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

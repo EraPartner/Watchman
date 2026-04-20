@@ -8,6 +8,7 @@ export {
   DialogTitle,
   DialogDescription,
 } from "./Dialog";
+export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
 export {
   Sheet,
   SheetTrigger,

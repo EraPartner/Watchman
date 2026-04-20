@@ -1,14 +1,20 @@
 ---
 title: "Component: PhilipsBridgeCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, philips, hue, smart-home]
 description: Philips Hue Bridge monitoring card with ICMP ping-based connectivity check
 aliases: [philips hue card, hue bridge card, smart lighting monitoring]
 ---
 
 # Component: PhilipsBridgeCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays Philips Hue Bridge connectivity status using ICMP ping for lightweight health monitoring.
@@ -47,7 +53,7 @@ Uses React Query with `useQuery` for status polling.
 
 ## Source
 
-- [[apps/frontend/src/components/PhilipsBridgeCard.tsx]]
+- `apps/frontend/src/components/PhilipsBridgeCard.tsx`
 
 ## Related
 

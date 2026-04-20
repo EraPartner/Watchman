@@ -46,7 +46,7 @@ SYNOLOGY_2_PASSWORD=password2
 
 ## Service Class
 
-[[apps/backend/services/SynologyService.js|SynologyService.js]]
+`apps/backend/services/SynologyService.js`
 
 ### Methods
 
@@ -55,7 +55,7 @@ SYNOLOGY_2_PASSWORD=password2
 
 ## Frontend Component
 
-[[apps/frontend/src/components/SynologyCard.tsx|SynologyCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` with `synologyRenderer` from the renderer registry.
 
 ## Related
 

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { loadEnv } from './config/env.js';
 import { createLogger } from './core/logger.js';
 import { buildServer } from './transport/http/server.js';
@@ -27,6 +28,7 @@ import { createRollupWorker } from './infra/timeseries/RollupWorker.js';
 import { GetServiceHistory } from './application/GetServiceHistory.js';
 import { ServiceRegistry } from './domain/ServiceRegistry.js';
 import { loadEncryptorFromEnv } from './config/store/encryption.js';
+import { loadOrCreateMasterKey } from './config/masterKey.js';
 import { runConfigMigrations } from './config/store/migrations.js';
 import { createConfigStore } from './config/store/ConfigStore.js';
 import { migrateEnvServicesIfNeeded } from './config/store/envMigrator.js';
@@ -71,7 +73,8 @@ async function main(): Promise<void> {
     }
   }
 
-  const encryptor = loadEncryptorFromEnv(env.WATCHMAN_MASTER_KEY);
+  const masterKey = loadOrCreateMasterKey(dataDir, env.WATCHMAN_MASTER_KEY);
+  const encryptor = loadEncryptorFromEnv(masterKey);
   const store = createConfigStore(dbPool, encryptor, bus);
   const migResult = await migrateEnvServicesIfNeeded(store, logger);
   if (migResult.migrated > 0) {

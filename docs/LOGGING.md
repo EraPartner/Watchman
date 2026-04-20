@@ -130,8 +130,8 @@ This happens regardless of the logging level, ensuring sensitive data is never w
 
 ## Request ID Generation
 
-- `requestIdMiddleware` in [[apps/backend/middleware/logger.js]] generates IDs with `crypto.randomUUID()` when an incoming request does not provide one.
-- `generateRequestId()` in [[apps/backend/middleware/performanceMonitor.js]] also uses `crypto.randomUUID()` for consistent request/metric correlation IDs.
+- `requestIdMiddleware` in `apps/backend/middleware/logger.js` generates IDs with `crypto.randomUUID()` when an incoming request does not provide one.
+- `generateRequestId()` in `apps/backend/middleware/performanceMonitor.js` also uses `crypto.randomUUID()` for consistent request/metric correlation IDs.
 
 ## Quick Start
 
@@ -303,4 +303,4 @@ end note
 
 - [[docs/architecture/backend-architecture|Backend Architecture]]
 - [[docs/reference/environment-variables|Environment Variables]]
-- [[apps/backend/middleware/logger.js|Logger Middleware (Code)]]
+- `apps/backend/middleware/logger.js` (Logger Middleware)

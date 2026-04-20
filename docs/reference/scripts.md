@@ -2,7 +2,7 @@
 title: Scripts Reference
 type: reference
 status: active
-date: 2026-04-10
+date: 2026-04-19
 tags: [reference, scripts, development]
 description: Reference of all npm scripts and commands for the Watchman project
 aliases: [scripts, npm scripts, commands, build commands]
@@ -19,13 +19,16 @@ aliases: [scripts, npm scripts, commands, build commands]
 | ------------------------ | ------------------------------------- |
 | `npm run dev`            | Start frontend + backend concurrently |
 | `npm run dev:frontend`   | Start frontend only (Vite on 5173)    |
-| `npm run dev:backend`    | Start backend only (Express on 3001)  |
+| `npm run dev:backend`    | Start backend only (Fastify on 3001)  |
+| `npm run dev:desktop`    | Start Electron app (dev mode)         |
 | `npm run start`          | Start both + open browser             |
 | `npm run start:frontend` | Start frontend in production mode     |
 | `npm run start:backend`  | Start backend in production mode      |
+| `npm run start:desktop`  | Start Electron app (production mode)  |
 | `npm run build`          | Build frontend + backend              |
 | `npm run build:frontend` | Build frontend only                   |
 | `npm run build:backend`  | Build backend only                    |
+| `npm run package:desktop` | Package Electron app for distribution |
 | `npm run lint`           | Lint all workspaces                   |
 | `npm run lint:fix`       | Fix lint issues in all workspaces     |
 | `npm run format`         | Format code with Prettier             |
@@ -33,6 +36,16 @@ aliases: [scripts, npm scripts, commands, build commands]
 | `npm run test`           | Run tests in all workspaces           |
 | `npm run clean`          | Remove all node_modules               |
 | `npm run setup`          | Install dependencies                  |
+
+### Desktop (`apps/desktop`)
+
+| Command                 | Description                    |
+| ----------------------- | ------------------------------ |
+| `npm run dev`           | Start Electron app (dev mode)  |
+| `npm run start`         | Start packaged Electron app    |
+| `npm run build`         | Build app for packaging        |
+| `npm run package`       | Package for all platforms      |
+| `npm run clean`         | Clean build artifacts          |
 
 ## Workspace Scripts
 

@@ -1,22 +1,33 @@
 ---
-title: ADR-004 - Layered Security Middleware Stack
+title: ADR-004 - Layered Security Middleware Stack (Superseded)
 type: adr
-status: accepted
+status: superseded
 date: 2026-04-02
-tags: [adr, security, backend, middleware]
-description: Defense-in-depth security using layered middleware including Helmet, JWT auth, CSRF, rate limiting, IP control, and more
+superseded_by: docs/adr/017-remove-authentication-frontend-v2-migration
+superseded_date: 2026-04-19
+tags: [adr, security, backend, middleware, superseded, historical]
+description: Historical defense-in-depth middleware stack — superseded by ADR-017 (auth removed) and ADR-013 (Fastify rewrite)
 aliases: [security middleware, defense in depth, layered security]
 ---
 
-# ADR-004: Layered Security Middleware Stack
+# ADR-004: Layered Security Middleware Stack (Superseded)
 
-> [!abstract] Summary
-> The backend applies security in multiple layers: Helmet, CORS, JWT authentication, CSRF protection, tiered rate limiting, IP access control, account lockout, request timeout, response size limits, and input validation.
+> [!danger] Superseded by ADR-017 and ADR-013
+> This ADR described a 10-layer defense-in-depth middleware stack (Helmet, CORS, JWT, CSRF, tiered rate limiting, IP control, account lockout, timeout, size limits, input validation) on the Express backend. It is **no longer implemented**. As of v2.3:
+> - Auth, CSRF, rate-limit, IP-control, and account-lockout middleware were **removed** — see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]].
+> - Express was **replaced by Fastify 4** — see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]].
+>
+> Current security posture: single-user home-lab app; network isolation is the operator's responsibility. Remaining transport-layer middleware: `logSamplingPlugin`, `requestTimeoutPlugin`, `compress`, `errorHandlerPlugin` (plus `@fastify/helmet` and CORS handled inline for the `watchman://` origin).
+
+> [!abstract] Historical Summary
+> The backend previously applied security in multiple layers: Helmet, CORS, JWT authentication, CSRF protection, tiered rate limiting, IP access control, account lockout, request timeout, response size limits, and input validation.
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Superseded
+- **Superseded by**: [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] (auth removed), [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] (Express → Fastify)
 - **Date**: 2026-04-02
+- **Superseded date**: 2026-04-19
 
 ## Context
 

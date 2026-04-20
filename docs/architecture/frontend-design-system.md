@@ -398,7 +398,7 @@ Usage: `shadow-elev-1`
 
 ## Demo Page
 
-The [[apps/frontend/src/pages/BentoDemo.tsx|BentoDemo]] page showcases all primitives and tokens. It's gated by the `?bento=1` query parameter or reachable at `/bento` route.
+The `apps/frontend/src/pages/BentoDemo.tsx` (BentoDemo) page showcases all primitives and tokens. It's gated by the `?bento=1` query parameter or reachable at `/bento` route.
 
 Sections include:
 - Buttons (ghost, tonal, accent sizes: sm, md, lg, icon)

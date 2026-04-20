@@ -17,59 +17,51 @@ aliases: [monitoring, health checks, service status]
 
 ### Service Pattern
 
-Every service follows a standard interface:
+Every service extends `BaseService` (TypeScript, v2):
 
-```javascript
-class ServiceName {
-  constructor(config) {
-    this.name = "service-name";
-    this.config = config;
-    this.enabled = this.checkConfig();
+```typescript
+export class ServiceName extends BaseService {
+  readonly kind = "service-name";
+
+  async checkHealth(): Promise<HealthResult> {
+    // Lightweight ping
   }
 
-  async checkHealth() {
-    // Lightweight ping - returns { status, timestamp, data }
-  }
-
-  async getStats() {
-    // Detailed metrics - returns { data, timestamp }
+  async getStats(): Promise<StatsResult> {
+    // Detailed metrics
   }
 }
 ```
 
-### ServiceManager
+See [[apps/backend/src/domain/BaseService.ts]] and [[apps/backend/src/domain/ServiceRegistry.ts]].
 
-The [[apps/backend/services/ServiceManager.js|ServiceManager]] orchestrates all services:
+### BackgroundPoller
 
-1. Reads `ENABLED_SERVICES` from environment
-2. Initializes each service via factory pattern
-3. Routes health/stats requests to appropriate service
+The `apps/backend/src/infra/scheduler/BackgroundPoller.ts` (BackgroundPoller) orchestrates all services:
+
+1. Tracks registered services from `ServiceRegistry`
+2. Polls each service on a configurable interval
+3. Persists results to time-series store (DuckDB)
 4. Applies circuit breaker pattern for fault tolerance
 
 ### Health Check Flow
 
 ```
-Frontend → GET /api/{service}/status
-  → healthLimiter middleware
-  → requireServiceEnabled middleware
-  → healthCacheMiddleware (30s TTL)
-  → ServiceManager.getServiceHealth()
-  → Circuit breaker check
-  → service.checkHealth()
-  → Cache result
-  → Return JSON response
+Frontend → GET /services/{id}/health
+  → Fastify route handler
+  → BackgroundPoller cached result
+  → Circuit breaker state
+  → Return JSON { data: { status, ... } }
 ```
 
 ### Stats Flow
 
 ```
-Frontend → GET /api/{service}/stats
-  → requireAuth middleware
-  → statsCacheMiddleware (60s TTL)
-  → ServiceManager.getServiceStats()
+Frontend → GET /services/{id}/stats
+  → Fastify route handler
+  → SWR cache (TTL configurable)
   → service.getStats()
-  → Cache result
-  → Return JSON response
+  → Return JSON { data: { ... } }
 ```
 
 ## Supported Services
@@ -92,14 +84,14 @@ Services use circuit breaker pattern to prevent cascading failures:
 
 ## Frontend Coverage Notes (Monitoring UI)
 
-- Dashboard query-orchestration coverage in [[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]] for [[apps/frontend/src/components/dashboard/useDashboardQueries.ts]] now includes:
+- Dashboard query-orchestration coverage in `apps/frontend/src/components/dashboard/useDashboardQueries.test.ts` for `apps/frontend/src/components/dashboard/useDashboardQueries.ts` now includes:
   - selective refetching for enabled service queries
   - always-refetched aggregate `servicesHealth`
   - expanded enablement branches for `frontendConfig` and `qbittorrent`
 - Shared monitoring UI coverage now includes:
-  - [[apps/frontend/src/components/UpdateBadge.test.tsx]] for update-check + click behavior in [[apps/frontend/src/components/UpdateBadge.tsx]]
+  - `apps/frontend/src/components/UpdateBadge.test.tsx` for update-check + click behavior in `apps/frontend/src/components/UpdateBadge.tsx`
   - [[apps/frontend/src/components/ServiceLink.test.tsx]] for host-only link display and click behavior in [[apps/frontend/src/components/ServiceLink.tsx]]
-  - [[apps/frontend/src/components/ServerStatusBadge.test.tsx]] for status variant rendering in [[apps/frontend/src/components/ServerStatusBadge.tsx]]
+  - `apps/frontend/src/components/ServerStatusBadge.test.tsx` for status variant rendering in `apps/frontend/src/components/ServerStatusBadge.tsx`
 
 ## PlantUML Diagrams
 

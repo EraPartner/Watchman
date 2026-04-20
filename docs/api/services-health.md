@@ -1,14 +1,20 @@
 ---
 title: "API: Services Health"
 type: api
-status: active
+status: superseded
 date: 2026-04-10
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [api, health, services, batch, backend]
 description: Aggregate and batch health check endpoints for all monitored services
 aliases: [services health, batch health, health batch]
 ---
 
 # Services Health Endpoints
+
+> [!danger] Superseded — No Longer Implemented
+> This document describes **v1 aggregate health endpoints** with auth requirements. The backend was rewritten to TypeScript + Fastify 4 in v2.0; current API in OpenAPI spec (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Aggregate health checks for all or a subset of monitored services. Used by the frontend dashboard to display service status cards.
@@ -74,10 +80,10 @@ Returns health status for all enabled services in a single request.
 
 ### Source
 
-- Route module: [[apps/backend/routes/metaRoutes.js]]
-- Route registration/dependencies: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
-- Request-timeout/abort source: [[apps/backend/middleware/requestTimeout.js]]
-- ServiceManager: [[apps/backend/services/ServiceManager.js]]
+- Route module: `apps/backend/routes/metaRoutes.js`
+- Route registration/dependencies: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
+- Request-timeout/abort source: `apps/backend/middleware/requestTimeout.js`
+- ServiceManager: `apps/backend/services/ServiceManager.js`
 
 ---
 
@@ -143,13 +149,13 @@ Check health for a specific subset of services. More efficient than individual s
 
 ### Frontend Usage
 
-Consumed by React Query hooks and dashboard views (for example `useAllServicesHealth()` in `[[apps/frontend/src/hooks/useServiceHealth.ts]]`).
+Consumed by React Query hooks and dashboard views (for example `useAllServicesHealth()` in `apps/frontend/src/hooks/useServiceHealth.ts`).
 
 ### Source
 
-- Route module: [[apps/backend/routes/metaRoutes.js]]
-- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
-- Frontend hooks: [[apps/frontend/src/hooks/useServiceHealth.ts]], [[apps/frontend/src/hooks/useServiceInstances.tsx]]
+- Route module: `apps/backend/routes/metaRoutes.js`
+- Route registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
+- Frontend hooks: `apps/frontend/src/hooks/useServiceHealth.ts`, `apps/frontend/src/hooks/useServiceInstances.tsx`
 
 ---
 
@@ -182,9 +188,9 @@ Returns metadata about multi-instance service configurations.
 
 ### Source
 
-- Route module: [[apps/backend/routes/metaRoutes.js]]
-- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
-- ServiceManager: [[apps/backend/services/ServiceManager.js]]
+- Route module: `apps/backend/routes/metaRoutes.js`
+- Route registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
+- ServiceManager: `apps/backend/services/ServiceManager.js`
 
 ---
 

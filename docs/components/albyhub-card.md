@@ -1,14 +1,20 @@
 ---
 title: "Component: AlbyHubCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-09
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, alby, lightning, bitcoin]
 description: Alby Hub Lightning wallet monitoring card with app list and node info
 aliases: [alby hub card, lightning wallet card, alby monitoring]
 ---
 
 # Component: AlbyHubCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays Alby Hub Lightning Network wallet status including node information, connected apps, and wallet balance.
@@ -59,7 +65,7 @@ Uses manual `useEffect` + `setInterval` pattern (not React Query).
 
 ## Source
 
-- [[apps/frontend/src/components/AlbyHubCard.tsx]]
+- `apps/frontend/src/components/AlbyHubCard.tsx`
 
 ## Related
 

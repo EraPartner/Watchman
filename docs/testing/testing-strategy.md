@@ -1,14 +1,19 @@
 ---
 title: Testing Strategy and Patterns
 type: doc
-status: active
+status: superseded
 date: 2026-04-11
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [testing, strategy, vitest, patterns]
 description: Comprehensive testing strategy, patterns, and conventions for the Watchman project
 aliases: [testing strategy, test patterns, test conventions]
 ---
 
 # Testing Strategy and Patterns
+
+> [!danger] Superseded — v1 Test File Listings
+> This document's **Test Structure** and **Backend Testing** sections describe **v1 backend tests** (`apps/backend/tests/*.test.js`, Express.js auth middleware) and auth-related frontend tests (`useAuth`, `AuthGuard`, `Login`, `csrf`) removed in v2.3. Current backend tests live under `apps/backend/src/**/*.test.ts`. See [[docs/testing/index|Testing Index]] for current state. Content retained for archival reference only.
 
 > [!abstract] Overview
 > Watchman uses **Vitest** as the unified test runner across the monorepo. Frontend tests run in a jsdom environment with React Testing Library. Backend testing focuses on route integration, middleware/validation behavior, and utility-level correctness.
@@ -170,7 +175,7 @@ describe("cn utility", () => {
 
 ## Backend Testing
 
-Current middleware coverage includes `responseSizeLimit` behavior in [[apps/backend/tests/responseSizeLimit.test.js]] for [[apps/backend/middleware/responseSizeLimit.js]]:
+Current middleware coverage includes `responseSizeLimit` behavior in `apps/backend/tests/responseSizeLimit.test.js` for `apps/backend/middleware/responseSizeLimit.js`:
 
 - health endpoint bypasses response-size enforcement
 - under-limit responses pass through normally
@@ -179,9 +184,9 @@ Current middleware coverage includes `responseSizeLimit` behavior in [[apps/back
 - object-like write chunks are coerced via `toString()` for byte-size accounting
 - repeated `res.write(...)` calls after limit exceed consistently return `false`
 
-Implementation detail: byte counting now tracks both `res.write` and `res.end` in [[apps/backend/middleware/responseSizeLimit.js]], and fixes the `originalEnd` handling bug.
+Implementation detail: byte counting now tracks both `res.write` and `res.end` in `apps/backend/middleware/responseSizeLimit.js`, and fixes the `originalEnd` handling bug.
 
-Authentication route integration coverage now includes login response compatibility in [[apps/backend/tests/authRoutes.integration.test.js]] for [[apps/backend/routes/authRoutes.js]]:
+Authentication route integration coverage now includes login response compatibility in `apps/backend/tests/authRoutes.integration.test.js` for `apps/backend/routes/authRoutes.js`:
 
 - `AUTH_RETURN_TOKEN=false` omits `token` from response body while still setting the auth cookie
 - `AUTH_RETURN_TOKEN=true` includes `token` in response body and still sets the auth cookie
@@ -190,46 +195,46 @@ Authentication route integration coverage now includes login response compatibil
 
 Backend coverage now includes focused tests for middleware, auth helpers, and infrastructure utilities:
 
-- [[apps/backend/tests/authMiddleware.test.js]] - JWT auth middleware request handling, including bcrypt failure branch handling
-- [[apps/backend/tests/authMiddleware.test.js]] - includes `requireAuth` behavior when decoded token has no `iat` (`tokenIssuedAt` remains `undefined`)
-- [[apps/backend/tests/authToken.test.js]] - auth token parsing/signing helper behavior, including non-object request handling and empty-key cookie parsing
-- [[apps/backend/tests/csrf.test.js]] - CSRF middleware validation and failure paths, including mismatched-length token rejection
-- [[apps/backend/tests/csrf.test.js]] - includes production cookie option behavior (`secure=true`, `sameSite='strict'`)
-- [[apps/backend/tests/requestTimeout.test.js]] - timeout + abort propagation behavior
-- [[apps/backend/tests/TorManager.test.js]] - expanded Tor manager lifecycle and error handling
+- `apps/backend/tests/authMiddleware.test.js` - JWT auth middleware request handling, including bcrypt failure branch handling
+- `apps/backend/tests/authMiddleware.test.js` - includes `requireAuth` behavior when decoded token has no `iat` (`tokenIssuedAt` remains `undefined`)
+- `apps/backend/tests/authToken.test.js` - auth token parsing/signing helper behavior, including non-object request handling and empty-key cookie parsing
+- `apps/backend/tests/csrf.test.js` - CSRF middleware validation and failure paths, including mismatched-length token rejection
+- `apps/backend/tests/csrf.test.js` - includes production cookie option behavior (`secure=true`, `sameSite='strict'`)
+- `apps/backend/tests/requestTimeout.test.js` - timeout + abort propagation behavior
+- `apps/backend/tests/TorManager.test.js` - expanded Tor manager lifecycle and error handling
   - covers `isInstalled()` fallback to Homebrew when `which tor` fails
   - covers `installTor()` success and failure paths
   - covers `startTor()` bootstrap log handling from stdout/stderr and child-process `error` path
   - covers `cleanup()` warning-path behavior when success logger throws
-  - measured coverage for [[apps/backend/services/TorManager.js]] from Node test coverage run: **~95.90% lines / ~90.91% branches / ~90.63% functions**
-- [[apps/backend/tests/logger.test.js]] - expanded structured logger behavior and formatting
+  - measured coverage for `apps/backend/services/TorManager.js` from Node test coverage run: **~95.90% lines / ~90.91% branches / ~90.63% functions**
+- `apps/backend/tests/logger.test.js` - expanded structured logger behavior and formatting
 
 Additional focused utility coverage includes:
 
-- [[apps/backend/tests/validation.test.js]] - request validation behavior and edge handling
-- [[apps/backend/tests/logger.test.js]] - structured logging utility behavior
-- [[apps/backend/tests/routeUtils.test.js]] - route helper utility correctness
-- [[apps/backend/tests/ip.test.js]] - IP parsing/normalization helpers
+- `apps/backend/tests/validation.test.js` - request validation behavior and edge handling
+- `apps/backend/tests/logger.test.js` - structured logging utility behavior
+- `apps/backend/tests/routeUtils.test.js` - route helper utility correctness
+- `apps/backend/tests/ip.test.js` - IP parsing/normalization helpers
 
-Frontend auth/bootstrap coverage includes [[apps/frontend/src/hooks/useAuth.test.tsx]] for [[apps/frontend/src/hooks/useAuth.tsx]]:
+Frontend auth/bootstrap coverage includes `apps/frontend/src/hooks/useAuth.test.tsx` for `apps/frontend/src/hooks/useAuth.tsx` (both removed in v2.3):
 
 - Auth state bootstrap (`getAuthMe`) is shared through `AuthProvider` and called once across multiple `useAuth` consumers
 - Bootstrap identity fallback is covered when backend user payload omits `username` (hook falls back to stringified `id`)
 - Auth bootstrap payload access errors are covered (warning path + unauthenticated fallback)
-- Login flow uses a silent post-login `fetchMe` refresh to avoid loading-state flicker; this is behavior in [[apps/frontend/src/hooks/useAuth.tsx]] and should remain covered as auth tests expand
+- Login flow uses a silent post-login `fetchMe` refresh to avoid loading-state flicker; this is behavior in `apps/frontend/src/hooks/useAuth.tsx` and should remain covered as auth tests expand
 - Login and logout success paths are explicitly covered
 - Login failure paths now include both missing-user and network-error scenarios
 - Logout failure path is covered
 - Non-`Error` login/logout thrown values are covered with generic `Network error` fallback assertions
 - Outside-provider `useAuth` usage is covered and expected to throw
-- Current measured coverage for [[apps/frontend/src/hooks/useAuth.tsx]]: **100% lines**, **100% functions**, **86.66% branches**
+- Current measured coverage for `apps/frontend/src/hooks/useAuth.tsx`: **100% lines**, **100% functions**, **86.66% branches**
 
 Frontend auth surface coverage now also includes:
 
-- [[apps/frontend/src/lib/csrf.test.ts]] - CSRF cookie/header helper behavior and config edge cases (token header injection, cookie-read exception logging, `hasToken()` absent-token false-path, missing-token no-header behavior, empty-config fallback, custom cookie/header names)
-- [[apps/frontend/src/components/AuthGuard.test.tsx]] - loading, redirect, and authenticated render behavior for route protection (**100% lines/branches/functions** for [[apps/frontend/src/components/AuthGuard.tsx]])
-- [[apps/frontend/src/pages/Login.test.tsx]] - login page interaction and error-path handling (already-authenticated redirect, missing-credentials validation, remember-me success flow, failed login error rendering, default error fallback, auth-context error rendering, loading-state disabled submit UX) (**100% lines/branches/functions** for [[apps/frontend/src/pages/Login.tsx]])
-- Current measured coverage for [[apps/frontend/src/lib/csrf.ts]]: **96.77% lines**, **84.21% branches**, **100% functions**
+- `apps/frontend/src/lib/csrf.test.ts` - CSRF cookie/header helper behavior and config edge cases (token header injection, cookie-read exception logging, `hasToken()` absent-token false-path, missing-token no-header behavior, empty-config fallback, custom cookie/header names)
+- `apps/frontend/src/components/AuthGuard.test.tsx` - loading, redirect, and authenticated render behavior for route protection (**100% lines/branches/functions** for `apps/frontend/src/components/AuthGuard.tsx`)
+- `apps/frontend/src/pages/Login.test.tsx` - login page interaction and error-path handling (already-authenticated redirect, missing-credentials validation, remember-me success flow, failed login error rendering, default error fallback, auth-context error rendering, loading-state disabled submit UX) (**100% lines/branches/functions** for `apps/frontend/src/pages/Login.tsx`)
+- Current measured coverage for `apps/frontend/src/lib/csrf.ts`: **96.77% lines**, **84.21% branches**, **100% functions**
 
 Frontend utility + response-shape coverage now also includes:
 
@@ -260,14 +265,14 @@ Frontend API client architecture now uses a stable public client wrapper `[[apps
 
 Frontend API client tests now include:
 
-- [[apps/frontend/src/services/apiClient/core.test.ts]] - core request/retry/error handling behavior
-- [[apps/frontend/src/services/apiClient/endpoints.test.ts]] - endpoint mapping and API contract helpers (expanded from 3 to 11 tests, including broad endpoint wrapper mapping, Bitcoin timeout, deprecated Homebridge alias, login fallback token, write payload helpers, tor relay nickname/no-nickname paths, and service-key endpoint composition)
+- `apps/frontend/src/services/apiClient/core.test.ts` - core request/retry/error handling behavior
+- `apps/frontend/src/services/apiClient/endpoints.test.ts` - endpoint mapping and API contract helpers (expanded from 3 to 11 tests, including broad endpoint wrapper mapping, Bitcoin timeout, deprecated Homebridge alias, login fallback token, write payload helpers, tor relay nickname/no-nickname paths, and service-key endpoint composition)
 - [[apps/frontend/vitest.config.ts]] - Vitest projects + coverage configuration
 - [[apps/frontend/package.json]] - `test:coverage` script and `@vitest/coverage-v8` dependency
 
 Current measured coverage for [[apps/frontend/src/services/apiClient/endpoints.ts]]: **86.58% lines**, **96.66% branches**, **71.79% functions**.
 
-Backend timeout/abort behavior now includes request-level abort propagation from [[apps/backend/middleware/requestTimeout.js]] into route/service health calls (`[[apps/backend/routes/metaRoutes.js]]`, `[[apps/backend/services/ServiceManager.js]]`). Add targeted tests for timeout and client-disconnect abort paths when extending backend middleware coverage.
+Backend timeout/abort behavior now includes request-level abort propagation from `apps/backend/middleware/requestTimeout.js` into route/service health calls (`apps/backend/routes/metaRoutes.js`, `apps/backend/services/ServiceManager.js`). Add targeted tests for timeout and client-disconnect abort paths when extending backend middleware coverage.
 
 Frontend backend URL coverage includes [[apps/frontend/src/lib/backendUrl.test.ts]] for [[apps/frontend/src/lib/backendUrl.ts]]:
 
@@ -278,7 +283,7 @@ Frontend logger and dashboard-page coverage now also includes:
 - [[apps/frontend/src/lib/logger.test.ts]] - coverage for frontend logging helper behavior in [[apps/frontend/src/lib/logger.ts]]
   - validates sensitive-value redaction behavior
   - validates regex fallback behavior where no capture group exists (returns `[REDACTED]`)
-- [[apps/frontend/src/pages/Index.test.tsx]] - coverage for dashboard page behavior in [[apps/frontend/src/pages/Index.tsx]]
+- `apps/frontend/src/pages/Index.test.tsx` - coverage for dashboard page behavior in `apps/frontend/src/pages/Index.tsx`
   - improves `Index.tsx` to ~88% line coverage
 - [[apps/frontend/src/lib/backendUrl.test.ts]] - expanded coverage breadth for URL-derivation branches in [[apps/frontend/src/lib/backendUrl.ts]]
 
@@ -293,7 +298,7 @@ Frontend route shell and API client wrapper coverage now also includes:
   - `404` heading render
   - page-not-found message render
   - dashboard-link href/text assertions
-- [[apps/frontend/src/services/ApiClient.test.ts]] - public wrapper behavior for [[apps/frontend/src/services/ApiClient.ts]]
+- `apps/frontend/src/services/ApiClient.test.ts` - public wrapper behavior for [[apps/frontend/src/services/ApiClient.ts]]
   - singleton export shape (`apiClient`)
   - constructor behavior (`new ApiClient()`)
   - inherited endpoint method exposure from `ApiClientEndpoints`
@@ -305,18 +310,18 @@ Frontend real-time and dashboard-query coverage now also includes:
   - aggregate `servicesHealth` invalidation after service updates
   - `alert` level routing (`error`/`warning`/`info`) to toast handlers
   - unknown message type warning-path logging
-- [[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]] - dashboard query orchestrator behavior for [[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]
+- `apps/frontend/src/components/dashboard/useDashboardQueries.test.ts` - dashboard query orchestrator behavior for `apps/frontend/src/components/dashboard/useDashboardQueries.ts`
   - `refreshEnabledQueries()` refetches only enabled service queries
   - `refreshEnabledQueries()` always refetches `servicesHealth`
   - expanded enablement coverage for `frontendConfig` and `qbittorrent` query refetch branches
 
 Frontend shared component and toast-hook coverage now also includes:
 
-- [[apps/frontend/src/hooks/use-toast.test.tsx]] - reducer + hook lifecycle coverage for [[apps/frontend/src/hooks/use-toast.ts]]
+- `apps/frontend/src/hooks/use-toast.test.tsx` - reducer + hook lifecycle coverage for `apps/frontend/src/hooks/use-toast.ts`
   - `ADD_TOAST` limit behavior (latest toast retained)
   - `DISMISS_TOAST` without ID dismisses all active toasts
   - hook add/update/dismiss/remove flow with fake-timer removal validation
-- [[apps/frontend/src/components/UpdateBadge.test.tsx]] - update-indicator behavior for [[apps/frontend/src/components/UpdateBadge.tsx]]
+- `apps/frontend/src/components/UpdateBadge.test.tsx` - update-indicator behavior for `apps/frontend/src/components/UpdateBadge.tsx`
   - 503 service-not-configured path hides output (`null`) and logs debug
   - query-error path logs warning
   - update-available badge click opens release URL in new tab
@@ -324,7 +329,7 @@ Frontend shared component and toast-hook coverage now also includes:
   - missing `raw` value fallback (`N/A`)
   - `hostOnly` rendering branch
   - click-through via computed href (`openHref`)
-- [[apps/frontend/src/components/ServerStatusBadge.test.tsx]] - status-label rendering for [[apps/frontend/src/components/ServerStatusBadge.tsx]]
+- `apps/frontend/src/components/ServerStatusBadge.test.tsx` - status-label rendering for `apps/frontend/src/components/ServerStatusBadge.tsx`
   - `loading`, `online`, `warning`, `error`, `maintenance`, and `offline` label variants
 
 Frontend mobile hook coverage now also includes [[apps/frontend/src/hooks/use-mobile.test.tsx]] for [[apps/frontend/src/hooks/use-mobile.tsx]]:
@@ -359,7 +364,7 @@ Frontend WebSocket hook coverage in [[apps/frontend/src/hooks/useWebSocket.test.
 - max reconnect attempts error path (terminal retry failure behavior)
 - singleton/global test cleanup stability between test cases
 
-Frontend dashboard orchestrator coverage now also includes [[apps/frontend/src/components/LiveServerDashboard.test.tsx]] for [[apps/frontend/src/components/LiveServerDashboard.tsx]]:
+Frontend dashboard orchestrator coverage now also includes `apps/frontend/src/components/LiveServerDashboard.test.tsx` for `apps/frontend/src/components/LiveServerDashboard.tsx` (both removed in Phase 3):
 
 - loading-state rendering behavior when dashboard queries are still resolving
 - overview count-derivation branches for mixed service-status payloads
@@ -367,7 +372,7 @@ Frontend dashboard orchestrator coverage now also includes [[apps/frontend/src/c
 - stacked IPFS/Homebridge rendering path coverage
 - system health label matrix coverage across status combinations
 
-Backend Tor manager coverage in [[apps/backend/tests/TorManager.test.js]] now also includes:
+Backend Tor manager coverage in `apps/backend/tests/TorManager.test.js` now also includes:
 
 - `isInstalled()` fallback behavior from `which tor` to Homebrew detection
 - `installTor()` success and failure behavior
@@ -498,7 +503,7 @@ it("handles rejected promises", async () => {
 | API client         | ⚠️ Partially covered | `ApiClient.test.ts` now covers wrapper surface/singleton behavior and `endpoints.test.ts` includes 11 focused wrapper tests; `endpoints.ts` remains at 86.58% lines, 96.66% branches, 71.79% functions |
 | Backend services   | ❌ Not covered       | All service classes need tests                                                                                                                                                                         |
 | Backend middleware | ✅ Improved          | `auth` and `csrf` middleware are now at 100% line coverage; `requestTimeout` and `responseSizeLimit` are directly tested                                                                               |
-| Backend routes     | ⚠️ Partially covered | Auth route integration includes login compatibility and `/api/auth/me` decoded-token fallback coverage in [[apps/backend/tests/authRoutes.integration.test.js]]                                        |
+| Backend routes     | ⚠️ Partially covered | Auth route integration includes login compatibility and `/api/auth/me` decoded-token fallback coverage in `apps/backend/tests/authRoutes.integration.test.js`                                        |
 | WebSocket manager  | ❌ Not covered       | Real-time communication needs tests                                                                                                                                                                    |
 
 Backend test suite status: expanded with additional middleware/auth route coverage in this update cycle.

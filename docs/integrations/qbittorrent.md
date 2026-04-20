@@ -45,7 +45,7 @@ QBITTORRENT_2_PASSWORD=password2
 
 ## Service Class
 
-[[apps/backend/services/QBittorrentService.js|QBittorrentService.js]]
+`apps/backend/services/QBittorrentService.js`
 
 ### Methods
 
@@ -54,7 +54,7 @@ QBITTORRENT_2_PASSWORD=password2
 
 ## Frontend Component
 
-[[apps/frontend/src/components/QBittorrentCard.tsx|QBittorrentCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

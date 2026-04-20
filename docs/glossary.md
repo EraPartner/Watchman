@@ -47,7 +47,7 @@ aliases:
 | **Service Instance** | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.           | [[docs/features/multi-instance              | Multi-Instance]]     |
 | **Health Check**     | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.               | [[docs/api/index                            | API]]                |
 | **Stats**            | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                    | [[docs/api/index                            | API]]                |
-| **ServiceManager**   | orchestrator, service manager                | Central backend class that manages all service instances and routes requests.                         | [[apps/backend/services/ServiceManager.js]] |
+| **ServiceManager**   | orchestrator, service manager                | Central backend class that manages all service instances and routes requests.                         | `apps/backend/services/ServiceManager.js` |
 | **Circuit Breaker**  | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                             | [[docs/performance/index                    | Performance]]        |
 
 ## Services

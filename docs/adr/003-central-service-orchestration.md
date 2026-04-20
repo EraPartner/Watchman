@@ -1,8 +1,10 @@
 ---
 title: ADR-003 - Central Service Orchestration via ServiceManager
 type: adr
-status: accepted
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [adr, architecture, backend, services]
 description: ServiceManager acts as the central orchestrator for all service instances with circuit breaker integration
 aliases: [service manager, orchestrator, service lifecycle]
@@ -10,13 +12,18 @@ aliases: [service manager, orchestrator, service lifecycle]
 
 # ADR-003: Central Service Orchestration via ServiceManager
 
+> [!danger] Superseded by ADR-013 — No Longer Implemented
+> This document describes **v1 architecture** (`ServiceManager` on Express.js/JavaScript). The backend was rewritten to TypeScript + Fastify 4 in v2.0 — `ServiceManager` replaced by `BackgroundPoller` + `ServiceRegistry` (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 > [!abstract] Summary
 > A single `ServiceManager` class acts as the central orchestrator for all service instances, managing lifecycle, providing unified access methods, and wrapping health checks with circuit breakers.
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Superseded
+- **Superseded by**: [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]
 - **Date**: 2026-04-02
+- **Superseded date**: 2026-04-20
 
 ## Context
 

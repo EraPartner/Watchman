@@ -2,11 +2,14 @@ import { sharedCore } from "./ApiClient";
 
 export type FieldType =
   | "string"
+  | "text"
   | "number"
   | "boolean"
   | "url"
   | "password"
-  | "select";
+  | "select"
+  | "stringArray"
+  | "numberArray";
 
 export interface FieldMeta {
   name: string;
@@ -17,6 +20,7 @@ export interface FieldMeta {
   placeholder?: string;
   help?: string;
   options?: string[];
+  default?: unknown;
 }
 
 export interface KindSchema {
@@ -101,15 +105,19 @@ export const configApi = {
   },
 
   async createService(input: ServiceInstanceInput): Promise<ServiceInstance> {
-    return sharedCore.request(`${BASE}/config/services`, jsonBody(input));
+    const { config, ...rest } = input;
+    const body = { ...rest, ...(config ?? {}) };
+    return sharedCore.request(`${BASE}/config/services`, jsonBody(body));
   },
 
   async updateService(
     id: string,
     input: Partial<ServiceInstanceInput>
   ): Promise<ServiceInstance> {
+    const { config, ...rest } = input;
+    const body = { ...rest, ...(config ?? {}) };
     return sharedCore.request(`${BASE}/config/services/${encodeURIComponent(id)}`, {
-      ...jsonBody(input),
+      ...jsonBody(body),
       method: "PUT",
     });
   },
@@ -124,7 +132,7 @@ export const configApi = {
   async testService(id: string): Promise<TestConnectionResult> {
     return sharedCore.request(
       `${BASE}/config/services/${encodeURIComponent(id)}/test`,
-      { method: "POST" }
+      { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } }
     );
   },
 

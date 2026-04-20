@@ -2,8 +2,8 @@
 title: Guides
 type: index
 status: active
-date: 2026-04-02
-tags: [guide, index]
+date: 2026-04-19
+tags: [guide, index, setup-wizard]
 description: Index of all how-to guides for the Watchman project
 aliases: [guides index, how-to, tutorials]
 ---
@@ -26,11 +26,14 @@ SORT file.name ASC
 
 | Guide                           | Description         |
 | ------------------------------- | ------------------- | ------------------------------------ |
-| [[docs/guides/setup             | Setup Guide]]       | Local development environment setup  |
-| [[docs/guides/deployment        | Deployment Guide]]  | Production deployment instructions   |
-| [[docs/guides/adding-services   | Adding Services]]   | How to add a new service integration |
-| [[docs/guides/contributing      | Contributing]]      | Contribution guidelines and workflow |
-| [[docs/guides/ai-agent-workflow | AI Agent Workflow]] | Comprehensive AI agent instructions  |
+| [[docs/guides/setup             | Setup Guide]]           | Local development environment setup  |
+| [[docs/guides/running-the-setup-wizard | Setup Wizard]]  | First-boot wizard for service configuration  |
+| [[docs/guides/deployment        | Deployment Guide]]      | Production deployment instructions   |
+| [[docs/guides/deploying-to-raspberry-pi | Deploy to Raspberry Pi]] | Install the backend on a Pi under systemd (split-deploy model) |
+| [[docs/guides/running-the-desktop-app | Desktop App]]   | Build and run the Electron desktop application |
+| [[docs/guides/adding-services   | Adding Services]]       | How to add a new service integration |
+| [[docs/guides/contributing      | Contributing]]          | Contribution guidelines and workflow |
+| [[docs/guides/ai-agent-workflow | AI Agent Workflow]]     | Comprehensive AI agent instructions  |
 
 ## AI Agent Resources
 
@@ -96,6 +99,8 @@ if (Set up project?) then (yes)
     :[[docs/guides/setup|Setup Guide]];
 elseif (Deploy to production?) then (yes)
     :[[docs/guides/deployment|Deployment Guide]];
+elseif (Deploy backend to Pi?) then (yes)
+    :[[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]];
 elseif (Add new service?) then (yes)
     :[[docs/guides/adding-services|Adding Services Guide]];
 elseif (Contribute code?) then (yes)

@@ -1,22 +1,33 @@
 ---
 title: ADR-005 - Real-Time Communication via WebSocket
 type: adr
-status: accepted
+status: amended
 date: 2026-04-09
+amended_by: docs/adr/017-remove-authentication-frontend-v2-migration
+amended_date: 2026-04-19
 tags: [adr, architecture, backend, frontend, real-time]
-description: WebSocket-based real-time updates with JWT authentication, heartbeat monitoring, and automatic reconnection
+description: WebSocket-based real-time updates with heartbeat monitoring and automatic reconnection (auth layer removed in v2.3)
 aliases: [websocket, real-time, live updates]
 ---
 
 # ADR-005: Real-Time Communication via WebSocket
 
+> [!warning] Amended by ADR-017 and ADR-013
+> Core decision (persistent WS for real-time updates) still stands. But the following details are stale and have been updated in this document:
+> - **JWT authentication on WebSocket** — removed in v2.3 per [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]. `AuthGate` now returns anonymous by default.
+> - **Express → Fastify 4** — backend rewritten per [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]. The `ws` library is now wrapped in a Fastify plugin.
+> - **File path** — `apps/backend/services/WebSocketManager.js` → `apps/backend/src/transport/ws/wsPlugin.ts`.
+> - **Connection limit** — 5 per IP → 10 per IP (current default in `wsPlugin.ts`).
+
 > [!abstract] Summary
-> Real-time status updates use the `ws` library on the backend attached to the same HTTP server, with JWT authentication, heartbeat monitoring, and a frontend global singleton with automatic reconnection.
+> Real-time status updates use the `ws` library wrapped in a Fastify plugin on the backend, with origin validation, heartbeat monitoring, and a frontend global singleton with automatic reconnection.
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Amended
+- **Amended by**: [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] (auth removed), [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] (Express → Fastify)
 - **Date**: 2026-04-09
+- **Amended date**: 2026-04-19
 
 ## Context
 
@@ -26,13 +37,13 @@ Watchman monitors service health in real-time. Polling via REST API would create
 
 ### Backend
 
-- Uses `ws` library attached to the same HTTP server as the Express app
-- Connections authenticated via JWT (extracted from Authorization header or cookies)
+- Uses `ws` library wrapped in a Fastify plugin (`wsPlugin.ts`) attached to the same HTTP server
+- Origin validation restricts connections to the `watchman://` Electron origin (anonymous by default)
 - Heartbeat monitoring (ping/pong) detects dead connections
-- Connection limit per IP (default 5) prevents abuse
-- `WebSocketManager` extends EventEmitter for event broadcasting
+- Connection limit per IP (default 10) prevents abuse
+- Plugin exposes broadcast helpers consumed by domain layers (poller, config writes) for status updates
 - Disconnect handling is idempotent to avoid double-processing from close+error races
-- Broadcast cleanup paths funnel stale sockets through `handleClientDisconnect` so per-IP counters (`connectionsByIp`) remain consistent
+- Broadcast cleanup paths funnel stale sockets through disconnect handling so per-IP counters remain consistent
 
 ### Frontend
 
@@ -44,7 +55,7 @@ Watchman monitors service health in real-time. Polling via REST API would create
 
 ### Key Code
 
-- `[[apps/backend/services/WebSocketManager.js]]` - Backend WebSocket manager
+- `[[apps/backend/src/transport/ws/wsPlugin.ts]]` - Backend Fastify WebSocket plugin
 - `[[apps/frontend/src/hooks/useWebSocket.ts]]` - Frontend WebSocket hook
 
 ## Consequences
@@ -52,7 +63,7 @@ Watchman monitors service health in real-time. Polling via REST API would create
 ### Positive
 
 - Persistent bidirectional communication for live service status updates
-- JWT auth on WebSocket reuses the same auth mechanism as REST API
+- Origin validation restricts connections to trusted Electron client (`watchman://`)
 - Heartbeat monitoring detects dead connections automatically
 - Frontend global singleton prevents connection multiplicity issues
 - React Query cache invalidation keeps UI in sync with backend state
@@ -62,7 +73,7 @@ Watchman monitors service health in real-time. Polling via REST API would create
 - Connection limit per IP may be low for legitimate multi-tab usage
 - Max reconnect attempts of 5 means persistent network issues require manual intervention
 - No WebSocket message persistence -- missed updates on disconnect are lost
-- Backend WebSocketManager extends EventEmitter but event system is underutilized
+- Broadcast API relies on plugin-exposed helpers; domain events fan out through direct calls rather than a pub/sub abstraction
 
 ### Risks
 
@@ -78,13 +89,13 @@ Watchman monitors service health in real-time. Polling via REST API would create
 !theme plain
 
 package "Backend" {
-    [Express Server] as Express
-    [WebSocketManager] as WSM
-    [JWT Auth] as JWT
+    [Fastify Server] as Fastify
+    [wsPlugin] as WSM
+    [Origin Check] as Origin
 }
 
 package "HTTP Server" {
-    [HTTP Request] as HTTP
+    [HTTP Upgrade] as HTTP
 }
 
 package "WebSocket Clients" {
@@ -93,10 +104,10 @@ package "WebSocket Clients" {
     [Client N] as Cn
 }
 
-Express -> WSM : Initialize
+Fastify -> WSM : Register plugin
 HTTP -> WSM : Attach to same server
 
-WSM -> JWT : Authenticate\n(extract from header)
+WSM -> Origin : Validate origin\n(watchman://)
 
 C1 -> WSM : Connect\n(ws://host:port)
 C2 -> WSM : Connect
@@ -107,10 +118,10 @@ WSM -> C2 : Broadcast status updates
 WSM -> Cn : Broadcast status updates
 
 note right of WSM
-  - JWT authentication
+  - Origin validation
   - Heartbeat ping/pong
-  - 5 connections per IP limit
-  - EventEmitter for events
+  - 10 connections per IP limit
+  - Broadcast helpers for domain events
 end note
 @enduml
 ```
@@ -173,7 +184,7 @@ end
 !theme plain
 
 participant "Server" as Server
-participant "WebSocketManager" as WSM
+participant "wsPlugin" as WSM
 participant "Client" as Client
 
 Server -> WSM : Start heartbeat interval\n(every 30s)
@@ -200,8 +211,8 @@ end
 @startuml
 !theme plain
 
-participant "ServiceManager" as SvcMgr
-participant "WebSocketManager" as WSM
+participant "BackgroundPoller" as SvcMgr
+participant "wsPlugin" as WSM
 participant "Client 1" as C1
 participant "Client 2" as C2
 participant "React Query" as Query
@@ -214,7 +225,7 @@ SvcMgr -> SvcMgr : Poll services
 SvcMgr -> SvcMgr : Compare status
 
 alt Status Changed
-    SvcMgr -> WSM : emit('status-update', data)
+    SvcMgr -> WSM : broadcast('service_update', data)
 
     WSM -> WSM : Serialize message
 
@@ -234,5 +245,5 @@ end
 
 - [[docs/features/real-time-updates|Real-Time Updates]]
 - [[docs/architecture/data-flow|Data Flow]]
-- Related code: `[[apps/backend/services/WebSocketManager.js]]`
+- Related code: `[[apps/backend/src/transport/ws/wsPlugin.ts]]`
 - Related code: `[[apps/frontend/src/hooks/useWebSocket.ts]]`

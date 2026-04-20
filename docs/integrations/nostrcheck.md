@@ -28,11 +28,11 @@ Nostrcheck is a **WebSocket-based** service integration that differs from other 
 1. **No REST API** - Instead of HTTP endpoints, it uses WebSocket for real-time updates
 2. **Frontend-driven** - Frontend connects directly to the configured relay via WebSocket
 3. **Always available** - Uses a special pattern where it's enabled via `NOSTRCHECK_ENABLED=true`
-4. **Service class** - Uses config-based approach in `[[apps/backend/config.js|config.js]]` rather than factory pattern
+4. **Service class** - Uses config-based approach in `apps/backend/config.js` rather than factory pattern
 
 ### Service Configuration
 
-Unlike other services that use the factory pattern, Nostrcheck is configured directly in [[apps/backend/config.js]]:
+Unlike other services that use the factory pattern, Nostrcheck is configured directly in `apps/backend/config.js`:
 
 ```javascript
 nostrcheck: {
@@ -46,7 +46,7 @@ The service is included in `ENABLED_SERVICES` list as `nostrcheck`.
 
 ## Frontend Component
 
-[[apps/frontend/src/components/NostrcheckCard.tsx|NostrcheckCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 The frontend component:
 

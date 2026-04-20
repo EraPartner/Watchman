@@ -33,7 +33,7 @@ HOMEBRIDGE_AUTH_TOKEN=your-homebridge-token
 
 ## Service Class
 
-[[apps/backend/services/HomebridgeService.js|HomebridgeService.js]]
+`HomebridgeService` (`apps/backend/src/domain/services/`)
 
 ### Methods
 
@@ -49,19 +49,19 @@ HOMEBRIDGE_AUTH_TOKEN=your-homebridge-token
 
 - **Background Login**: Homebridge performs background login on initialization
 - **Paginated Accessories**: Accessories endpoint supports pagination (default 50, max 100)
-- **Normalized Accessories Shape**: `GET /api/accessories` now normalizes upstream Homebridge accessories payloads via route-level helper `extractHomebridgeAccessories()` in `[[apps/backend/routes/homebridgeRoutes.js]]` before pagination.
-- **Cached Accessories Fallback**: If a fresh fetch fails but prior accessories data exists, `GET /api/accessories` serves the last known list from `lastData` and still responds with HTTP `200` (`[[apps/backend/routes/homebridgeRoutes.js]]`, `[[apps/backend/services/HomebridgeService.js]]`)
-- **Warning passthrough semantics preserved**: If Homebridge accessories fetch fails and no accessory list is available, endpoint still returns HTTP `200` with empty paginated `data` plus `warning`/`message` fields so UI can degrade gracefully without hard request failures (`[[apps/backend/routes/homebridgeRoutes.js]]`)
-- **Self-Signed HTTPS Support**: Homebridge HTTPS requests use a permissive TLS agent to support common self-hosted setups with self-signed certificates (`[[apps/backend/services/HomebridgeService.js]]`)
+- **Normalized Accessories Shape**: `GET /api/accessories` normalizes upstream Homebridge accessories payloads via route-level helper `extractHomebridgeAccessories()` before pagination.
+- **Cached Accessories Fallback**: If a fresh fetch fails but prior accessories data exists, `GET /api/accessories` serves the last known list from `lastData` and still responds with HTTP `200`.
+- **Warning passthrough semantics preserved**: If Homebridge accessories fetch fails and no accessory list is available, endpoint still returns HTTP `200` with empty paginated `data` plus `warning`/`message` fields so UI can degrade gracefully without hard request failures.
+- **Self-Signed HTTPS Support**: Homebridge HTTPS requests use a permissive TLS agent to support common self-hosted setups with self-signed certificates.
 
 ## Route Registration
 
-- Homebridge special routes are registered via `[[apps/backend/routes/homebridgeRoutes.js]]` and integrated from `[[apps/backend/server.js]]`.
-- Core `/api/homebridge/status` and `/api/homebridge/stats` still come from factory-generated service routes.
+- Homebridge special routes (accessories, version) are registered as Fastify plugins in `apps/backend/src/transport/http/`.
+- Core `/api/homebridge/status` and `/api/homebridge/stats` come from the standard service route plugin.
 
 ## Frontend Component
 
-[[apps/frontend/src/components/HomebridgeCard.tsx|HomebridgeCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

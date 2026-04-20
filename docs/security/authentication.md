@@ -1,17 +1,22 @@
 ---
-title: Authentication
+title: Authentication (Superseded)
 type: security
-status: active
+status: superseded
 date: 2026-04-11
-tags: [security, authentication, backend, jwt]
-description: Authentication system documentation - JWT, cookies, and CSRF protection
+superseded_by: docs/adr/017-remove-authentication-frontend-v2-migration
+superseded_date: 2026-04-19
+tags: [security, authentication, backend, jwt, superseded, historical]
+description: Historical JWT/CSRF auth design — removed in v2.3 per ADR-017; retained for archival context only
 aliases: [auth, jwt, csrf, login, authentication]
 ---
 
-# Authentication
+# Authentication (Superseded)
 
-> [!abstract] Overview
-> Watchman uses JWT-based authentication with HTTP-only cookies and CSRF protection via the double-submit cookie pattern.
+> [!danger] Superseded — No Longer Implemented
+> This document describes the **historical** JWT + CSRF authentication design. As of v2.3, all built-in authentication has been removed. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for rationale. Watchman is now a single-user home-lab app; security is provided by network isolation (firewall, VPN, closed LAN). The content below is retained for archival reference only — none of the files, middleware, endpoints, or env vars described here exist in the current codebase.
+
+> [!abstract] Historical Overview
+> Watchman previously used JWT-based authentication with HTTP-only cookies and CSRF protection via the double-submit cookie pattern.
 
 ## Authentication Flow
 
@@ -29,7 +34,7 @@ Body: { username, password }
 → Optionally include deprecated `token` when `AUTH_RETURN_TOKEN=true`
 ```
 
-Implementation references: [[apps/backend/routes/authRoutes.js]], [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]], [[apps/backend/server.js]], [[apps/backend/openapi.yaml]].
+Implementation references: `apps/backend/routes/authRoutes.js`, `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`, `apps/backend/server.js`, `apps/backend/openapi.yaml`.
 
 ### Session Check
 
@@ -41,7 +46,7 @@ GET /api/auth/me
 → Refresh CSRF token
 ```
 
-Authenticated response shape is documented in [[apps/backend/openapi.yaml]] (`AuthMeResponse`) and implemented in [[apps/backend/routes/authRoutes.js]].
+Authenticated response shape is documented in `apps/backend/openapi.yaml` (`AuthMeResponse`) and implemented in `apps/backend/routes/authRoutes.js`.
 
 ### Logout
 
@@ -63,20 +68,20 @@ POST /api/auth/logout
 | Max Age     | 8 hours                                    |
 | Domain      | Derived from FRONTEND_URL                  |
 
-Cookie options are centralized in [[apps/backend/routes/authRoutes.js]] and consumed through API route registration in [[apps/backend/routes/registerApiRoutes.js]].
+Cookie options are centralized in `apps/backend/routes/authRoutes.js` and consumed through API route registration in `apps/backend/routes/registerApiRoutes.js`.
 
 Token claims and signing options:
 
 - Login signs payload `{ sub, username }`
 - Sign options include `expiresIn: "8h"`
-- Integration coverage: [[apps/backend/tests/authRoutes.integration.test.js]] asserts payload and sign options
+- Integration coverage: `apps/backend/tests/authRoutes.integration.test.js` asserts payload and sign options
 
 ## Login Response Compatibility
 
 - Default behavior is cookie-first auth: login returns `message` and `user`, and clients authenticate via HTTP-only cookie.
 - `token` in the login response body is deprecated and hidden by default.
 - Set `AUTH_RETURN_TOKEN=true` only for temporary compatibility with legacy clients that still read body tokens.
-- OpenAPI documents `token` as optional/deprecated in [[apps/backend/openapi.yaml]].
+- OpenAPI documents `token` as optional/deprecated in `apps/backend/openapi.yaml`.
 
 ## CSRF Protection
 
@@ -88,18 +93,18 @@ Uses double-submit cookie pattern:
 
 ### Middleware
 
-[[apps/backend/middleware/csrf.js|csrf.js]]:
+`apps/backend/middleware/csrf.js`:
 
 - `issueCsrfToken(res)` - Generate and set CSRF cookie
 - `verifyCsrf` - Middleware to verify CSRF token using constant-time comparison (`crypto.timingSafeEqual`) to reduce timing side-channel risk
 
-Client-side CSRF header/cookie handling is implemented in `[[apps/frontend/src/lib/csrf.ts]]` and covered by `[[apps/frontend/src/lib/csrf.test.ts]]`.
+Client-side CSRF header/cookie handling is implemented in `apps/frontend/src/lib/csrf.ts` and covered by `apps/frontend/src/lib/csrf.test.ts`.
 
 ## Auth/CSRF Test Coverage
 
 Recent auth/CSRF-focused test additions and expansions:
 
-- Frontend auth hook coverage: [[apps/frontend/src/hooks/useAuth.test.tsx]] (+11 tests)
+- Frontend auth hook coverage: `apps/frontend/src/hooks/useAuth.test.tsx` (+11 tests)
   - login failure paths (missing user response + network-error fallback)
   - logout error path
   - outside-provider hook usage throws as expected
@@ -107,18 +112,18 @@ Recent auth/CSRF-focused test additions and expansions:
   - auth bootstrap error handling when payload access throws
   - login/logout success behavior
   - non-`Error` login/logout failure fallback (`Network error`)
-- Frontend CSRF utilities: [[apps/frontend/src/lib/csrf.test.ts]] (+6 tests)
+- Frontend CSRF utilities: `apps/frontend/src/lib/csrf.test.ts` (+6 tests)
   - token header injection behavior
   - cookie-read exception logging path
   - `hasToken()` absent-token false behavior
   - no-token header omission behavior
   - empty-value `configure()` fallback behavior (defaults preserved)
   - custom cookie/header configuration token lookup + header injection
-- Frontend route guard behavior: [[apps/frontend/src/components/AuthGuard.test.tsx]] (+3 tests)
+- Frontend route guard behavior: `apps/frontend/src/components/AuthGuard.test.tsx` (+3 tests)
   - loading state
   - unauthenticated redirect to `/login`
   - authenticated child rendering
-- Frontend login flow/error states: [[apps/frontend/src/pages/Login.test.tsx]] (+7 tests)
+- Frontend login flow/error states: `apps/frontend/src/pages/Login.test.tsx` (+7 tests)
   - already-authenticated redirect
   - missing-credentials validation
   - remember-me success submission
@@ -126,32 +131,32 @@ Recent auth/CSRF-focused test additions and expansions:
   - default login error fallback rendering (`Login failed`)
   - auth-context error rendering
   - loading/disabled submit behavior
-- Frontend API auth-related endpoint behavior: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 11 tests)
+- Frontend API auth-related endpoint behavior: `apps/frontend/src/services/apiClient/endpoints.test.ts` (expanded 3 → 11 tests)
   - includes login fallback token path and endpoint composition edge cases used by auth surface
-- Backend auth and CSRF middleware coverage: [[apps/backend/tests/authMiddleware.test.js]], [[apps/backend/tests/csrf.test.js]]
+- Backend auth and CSRF middleware coverage: `apps/backend/tests/authMiddleware.test.js`, `apps/backend/tests/csrf.test.js`
   - both currently at **100% line coverage**
   - includes `requireAuth` no-`iat` decoded-token path (`tokenIssuedAt` is `undefined`)
   - includes production CSRF cookie-option assertions (`secure=true`, `sameSite='strict'`)
-- Backend auth token edge parsing (non-object request and empty-key cookie): [[apps/backend/tests/authToken.test.js]]
-- Backend auth route integration edge handling: [[apps/backend/tests/authRoutes.integration.test.js]] now covers `/api/auth/me` non-object decoded-token fallback behavior
+- Backend auth token edge parsing (non-object request and empty-key cookie): `apps/backend/tests/authToken.test.js`
+- Backend auth route integration edge handling: `apps/backend/tests/authRoutes.integration.test.js` now covers `/api/auth/me` non-object decoded-token fallback behavior
 
 Session coverage snapshot:
 
-- [[apps/frontend/src/hooks/useAuth.tsx]]: 100% lines/functions, 86.66% branches
-- [[apps/frontend/src/lib/csrf.ts]]: 96.77% lines, 84.21% branches, 100% functions
-- [[apps/frontend/src/pages/Login.tsx]]: 100% lines/branches/functions
-- [[apps/frontend/src/components/AuthGuard.tsx]]: 100% lines/branches/functions
-- [[apps/frontend/src/services/apiClient/endpoints.ts]]: 86.58% lines, 96.66% branches, 71.79% functions
+- `apps/frontend/src/hooks/useAuth.tsx`: 100% lines/functions, 86.66% branches
+- `apps/frontend/src/lib/csrf.ts`: 96.77% lines, 84.21% branches, 100% functions
+- `apps/frontend/src/pages/Login.tsx`: 100% lines/branches/functions
+- `apps/frontend/src/components/AuthGuard.tsx`: 100% lines/branches/functions
+- `apps/frontend/src/services/apiClient/endpoints.ts`: 86.58% lines, 96.66% branches, 71.79% functions
 - Backend test suite: **81/81 tests passing**
 
 ## Account Lockout
 
-[[apps/backend/middleware/accountLockout.js|accountLockout.js]]:
+`apps/backend/middleware/accountLockout.js`:
 
 - Tracks failed login attempts per username/IP
 - Locks account after threshold exceeded
 - Prevents brute force attacks
-- Username/IP lockout keys use normalized IP values from [[apps/backend/utils/ip.js]] to avoid duplicate keys for equivalent addresses (for example IPv4-mapped IPv6)
+- Username/IP lockout keys use normalized IP values from `apps/backend/utils/ip.js` to avoid duplicate keys for equivalent addresses (for example IPv4-mapped IPv6)
 
 ## Password Storage
 

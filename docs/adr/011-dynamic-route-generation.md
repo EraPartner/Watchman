@@ -1,8 +1,10 @@
 ---
 title: ADR-011 - Dynamic Route Generation with Mixed Manual Routes
 type: adr
-status: accepted
+status: superseded
 date: 2026-04-09
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [adr, backend, architecture, routing]
 description: Hybrid routing approach combining factory-generated standard routes with manually-defined special endpoints
 aliases: [dynamic routes, route factory, mixed routing]
@@ -10,13 +12,18 @@ aliases: [dynamic routes, route factory, mixed routing]
 
 # ADR-011: Dynamic Route Generation with Mixed Manual Routes
 
+> [!danger] Superseded by ADR-013 — No Longer Implemented
+> This document describes **v1 routing** (`createServiceRoutes()` factory, `server.js`). The backend was rewritten to TypeScript + Fastify 4 with plugin-based routing in v2.0 (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 > [!abstract] Summary
 > Standard service routes (`/status`, `/stats`, `/updates`) are generated via factory functions, while services with special endpoints are registered through dedicated route modules wired by `server.js`.
 
 ## Status
 
-- **Status**: Accepted
-- **Date**: 2026-04-02
+- **Status**: Superseded
+- **Superseded by**: [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]
+- **Date**: 2026-04-09
+- **Superseded date**: 2026-04-20
 
 ## Context
 

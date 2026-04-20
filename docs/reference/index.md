@@ -40,15 +40,15 @@ SORT file.name ASC
 
 ## Quick Links
 
-- **Backend Entry**: [[apps/backend/server.js]]
-- **API Route Orchestrator**: [[apps/backend/routes/registerApiRoutes.js]]
-- **Route Modules**: [[apps/backend/routes/authRoutes.js]], [[apps/backend/routes/controlRoutes.js]], [[apps/backend/routes/instanceRoutes.js]], [[apps/backend/routes/homebridgeRoutes.js]], [[apps/backend/routes/serviceAliasRoutes.js]], [[apps/backend/routes/metaRoutes.js]], [[apps/backend/routes/routerRoutes.js]], [[apps/backend/routes/securityRoutes.js]]
-- **Route Utilities**: [[apps/backend/routes/routeUtils.js]]
+- **Backend Entry**: [[apps/backend/src/index.ts]]
+- **HTTP Transport**: [[apps/backend/src/transport/http/server.ts]]
+- **WebSocket Transport**: [[apps/backend/src/transport/ws/wsPlugin.ts]]
+- **Service Registry**: [[apps/backend/src/domain/ServiceRegistry.ts]]
+- **Base Service**: [[apps/backend/src/domain/BaseService.ts]]
+- **Config Store**: [[apps/backend/src/config/store/ConfigStore.ts]]
+- **Background Poller**: `apps/backend/src/infra/scheduler/BackgroundPoller.ts`
 - **Frontend Entry**: [[apps/frontend/src/main.tsx]]
 - **OpenAPI Spec**: [[apps/backend/openapi.yaml]]
-- **Service Factory**: [[apps/backend/services/serviceFactoryConfig.js]]
-- **Route Generation**: [[apps/backend/routes/serviceFactory.js]]
-- **Logger**: [[docs/LOGGING|Logging]]
 
 ## Related
 

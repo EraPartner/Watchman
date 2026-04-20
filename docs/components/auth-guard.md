@@ -1,21 +1,23 @@
 ---
-title: AuthGuard Component
+title: AuthGuard Component (DEPRECATED)
 type: component
-status: active
-date: 2026-04-10
-tags: [component, frontend, react, auth, route-protection]
-description: Route protection wrapper that prevents dashboard rendering until authentication is confirmed, redirecting unauthenticated users to login
+status: deprecated
+date: 2026-04-19
+tags: [component, frontend, react, auth, deprecated, v2.3]
+description: DEPRECATED - Route protection wrapper removed in v2.3 when authentication was removed
 aliases: [auth guard, route guard, protected route]
 ---
 
-# AuthGuard
+# AuthGuard (DEPRECATED)
 
-> [!abstract] Summary
-> A lightweight route protection component that prevents child components from mounting until authentication status is confirmed, redirecting unauthenticated users to the login page.
+> [!warning] DEPRECATED in v2.3
+> This component was **removed** as of version 2.3. Watchman is now a single-user home-lab application with no authentication. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for details.
 
-## Overview
+## Removal Details
 
-`AuthGuard` wraps protected routes (primarily the dashboard) and uses `useAuth` from the shared auth context to check authentication status. It prevents the dashboard from rendering and starting API requests until the user is authenticated.
+- **Removed**: v2.3 (commit 6abf46b)
+- **File**: `apps/frontend/src/components/AuthGuard.tsx` (deleted)
+- **Reason**: Watchman is single-user; no route protection needed
 
 ## File Location
 

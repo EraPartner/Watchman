@@ -2,10 +2,10 @@
 title: Frontend Components
 type: index
 status: active
-date: 2026-04-19
-tags: [component, index, frontend, ui, primitives, design-system, bento, phase3, settings, backup]
-description: Index of all React component and hook documentation for the Watchman frontend including design system primitives and Phase 3 bento dashboard
-aliases: [components index, react components, ui components, bento components, settings pages]
+date: 2026-04-20
+tags: [component, index, frontend, ui, primitives, design-system, bento, phase3, settings, backup, setup-wizard, single-user, v2]
+description: Index of all React component and hook documentation for the Watchman frontend including design system primitives, setup wizard, and Phase 3 bento dashboard (single-user, no auth)
+aliases: [components index, react components, ui components, bento components, settings pages, setup wizard]
 ---
 
 # Frontend Components
@@ -15,18 +15,19 @@ aliases: [components index, react components, ui components, bento components, s
 
 ## Bento Dashboard Components (Phase 3 — Renderer-Driven Layout)
 
-Phase 3 introduces a new dashboard architecture built on a renderer registry pattern:
+Phase 3 introduces a new dashboard architecture built on a renderer registry pattern with full CRUD discoverability:
 
-- [[docs/components/bento-dashboard|BentoDashboard]] — Main page orchestrator (lazy-loaded, behind `?bento=1` flag)
+- [[docs/components/bento-dashboard|BentoDashboard]] — Main page orchestrator with header add button and empty-state discovery (lazy-loaded, behind `?bento=1` flag)
 - [[docs/components/dashboard-grid|DashboardGrid]] — 12-column CSS grid layout container
 - [[docs/components/service-tile|ServiceTile]] — Generic single-tile component (replaces all 18 legacy `*Card.tsx`)
-- [[docs/components/service-detail-sheet|ServiceDetailSheet]] — Right-anchored detail view for each service
+- [[docs/components/service-detail-sheet|ServiceDetailSheet]] — Right-anchored detail view with enable/disable, edit, and delete footer controls
+- [[docs/components/service-editor|ServiceEditor]] — Reusable dynamic form for create/edit with field filtering and validation
 - [[docs/services/renderers/index|ServiceRenderer Registry]] — Per-service customization (summary metrics, detail groups, charts, tone)
 
 **Phase 3 Pilot Services**: Bitcoin (XL tile) and Synology (L tile) have full renderers. Remaining 14 services are stubbed for Phase 4.
 
-> [!note] Legacy Cards
-> The 18 service-specific card components (`BitcoinCard`, `SynologyCard`, etc.) remain active and used by `LiveServerDashboard` until Phase 6. The bento dashboard is available as an opt-in feature via `?bento=1`.
+> [!note] Legacy Cards Removed
+> The 18 service-specific card components (`BitcoinCard`, `SynologyCard`, etc.) and `LiveServerDashboard` were removed in Phase 3. The bento dashboard with `ServiceTile` + renderer registry is the active dashboard.
 
 ## Primitive Components (Phase 2 — Design System — LIVE)
 
@@ -37,7 +38,7 @@ See [[docs/components/primitives/index|Primitive Components Index]] for complete
 **Core Primitives:**
 - **Interactive**: [[docs/components/primitives/button|Button]], [[docs/components/primitives/toggle|Toggle]]
 - **Containers**: [[docs/components/primitives/surface|Surface]], [[docs/components/primitives/skeleton|Skeleton]]
-- **Modal**: [[docs/components/primitives/dialog|Dialog]], [[docs/components/primitives/sheet|Sheet]]
+- **Modal**: [[docs/components/primitives/dialog|Dialog]], [[docs/components/primitives/confirm-dialog|ConfirmDialog]], [[docs/components/primitives/sheet|Sheet]]
 - **Floating**: [[docs/components/primitives/tooltip|Tooltip]], [[docs/components/primitives/popover|Popover]]
 - **Navigation**: [[docs/components/primitives/tabs|Tabs]], [[docs/components/primitives/scroll-area|ScrollArea]]
 - **Indicators**: [[docs/components/primitives/badge|Badge]], [[docs/components/primitives/status-dot|StatusDot]]
@@ -58,43 +59,47 @@ SORT file.name ASC
 
 The 18 service-specific card components below are **legacy** and remain active for the `LiveServerDashboard` until Phase 6. The bento dashboard (Phase 3, LIVE) replaces them with a single `<ServiceTile>` component driven by a `ServiceRenderer` registry.
 
-| Component                                                  | Service      | File                                                   | Status          |
-| ---------------------------------------------------------- | ------------ | ------------------------------------------------------ | --------------- |
-| [[docs/components/adguard-card\|AdGuardCard]]              | AdGuard Home | [[apps/frontend/src/components/AdGuardCard.tsx]]       | Legacy (Phase 6) |
-| [[docs/components/bitcoin-card\|BitcoinCard]]              | Bitcoin      | [[apps/frontend/src/components/BitcoinCard.tsx]]       | Has Renderer    |
-| [[docs/components/tor-card\|TorCard]]                      | Tor          | [[apps/frontend/src/components/TorCard.tsx]]           | Legacy (Phase 6) |
-| [[docs/components/qbittorrent-card\|QBittorrentCard]]      | qBittorrent  | [[apps/frontend/src/components/QBittorrentCard.tsx]]   | Legacy (Phase 6) |
-| [[docs/components/ipfs-card\|IpfsCard]]                    | IPFS         | [[apps/frontend/src/components/IpfsCard.tsx]]          | Legacy (Phase 6) |
-| [[docs/components/synology-card\|SynologyCard]]            | Synology     | [[apps/frontend/src/components/SynologyCard.tsx]]      | Has Renderer    |
-| [[docs/components/roon-card\|RoonCard]]                    | Roon         | [[apps/frontend/src/components/RoonCard.tsx]]          | Legacy (Phase 6) |
-| [[docs/components/philips-bridge-card\|PhilipsBridgeCard]] | Philips Hue  | [[apps/frontend/src/components/PhilipsBridgeCard.tsx]] | Legacy (Phase 6) |
-| [[docs/components/homebridge-card\|HomebridgeCard]]        | Homebridge   | [[apps/frontend/src/components/HomebridgeCard.tsx]]    | Legacy (Phase 6) |
-| [[docs/components/macmini-card\|MacMiniCard]]              | Mac Mini     | [[apps/frontend/src/components/MacMiniCard.tsx]]       | Legacy (Phase 6) |
-| [[docs/components/albyhub-card\|AlbyHubCard]]              | Alby Hub     | [[apps/frontend/src/components/AlbyHubCard.tsx]]       | Legacy (Phase 6) |
-| [[docs/components/raspberry-pi-card\|RaspberryPiCard]]     | Raspberry Pi | [[apps/frontend/src/components/RaspberryPiCard.tsx]]   | Legacy (Phase 6) |
-| [[docs/components/router-card\|RouterCard]]                | Router       | [[apps/frontend/src/components/RouterCard.tsx]]        | Legacy (Phase 6) |
-| [[docs/components/nostrcheck-card\|NostrcheckCard]]        | Nostrcheck   | [[apps/frontend/src/components/NostrcheckCard.tsx]]    | Legacy (Phase 6) |
+| Component                                                  | Service      | Status          |
+| ---------------------------------------------------------- | ------------ | --------------- |
+| [[docs/components/adguard-card\|AdGuardCard]]              | AdGuard Home | Removed (Phase 3) |
+| [[docs/components/bitcoin-card\|BitcoinCard]]              | Bitcoin      | Removed (Phase 3) |
+| [[docs/components/tor-card\|TorCard]]                      | Tor          | Removed (Phase 3) |
+| [[docs/components/qbittorrent-card\|QBittorrentCard]]      | qBittorrent  | Removed (Phase 3) |
+| [[docs/components/ipfs-card\|IpfsCard]]                    | IPFS         | Removed (Phase 3) |
+| [[docs/components/synology-card\|SynologyCard]]            | Synology     | Removed (Phase 3) |
+| [[docs/components/roon-card\|RoonCard]]                    | Roon         | Removed (Phase 3) |
+| [[docs/components/philips-bridge-card\|PhilipsBridgeCard]] | Philips Hue  | Removed (Phase 3) |
+| [[docs/components/homebridge-card\|HomebridgeCard]]        | Homebridge   | Removed (Phase 3) |
+| [[docs/components/macmini-card\|MacMiniCard]]              | Mac Mini     | Removed (Phase 3) |
+| [[docs/components/albyhub-card\|AlbyHubCard]]              | Alby Hub     | Removed (Phase 3) |
+| [[docs/components/raspberry-pi-card\|RaspberryPiCard]]     | Raspberry Pi | Removed (Phase 3) |
+| [[docs/components/router-card\|RouterCard]]                | Router       | Removed (Phase 3) |
+| [[docs/components/nostrcheck-card\|NostrcheckCard]]        | Nostrcheck   | Removed (Phase 3) |
 
-## Shared Components (Legacy)
+## Shared Components
 
 | Component                                                      | Description                 | File                                                     | Status           |
 | -------------------------------------------------------------- | --------------------------- | -------------------------------------------------------- | ---------------- |
 | [[docs/components/error-boundary\|ErrorBoundary]]              | Error boundary wrapper      | [[apps/frontend/src/components/ErrorBoundary.tsx]]       | Active           |
-| [[docs/components/auth-guard\|AuthGuard]]                      | Route protection wrapper    | [[apps/frontend/src/components/AuthGuard.tsx]]           | Active           |
-| [[docs/components/live-server-dashboard\|LiveServerDashboard]] | Legacy dashboard (Phase 6)  | [[apps/frontend/src/components/LiveServerDashboard.tsx]] | **Deprecated**   |
+| [[docs/components/offline-banner\|OfflineBanner]]              | LAN backend unreachable     | [[apps/frontend/src/components/OfflineBanner.tsx]]       | Active (split-deploy) |
+| [[docs/components/live-server-dashboard\|LiveServerDashboard]] | Legacy dashboard (Phase 6)  | Removed          | **Deprecated**   |
 
-### Deleted Components (Phase 3)
+### Deleted Components
 
-The following components were removed during the bento redesign:
-
+**Phase 3 Deletions:**
 - **UpdateBadge** — Removed
 - **ServerStatusBadge** — Replaced by primitives (Badge, StatusDot)
-- **ServiceLink** — Removed
+- All 18 `*Card.tsx` components — Removed (replaced by `ServiceTile` + renderer registry)
+- **LiveServerDashboard** — Removed
+
+**Version 2.3 Deletions (Auth Removal):**
+- **AuthGuard** — Removed (no authentication in single-user design)
+- **Login page** — Removed (no authentication in single-user design)
+- See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for details
 
 ### Test Coverage
 
 - [[apps/frontend/src/components/ErrorBoundary.test.tsx]] covers error handling and fallback UI
-- [[apps/frontend/src/components/AuthGuard.test.tsx]] covers protected route behavior
 
 ## Custom Hooks
 
@@ -103,10 +108,10 @@ The following components were removed during the bento redesign:
 | Hook                                                                                              | Description                                           | File                                                |
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------- |
 | [[docs/components/use-service-health\|useServiceHealth / useServiceStats]]                       | Query service health/stats snapshots                  | [[apps/frontend/src/hooks/useServiceHealth.ts]]     |
-| [[docs/components/use-service-history\|useServiceHistory]]                                       | Query time-series historical metrics (Phase 1)        | [[apps/frontend/src/hooks/useServiceHistory.ts]]    |
-| [[docs/components/use-fleet-summary\|useFleetSummary]]                                           | Aggregated health for all services                    | [[apps/frontend/src/hooks/useFleetSummary.ts]]      |
+| `useServiceHistory`                                                                               | Query time-series historical metrics (Phase 1)        | [[apps/frontend/src/hooks/useServiceHistory.ts]]    |
 | [[docs/components/use-service-instances\|useServiceInstances]]                                    | Multi-instance service management                    | [[apps/frontend/src/hooks/useServiceInstances.tsx]] |
 | [[docs/components/use-enabled-services\|useEnabledServices]]                                      | Enabled services configuration                       | [[apps/frontend/src/hooks/useEnabledServices.ts]]   |
+| `useBackendReachable`                                                                           | Polls `/meta/health` and detects backend unreachable | [[apps/frontend/src/hooks/useBackendReachable.ts]]  |
 
 ### WebSocket & Realtime Hooks
 
@@ -116,18 +121,15 @@ The following components were removed during the bento redesign:
 | `useWebSocketContext()`                                                                           | Access connection state (isConnected, reconnectAttempts) | [[apps/frontend/src/providers/WebSocketProvider.tsx]] |
 | `useWebSocketEvent(type)`                                                                         | Subscribe to specific WebSocket message type          | [[apps/frontend/src/hooks/useWebSocket.ts]]         |
 
-### Auth Hooks
+### UI & Setup Hooks
 
 | Hook                                                                                              | Description                                           | File                                                |
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------- |
-| [[docs/components/use-auth-hook\|useAuth]]                                                        | Authentication state and login/logout                 | [[apps/frontend/src/hooks/useAuth.tsx]]             |
-| [[docs/components/use-config-hook\|useFrontendConfig (replaced useConfig)]]                       | Frontend runtime configuration    | [[apps/frontend/src/hooks/useFrontendConfig.ts]]    |
+| [[docs/components/use-setup-dismissal\|useSetupDismissal]]                                        | Setup wizard dismissal state via localStorage         | [[apps/frontend/src/hooks/useSetupDismissal.ts]]    |
 | [[docs/components/use-mobile-hook\|use-mobile]]                                                   | Mobile breakpoint detection       | [[apps/frontend/src/hooks/use-mobile.tsx]]          |
-| [[docs/components/use-toast-hook\|use-toast]]                                                     | Toast notifications               | [[apps/frontend/src/hooks/use-toast.ts]]            |
 
 ### Hook Coverage Notes
 
-- [[apps/frontend/src/hooks/use-toast.test.tsx]] covers reducer and hook lifecycle behavior for [[apps/frontend/src/hooks/use-toast.ts]] (toast limit, dismiss-all, add/update/dismiss/remove lifecycle).
 - [[apps/frontend/src/hooks/use-mobile.test.tsx]] covers breakpoint reactivity and unmount cleanup behavior for [[apps/frontend/src/hooks/use-mobile.tsx]].
 - [[apps/frontend/src/hooks/useWebSocket.test.tsx]] expanded coverage includes tor/router invalidation families, metrics invalidation + connection toast handling, max reconnect-attempts error path, and cleanup stability for [[apps/frontend/src/hooks/useWebSocket.ts]].
 
@@ -135,14 +137,16 @@ The following components were removed during the bento redesign:
 
 | Page         | Route              | File                                     |
 | ------------ | ------------------ | ---------------------------------------- |
-| Dashboard    | `/`                | [[apps/frontend/src/pages/Index.tsx]]    |
-| Login        | `/login`           | [[apps/frontend/src/pages/Login.tsx]]    |
+| Dashboard    | `/`                | [[apps/frontend/src/App.tsx]]            |
+| Setup Wizard | `/setup`           | [[docs/components/setup-wizard\|SetupWizard]] |
+| Services Settings | `/settings/services` | [[docs/components/service-editor\|ServiceEditor]] (embedded in Settings) |
 | Backup       | `/settings/backup` | [[docs/components/backup-restore\|BackupRestore]] |
 | Not Found    | `*`                | [[apps/frontend/src/pages/NotFound.tsx]] |
 
 ### Page Test Coverage Notes
 
-- Dashboard page coverage added in [[apps/frontend/src/pages/Index.test.tsx]] for [[apps/frontend/src/pages/Index.tsx]] (now ~88% lines).
+- App route coverage in [[apps/frontend/src/App.test.tsx]] for [[apps/frontend/src/App.tsx]] (router-level rendering, retry policy).
+- Setup Wizard coverage: [[apps/frontend/src/pages/setup/SetupWizard.tsx]] with [[docs/components/setup-wizard|multi-step component docs]].
 
 ## Services and Utilities
 

@@ -82,7 +82,7 @@ The hook implements **batched, debounced** cache invalidation using the centrali
 
 This prevents cache thrashing when multiple service updates arrive rapidly.
 
-Dashboard freshness display (`Updated Xs ago`) now relies on React Query `dataUpdatedAt` values in [[apps/frontend/src/components/LiveServerDashboard.tsx]], so targeted invalidation accuracy directly impacts that timestamp.
+Dashboard freshness display (`Updated Xs ago`) relies on React Query `dataUpdatedAt` values, so targeted invalidation accuracy directly impacts that timestamp.
 
 ### Invalidation Rules
 
@@ -160,6 +160,6 @@ function Dashboard() {
 - [[docs/features/real-time-updates|Real-Time Updates]]
 - [[docs/adr/005-real-time-websocket|ADR-005: Real-Time Communication via WebSocket]]
 - [[docs/testing/testing-strategy|Testing Strategy and Patterns]]
-- `[[apps/backend/services/WebSocketManager.js]]` — Backend WebSocket manager
+- `apps/backend/src/transport/ws/wsPlugin.ts` — Backend WebSocket plugin (v2)
 - `[[apps/frontend/src/services/ApiClient.ts]]` — API client (complementary communication)
 - `[[apps/frontend/src/lib/logger.ts]]` — Frontend structured logging utility

@@ -1,14 +1,20 @@
 ---
 title: "Component: TorCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, tor, privacy]
 description: Tor relay monitoring card displaying relay statistics, bandwidth, and network info
 aliases: [tor card, tor relay card, onion routing monitoring]
 ---
 
 # Component: TorCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays Tor relay status including relay nickname, bandwidth statistics, flags, and network position.
@@ -47,7 +53,7 @@ Monitors Tor relay nodes showing relay information fetched from the Onionoo API,
 
 ## Source
 
-- [[apps/frontend/src/components/TorCard.tsx]]
+- `apps/frontend/src/components/TorCard.tsx`
 
 ## Related
 

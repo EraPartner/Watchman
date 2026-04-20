@@ -32,7 +32,7 @@ ADGUARD_TIMEOUT=10000  # optional, default 10s
 
 ## Service Class
 
-[[apps/backend/services/AdGuardService.js|AdGuardService.js]]
+`apps/backend/services/AdGuardService.js`
 
 ### Methods
 
@@ -43,7 +43,7 @@ ADGUARD_TIMEOUT=10000  # optional, default 10s
 
 ## Frontend Component
 
-[[apps/frontend/src/components/AdGuardCard.tsx|AdGuardCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

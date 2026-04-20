@@ -22,7 +22,7 @@ aliases: [health endpoint, health check, ping]
 | **Auth**   | None                       |
 | **Rate**   | `healthLimiter`            |
 | **Cache**  | None                       |
-| **Source** | [[apps/backend/server.js]] |
+| **Source** | `apps/backend/server.js` |
 
 ## Request
 

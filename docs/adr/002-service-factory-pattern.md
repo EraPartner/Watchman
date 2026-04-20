@@ -1,8 +1,10 @@
 ---
 title: ADR-002 Declarative Service Factory Pattern
 type: adr
-status: accepted
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [adr, architecture, backend, services, factory-pattern]
 description: Decision to use a declarative factory pattern for service registration and dynamic route generation
 aliases:
@@ -11,13 +13,18 @@ aliases:
 
 # ADR-002: Declarative Service Factory Pattern
 
+> [!danger] Superseded by ADR-013 — No Longer Implemented
+> This document describes **v1 architecture** (Express.js/JavaScript declarative factory pattern). The backend was rewritten to TypeScript + Fastify 4 in v2.0 (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 > [!abstract] Summary
 > Services are registered declaratively in a configuration object, and routes are generated dynamically via factory functions, eliminating boilerplate for 13+ services.
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Superseded
+- **Superseded by**: [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]
 - **Date**: 2026-04-02
+- **Superseded date**: 2026-04-20
 
 ## Context
 

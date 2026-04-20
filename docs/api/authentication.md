@@ -1,14 +1,20 @@
 ---
 title: "API: Authentication Endpoints"
 type: api
-status: active
+status: superseded
 date: 2026-04-11
+superseded_by: docs/adr/017-remove-authentication-frontend-v2-migration
+superseded_date: 2026-04-19
 tags: [api, auth, authentication, backend, jwt, csrf]
 description: Authentication API endpoints - login, logout, and auth status check
 aliases: [auth endpoints, login api, logout api]
 ---
 
 # Authentication Endpoints
+
+> [!danger] Superseded — No Longer Implemented
+> This document describes **v1 JWT authentication endpoints** (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`). As of v2.3, all auth endpoints were removed (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > JWT-based authentication with HTTP-only cookies and CSRF protection. Single-user model with credentials from environment variables.
@@ -59,7 +65,7 @@ Cookie-first behavior is default. The response always includes `message` and `us
 }
 ```
 
-Validation coverage: [[apps/backend/tests/authRoutes.integration.test.js]] verifies both `AUTH_RETURN_TOKEN=false` (no body token) and `AUTH_RETURN_TOKEN=true` (body token present), with auth cookie set in both cases.
+Validation coverage: `apps/backend/tests/authRoutes.integration.test.js` verifies both `AUTH_RETURN_TOKEN=false` (no body token) and `AUTH_RETURN_TOKEN=true` (body token present), with auth cookie set in both cases.
 
 Cookies set on success:
 
@@ -89,15 +95,15 @@ JWT signing details:
 
 ### Source
 
-- Route module: [[apps/backend/routes/authRoutes.js]]
-- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
-- Auth middleware: [[apps/backend/middleware/auth.js]]
+- Route module: `apps/backend/routes/authRoutes.js`
+- Route registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
+- Auth middleware: `apps/backend/middleware/auth.js`
 
-Integration coverage notes: [[apps/backend/tests/authRoutes.integration.test.js]] includes `/api/auth/me` fallback behavior when decoded token payload is non-object.
+Integration coverage notes: `apps/backend/tests/authRoutes.integration.test.js` includes `/api/auth/me` fallback behavior when decoded token payload is non-object.
 
-- CSRF middleware: [[apps/backend/middleware/csrf.js]]
-- Lockout middleware: [[apps/backend/middleware/accountLockout.js]]
-- IP normalization utility used for auth/lockout keying: [[apps/backend/utils/ip.js]]
+- CSRF middleware: `apps/backend/middleware/csrf.js`
+- Lockout middleware: `apps/backend/middleware/accountLockout.js`
+- IP normalization utility used for auth/lockout keying: `apps/backend/utils/ip.js`
 
 ---
 
@@ -124,8 +130,8 @@ Cookies cleared:
 
 ### Source
 
-- Route module: [[apps/backend/routes/authRoutes.js]]
-- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
+- Route module: `apps/backend/routes/authRoutes.js`
+- Route registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
 
 ---
 
@@ -165,9 +171,9 @@ No parameters. Token extracted from:
 
 ### Source
 
-- Route module: [[apps/backend/routes/authRoutes.js]]
-- Route registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]]
-- Auth middleware: [[apps/backend/middleware/auth.js]]
+- Route module: `apps/backend/routes/authRoutes.js`
+- Route registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
+- Auth middleware: `apps/backend/middleware/auth.js`
 
 ---
 
@@ -175,7 +181,7 @@ No parameters. Token extracted from:
 
 - [[docs/security/authentication|Authentication]]
 - [[docs/api/index|API Index]]
-- [[docs/adr/adr-004-layered-security-middleware|ADR-004: Layered Security Middleware]]
+- [[docs/adr/004-layered-security-middleware|ADR-004: Layered Security Middleware]]
 
 ## PlantUML Diagrams
 

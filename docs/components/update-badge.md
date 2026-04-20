@@ -1,14 +1,20 @@
 ---
 title: "Component: UpdateBadge"
 type: component
-status: active
+status: superseded
 date: 2026-04-11
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, shared, updates, version]
 description: Displays update availability badge for services with clickable release notes link
 aliases: [update badge, version badge, update available]
 ---
 
 # Component: UpdateBadge
+
+> [!danger] Superseded — No Longer Implemented
+> The `UpdateBadge` component was **removed in the v2 frontend rewrite**. Update display is now handled within individual service renderers in the bento dashboard. Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > A badge component that checks for software updates for supported services and displays a clickable alert when an update is available.
@@ -90,11 +96,11 @@ import { UpdateBadge } from "./UpdateBadge";
 
 ## Source
 
-- [[apps/frontend/src/components/UpdateBadge.tsx]]
-- [[apps/frontend/src/components/UpdateBadge.test.tsx]]
+- `apps/frontend/src/components/UpdateBadge.tsx`
+- `apps/frontend/src/components/UpdateBadge.test.tsx`
 
 ## Related
 
 - [[docs/components/index|Components Index]]
 - [[docs/api/index|API Index]] — Update endpoints
-- [[apps/backend/utils/versionComparison.js|Version Comparison Utility]]
+- `apps/backend/utils/versionComparison.js` — Version Comparison Utility

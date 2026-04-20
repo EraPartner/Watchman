@@ -43,11 +43,14 @@ SORT file.name ASC
 | [[docs/adr/013-backend-rewrite-typescript-fastify.md   | Backend Rewrite]]   | TypeScript + Fastify 4 + in-process state |
 | [[docs/adr/014-time-series-duckdb-and-bento-design-system.md | Time-Series + Bento]] | DuckDB + time-series backend + bento design frontend |
 | [[docs/adr/015-ui-driven-service-configuration.md | UI Configuration]] | UI-driven CRUD with DuckDB + encrypted secrets + hot-reload |
+| [[docs/adr/016-electron-desktop-wrapper.md | Electron Desktop Wrapper]] | Custom watchman:// protocol, auto-spawned backend, per-install master key |
+| [[docs/adr/017-remove-authentication-frontend-v2-migration.md | Auth Removal + Frontend v2 Migration]] | Single-user posture, removed JWT/CSRF auth, frontend v2 envelope contract, port 3101→3001 |
+| [[docs/adr/018-split-deploy-pi-backend.md | Split Deploy — Pi Backend]] | Always-on Raspberry Pi backend under systemd + thin Electron client; LAN-only, no TLS, offline banner on Pi unreachable |
 
 ## Creating a New ADR
 
 1. Copy [[docs/adr/template|ADR Template]]
-2. Name it `NNN-short-title.md` (next sequential number after 015)
+2. Name it `NNN-short-title.md` (next sequential number after 018)
 3. Fill in all sections:
    - **Status**: Proposed | Accepted | Deprecated | Superseded
    - **Context**: The problem being solved

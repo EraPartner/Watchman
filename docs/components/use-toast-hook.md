@@ -1,7 +1,7 @@
 ---
 title: "Hook: useToast"
 type: component
-status: active
+status: superseded
 date: 2026-04-11
 tags: [hook, frontend, react, toast, notification, shadcn]
 description: Toast notification system with reducer-based state management (shadcn/ui)
@@ -78,13 +78,10 @@ type ToasterToast = {
 - Uses a global `listeners` array for pub-sub state updates
 - Toast IDs are generated from a monotonically increasing counter
 
-## Test Coverage
+## Status
 
-- `[[apps/frontend/src/hooks/use-toast.test.tsx]]` covers reducer and hook lifecycle behavior for `[[apps/frontend/src/hooks/use-toast.ts]]`:
-  - reducer enforces toast limit by keeping only the newest toast (`ADD_TOAST`)
-  - reducer dismiss-all behavior when `DISMISS_TOAST` has no `toastId`
-  - hook API lifecycle coverage for add → update → dismiss → timed remove
-  - fake-timer based validation of delayed removal behavior
+> [!warning] Removed (v2.3)
+> `use-toast` and its test were removed as part of the shadcn/ui cleanup. Toast notifications are now handled via `sonner` or Radix primitives directly. This document is preserved for historical reference.
 
 ## Usage Example
 
@@ -115,11 +112,10 @@ function MyComponent() {
 
 ## Source
 
-- [[apps/frontend/src/hooks/use-toast.ts]]
-- [[apps/frontend/src/hooks/use-toast.test.tsx]]
+Files removed in v2.3: `apps/frontend/src/hooks/use-toast.ts`, `apps/frontend/src/hooks/use-toast.test.tsx`
 
 ## Related
 
 - [[docs/components/index|Components Index]]
-- [[apps/frontend/src/components/ui/toast.tsx|Toast UI Component]]
-- [[apps/frontend/src/components/ui/toaster.tsx|Toaster Component]]
+- `apps/frontend/src/components/ui/toast.tsx` — Toast UI Component
+- `apps/frontend/src/components/ui/toaster.tsx` — Toaster Component

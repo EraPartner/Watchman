@@ -2,10 +2,10 @@
 title: UI-Driven Service Configuration
 type: feature
 status: active
-date: 2026-04-19
-tags: [feature, configuration, ui, setup-wizard, settings, duckdb, encryption, hot-reload, backup, export, import]
-description: Runtime service configuration from the UI with encrypted secrets, audit trail, hot-reload without restart, and backup/restore
-aliases: [ui config, configuration, settings, setup wizard, backup, restore]
+date: 2026-04-20
+tags: [feature, configuration, ui, setup-wizard, settings, duckdb, encryption, hot-reload, backup, export, import, crud, discoverability]
+description: Runtime service configuration from the UI with encrypted secrets, audit trail, hot-reload without restart, backup/restore, and dashboard CRUD discoverability (add/edit/delete from dashboard detail sheet)
+aliases: [ui config, configuration, settings, setup wizard, backup, restore, service management, crud]
 ---
 
 # UI-Driven Service Configuration
@@ -36,14 +36,23 @@ flowchart TD
     B -->|No| D["Normal Mode"]
     
     C --> E["SetupWizard Page"]
-    E --> F["Welcome"]
-    F --> G["Set Admin Creds<br/>(if MISSING)"]
-    G --> H["Add First Service"]
-    H --> I["Configure fields<br/>via dynamic form"]
-    I --> J["Test connection"]
-    J --> K["Save to DB<br/>(encrypted)"]
-    K --> L["Wizard complete"]
-    L --> M["Redirect to<br/>/settings/services"]
+    E --> F["Welcome Step"]
+    F --> G{"User skips<br/>or starts?"}
+    G -->|Skip| H["Dismiss wizard<br/>via localStorage"]
+    G -->|Start| I["Kind Picker Step"]
+    
+    I --> J["Select service type<br/>from 13 kinds<br/>5 categories"]
+    J --> K["Configure Step<br/>embedded ServiceEditor"]
+    K --> L["Fill form fields<br/>from /config/kinds"]
+    L --> M["Test connection<br/>optional"]
+    M --> N["Save to DB<br/>encrypted secrets"]
+    
+    N --> O["Review Step"]
+    O --> P{"User action?"}
+    P -->|Add Another| I
+    P -->|Finish| Q["Navigate to<br/>dashboard"]
+    
+    H --> R["Redirect to<br/>dashboard<br/>skip wizard"]
 ```
 
 ### Service Configuration Flow
@@ -107,16 +116,37 @@ sequenceDiagram
 
 ## Core Components
 
-### SetupWizard (`src/pages/SetupWizard.tsx`)
+### SetupWizard (`src/pages/setup/SetupWizard.tsx`)
 
-Multi-step wizard served when no services are configured:
+**Multi-step wizard** served when no services are configured. Users can skip to dismiss (stored in localStorage) and re-enter from Settings.
 
-1. **Welcome**: Explains purpose
-2. **Admin Setup**: Form to set `AUTH_USERNAME` + `AUTH_PASSWORD_HASH` (if missing in env)
-3. **First Service**: Full service configuration form
-4. **Complete**: Redirects to `/settings/services`
+**Steps** (4-step flow):
+1. **Welcome** — Introduction and skip/start options
+2. **Kind Picker** — Select from 13 service types across 5 categories (Network, Media, Bitcoin, Home Automation, Hardware)
+3. **Configure** — Dynamic form (embedded `ServiceEditor`) with Zod validation and optional test-connection
+4. **Review** — Summary of added services with "Add Another" or "Finish Setup" options
 
-Uses `useSetupStatus()` query to detect when setup is done and navigate.
+**Components** (`[[docs/components/setup-wizard|Setup Wizard Components]]`):
+- `SetupWizard.tsx` — Main orchestrator (step/selectedKind/addedIds state)
+- `WelcomeStep.tsx` — Onboarding intro
+- `KindPickerStep.tsx` — Searchable, categorized service picker with lucide icons
+- `KindCard.tsx` — Individual service card
+- `ConfigureStep.tsx` — Embedded form via `ServiceEditor` (with `hideKind` and `hideCancel` props)
+- `ReviewStep.tsx` — Added services summary with loop-or-finish logic
+- `ProgressRail.tsx` — Visual progress indicator
+- `setup.css` — Shell layout, grain background, responsive grid
+
+**Dismissal** (`[[docs/components/use-setup-dismissal|useSetupDismissal Hook]]`):
+- Hook manages localStorage key `watchman.setupDismissed`
+- `dismiss()` writes "1" and sets state; `reset()` removes flag to re-enter
+- Cross-tab sync via `storage` event
+- `SetupGate` in `App.tsx` checks flag before showing wizard
+
+**Design**:
+- No env-based admin creds (single-user design — see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]])
+- Shell has grain background, brand sidebar, progress rail
+- Responsive grid for kind cards (2 cols mobile, 3 cols desktop)
+- Each step fades in; back/next navigate between steps with state preservation
 
 ### Services UI (`src/pages/Settings/Services.tsx`)
 
@@ -131,16 +161,19 @@ Uses `useServices()` and `useDeleteService()` mutations.
 
 ### ServiceEditor (`src/pages/Settings/ServiceEditor.tsx`)
 
-Dynamic form driven by `/config/kinds` schemas:
+Dynamic form driven by `/config/kinds` schemas with filtering and collapsible advanced settings:
 
-- Per-kind Zod schema defines field types, validation, and UI metadata
-- Fields: `label`, `type` (text/password/number/select), `secret`, `required`, `placeholder`, `help`, `options`
-- Secret fields show `(saved — leave blank to keep)` on edit
-- On submit, empty secret fields are omitted (preserves existing value)
-- On response, secret fields masked as `"***"`
-- Optional "Test Connection" button validates before save
+- **Per-kind Zod schema** defines field types, validation, and UI metadata
+- **Field types**: `text`, `password`, `number`, `boolean`, `url`, `select`, `stringArray`, `numberArray`
+- **Field metadata**: `label`, `type`, `secret`, `required`, `placeholder`, `help`, `options`, `default`
+- **Chrome fields** (instanceId, enabled, cacheTtlMs, timeoutMs, pollPolicy) filtered into "Advanced" `<details>` collapsible
+- **Kind-specific fields** rendered in main form with required markers (`*`)
+- **Array fields** (stringArray, numberArray) accept CSV input (e.g., "8080, 8443, 9000")
+- **Default values** respect `FieldMeta.default`; fall back to type-based defaults if not specified
+- **Secret fields** show `(saved — leave blank to keep)` on edit; empty values preserve existing
+- **Test Connection** button validates credentials before save
 
-Uses `useKinds()` to fetch schemas and `useCreateService()` / `useUpdateService()` to save.
+Uses `useKinds()` to fetch schemas and `useCreateService()` / `useUpdateService()` to save. See [[docs/components/service-editor|ServiceEditor documentation]] for complete field handling, defaults, and array support.
 
 ### Audit Timeline (`src/pages/Settings/Audit.tsx`)
 
@@ -342,17 +375,18 @@ List all configured services (secrets masked):
 
 #### `POST /config/services`
 
-Create a new service:
+Create a new service (flat discriminated union, not nested):
 
 ```json
 {
   "kind": "bitcoin",
-  "name": "Main Bitcoin Node",
-  "config": {
-    "onionUrl": "...",
-    "rpcUser": "...",
-    "rpcPassword": "..."
-  }
+  "instanceId": "main",
+  "enabled": true,
+  "cacheTtlMs": 10000,
+  "timeoutMs": 5000,
+  "onionUrl": "...",
+  "rpcUser": "...",
+  "rpcPassword": "..."
 }
 ```
 
@@ -360,14 +394,13 @@ Response: As above.
 
 #### `PUT /config/services/{id}`
 
-Update service config (secrets are optional on edit):
+Update service config (flat; secrets optional on edit):
 
 ```json
 {
-  "config": {
-    "onionUrl": "...",
-    "rpcPassword": "" // Omit or empty = keep existing
-  }
+  "cacheTtlMs": 12000,
+  "onionUrl": "...",
+  "rpcPassword": "" // Omit entirely or leave empty = keep existing
 }
 ```
 
@@ -381,11 +414,13 @@ DELETE /config/services/bitcoin:1
 
 #### `POST /config/services/{id}/test`
 
-Test connection with provided credentials:
+Test connection with provided credentials (flat config fields):
 
 ```json
 {
-  "config": { /* trial config */ }
+  "onionUrl": "...",
+  "rpcUser": "...",
+  "rpcPassword": "..."
 }
 ```
 
@@ -451,13 +486,26 @@ List audit log entries (query params: `?limit=50&offset=0`):
 }
 ```
 
+## Master-Key Provisioning
+
+The master key for AES-256-GCM secret encryption is now provisioned by the backend itself on first boot:
+
+- **Location**: `[[apps/backend/src/config/masterKey.ts|masterKey.ts]]` loaded during backend bootstrap
+- **File location**: `{DATA_DIR}/master.key` (e.g., `/home/pi/.watchman/data/master.key` on Pi, or `<userData>/data/master.key` in Electron)
+- **Permissions**: Mode 0600 (owner read/write only)
+- **Auto-generation**: On first boot, if the file does not exist, generates 32 random bytes, base64-encodes, and writes to disk
+- **Environment override**: If `WATCHMAN_MASTER_KEY` env var is set, uses that instead of the file (useful for containerized deployments)
+- **Backend integration**: Called from `[[apps/backend/src/index.ts|index.ts]]` during bootstrap before any secret-encrypting consumer initializes
+
+This moves master-key responsibility from the Electron main process (old model) to the backend itself, making it work identically on Raspberry Pi, Mac dev, or any other deployment.
+
 ## Environment Variables
 
-### New
+### Updated
 
-| Variable           | Description                                      | Required | Example                                   |
+| Variable           | Description                                      | Required | Example / Default                         |
 | ------------------ | ------------------------------------------------ | -------- | ----------------------------------------- |
-| `WATCHMAN_MASTER_KEY` | AES-256-GCM key for encrypting secrets (base64) | Yes      | `Z0VzN3AxMHBXZ3UyaDR...` (32 bytes, base64) |
+| `WATCHMAN_MASTER_KEY` | AES-256-GCM key for encrypting secrets (base64, optional override) | No       | `Z0VzN3AxMHBXZ3UyaDR...` (32 bytes, base64); auto-provisioned at `{DATA_DIR}/master.key` if not set |
 
 ### Removed
 
@@ -474,6 +522,66 @@ On first boot with existing `.env`, `envMigrator` runs:
 - Logs warning on subsequent boots if legacy vars still present
 
 Admins should remove legacy service env vars from `.env` after first boot.
+
+## Dashboard CRUD Discoverability (Phase 3)
+
+The bento dashboard (Phase 3, live behind `?bento=1`) integrates service configuration directly into the main dashboard experience, eliminating the need to visit Settings for quick edits:
+
+### Add Service Entry Points
+
+**Header Button**
+- Right-aligned "+ Add service" button in dashboard header
+- Always visible for quick access
+- Opens `ServiceEditor` in create mode within a dialog
+- Kind selector visible; user selects service type and fills config
+
+**Empty State Button**
+- When no services are configured, dashboard shows styled "Add your first service" button
+- Clicking opens the same create editor dialog
+- Introduces setup flow without leaving dashboard context
+
+### Service Detail Sheet Controls (Footer)
+
+When user clicks a service tile:
+
+1. **Right-anchored sheet opens** with metrics, charts, and controls
+
+2. **Enable/Disable Toggle** — Checkbox/button in footer
+   - Instantly toggles service enabled state via `useUpdateService` mutation
+   - Sheet remains open; disabled badge appears in header
+   - No form required; single-click operation
+
+3. **Edit Button** — Enters edit mode
+   - Body switches from tabs (metrics/charts) to inline `ServiceEditor` form
+   - Pre-populated with current service config
+   - Kind field hidden; cannot change service type in place
+   - Advanced fields (cache TTL, timeout, polling) shown in collapsible
+   - Save button calls update mutation; Cancel returns to detail view
+
+4. **Delete Button** (Destructive Styling)
+   - Opens `ConfirmDialog` with destructive variant (`--crit` color)
+   - Confirmation message includes service name
+   - On confirm: calls `useDeleteService` mutation
+   - Sheet closes on success
+   - Success feedback via toast notification (optional)
+
+### Settings Page Parity
+
+The Settings → Services page retains the full service list view with status dots and bulk operations:
+
+- List of all configured services
+- Status indicators (online/offline/warning)
+- Inline delete button with `ConfirmDialog` confirmation
+- Edit button opens form in modal
+- Matches footer controls from detail sheet for consistency
+
+### Benefits
+
+- **Discoverability**: Services are configurable from the main dashboard, not hidden in Settings
+- **Quick Edits**: Enable/disable and edit form accessible without leaving service context
+- **Destructive Operations**: Clear visual warning (red button, confirmation dialog) for deletions
+- **Consistency**: Detail sheet, bento dashboard, and settings all use same `ServiceEditor` and `ConfirmDialog` components
+- **Flow Integration**: Create → see on dashboard → edit/delete inline, no back-and-forth to Settings
 
 ## Security Considerations
 
@@ -498,7 +606,11 @@ Admins should remove legacy service env vars from `.env` after first boot.
 ## Related Documentation
 
 - [[docs/adr/015-ui-driven-service-configuration|ADR-015]] — Design decision
+- [[docs/components/bento-dashboard|BentoDashboard]] — Dashboard with add-service entry points
+- [[docs/components/service-detail-sheet|ServiceDetailSheet]] — Detail view with edit/delete footer controls
+- [[docs/components/service-editor|ServiceEditor]] — Dynamic form component for create/edit
+- [[docs/components/primitives/confirm-dialog|ConfirmDialog]] — Deletion confirmation dialog
 - [[docs/api/config|API Documentation]] — Complete endpoint reference
 - [[docs/architecture/backend-architecture|Backend Architecture]] — ServiceFactory, ServiceLifecycle, ConfigStore
-- [[docs/architecture/frontend-architecture|Frontend Architecture]] — Settings pages, SetupWizard
+- [[docs/architecture/frontend-architecture|Frontend Architecture]] — Settings pages, SetupWizard, BentoDashboard
 - [[docs/reference/environment-variables|Environment Variables]] — Master key setup

@@ -32,8 +32,8 @@ TOR_RELAY_IP=your-ip-address
 
 ## Service Classes
 
-- [[apps/backend/services/TorService.js|TorService.js]] - Tor relay monitoring
-- [[apps/backend/services/TorManager.js|TorManager.js]] - Tor proxy management
+- `TorService` — Tor relay monitoring (`apps/backend/src/domain/services/`)
+- `TorManager` — Tor proxy management (`apps/backend/src/domain/services/`)
 
 ### TorService Methods
 
@@ -50,23 +50,22 @@ TOR_RELAY_IP=your-ip-address
 
 ### Runtime Behavior
 
-- Default Tor data directory is module-relative: `apps/backend/.tor-data` (see [[apps/backend/services/TorManager.js|TorManager.js]])
+- Default Tor data directory is module-relative: `apps/backend/.tor-data` (see `TorManager`)
 - Runtime root-level `.tor-data/` artifacts are ignored in git at repository root via [[.gitignore]]
 - SOCKS readiness/health checks use a local TCP socket probe on `127.0.0.1:{port}` instead of shelling out to `lsof`
 - Startup readiness polling uses backoff (`250ms` doubling up to `1000ms`) until timeout (`startupTimeout`)
 
 ### Test Coverage Notes
 
-- [[apps/backend/tests/TorManager.test.js]] includes lifecycle/error-path coverage for [[apps/backend/services/TorManager.js]]:
+- `TorManager` colocated test covers lifecycle/error-path coverage:
   - `isInstalled()` fallback from `which tor` to Homebrew detection
   - `installTor()` success and failure paths
   - `startTor()` bootstrap log handling from stdout/stderr plus child-process `error` path
   - `cleanup()` warning-path behavior when success logger throws
-- Latest backend Node coverage run reports TorManager at **~95.90% lines / ~90.91% branches / ~90.63% functions**
 
 ## Frontend Component
 
-[[apps/frontend/src/components/TorCard.tsx|TorCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

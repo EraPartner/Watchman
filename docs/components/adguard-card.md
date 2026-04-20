@@ -1,14 +1,20 @@
 ---
 title: "Component: AdGuardCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, adguard, dns]
 description: AdGuard Home DNS filter monitoring card with query stats, blocking rate, and protection controls
 aliases: [adguard card, dns filter card, adguard home monitoring]
 ---
 
 # Component: AdGuardCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays AdGuard Home DNS filtering status, query statistics, blocking rate, and protection feature metrics in a card layout.
@@ -63,7 +69,7 @@ Monitors AdGuard Home instances showing DNS query counts, blocked domains, block
 
 ## Source
 
-- [[apps/frontend/src/components/AdGuardCard.tsx]]
+- `apps/frontend/src/components/AdGuardCard.tsx`
 
 ## Related
 

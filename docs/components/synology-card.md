@@ -1,14 +1,20 @@
 ---
 title: "Component: SynologyCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, synology, nas, snmp]
 description: Synology NAS monitoring card displaying system, CPU, memory, disk, and network stats via SNMP
 aliases: [synology card, nas card, snmp monitoring]
 ---
 
 # Component: SynologyCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays Synology NAS health and statistics collected via SNMPv3, including system info, CPU usage, memory, disk space, and network throughput.
@@ -53,7 +59,7 @@ Uses React Query with `useQuery` for status polling.
 
 ## Source
 
-- [[apps/frontend/src/components/SynologyCard.tsx]]
+- `apps/frontend/src/components/SynologyCard.tsx`
 
 ## Related
 

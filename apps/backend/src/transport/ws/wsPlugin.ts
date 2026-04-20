@@ -74,27 +74,27 @@ export const wsPlugin = fp(async (app: FastifyInstance, opts: WsPluginOptions) =
   heartbeat.start();
 
   const path = opts.path ?? '/ws';
-  app.get(path, { websocket: true }, (conn, req) => {
+  app.get(path, { websocket: true }, (socket, req) => {
     const upgradeReq: WsUpgradeRequest = {
       headers: req.headers as Record<string, string | string[] | undefined>,
       socket: req.socket.remoteAddress ? { remoteAddress: req.socket.remoteAddress } : {},
     };
 
     if (!gate.isOriginAllowed(upgradeReq)) {
-      conn.socket.close(1008, 'origin_not_allowed');
+      socket.close(1008, 'origin_not_allowed');
       return;
     }
     const auth = gate.authenticate(upgradeReq);
     if (!auth.ok) {
-      conn.socket.close(1008, auth.reason);
+      socket.close(1008, auth.reason);
       return;
     }
 
-    const ws = conn.socket as unknown as WsClient;
+    const ws = socket as unknown as WsClient;
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
     const result = manager.add(ws, ip, auth.user);
     if (!result.ok) {
-      conn.socket.close(1013, result.reason);
+      socket.close(1013, result.reason);
       return;
     }
 

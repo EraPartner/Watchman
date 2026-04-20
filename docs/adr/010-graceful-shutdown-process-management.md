@@ -1,8 +1,10 @@
 ---
 title: ADR-010 - Graceful Shutdown and Process Management
 type: adr
-status: accepted
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [adr, backend, reliability, deployment]
 description: Ordered graceful shutdown handling for HTTP server, WebSocket, services, and resources with signal-based triggering
 aliases: [graceful shutdown, process management, signal handling]
@@ -10,13 +12,18 @@ aliases: [graceful shutdown, process management, signal handling]
 
 # ADR-010: Graceful Shutdown and Process Management
 
+> [!danger] Superseded by ADR-013 — No Longer Implemented
+> This document describes **v1 shutdown handling** (Express.js/JavaScript). The backend was rewritten to TypeScript + Fastify 4 in v2.0; shutdown is handled via Fastify's built-in lifecycle hooks (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 > [!abstract] Summary
 > The backend implements comprehensive graceful shutdown handling for SIGINT, SIGTERM, uncaught exceptions, and unhandled rejections with ordered resource cleanup.
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Superseded
+- **Superseded by**: [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]
 - **Date**: 2026-04-02
+- **Superseded date**: 2026-04-20
 
 ## Context
 

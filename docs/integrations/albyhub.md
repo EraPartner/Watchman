@@ -29,7 +29,7 @@ ALBYHUB_TOKEN=your-albyhub-token
 
 ## Service Class
 
-[[apps/backend/services/AlbyHubService.js|AlbyHubService.js]]
+`apps/backend/services/AlbyHubService.js`
 
 ### Methods
 
@@ -38,7 +38,7 @@ ALBYHUB_TOKEN=your-albyhub-token
 
 ## Frontend Component
 
-[[apps/frontend/src/components/AlbyHubCard.tsx|AlbyHubCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

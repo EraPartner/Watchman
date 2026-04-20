@@ -2,16 +2,16 @@
 title: ServiceDetailSheet Component
 type: component
 status: active
-date: 2026-04-18
-tags: [component, bento, sheet, modal, detail-view, frontend, phase3]
-description: Right-anchored detail sheet for service inspection. Displays tabbed metric groups, charts placeholder, and primary metric with status. Opened from ServiceTile click.
-aliases: [ServiceDetailSheet, detail sheet, service details]
+date: 2026-04-19
+tags: [component, bento, sheet, modal, detail-view, frontend, phase3, crud, edit, delete]
+description: Right-anchored detail sheet for service inspection, editing, and deletion. Displays tabbed metric groups, charts placeholder, service controls, and inline form editing.
+aliases: [ServiceDetailSheet, detail sheet, service details, service editor]
 ---
 
 # ServiceDetailSheet Component
 
 > [!abstract] Overview
-> `ServiceDetailSheet` provides a detailed drill-down view for each service. Opens from the right side of the screen, displaying tabbed metric groups, current-value charts (Phase 5), and status summary. Driven entirely by the `ServiceRenderer` registry.
+> `ServiceDetailSheet` provides a detailed drill-down view for each service with full CRUD affordances. Opens from the right side of the screen, displaying tabbed metric groups, charts placeholder (Phase 5), service controls (enable/disable), and inline edit mode. Driven entirely by the `ServiceRenderer` registry.
 
 ## Location
 
@@ -28,6 +28,21 @@ interface ServiceDetailSheetProps {
 }
 ```
 
+## State Management
+
+### View Mode
+
+```typescript
+type ViewMode = "detail" | "edit";
+
+const [view, setView] = useState<ViewMode>("detail");
+```
+
+- **`detail`** (default) — Shows tabbed metrics and chart placeholders; footer displays service controls
+- **`edit`** — Replaces sheet body with inline `ServiceEditor` form (see [[docs/components/service-editor|ServiceEditor]] docs)
+
+On sheet close (`open=false`), view resets to `"detail"`.
+
 ## Structure
 
 ### Header
@@ -35,12 +50,15 @@ interface ServiceDetailSheetProps {
 - Service icon/status dot
 - Service display name (from renderer)
 - Status badge (online/warning/error/offline)
+- Optional **disabled badge** — Shows when service exists and `enabled === false`
 - Primary metric value and unit
 
-### Tabs
+### Tabs (Detail View Only)
 
 1. **Metrics** — Detail sheet metric groups from `renderer.detail`
 2. **Charts** — Chart specs from `renderer.charts` (Phase 5 placeholder: "History chart coming in Phase 5")
+
+When `view === "edit"`, tabs are hidden and the body is replaced entirely with the form.
 
 ### Metrics Tab
 
@@ -93,6 +111,53 @@ When Phase 5 completes:
 - Range picker: 1h / 24h / 7d / 30d
 - Display current value + trend line
 
+### Footer (Detail View Only)
+
+Sheet footer displays service controls when `view === "detail"`:
+
+**Buttons** (right-aligned):
+
+1. **Enable/Disable Toggle** — Checkbox or button-like toggle
+   - Calls `useUpdateService().mutateAsync({ enabled: !current.enabled })`
+   - Updates without leaving detail view
+   - Toggles the disabled badge in header
+
+2. **Edit Button** — Sets `view = "edit"`
+   - Replaces body with inline `ServiceEditor`
+   - Pre-populates with current service config
+   - `existing={service}` prop triggers edit mode behavior
+
+3. **Delete Button** (destructive, red)
+   - Opens [[docs/components/primitives/confirm-dialog|ConfirmDialog]]
+   - `destructive={true}` for visual warning
+   - `pending={deleteMut.isPending}` for async state
+   - On confirm: `useDeleteService().mutateAsync(service.id)`
+   - Closes sheet on success
+
+4. **Close Button** — Closes sheet (`onOpenChange(false)`)
+
+### Edit Mode (Inline Form)
+
+When `view === "edit"`:
+
+```tsx
+<ServiceEditor
+  existing={service}
+  onSubmit={async (input) => {
+    await updateMut.mutateAsync(input);
+    setView("detail");
+  }}
+  onCancel={() => setView("detail")}
+  submitting={updateMut.isPending}
+/>
+```
+
+- Form inherits service id/kind
+- Fields pre-filled from `service.config`
+- "Save" button calls update mutation
+- "Cancel" button returns to detail view
+- On success, view resets to `"detail"`
+
 ## Rendering Details
 
 ### Font Stack
@@ -100,17 +165,28 @@ When Phase 5 completes:
 - **Headers**: Geist Variable (sans) — dark-luxury branding
 - **Metric Values**: Geist Mono Variable with `tabular-nums` — aligns decimals in columns
 
-### Data Queries
+### Data Queries & Service Discovery
 
 When `open=true` and `kind` is set:
 
-```typescript
-const { data: health } = useServiceHealth(kind);
-const { data: stats } = useServiceStats(kind);
-const renderer = getRenderer(kind);
-```
+1. **Service Lookup** — Fetch full `ServiceInstance` from `useServices()` by matching `kind` + `instanceId` (defaults to `"main"` when undefined)
+   ```typescript
+   const { data: services } = useServices();
+   const service = services?.find(s => s.kind === kind && (s.instanceId || "main") === (instanceId || "main"));
+   ```
 
-Uses `dotGet(stats, "path.to.metric")` from formatters to fetch nested metric values.
+2. **Health & Stats** — Query via renderer pattern
+   ```typescript
+   const { data: health } = useServiceHealth(kind);
+   const { data: stats } = useServiceStats(kind);
+   const renderer = getRenderer(kind);
+   ```
+
+3. **Nested Metric Access** — Uses `dotGet(stats, "path.to.metric")` from formatters to fetch nested metric values
+
+4. **Service Control Mutations**:
+   - `useUpdateService()` — Patch service config (e.g., toggle enabled)
+   - `useDeleteService()` — Delete service by id
 
 ### Tone
 
@@ -203,9 +279,12 @@ If service is offline or unreachable:
 
 ## Related
 
-- [[docs/components/service-tile|ServiceTile]]
-- [[docs/components/dashboard-grid|DashboardGrid]]
-- [[docs/components/bento-dashboard|BentoDashboard]]
-- [[docs/services/renderers/index|Renderer Registry]]
-- [[docs/components/primitives/sheet|Sheet Primitive]]
+- [[docs/components/service-tile|ServiceTile]] — Triggering detail sheet open
+- [[docs/components/service-editor|ServiceEditor]] — Inline form in edit mode
+- [[docs/components/primitives/confirm-dialog|ConfirmDialog]] — Delete confirmation
+- [[docs/components/dashboard-grid|DashboardGrid]] — Layout container
+- [[docs/components/bento-dashboard|BentoDashboard]] — Parent orchestrator
+- [[docs/services/renderers/index|Renderer Registry]] — Detail view specs
+- [[docs/components/primitives/sheet|Sheet Primitive]] — Modal wrapper
+- [[docs/api/config|Configuration API]] — Service CRUD endpoints
 - [[docs/adr/014-time-series-duckdb-and-bento-design-system|ADR-014]]

@@ -1,14 +1,20 @@
 ---
 title: "Component: IpfsCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-09
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, ipfs, kubo, p2p]
 description: IPFS/Kubo node monitoring card showing peer count, repo stats, and bandwidth usage
 aliases: [ipfs card, kubo card, distributed storage monitoring]
 ---
 
 # Component: IpfsCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays IPFS (Kubo) node status including peer connections, repository statistics, bandwidth usage, and Bitswap activity.
@@ -60,7 +66,7 @@ Uses manual `useEffect` + `setInterval` pattern (not React Query).
 
 ## Source
 
-- [[apps/frontend/src/components/IpfsCard.tsx]]
+- `apps/frontend/src/components/IpfsCard.tsx`
 
 ## Related
 

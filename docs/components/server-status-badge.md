@@ -1,14 +1,20 @@
 ---
 title: ServerStatusBadge Component
 type: component
-status: active
+status: superseded
 date: 2026-04-11
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, badge, status]
 description: Reusable status badge component displaying online/offline/loading/warning/error/maintenance states with icons and colors
 aliases: [status badge, server status, health badge]
 ---
 
 # ServerStatusBadge
+
+> [!danger] Superseded — No Longer Implemented
+> The `ServerStatusBadge` component was **removed in the v2 frontend rewrite**. Status display is now part of the `ServiceTile` component in the bento dashboard. Content retained for archival reference only.
+
 
 > [!abstract] Summary
 > A small, reusable badge component that visually represents service status states with appropriate colors, icons, and labels.
@@ -80,4 +86,4 @@ import { ServerStatusBadge } from "@/components/ServerStatusBadge";
 ## Related
 
 - [[docs/components/index|Components Index]]
-- [[apps/frontend/src/components/ServerStatusBadge.test.tsx]]
+- `apps/frontend/src/components/ServerStatusBadge.test.tsx`

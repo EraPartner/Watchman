@@ -2,34 +2,45 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-04-19
-tags: [architecture, frontend, react, typescript, design-system, primitives, configuration, settings, api-client]
-description: Frontend architecture documentation for the Watchman React application with design system, primitives, and UI-driven configuration
+date: 2026-04-20
+tags: [architecture, frontend, react, typescript, design-system, primitives, configuration, settings, api-client, v2, single-user, bento, dynamic-layout, multi-instance]
+description: Frontend architecture documentation for the Watchman React application - single-user design with v2 API contract, design system, dynamic bento dashboard with instance-aware layout, and UI-driven configuration
 aliases: [frontend, react architecture, frontend design]
 ---
 
 # Frontend Architecture
 
 > [!abstract] Overview
-> The Watchman frontend is a React 18 + TypeScript application built with Vite, styled with Tailwind CSS. **Phase 2** introduces a dark-luxury design system with OKLCH tokens, Geist typography, and 14 typed primitives. **Phase 3** adds the bento dashboard with a renderer registry pattern driving all service tiles.
+> The Watchman frontend is a **single-user** React 18 + TypeScript application built with Vite, styled with Tailwind CSS. It consumes the v2 API contract with standardized response envelope ({data} or {error}). **Phase 2** introduces a dark-luxury design system with OKLCH tokens, Geist typography, and 14 typed primitives. **Phase 3** adds the bento dashboard with a renderer registry pattern driving all service tiles. No authentication required.
 
 ## Entry Point
 
 [[apps/frontend/src/main.tsx|main.tsx]] - Application bootstrap.
-[[apps/frontend/src/App.tsx|App.tsx]] - Root component with routing.
+[[apps/frontend/src/App.tsx|App.tsx]] - Root component with routing and offline banner.
+
+**Backend URL Resolution (Split Deploy)**
+
+In split-deploy mode (Electron client paired with remote Pi backend):
+- `[[apps/frontend/src/lib/backendUrl.ts|backendUrl.ts]]` defines `getBackendUrl()` which reads from `window.__WATCHMAN__.apiUrl` (injected by Electron IPC)
+- If `apiUrl` is not set, returns empty string (dev mode uses vite proxy to `localhost:3001`)
+- SetupWizard gates on `apiUrl` presence; if empty, starts at ConnectStep (split-deploy URL entry)
+- OfflineBanner polls `/meta/health` every 10s; if 3 consecutive probes fail, shows offline state with Retry and Change URL options
+- See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] for architecture rationale
 
 ## Pages
 
 | Page      | File                                          | Description                                   |
 | --------- | --------------------------------------------- | --------------------------------------------- |
-| Dashboard (Legacy) | `[[apps/frontend/src/pages/Index.tsx]]`       | Main monitoring dashboard (LiveServerDashboard) |
+| Dashboard (Legacy) | Removed (Phase 3)                             | Replaced by bento dashboard |
 | Dashboard (Bento, Phase 3)  | `[[apps/frontend/src/components/dashboard/BentoDashboard.tsx]]` | New bento dashboard (behind `?bento=1` flag) |
-| Setup Wizard | `[[apps/frontend/src/pages/SetupWizard.tsx]]` | First-boot configuration wizard (served when no services configured) |
+| Setup Wizard | `[[apps/frontend/src/pages/setup/SetupWizard.tsx]]` | Multi-step first-boot configuration wizard (4 steps: welcome → kind picker → configure → review) |
 | Settings — Services | `[[apps/frontend/src/pages/Settings/Services.tsx]]` | Service CRUD interface with list, edit, delete |
 | Settings — Editor | `[[apps/frontend/src/pages/Settings/ServiceEditor.tsx]]` | Dynamic form driven by `/config/kinds` schemas |
 | Settings — Audit | `[[apps/frontend/src/pages/Settings/Audit.tsx]]` | Timeline of configuration changes and migrations |
-| Login     | `[[apps/frontend/src/pages/Login.tsx]]`       | Authentication page                           |
 | Not Found | `[[apps/frontend/src/pages/NotFound.tsx]]`   | 404 fallback page                             |
+
+> [!note] Auth Removed (v2.3)
+> The Login page and AuthGuard component have been removed as of v2.3. Watchman is now a single-user application. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for details.
 
 ## Component Hierarchy: Legacy (Phase 1–2)
 
@@ -46,10 +57,8 @@ App
 │   │   │   └── Service Cards (grid)
 │   │   │       ├── ServiceLink
 │   │   │       ├── UpdateBadge
-│   │   │       └── [Service-specific Card] (18 total)
+│   │   │       └── [Service-specific Card] (14 total)
 │   │   └── ErrorBoundary
-│   ├── Login
-│   │   └── AuthGuard
 │   └── NotFound
 ```
 
@@ -59,9 +68,10 @@ App
 App
 ├── Router
 │   ├── BentoDashboard (Phase 3)
+│   │   ├── useServiceInstances (fetch /api/instances)
 │   │   ├── TooltipProvider
 │   │   ├── DashboardGrid (12-col)
-│   │   │   └── ServiceTile[] (filtered by renderer)
+│   │   │   └── ServiceTile[] (filtered by renderer + configured instance count)
 │   │   │       ├── Surface (tone-aware)
 │   │   │       ├── StatusDot (health indicator)
 │   │   │       ├── Badge (status label)
@@ -72,34 +82,14 @@ App
 │   │       │   ├── Metrics Tab (detail groups from renderer)
 │   │       │   └── Charts Tab (Phase 5 placeholder)
 │   │       └── History (Phase 5: visx charts)
-│   ├── Login
-│   │   └── AuthGuard
 │   └── NotFound
 ```
 
-## Service Cards
+**Note**: BentoDashboard dynamically filters tiles by checking both renderer availability and configured service instances via the `/api/instances` endpoint. If no instances exist, displays empty state.
 
-Each service has a dedicated card component with service-specific queries/rendering. Legacy shared base card wrappers were removed during refactor.
+## Service Cards (Removed — Phase 3)
 
-- Type-focused cleanup in card internals keeps behavior unchanged while reducing loose casting in frontend config/stat access (notably [[apps/frontend/src/components/IpfsCard.tsx|IpfsCard.tsx]] and [[apps/frontend/src/components/AlbyHubCard.tsx|AlbyHubCard.tsx]]).
-- `IpfsCard` now uses a local `IpfsStats` payload type plus typed `FrontendConfig` access; `AlbyHubCard` now uses typed `FrontendConfig` access.
-
-| Card Component    | Base      | File                                                     |
-| ----------------- | --------- | -------------------------------------------------------- |
-| AdGuardCard       | Optimized | `[[apps/frontend/src/components/AdGuardCard.tsx]]`       |
-| BitcoinCard       | Optimized | `[[apps/frontend/src/components/BitcoinCard.tsx]]`       |
-| TorCard           | Optimized | `[[apps/frontend/src/components/TorCard.tsx]]`           |
-| QBittorrentCard   | Optimized | `[[apps/frontend/src/components/QBittorrentCard.tsx]]`   |
-| IpfsCard          | Optimized | `[[apps/frontend/src/components/IpfsCard.tsx]]`          |
-| SynologyCard      | Optimized | `[[apps/frontend/src/components/SynologyCard.tsx]]`      |
-| RoonCard          | Optimized | `[[apps/frontend/src/components/RoonCard.tsx]]`          |
-| PhilipsBridgeCard | Optimized | `[[apps/frontend/src/components/PhilipsBridgeCard.tsx]]` |
-| HomebridgeCard    | Optimized | `[[apps/frontend/src/components/HomebridgeCard.tsx]]`    |
-| MacMiniCard       | Optimized | `[[apps/frontend/src/components/MacMiniCard.tsx]]`       |
-| AlbyHubCard       | Optimized | `[[apps/frontend/src/components/AlbyHubCard.tsx]]`       |
-| RaspberryPiCard   | Optimized | `[[apps/frontend/src/components/RaspberryPiCard.tsx]]`   |
-| RouterCard        | Optimized | `[[apps/frontend/src/components/RouterCard.tsx]]`        |
-| NostrcheckCard    | Optimized | `[[apps/frontend/src/components/NostrcheckCard.tsx]]`    |
+All 18 service-specific card components (`AdGuardCard`, `BitcoinCard`, `TorCard`, etc.) were removed in Phase 3. The bento dashboard replaces them with a single [[apps/frontend/src/components/tile/ServiceTile.tsx|ServiceTile]] component driven by the renderer registry. See [[docs/reference/code-patterns|ServiceRenderer Registry Pattern]].
 
 ## State Management
 
@@ -110,28 +100,19 @@ Each service has a dedicated card component with service-specific queries/render
   - **Timeout handling**: Uses native `AbortSignal.timeout(timeoutMs)` combined with optional caller signal via `AbortSignal.any()` (removes manual timer leak)
   - **Catch branch**: Handles both `TimeoutError` and `AbortError` (native abort signal errors)
 - **queryKeys** - Centralized query key factory (`[[apps/frontend/src/lib/queryKeys.ts]]`)
-- **UpdateBadge query path** - `[[apps/frontend/src/components/UpdateBadge.tsx]]` uses `useQuery` with `queryKeys.serviceUpdates(service)` and `apiClient.getServiceUpdates(service)` for update checks
-- **Dashboard query orchestration** - `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` centralizes LiveServerDashboard queries and refresh behavior, with `torRelay` and `frontendConfig` fetched as separate queries
-- **Dashboard manual refresh scope** - `refreshEnabledQueries()` in `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` also refetches `servicesHealthQuery` so overview counters refresh with manual refresh
-- **Dashboard refresh coverage** - `[[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]]` covers `refreshEnabledQueries()` selective refetching for enabled services plus guaranteed `servicesHealth` refetch
 - **Dashboard tile helpers** - `[[apps/frontend/src/components/dashboard/dashboardData.ts]]` provides reusable instance-tile assembly helpers (`appendInstanceTiles`, `getInstanceNumber`)
-- **Dashboard section rendering** - `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]` centralizes repeated Software/Hardware tile-section rendering used by `[[apps/frontend/src/components/LiveServerDashboard.tsx]]`
+- **Dashboard section rendering** - `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]` centralizes repeated Software/Hardware tile-section rendering
 
 ### Frontend Logging
 
 - Frontend diagnostics for hooks/components are normalized through `[[apps/frontend/src/lib/logger.ts]]` rather than direct `console.*` usage in hot paths.
-- Recent cleanup updates include `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/hooks/useAuth.tsx]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`, and `[[apps/frontend/src/lib/csrf.ts]]`.
+- Recent cleanup updates include `[[apps/frontend/src/hooks/useWebSocket.ts]]` and `[[apps/frontend/src/components/ErrorBoundary.tsx]]`.
 - Logger redaction fallback now handles regex matches without a capture group by returning `[REDACTED]` (covered in `[[apps/frontend/src/lib/logger.test.ts]]`).
 - WebSocket hook behavior coverage now includes `[[apps/frontend/src/hooks/useWebSocket.test.tsx]]` for batched/deduped invalidation and alert/unknown message handling.
 
-### Query Retry and Auth Bootstrap
+### Query Retry
 
-- React Query retry behavior in `[[apps/frontend/src/App.tsx]]` now uses a predicate that avoids retries for 4xx responses while keeping capped retries for retryable failures
-- Auth bootstrap in `[[apps/frontend/src/hooks/useAuth.tsx]]` keeps initial load behavior, and uses a silent post-login `/api/auth/me` refresh to avoid transient loading-state flicker
-
-### Dashboard Re-render Isolation
-
-- `Updated Xs ago` display in `[[apps/frontend/src/components/LiveServerDashboard.tsx]]` is isolated into memoized `LastUpdatedText` so the 1-second timer does not force full dashboard re-render
+- React Query retry behavior in `[[apps/frontend/src/App.tsx]]` uses a predicate that avoids retries for 4xx responses while keeping capped retries for retryable failures
 
 ### Service Renderer Registry (Phase 3)
 
@@ -160,26 +141,26 @@ See [[docs/services/renderers/index|Renderer Registry Documentation]] for comple
 
 | Hook                  | Purpose                        | File                                                  |
 | --------------------- | ------------------------------ | ----------------------------------------------------- |
-| `useAuth`             | Authentication state           | `[[apps/frontend/src/hooks/useAuth.tsx]]`             |
+| `useSetupDismissal`   | Setup wizard dismissal state    | `[[apps/frontend/src/hooks/useSetupDismissal.ts]]`    |
 | `useServiceHealth`    | Single service health          | `[[apps/frontend/src/hooks/useServiceHealth.ts]]`     |
 | `useServiceInstances` | Multi-instance management      | `[[apps/frontend/src/hooks/useServiceInstances.tsx]]` |
 | `useEnabledServices`  | Enabled services config        | `[[apps/frontend/src/hooks/useEnabledServices.ts]]`   |
+| `useBackendReachable` | LAN backend reachability probe | `[[apps/frontend/src/hooks/useBackendReachable.ts]]`  |
 | `useWebSocket`        | Real-time WebSocket connection | `[[apps/frontend/src/hooks/useWebSocket.ts]]`         |
-| `useFrontendConfig`   | Frontend configuration         | `[[apps/frontend/src/hooks/useFrontendConfig.ts]]`    |
 | `use-mobile`          | Mobile breakpoint              | `[[apps/frontend/src/hooks/use-mobile.tsx]]`          |
-| `use-toast`           | Toast notifications            | `[[apps/frontend/src/hooks/use-toast.ts]]`            |
 
-> [!note]
-> Removed hook/module references: `use-config.tsx` and `useServicesHealth.ts` are deleted; `RequestOptimizer.ts` is no longer present.
+> [!note] Removed (v2.3)
+> Deleted hooks: `useAuth`, `useFrontendConfig` (auth removed); deleted modules: `csrf.ts`, `RequestOptimizer.ts`. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]].
 
 ## Routing
 
 React Router v6 with the following structure:
 
 - `/` → Dashboard (Index page)
-- `/login` → Login page
 - `*` → Not Found page
-- AuthGuard wraps protected routes
+
+> [!info] No Auth Routes (v2.3)
+> Login page and route protection have been removed. Watchman is single-user with no authentication.
 
 ## Styling & Design System
 

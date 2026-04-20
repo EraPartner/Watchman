@@ -1,8 +1,10 @@
 ---
 title: ADR-008 - Configuration Management via Environment Variables
 type: adr
-status: accepted
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [adr, backend, configuration, deployment]
 description: Environment-driven configuration with startup validation and multi-instance support via numbered env var patterns
 aliases: [configuration, environment variables, config management]
@@ -10,13 +12,18 @@ aliases: [configuration, environment variables, config management]
 
 # ADR-008: Configuration Management via Environment Variables
 
+> [!danger] Superseded by ADR-013 — No Longer Implemented
+> This document describes **v1 configuration** (numbered `SERVICE_N_*` env var patterns, `config.js`). The backend was rewritten to TypeScript + Fastify 4 with Zod schema validation and `ConfigStore` for runtime config in v2.0 (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 > [!abstract] Summary
 > All configuration comes from environment variables, parsed and validated at startup, with multi-instance support via numbered env var patterns (`SERVICE_N_*`).
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Superseded
+- **Superseded by**: [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]
 - **Date**: 2026-04-02
+- **Superseded date**: 2026-04-20
 
 ## Context
 

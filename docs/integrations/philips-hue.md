@@ -28,7 +28,7 @@ PHILIPS_BRIDGE_HOST=192.0.2.200
 
 ## Service Class
 
-[[apps/backend/services/PhilipsBridgeService.js|PhilipsBridgeService.js]]
+`apps/backend/services/PhilipsBridgeService.js`
 
 ### Methods
 
@@ -37,7 +37,7 @@ PHILIPS_BRIDGE_HOST=192.0.2.200
 
 ## Frontend Component
 
-[[apps/frontend/src/components/PhilipsBridgeCard.tsx|PhilipsBridgeCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

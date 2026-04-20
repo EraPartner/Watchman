@@ -60,6 +60,20 @@ export function extractApiError(payload: unknown, fallback: string): string {
     )
       return candidate.error;
     if (
+      candidate.error &&
+      typeof candidate.error === "object"
+    ) {
+      const nested = candidate.error as Record<string, unknown>;
+      if (
+        typeof nested.message === "string" &&
+        nested.message.trim().length > 0
+      ) {
+        return typeof nested.code === "string" && nested.code.trim().length > 0
+          ? `${nested.code}: ${nested.message}`
+          : nested.message;
+      }
+    }
+    if (
       typeof candidate.message === "string" &&
       candidate.message.trim().length > 0
     )

@@ -1,21 +1,26 @@
 ---
-title: Rate Limiting
+title: Rate Limiting (Superseded)
 type: security
-status: active
+status: superseded
 date: 2026-04-09
-tags: [security, rate-limiting, middleware, throttling, backend]
-description: Tiered rate limiting documentation for the Watchman API - protects against abuse, brute force, and DoS
+superseded_by: docs/adr/017-remove-authentication-frontend-v2-migration
+superseded_date: 2026-04-19
+tags: [security, rate-limiting, middleware, throttling, backend, superseded, historical]
+description: Historical tiered rate limiting — removed in v2.3 per ADR-017; retained for archival context only
 aliases: [rate limiting, throttling, rate limit, request limiting]
 ---
 
-# Rate Limiting
+# Rate Limiting (Superseded)
 
-> [!abstract] Overview
-> Watchman implements tiered rate limiting to protect against abuse, brute force attacks, and DoS. Different endpoint categories have different limits based on their sensitivity and expected usage patterns.
+> [!danger] Superseded — No Longer Implemented
+> This document describes **historical** tiered rate limiting via `rateLimiting.js` and `express-rate-limit`. As of v2.3 (backend rewritten to Fastify, auth removed), all rate-limit middleware and its `RATE_LIMIT_*_MAX` environment variables have been removed. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] and [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]. Watchman now depends on network isolation (firewall, VPN, closed LAN) — operator-owned. Content retained for archival reference only.
+
+> [!abstract] Historical Overview
+> Watchman previously implemented tiered rate limiting to protect against abuse, brute force, and DoS. Different endpoint categories had different limits based on sensitivity and expected usage patterns.
 
 ## Implementation
 
-[[apps/backend/middleware/rateLimiting.js|rateLimiting.js]] uses `express-rate-limit` with per-tier configurations:
+`apps/backend/middleware/rateLimiting.js` uses `express-rate-limit` with per-tier configurations:
 
 | Limiter          | Window | Max Requests | Use For                   | Bypass                        |
 | ---------------- | ------ | ------------ | ------------------------- | ----------------------------- |

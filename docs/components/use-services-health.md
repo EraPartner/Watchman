@@ -94,7 +94,7 @@ function StatusOverview() {
 ## Source
 
 - Current aggregate health source: [[apps/frontend/src/hooks/useServiceHealth.ts]]
-- Current frontend config source: [[apps/frontend/src/hooks/useFrontendConfig.ts]]
+- Current frontend config source: `apps/frontend/src/hooks/useFrontendConfig.ts`
 
 ## Related
 

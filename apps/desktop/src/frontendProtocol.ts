@@ -42,4 +42,4 @@ export function handleFrontendProtocol(frontendRoot: string): void {
 }
 
 export const FRONTEND_SCHEME = SCHEME;
-export const FRONTEND_ENTRY_URL = `${SCHEME}://app/index.html`;
+export const FRONTEND_ENTRY_URL = `${SCHEME}://app/`;

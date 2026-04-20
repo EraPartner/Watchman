@@ -2,21 +2,23 @@
 title: API Documentation
 type: index
 status: active
-date: 2026-04-19
-tags: [api, index, backend, openapi, endpoint, rest, fastify, backup, export, import]
-description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.1 specification (regenerated from TypeScript backend)
+date: 2026-04-20
+tags: [api, index, backend, openapi, endpoint, rest, fastify, backup, export, import, v2, single-user]
+description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.1 specification, no authentication required
 aliases: [api index, endpoints, rest api, swagger, openapi spec, backup api]
 ---
 
 # API Documentation
 
 > [!abstract] Overview
-> Watchman provides a RESTful API with a TypeScript + Fastify 4 backend. The OpenAPI 3.1 specification is complete and reflects all current endpoints.
+> Watchman provides a RESTful API with a TypeScript + Fastify 4 backend. The OpenAPI 3.1 specification is complete and reflects all current endpoints. **No authentication required** (single-user home-lab design).
 >
 > **Base URL**: `http://localhost:3001` (development)
 >
 > **API Version**: 2.0.0  
 > **License**: AGPL-3.0-only
+>
+> **Authentication**: None. Watchman is a single-user application intended for trusted networks. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for details.
 
 ## Response Envelope
 
@@ -58,7 +60,7 @@ Operational health and version information.
 
 | Endpoint            | Method | Description               |
 | ------------------- | ------ | ------------------------- |
-| `GET /meta/health`  | GET    | Liveness probe            |
+| `GET /meta/health`  | GET    | Liveness probe (no auth needed) |
 | `GET /meta/version` | GET    | API version and Node info |
 
 **Response Example** (`/meta/health`):
@@ -70,6 +72,8 @@ Operational health and version information.
   "timestamp": "2026-04-18T12:00:00Z"
 }
 ```
+
+**Note on `/meta/health`**: In split-deploy mode (Electron client + Pi backend), the setup wizard's ConnectStep probes this endpoint with a 3-second timeout to verify the Pi backend is reachable. The OfflineBanner also polls this endpoint every 10 seconds to detect if the backend goes offline. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]].
 
 ### Services Endpoints
 

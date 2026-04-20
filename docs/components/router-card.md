@@ -1,8 +1,10 @@
 ---
 title: "Component: RouterCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, router, network, arp]
 description: Network router monitoring card with ARP table lookup for connected device tracking
 aliases:
@@ -10,6 +12,10 @@ aliases:
 ---
 
 # Component: RouterCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays network router (Beryl AX, Telenet) health status and performs ARP table lookups to show connected devices on the local network.
@@ -63,7 +69,7 @@ ARP table lookup is enabled when:
 
 ## Source
 
-- [[apps/frontend/src/components/RouterCard.tsx]]
+- `apps/frontend/src/components/RouterCard.tsx`
 
 ## Related
 

@@ -19,7 +19,7 @@ aliases:
 | File          | Path                           | Description                        |
 | ------------- | ------------------------------ | ---------------------------------- |
 | **Main Spec** | [[apps/backend/openapi.yaml]]  | Complete OpenAPI 3.0 specification |
-| **Symlink**   | [[apps/backend/api-docs.yaml]] | Symlink for easy access            |
+| **Symlink**   | `apps/backend/api-docs.yaml` | Symlink for easy access            |
 
 ## Interactive Documentation
 

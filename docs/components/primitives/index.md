@@ -47,6 +47,7 @@ SORT file.name ASC
 | Primitive | Purpose | File |
 |-----------|---------|------|
 | [[docs/components/primitives/dialog\|Dialog]] | Modal dialog wrapper | [[apps/frontend/src/components/primitives/Dialog.tsx]] |
+| [[docs/components/primitives/confirm-dialog\|ConfirmDialog]] | Styled confirmation dialog with destructive variant | [[apps/frontend/src/components/primitives/ConfirmDialog.tsx]] |
 | [[docs/components/primitives/sheet\|Sheet]] | Slide-out drawer modal | [[apps/frontend/src/components/primitives/Sheet.tsx]] |
 | [[docs/components/primitives/tooltip\|Tooltip]] | Floating tooltip label | [[apps/frontend/src/components/primitives/Tooltip.tsx]] |
 | [[docs/components/primitives/popover\|Popover]] | Floating interactive panel | [[apps/frontend/src/components/primitives/Popover.tsx]] |
@@ -125,6 +126,7 @@ All primitives are exported from [[apps/frontend/src/components/primitives/index
 export { Button, type ButtonProps } from "./Button";
 export { Surface, type SurfaceProps } from "./Surface";
 export { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription, DialogClose } from "./Dialog";
+export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
 export { Sheet, SheetTrigger, SheetClose, SheetContent, SheetHeader, SheetBody, SheetFooter } from "./Sheet";
 export { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "./Tooltip";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs";
@@ -141,7 +143,7 @@ export { Sparkline, type SparklineProps, type SparklineTone } from "./Sparkline"
 
 ## Demo Page
 
-The [[apps/frontend/src/pages/BentoDemo.tsx|BentoDemo]] page showcases all primitives with interactive examples. Gated by `?bento=1` query or reachable at `/bento` route.
+The `apps/frontend/src/pages/BentoDemo.tsx` (BentoDemo) page showcases all primitives with interactive examples. Gated by `?bento=1` query or reachable at `/bento` route.
 
 ## Phase Roadmap
 

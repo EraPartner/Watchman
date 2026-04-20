@@ -1,14 +1,20 @@
 ---
 title: "API: Frontend Configuration"
 type: api
-status: active
+status: superseded
 date: 2026-04-10
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [api, config, frontend, backend]
 description: GET /api/config/frontend - Frontend configuration endpoint
 aliases: [frontend config, config endpoint, frontend configuration]
 ---
 
 # Frontend Configuration Endpoint
+
+> [!danger] Superseded — No Longer Implemented
+> This document describes the **v1 frontend config endpoint** (`GET /api/config/frontend`). The backend was rewritten to TypeScript + Fastify 4 in v2.0; current config API is at `GET /config/services` and documented in the OpenAPI spec (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Provides runtime configuration to the frontend application. No authentication required.
@@ -21,7 +27,7 @@ aliases: [frontend config, config endpoint, frontend configuration]
 | **Path**   | `/api/config/frontend`                |
 | **Auth**   | None                                  |
 | **Rate**   | `generalLimiter`                      |
-| **Source** | [[apps/backend/routes/metaRoutes.js]] |
+| **Source** | `apps/backend/routes/metaRoutes.js` |
 
 ## Response
 
@@ -64,7 +70,7 @@ aliases: [frontend config, config endpoint, frontend configuration]
 
 Called by the frontend on initial load to determine which service cards to render.
 
-`security.csrf` is consumed by `[[apps/frontend/src/lib/csrf.ts]]` via `[[apps/frontend/src/services/apiClient/endpoints.ts]]` (`getFrontendConfig()`) to configure CSRF header/cookie names dynamically.
+`security.csrf` is consumed by `apps/frontend/src/lib/csrf.ts` via `apps/frontend/src/services/apiClient/endpoints.ts` (`getFrontendConfig()`) to configure CSRF header/cookie names dynamically.
 
 ### Frontend Hook
 
@@ -76,10 +82,10 @@ const { data: config } = useFrontendConfig();
 
 ## Source
 
-- Route module: [[apps/backend/routes/metaRoutes.js]]
-- Registration: [[apps/backend/routes/registerApiRoutes.js]], [[apps/backend/bootstrap/registerRoutes.js]], [[apps/backend/server.js]]
-- Service: [[apps/backend/services/FrontendConfigService.js]]
-- Frontend hook: [[apps/frontend/src/hooks/useFrontendConfig.ts]]
+- Route module: `apps/backend/routes/metaRoutes.js`
+- Registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`, `apps/backend/server.js`
+- Service: `apps/backend/services/FrontendConfigService.js`
+- Frontend hook: `apps/frontend/src/hooks/useFrontendConfig.ts`
 - Query keys: [[apps/frontend/src/lib/queryKeys.ts]]
 - OpenAPI schema: [[apps/backend/openapi.yaml]] (`FrontendConfigResponse`)
 

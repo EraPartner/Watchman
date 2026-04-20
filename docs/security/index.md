@@ -2,16 +2,18 @@
 title: Security
 type: index
 status: active
-date: 2026-04-10
-tags: [security, index]
-description: Index of all security documentation for the Watchman project
+date: 2026-04-20
+tags: [security, index, single-user, network-isolation]
+description: Index of all security documentation for the Watchman project (single-user, no built-in authentication)
 aliases: [security index, security docs]
 ---
 
 # Security
 
 > [!abstract] Overview
-> Watchman implements defense-in-depth security with multiple layers of protection.
+> Watchman is a single-user home-lab application. Built-in authentication has been removed (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]). Security relies on network isolation: firewall rules, VPN, or deployment on a closed local network. In split-deploy mode (Pi backend + Mac client), the backend and client communicate over LAN without TLS; firewall rules and DHCP isolation are critical (see [[docs/adr/018-split-deploy-pi-backend|ADR-018]]).
+>
+> The security documentation below is **for reference only** and documents the network isolation responsibility, not built-in auth mechanisms.
 
 ## Security Index
 
@@ -22,58 +24,68 @@ WHERE type = "security"
 SORT file.name ASC
 ```
 
-## Security Layers
+## Security Approach (Single-User, No Built-In Auth)
 
-| Layer            | Documentation                   | Description       |
-| ---------------- | ------------------------------- | ----------------- | --------------------------------------- |
-| Authentication   | [[docs/security/authentication  | Authentication]]  | JWT, cookies, CSRF protection           |
-| Auth Middleware  | [[docs/security/auth-middleware | Auth Middleware]] | Token management, credential validation |
-| Rate Limiting    | [[docs/security/rate-limiting   | Rate Limiting]]   | Tiered request throttling               |
-| IP Control       | [[docs/security/ip-control      | IP Control]]      | Whitelist/blacklist enforcement         |
-| Headers          | [[docs/architecture/index       | Architecture]]    | Helmet, CSP, HSTS                       |
-| Input Validation | [[docs/reference/code-patterns  | Code Patterns]]   | Sanitization and validation             |
-| Logging          | [[docs/LOGGING                  | Logging]]         | Structured audit logging                |
+| Responsibility   | Mechanism                      | Notes |
+| --- | --- | --- |
+| **Network Isolation** | Firewall / VPN / Closed LAN | Operator's responsibility; no port forwarding to internet |
+| Input Validation | Parameter sanitization and Zod validation | All user inputs validated before processing |
+| Headers          | Helmet, CSP, HSTS (via Fastify) | Standard security headers applied |
+| Logging          | Structured Pino logging with sensitive field redaction | Audit trail for configuration changes |
+
+> [!warning] No Built-In Authentication
+> Watchman **does not** have authentication, CSRF protection, rate-limiting middleware, or account lockout. Ensure network isolation before running Watchman. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
 
 ## Security Features
 
-- **JWT Authentication** - HTTP-only cookies with secure flags
-- **CSRF Protection** - Double-submit cookie pattern
-- **Rate Limiting** - Per-IP, per-endpoint tiered limits
-- **IP Control** - Whitelist/blacklist for sensitive endpoints
-- **Account Lockout** - Failed login tracking and lockout
-- **Input Validation** - Parameter sanitization and type checking
-- **Security Headers** - Helmet, CSP, HSTS, Permissions-Policy
-- **CORS Restrictions** - Origin-validated CORS in production
+- **Input Validation** - Zod schema validation and type checking on all endpoints
+- **Security Headers** - Helmet, CSP, HSTS, Permissions-Policy (via Fastify)
+- **CORS Restrictions** - Origin-validated CORS configured via `FRONTEND_URL`
 - **Request Timeout** - Global timeout prevents hanging requests
 - **Response Size Limit** - Prevents large response DoS
-- **Command Injection Prevention** - Strict validation for SSH/ARP commands
-- **Structured Logging** - PII redaction, audit trails
+- **Command Injection Prevention** - Strict validation for SSH/SNMP/ARP commands
+- **Structured Logging** - PII redaction in Pino logs, configuration audit trail
+- **Master Key Protection** - AES-256-GCM encryption of service secrets at rest
+- **No Network Exposure** - Intended for trusted networks only (operator's responsibility)
 
 ## Production Hardening
 
 See [[docs/guides/deployment|Deployment Guide]] for production security checklist.
 
-## Recent Auth/CSRF Test Coverage
+## Authentication (Removed as of v2.3)
 
-- Frontend auth and route-protection tests: [[apps/frontend/src/hooks/useAuth.test.tsx]] (+11), [[apps/frontend/src/components/AuthGuard.test.tsx]] (+3), [[apps/frontend/src/pages/Login.test.tsx]] (+7)
-  - includes auth bootstrap fallback username, bootstrap payload-error handling, login/logout success paths, logout/login failure paths, outside-provider throw behavior, and non-`Error` network fallback assertions
-  - includes login page redirect, missing-credentials validation, remember-me success, failed login rendering, default fallback message, auth-context error rendering, and loading/disabled submit coverage
-- Frontend CSRF utility coverage: [[apps/frontend/src/lib/csrf.test.ts]] (+6)
-  - includes token header injection, cookie-read exception logging, `hasToken()` absent-token false-path, missing-token no-header behavior, empty config fallback, and custom cookie/header config token injection
-- Frontend API auth-adjacent endpoint coverage: [[apps/frontend/src/services/apiClient/endpoints.test.ts]] (expanded 3 → 11 tests)
-  - includes login fallback token handling and endpoint composition edge cases
-- Backend auth/csrf edge-branch coverage: [[apps/backend/tests/authMiddleware.test.js]], [[apps/backend/tests/authToken.test.js]], [[apps/backend/tests/csrf.test.js]]
-  - auth and csrf middleware now report **100% line coverage**
-  - backend suite status: **81/81 tests passing**
+As of v2.3, all built-in authentication has been removed:
+- Deleted `useAuth` hook, AuthGuard component, and Login page
+- Removed JWT token generation, CSRF validation, and rate-limiting middleware
+- Removed `AUTH_USERNAME` and `AUTH_PASSWORD_HASH` environment variables
+
+See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
+
+**Security is now the operator's responsibility:** Use firewall rules, VPN, or deployment on a closed local network to prevent unauthorized access.
+
+## LAN-Only Communication (Split Deploy)
+
+When running in split-deploy mode (Electron client paired with Raspberry Pi backend):
+
+- All API calls from Mac to Pi travel over LAN HTTP without TLS
+- Configuration secrets are encrypted at rest on the Pi with AES-256-GCM
+- Network isolation (VPN, firewall, closed Wi-Fi) prevents unauthorized access
+- No support for internet-facing deployments; this is a strict LAN-only mode
+- Operator must reserve a DHCP lease or use static IP for the Pi to keep the URL stable
+
+See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] and [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]] for setup guidance.
 
 ## Related
 
+- [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] — Single-user, no authentication
+- [[docs/adr/018-split-deploy-pi-backend|ADR-018]] — Split deploy LAN architecture
 - [[docs/architecture/index|Architecture]]
 - [[docs/guides/deployment|Deployment Guide]]
+- [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]]
 
 ## PlantUML Diagrams
 
-### Security Layers Overview
+### Request Pipeline (Single-User, No Auth)
 
 ```plantuml
 @startuml
@@ -83,110 +95,30 @@ package "Incoming Request" as Request {
     [HTTP Request] as Req
 }
 
-package "Layer 1: Transport" {
+package "Transport Hardening" {
     [Helmet] as H1
-    [CORS] as C1
+    [CORS (watchman:// origin)] as C1
 }
 
-package "Layer 2: Access Control" {
-    [IP Control] as IP
-    [Rate Limiter] as Rate
-}
-
-package "Layer 3: Authentication" {
-    [JWT Auth] as JWT
-    [CSRF] as CSRF
-    [Account Lockout] as Lockout
-}
-
-package "Layer 4: Validation" {
+package "Request Shaping" {
     [Request Timeout] as Timeout
     [Response Size Limit] as SizeLimit
-    [Input Validation] as Valid
+    [Log Sampling] as Log
+}
+
+package "Application Layer" {
+    [Zod Input Validation] as Valid
+    [Error Handler] as Err
 }
 
 Req --> H1
 H1 --> C1
-C1 --> IP
-IP --> Rate
-Rate --> JWT
-JWT --> CSRF
-CSRF --> Lockout
-Lockout --> Timeout
+C1 --> Timeout
 Timeout --> SizeLimit
-SizeLimit --> Valid
+SizeLimit --> Log
+Log --> Valid
+Valid --> Err
 @enduml
 ```
 
-### Authentication Flow
-
-```plantuml
-@startuml
-!theme plain
-
-actor "User" as User
-participant "Frontend" as FE
-participant "Backend" as BE
-participant "Auth Middleware" as Auth
-database "Environment" as Env
-
-User -> FE : Enter credentials
-FE -> BE : POST /api/auth/login
-
-BE -> Auth : authenticateCredentials()
-Auth -> Env : Get AUTH_USERNAME\nAUTH_PASSWORD_HASH
-
-alt Valid
-    Auth -> Auth : Generate JWT
-    Auth --> BE : Token
-    BE -> BE : Set HTTP-only cookie\nSecure, SameSite
-    BE --> FE : 200 OK
-else Invalid
-    Auth --> BE : null
-    BE --> FE : 401 Unauthorized
-end
-@enduml
-```
-
-### Attack Prevention
-
-```plantuml
-@startuml
-!theme plain
-
-participant "Attacker" as Attacker
-participant "Rate Limiter" as Rate
-participant "Account Lockout" as Lockout
-participant "IP Control" as IP
-
-note over Attacker
-  Multiple attack vectors
-end note
-
-alt Brute Force Login
-    Attacker -> Rate : POST /api/auth/login\n(many attempts)
-    Rate -> Rate : Check rate limit
-    alt Exceeds limit
-        Rate --> Attacker : 429 Too Many Requests
-    end
-
-    Rate -> Lockout : Track failures
-    alt Lockout threshold
-        Lockout --> Attacker : Account locked
-    end
-
-else DDoS Attack
-    Attacker -> Rate : Many requests
-    Rate -> Rate : Tiered limits
-    Rate --> Attacker : 429 (per tier)
-
-else Invalid IP
-    Attacker -> IP : Request
-    IP -> IP : Check whitelist/blacklist
-    alt Not allowed
-        IP --> Attacker : 403 Forbidden
-    end
-
-end
-@enduml
-```
+> Historical multi-layer JWT/CSRF/rate-limit/IP-control diagrams were removed in v2.3 per [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]. See [[docs/security/authentication|Authentication (Superseded)]] for archived flow diagrams.

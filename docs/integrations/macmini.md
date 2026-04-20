@@ -30,7 +30,7 @@ MACMINI_SSH_KEY_PATH=/path/to/your/ssh/key
 
 ## Service Class
 
-[[apps/backend/services/MacMiniService.js|MacMiniService.js]]
+`apps/backend/services/MacMiniService.js`
 
 ### Methods
 
@@ -39,7 +39,7 @@ MACMINI_SSH_KEY_PATH=/path/to/your/ssh/key
 
 ## Frontend Component
 
-[[apps/frontend/src/components/MacMiniCard.tsx|MacMiniCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

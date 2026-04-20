@@ -29,7 +29,7 @@ RASPI_PORT=22
 
 ## Service Class
 
-[[apps/backend/services/RaspberryPiService.js|RaspberryPiService.js]]
+`apps/backend/services/RaspberryPiService.js`
 
 ### Methods
 
@@ -38,7 +38,7 @@ RASPI_PORT=22
 
 ## Frontend Component
 
-[[apps/frontend/src/components/RaspberryPiCard.tsx|RaspberryPiCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

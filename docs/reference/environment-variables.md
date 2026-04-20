@@ -2,9 +2,9 @@
 title: Environment Variables
 type: reference
 status: active
-date: 2026-04-19
-tags: [reference, configuration, backend]
-description: Complete reference of all environment variables for the Watchman project
+date: 2026-04-20
+tags: [reference, configuration, backend, desktop, environment, single-user]
+description: Complete reference of all environment variables for the Watchman project (single-user, no authentication)
 aliases: [env vars, environment, configuration, config]
 ---
 
@@ -17,23 +17,31 @@ aliases: [env vars, environment, configuration, config]
 
 | Variable             | Description                               | Example                                              |
 | -------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| `AUTH_USERNAME`      | Admin username                            | `admin`                                              |
-| `AUTH_PASSWORD_HASH` | bcrypt password hash                      | `$2b$10$...`                                         |
-| `JWT_SECRET`         | JWT signing secret (min 32 chars)         | `your-super-secret-jwt-key-min-32-characters`        |
-| `FRONTEND_URL`       | Frontend origin(s), comma/space-separated | `http://localhost:5173 https://watchman.example.com` |
-| `WATCHMAN_MASTER_KEY` | AES-256-GCM key for encrypting secrets (base64, 32 bytes) | `Z0VzN3AxMHBXZ3UyaDRxZ0I1Y...` (base64-decoded = 32 bytes) |
+| `FRONTEND_URL`       | Frontend origin(s), comma/space-separated (for CORS) | `http://localhost:5173 https://watchman.example.com` |
+
+> [!info] Authentication Removed
+> As of v2.3, Watchman is a single-user home-lab application with **no authentication**. Previously required variables `AUTH_USERNAME`, `AUTH_PASSWORD_HASH`, and `JWT_SECRET` have been removed. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for context.
+>
+> **Network isolation** (firewall, VPN, or closed LAN) is the operator's responsibility.
+
+## Master Key Configuration
+
+| Variable             | Description                               | Default | Example                                              |
+| -------------------- | ----------------------------------------- | ------- | ---------------------------------------------------- |
+| `WATCHMAN_MASTER_KEY` | AES-256-GCM key for encrypting service secrets (base64, 32 bytes, optional) | Auto-provisioned at `{DATA_DIR}/master.key` if not set | `Z0VzN3AxMHBXZ3UyaDRxZ0I1Y...` (base64-decoded = 32 bytes) |
 
 > [!warning] Master Key Loss
-> If `WATCHMAN_MASTER_KEY` is lost or rotated, all encrypted service secrets become unrecoverable. Store it securely in your deployment (secrets vault, encrypted environment, encrypted `.env.local`, etc.). Losing it requires re-entering all service credentials.
+> If `WATCHMAN_MASTER_KEY` is lost or rotated, all encrypted service secrets become unrecoverable. Store the master key file securely (encrypted backup, secrets vault). On Raspberry Pi deployment, preserve `~/.watchman/data/master.key` during backups. Losing it requires re-entering all service credentials.
 
 ## Server Configuration
 
 | Variable            | Description                                                                                                                  | Default       | Example                            |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------------------- |
-| `PORT`              | Backend server port                                                                                                          | `3001`        | `3001`                             |
+| `BACKEND_V2_PORT`   | Backend server port (changed from 3101 → 3001 in v2.3)                                                                      | `3001`        | `3001`, `8080`                     |
+| `BACKEND_V2_HOST`   | Backend server bind address                                                                                                  | `0.0.0.0`     | `127.0.0.1`, `0.0.0.0`             |
 | `NODE_ENV`          | Environment mode                                                                                                             | `development` | `production`                       |
 | `TRUST_PROXY`       | Fastify `trust proxy` setting parsed from env (boolean, hop count, or trusted subnet/IP list) and applied in server startup. | `1`           | `false`, `1`, `loopback,127.0.0.1` |
-| `AUTH_RETURN_TOKEN` | Feature flag for legacy login response bodies: when `true`, includes deprecated `token` field in `/api/auth/login` JSON.     | `false`       | `true`                             |
+| `LOG_LEVEL`         | Pino logging level                                                                                                           | `info`        | `debug`, `info`, `warn`, `error`   |
 
 > [!info] Service Configuration
 > As of v2.2, services are managed via the UI and stored in DuckDB. The `ENABLED_SERVICES` and per-service env vars are removed. On first boot, legacy service env vars are migrated to the database. See [[docs/features/ui-configuration|UI Configuration Feature]] for details.
@@ -43,27 +51,39 @@ aliases: [env vars, environment, configuration, config]
 | Variable             | Description                                 | Default              | Example            |
 | -------------------- | ------------------------------------------- | -------------------- | ------------------ |
 | `TIMESERIES_ENABLED` | Enable/disable time-series metrics storage  | `true`               | `true`, `false`    |
-| `DATA_DIR`           | Directory for DuckDB and other data files   | `./data`             | `/var/lib/watchman` |
 
 > [!info] Time-Series Storage
 > When `TIMESERIES_ENABLED=true`, Watchman stores metrics in a DuckDB database at `{DATA_DIR}/timeseries.duckdb`. The database contains 5 tables (metric_raw, metric_1m, metric_5m, metric_1h, rollup_state) with automatic background rollups and retention policies. See [[docs/features/time-series-history|Time-Series Feature Documentation]] for details.
 
-## Cookie Configuration
+## Raspberry Pi / Standalone Deployment
 
-| Variable               | Description            | Default                        |
-| ---------------------- | ---------------------- | ------------------------------ |
-| `COOKIE_DOMAIN`        | Override cookie domain | Auto-derived from FRONTEND_URL |
-| `COOKIE_STRICT_DOMAIN` | Force strict domain    | `false` for multiple origins   |
-| `CSRF_COOKIE_NAME`     | CSRF cookie name       | `csrfToken`                    |
-| `CSRF_HEADER_NAME`     | CSRF header name       | `x-csrf-token`                 |
+| Variable             | Description                                 | Default             | Example |
+| -------------------- | ------------------------------------------- | ------------------- | ------- |
+| `DATA_DIR`           | Directory for DuckDB, master key, backups   | `./data`            | `/home/pi/.watchman/data` |
+| `BACKEND_V2_PORT`    | Fastify server port                         | `3001`              | `3001`, `8080` |
+| `BACKEND_V2_HOST`    | Fastify server bind address                 | `0.0.0.0`           | `127.0.0.1`, `0.0.0.0` |
 
-## Auth and Proxy Notes
+> [!info] Pi Data Directory
+> For systemd deployment on Raspberry Pi, set `DATA_DIR=/home/pi/.watchman/data` in the unit file. Master key is auto-provisioned at `{DATA_DIR}/master.key` (mode 0600) on first boot. See [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]] for complete setup.
 
-- `AUTH_RETURN_TOKEN=false` is the default and recommended mode; authentication is cookie-first via HTTP-only `token` cookie.
-- Use `AUTH_RETURN_TOKEN=true` only for temporary client compatibility while migrating away from reading `token` from login JSON.
-- `TRUST_PROXY` affects client IP detection and secure cookie/protocol behavior when running behind reverse proxies.
+## Desktop App Configuration (Electron)
+
+> [!warning] Split Deploy — No Backend Spawn
+> As of v2.5, the Electron desktop app no longer spawns a backend subprocess. It is now a pure client that pairs with a remote backend (typically on Raspberry Pi) via setup-wizard URL entry. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] and [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]].
+
+| Variable                    | Description                                   | Default             | Notes |
+| --------------------------- | --------------------------------------------- | ------------------- | ----- |
+| `WATCHMAN_DEV_URL`          | Frontend URL override (dev mode only)         | `watchman://app/`   | For testing custom frontend server |
+
+> [!info] Desktop Data Directory
+> In Electron, `DATA_DIR` is not used. Client configuration is stored at `<userData>/client-config.json` and contains the remote backend URL set via setup wizard. See [[docs/guides/running-the-desktop-app|Desktop App Guide]] for platform-specific paths.
+
+## Important Notes
+
+- `TRUST_PROXY` affects client IP detection and protocol behavior when running behind reverse proxies.
 - `FRONTEND_URL` supports multiple origins separated by commas and/or spaces; each origin is validated individually in code.
 - Master key rotation: See [[docs/features/ui-configuration|UI Configuration Feature]] for implications.
+- **No auth configuration needed**: Watchman is single-user. Use network isolation (firewall, VPN) for security.
 
 ## Service Configuration (Migrated to UI)
 

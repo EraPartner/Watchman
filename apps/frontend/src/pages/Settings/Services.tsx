@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, StatusDot } from "../../components/primitives";
 import {
+  Button,
+  StatusDot,
   Dialog,
   DialogContent,
   DialogTitle,
+  ConfirmDialog,
 } from "../../components/primitives";
 import ServiceEditor from "./ServiceEditor";
 import {
@@ -26,6 +28,9 @@ export default function Services() {
   const updateMut = useUpdateService();
   const deleteMut = useDeleteService();
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
+  const [pendingDelete, setPendingDelete] = useState<ServiceInstance | null>(
+    null,
+  );
 
   return (
     <div className="min-h-screen bg-[var(--surface-0)] p-6">
@@ -103,11 +108,7 @@ export default function Services() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    if (confirm(`Delete ${svc.kind}/${svc.instanceId}?`)) {
-                      deleteMut.mutate(svc.id);
-                    }
-                  }}
+                  onClick={() => setPendingDelete(svc)}
                 >
                   Delete
                 </Button>
@@ -145,6 +146,21 @@ export default function Services() {
           )}
         </DialogContent>
       </Dialog>
+
+      {pendingDelete ? (
+        <ConfirmDialog
+          open={!!pendingDelete}
+          onOpenChange={(open) => !open && setPendingDelete(null)}
+          title={`Delete ${pendingDelete.kind}/${pendingDelete.instanceId}?`}
+          description="This removes the service and stops polling. Cannot be undone without re-adding."
+          destructive
+          pending={deleteMut.isPending}
+          onConfirm={async () => {
+            await deleteMut.mutateAsync(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

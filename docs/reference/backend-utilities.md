@@ -1,14 +1,20 @@
 ---
 title: Backend Utilities
 type: reference
-status: active
+status: superseded
 date: 2026-04-02
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [reference, backend, utilities, utils]
 description: Reference documentation for all backend utility modules - circuit breaker, validation, pagination, and more
 aliases: [utilities, utils, backend utils, helper functions]
 ---
 
 # Backend Utilities
+
+> [!danger] Superseded — No Longer Implemented
+> This document describes **v1 backend utility modules** (`apps/backend/utils/*.js`). The backend was rewritten to TypeScript + Fastify 4 in v2.0; utilities are now in `apps/backend/src/infra/` (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > The Watchman backend includes several utility modules that provide shared functionality across services and middleware. This document covers all utility modules.
@@ -17,18 +23,18 @@ aliases: [utilities, utils, backend utils, helper functions]
 
 | Utility            | File                                        | Description                                |
 | ------------------ | ------------------------------------------- | ------------------------------------------ |
-| Circuit Breaker    | [[apps/backend/utils/circuitBreaker.js]]    | Fault tolerance for external service calls |
-| Validation         | [[apps/backend/utils/validation.js]]        | Input sanitization and validation          |
-| Pagination         | [[apps/backend/utils/pagination.js]]        | API response pagination                    |
-| Security           | [[apps/backend/utils/security.js]]          | Security helpers (IPs, sanitization)       |
-| Version Comparison | [[apps/backend/utils/versionComparison.js]] | Software version comparison                |
-| Ping               | [[apps/backend/utils/ping.js]]              | ICMP ping functionality                    |
-| HTTP Agent Pool    | [[apps/backend/utils/httpAgentPool.js]]     | HTTP/HTTPS connection pooling              |
-| Service Utils      | [[apps/backend/utils/serviceUtils.js]]      | Service-specific utilities                 |
+| Circuit Breaker    | `apps/backend/utils/circuitBreaker.js`    | Fault tolerance for external service calls |
+| Validation         | `apps/backend/utils/validation.js`        | Input sanitization and validation          |
+| Pagination         | `apps/backend/utils/pagination.js`        | API response pagination                    |
+| Security           | `apps/backend/utils/security.js`          | Security helpers (IPs, sanitization)       |
+| Version Comparison | `apps/backend/utils/versionComparison.js` | Software version comparison                |
+| Ping               | `apps/backend/utils/ping.js`              | ICMP ping functionality                    |
+| HTTP Agent Pool    | `apps/backend/utils/httpAgentPool.js`     | HTTP/HTTPS connection pooling              |
+| Service Utils      | `apps/backend/utils/serviceUtils.js`      | Service-specific utilities                 |
 
 ## Circuit Breaker
 
-[[apps/backend/utils/circuitBreaker.js]] implements the circuit breaker pattern to prevent cascading failures when external services are unavailable.
+`apps/backend/utils/circuitBreaker.js` implements the circuit breaker pattern to prevent cascading failures when external services are unavailable.
 
 ### States
 
@@ -57,7 +63,7 @@ const result = await breaker.execute(() => service.checkHealth());
 
 ### Integration
 
-Used by [[apps/backend/services/ServiceManager.js|ServiceManager]] to protect service calls:
+Used by `apps/backend/services/ServiceManager.js` (ServiceManager) to protect service calls:
 
 ```javascript
 // In ServiceManager.getServiceHealth()
@@ -67,7 +73,7 @@ const health = await breaker.execute(() => service.checkHealth());
 
 ## Validation
 
-[[apps/backend/utils/validation.js]] provides input sanitization to prevent injection attacks.
+`apps/backend/utils/validation.js` provides input sanitization to prevent injection attacks.
 
 ### Functions
 
@@ -95,7 +101,7 @@ const safeInput = sanitizeString(userInput, 100);
 
 ## Pagination
 
-[[apps/backend/utils/pagination.js]] provides pagination for API endpoints returning large lists.
+`apps/backend/utils/pagination.js` provides pagination for API endpoints returning large lists.
 
 ### Functions
 
@@ -133,7 +139,7 @@ const safeInput = sanitizeString(userInput, 100);
 
 ## Security
 
-[[apps/backend/utils/security.js]] provides security-related helper functions.
+`apps/backend/utils/security.js` provides security-related helper functions.
 
 ### Functions
 
@@ -146,7 +152,7 @@ const safeInput = sanitizeString(userInput, 100);
 
 ## Version Comparison
 
-[[apps/backend/utils/versionComparison.js]] compares software version strings.
+`apps/backend/utils/versionComparison.js` compares software version strings.
 
 ### Functions
 
@@ -170,7 +176,7 @@ const hasUpdate = isUpdateAvailable("v0.107.8", "v0.108.0");
 
 ## Ping
 
-[[apps/backend/utils/ping.js]] provides ICMP ping functionality for network diagnostics.
+`apps/backend/utils/ping.js` provides ICMP ping functionality for network diagnostics.
 
 ### Functions
 
@@ -191,7 +197,7 @@ const hasUpdate = isUpdateAvailable("v0.107.8", "v0.108.0");
 
 ## HTTP Agent Pool
 
-[[apps/backend/utils/httpAgentPool.js]] manages HTTP/HTTPS connection pooling.
+`apps/backend/utils/httpAgentPool.js` manages HTTP/HTTPS connection pooling.
 
 ### Purpose
 

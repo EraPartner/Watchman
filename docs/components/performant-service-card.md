@@ -3,12 +3,18 @@ title: PerformantServiceCard Component
 type: component
 status: deprecated
 date: 2026-04-09
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, performance, memo, usememo]
 description: Enhanced service card with priority-based polling intervals, memoized calculations, web URL links, and performance level indicators
 aliases: [performant service card, priority service card]
 ---
 
 # PerformantServiceCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Summary
 > An enhanced version of the service card with priority-based polling intervals, `useMemo` for expensive calculations, web URL links, and visual performance level indicators.

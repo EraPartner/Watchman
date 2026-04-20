@@ -2,19 +2,19 @@
 title: Architecture
 type: index
 status: active
-date: 2026-04-19
-tags: [architecture, index, fastify, typescript, layered, duckdb, configuration]
-description: Index of all architecture documentation for the Watchman project - client-server with TypeScript backend
+date: 2026-04-20
+tags: [architecture, index, fastify, typescript, layered, duckdb, configuration, electron, single-user]
+description: Index of all architecture documentation for the Watchman project - single-user client-server with TypeScript backend
 aliases: [architecture index, system design, system architecture]
 ---
 
 # Architecture
 
 > [!abstract] Overview
-> Watchman uses a client-server architecture with a React 18 frontend and TypeScript + Fastify 4 backend. The backend uses a layered architecture (config → core → infra → domain → application → transport) with in-process LRU caching and croner-based background polling.
+> Watchman is a **single-user home-lab monitoring dashboard** with a React 18 frontend and TypeScript + Fastify 4 backend. No built-in authentication; security relies on network isolation. The backend uses a layered architecture (config → core → infra → domain → application → transport) with in-process LRU caching and croner-based background polling. The frontend is available as both a web app and as a standalone Electron desktop wrapper.
 
 > [!note]
-> The backend is bootstrapped from [[apps/backend/src/index.ts|index.ts]], which initializes the config, core, infra, and domain layers, then registers HTTP routes and WebSocket handlers via Fastify.
+> The backend is bootstrapped from [[apps/backend/src/index.ts|index.ts]], which initializes the config, core, infra, and domain layers, then registers HTTP routes and WebSocket handlers via Fastify. The desktop app [[apps/desktop/src/main.ts|main.ts]] spawns the backend process and serves the frontend via a custom `watchman://` protocol.
 
 ## Architecture Index
 
@@ -35,32 +35,44 @@ SORT file.name ASC
 | [[docs/architecture/core-systems          | Core Systems]]          | Event Bus and Service Lifecycle orchestration  |
 | [[docs/architecture/data-flow             | Data Flow]]             | Authentication, monitoring, and WebSocket flows |
 
+## Deployment Topologies
+
+### Single-Box (Bundled Electron)
+
+Frontend and backend run on the same machine (Mac/Windows/Linux) as a standalone Electron app.
+
+### Split Deploy (Pi Backend + Mac Client)
+
+Backend runs natively on Raspberry Pi under systemd; Electron becomes a pure client on Mac that pairs via setup-wizard URL entry. Polling is continuous and unaffected by Mac sleep. Data lives at `~/.watchman/data/` on the Pi. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] and [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]].
+
 ## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Frontend (Vite + React)                  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   Dashboard  │  │  Service     │  │   Auth UI    │     │
+│  │   Dashboard  │  │  Service     │  │   Settings   │     │
 │  │              │  │  Cards       │  │              │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 └─────────────────────────────────────────────────────────────┘
-                            │ HTTPS / HTTP
+                            │ HTTP (LAN)
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  Backend API (Node.js/Express)              │
+│            Backend API (Node.js + Fastify 4)                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │ Auth Layer   │  │  Middleware  │  │   API Routes │     │
-│  │ - JWT        │  │  - CSRF      │  │  - /health   │     │
-│  │ - Rate Limit │  │  - Logging   │  │  - /api/*    │     │
-│  │ - IP Control │  │  - Cache     │  │  - /api/docs │     │
+│  │  Middleware  │  │   Logging    │  │   API Routes │     │
+│  │  - CORS      │  │  - Audit     │  │  - /health   │     │
+│  │  - Timeout   │  │  - PII       │  │  - /api/*    │     │
+│  │  - Validation│  │  - redaction │  │  - /api/docs │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │              ServiceManager                         │   │
+│  │            ServiceRegistry + Poller                │   │
 │  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐     │   │
 │  │  │AdGuard │ │Bitcoin │ │  Tor   │ │ IPFS   │ ... │   │
 │  │  └────────┘ └────────┘ └────────┘ └────────┘     │   │
+│  │                                                    │   │
+│  │  DuckDB: timeseries + service config + audit     │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                             │
@@ -75,8 +87,14 @@ SORT file.name ASC
 ## Related
 
 - [[docs/adr/index|Architecture Decision Records]]
+- [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] — TypeScript + Fastify 4 backend
 - [[docs/adr/014-time-series-duckdb-and-bento-design-system|ADR-014]] — Time-series + bento design system
 - [[docs/adr/015-ui-driven-service-configuration|ADR-015]] — UI-driven service configuration with DuckDB + encryption
+- [[docs/adr/016-electron-desktop-wrapper|ADR-016]] — Electron desktop wrapper with custom protocol
+- [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] — Single-user design, removed auth, frontend v2 migration
+- [[docs/adr/018-split-deploy-pi-backend|ADR-018]] — Split Deploy: Pi Backend + Mac Electron Client
+- [[docs/guides/running-the-desktop-app|Desktop App Guide]] — Build and run the Electron app
+- [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]] — Native systemd deployment on Raspberry Pi
 - [[docs/components/primitives/index|Primitive Components Index]]
 - [[docs/features/index|Features]]
 

@@ -1,7 +1,7 @@
 ---
 title: "Hook: useFrontendConfig (replaces useConfig)"
 type: component
-status: active
+status: superseded
 date: 2026-04-09
 tags: [hook, frontend, react, config]
 description: React Query frontend configuration hook; legacy useConfig hook removed
@@ -62,8 +62,8 @@ interface FrontendConfig {
 - Shares cached config across hooks/components via React Query
 - Used by `useEnabledServices` and service cards that need frontend runtime config
 
-> [!note] Legacy hook removal
-> `[[apps/frontend/src/hooks/use-config.tsx]]` was removed as part of refactoring. Consumers should use `[[apps/frontend/src/hooks/useFrontendConfig.ts]]`.
+> [!warning] Removed (v2.3)
+> Both `use-config.tsx` and `useFrontendConfig.ts` were removed when auth and frontend config endpoints were dropped. This document is preserved for historical reference.
 
 ## Usage Example
 
@@ -86,7 +86,7 @@ function Header() {
 
 ## Source
 
-- [[apps/frontend/src/hooks/useFrontendConfig.ts]]
+Files removed in v2.3: `apps/frontend/src/hooks/use-config.tsx`, `apps/frontend/src/hooks/useFrontendConfig.ts`
 
 ## Related
 

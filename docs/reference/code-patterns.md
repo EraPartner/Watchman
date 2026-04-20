@@ -41,55 +41,34 @@ export default class ServiceName {
 }
 ```
 
-### Factory Registration Pattern
+### Service Registration Pattern
 
-Services are registered in `serviceFactoryConfig.js`:
+Services are registered in [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]]:
 
-```javascript
-import ServiceName from "./ServiceName.js";
-
-export const serviceFactoryConfigs = {
-  servicename: {
-    ServiceClass: ServiceName,
-    getConfig: () => {
-      if (!process.env.SERVICENAME_HOST) return null;
-      return { host: process.env.SERVICENAME_HOST };
-    },
-  },
-};
+```typescript
+// apps/backend/src/domain/ServiceRegistry.ts
+export class ServiceRegistry {
+  static register(service: BaseService): void { ... }
+  static get(id: string): BaseService | undefined { ... }
+  static getAll(): BaseService[] { ... }
+}
 ```
 
-### Route Middleware Pattern
+Services are instantiated by kind via `ServiceFactory` and wired into the `BackgroundPoller` at bootstrap.
 
-```javascript
-app.get(
-  "/api/service/endpoint",
-  rateLimiter, // Rate limiting
-  requireAuth, // Authentication (if needed)
-  verifyCsrf, // CSRF protection (for mutations)
-  requireServiceEnabled("service"), // Service availability
-  cacheMiddleware, // Response caching (if needed)
-  async (req, res) => {
+### Route Plugin Pattern (Fastify v4)
+
+Each transport concern is a Fastify plugin registered in `[[apps/backend/src/transport/http/server.ts]]`:
+
+```typescript
+import fp from "fastify-plugin";
+
+const serviceRoutes = fp(async (fastify) => {
+  fastify.get("/services/:id/health", async (req, reply) => {
     // Handler
-  }
-);
+  });
+});
 ```
-
-### Route Registration Pattern
-
-Route handlers are registered through focused route modules and wired in `server.js`:
-
-```javascript
-import { registerAuthRoutes } from "./routes/authRoutes.js";
-import { registerMetaRoutes } from "./routes/metaRoutes.js";
-
-registerAuthRoutes(app, deps);
-registerMetaRoutes(app, deps);
-```
-
-Standard per-service status/stats/update endpoints remain factory-generated via `createServiceRoutes()` and `createUpdatesRoute()`.
-
-Shared route-level helpers are centralized in `[[apps/backend/routes/routeUtils.js]]` and consumed by route modules (including `[[apps/backend/routes/serviceFactory.js]]`, `[[apps/backend/routes/serviceAliasRoutes.js]]`, `[[apps/backend/routes/routerRoutes.js]]`, `[[apps/backend/routes/metaRoutes.js]]`, `[[apps/backend/routes/controlRoutes.js]]`, `[[apps/backend/routes/homebridgeRoutes.js]]`, `[[apps/backend/routes/instanceRoutes.js]]`, and `[[apps/backend/routes/authRoutes.js]]`) to reduce duplicated service-context and error-message logic without changing route contracts.
 
 ### Error Handling Pattern
 
@@ -134,7 +113,7 @@ logger.error("Unhandled UI error", { error, componentStack });
 
 Use `unknown` in catch blocks and narrow before logging details where needed.
 
-Related files: `[[apps/frontend/src/lib/logger.ts]]`, `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/hooks/useAuth.tsx]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`, `[[apps/frontend/src/lib/csrf.ts]]`.
+Related files: `[[apps/frontend/src/lib/logger.ts]]`, `[[apps/frontend/src/hooks/useWebSocket.ts]]`, `[[apps/frontend/src/components/ErrorBoundary.tsx]]`.
 
 Redaction behavior note: in `[[apps/frontend/src/lib/logger.ts]]`, when a redaction regex matches without a capture group, the replacement falls back to `[REDACTED]`.
 

@@ -3,12 +3,18 @@ title: OptimizedServiceCard Component
 type: component
 status: deprecated
 date: 2026-04-09
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, memo]
 description: Base service card component with React.memo optimization and React Query data fetching for health and stats
 aliases: [optimized service card, service card base]
 ---
 
 # OptimizedServiceCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Summary
 > A memoized React component that displays a service's health status and statistics using React Query for data fetching. Serves as the base template for individual service cards.

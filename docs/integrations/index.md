@@ -11,7 +11,7 @@ aliases: [integrations index, services, service docs]
 # Service Integrations
 
 > [!abstract] Overview
-> Watchman integrates with 14+ self-hosted service types. Each integration extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` and `getStats()` methods. Services are registered via [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry]] using keys like `${kind}:${instanceId}` (e.g., `qbittorrent:1`, `qbittorrent:2` for multi-instance support).
+> Watchman integrates with 14+ self-hosted service types. Each integration extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` and `getStats()` methods. Services are registered via [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]] using keys like `${kind}:${instanceId}` (e.g., `qbittorrent:1`, `qbittorrent:2` for multi-instance support).
 
 ## Integration Index
 

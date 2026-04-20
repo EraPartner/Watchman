@@ -1,14 +1,20 @@
 ---
 title: "Component: RaspberryPiCard"
 type: component
-status: active
+status: superseded
 date: 2026-04-03
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, service-card, raspberry-pi, gpio, ssh]
 description: Raspberry Pi monitoring card with GPIO status, hardware info, and system metrics
 aliases: [raspberry pi card, rpi card, pi monitoring, gpio card]
 ---
 
 # Component: RaspberryPiCard
+
+> [!danger] Superseded — Legacy Phase 6 Components
+> These per-service `*Card` components describe **v1 frontend architecture** (Phase 6, individual card components). The frontend was rewritten in Phase 3 with a `ServiceTile` + renderer registry bento dashboard (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] and [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Displays Raspberry Pi health and statistics including hardware model, GPIO pin states, system resources, and connectivity.
@@ -66,7 +72,7 @@ Uses React Query with `useQuery` for status polling.
 
 ## Source
 
-- [[apps/frontend/src/components/RaspberryPiCard.tsx]]
+- `apps/frontend/src/components/RaspberryPiCard.tsx`
 
 ## Related
 

@@ -1,96 +1,72 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 
-describe("getWebSocketUrl", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    vi.doUnmock("./env");
-    vi.resetModules();
-  });
-
-  it("uses secure wss protocol for https backend URL", async () => {
-    vi.stubEnv("VITE_BACKEND_URL", "https://api.example.com");
-
-    const { getWebSocketUrl } = await import("./backendUrl");
-    expect(getWebSocketUrl()).toBe("wss://api.example.com/ws");
-  });
-
-  it("uses ws protocol for http backend URL", async () => {
-    vi.stubEnv("VITE_BACKEND_URL", "http://api.example.com:3001");
-
-    const { getWebSocketUrl } = await import("./backendUrl");
-    expect(getWebSocketUrl("events")).toBe("ws://api.example.com:3001/events");
-  });
-
-  it("falls back to localhost websocket URL when backend env URL is empty", async () => {
-    vi.stubEnv("VITE_BACKEND_URL", "");
-
-    const { getWebSocketUrl } = await import("./backendUrl");
-    expect(getWebSocketUrl("events")).toBe("ws://localhost:3001/events");
-  });
-
-  it("normalizes websocket path when missing leading slash", async () => {
-    vi.stubEnv("VITE_BACKEND_URL", "https://api.example.com");
-
-    const { getWebSocketUrl } = await import("./backendUrl");
-    expect(getWebSocketUrl("updates")).toBe("wss://api.example.com/updates");
-  });
-
-  it("falls back to runtime window host when backend env URL is invalid", async () => {
-    vi.doMock("./env", () => ({
-      env: {
-        get: () => "not-a-valid-url",
-      },
-    }));
-    vi.stubGlobal("window", {
-      location: {
-        protocol: "https:",
-        host: "watchman.example.com",
-      },
-    });
-
-    const { getWebSocketUrl } = await import("./backendUrl");
-    expect(getWebSocketUrl("events")).toBe("wss://watchman.example.com/events");
-  });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.resetModules();
 });
 
+function stubBridge(bridge: Record<string, unknown> | undefined) {
+  vi.stubGlobal("window", {
+    __WATCHMAN__: bridge,
+    location: { protocol: "http:", host: "localhost:5173" },
+  });
+}
+
 describe("getBackendUrl", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    vi.doUnmock("./env");
-    vi.resetModules();
-  });
-
-  it("returns env backend URL when provided", async () => {
-    vi.stubEnv("VITE_BACKEND_URL", "https://api.example.com");
-
+  it("returns the desktop bridge apiUrl when present", async () => {
+    stubBridge({ apiUrl: "http://192.168.1.10:3001", isDesktop: true });
     const { getBackendUrl } = await import("./backendUrl");
-    expect(getBackendUrl()).toBe("https://api.example.com");
+    expect(getBackendUrl()).toBe("http://192.168.1.10:3001");
   });
 
-  it("returns empty backend URL in development when env URL is not set", async () => {
-    vi.stubEnv("VITE_BACKEND_URL", "");
-
+  it("returns empty string when bridge is missing", async () => {
+    stubBridge(undefined);
     const { getBackendUrl } = await import("./backendUrl");
     expect(getBackendUrl()).toBe("");
   });
 
-  it("returns window-derived URL in production when env URL is not set", async () => {
-    vi.doMock("./env", () => ({
-      env: {
-        get: () => "",
-      },
-    }));
-    vi.stubGlobal("window", {
-      location: {
-        protocol: "https:",
-        hostname: "dashboard.example.com",
-      },
-    });
-    vi.stubEnv("DEV", "");
-
+  it("returns empty string when bridge apiUrl is unset", async () => {
+    stubBridge({ isDesktop: true });
     const { getBackendUrl } = await import("./backendUrl");
-    expect(getBackendUrl()).toBe("https://dashboard.example.com:3001");
+    expect(getBackendUrl()).toBe("");
+  });
+});
+
+describe("getWebSocketUrl", () => {
+  it("uses bridge wsUrl when present", async () => {
+    stubBridge({
+      apiUrl: "http://192.168.1.10:3001",
+      wsUrl: "ws://192.168.1.10:3001/ws",
+      isDesktop: true,
+    });
+    const { getWebSocketUrl } = await import("./backendUrl");
+    expect(getWebSocketUrl()).toBe("ws://192.168.1.10:3001/ws");
+  });
+
+  it("normalizes missing leading slash in path", async () => {
+    stubBridge({
+      wsUrl: "ws://192.168.1.10:3001/ws",
+      isDesktop: true,
+    });
+    const { getWebSocketUrl } = await import("./backendUrl");
+    expect(getWebSocketUrl("events")).toBe("ws://192.168.1.10:3001/events");
+  });
+
+  it("falls back to window host when bridge wsUrl is missing", async () => {
+    vi.stubGlobal("window", {
+      __WATCHMAN__: undefined,
+      location: { protocol: "http:", host: "localhost:5173" },
+    });
+    const { getWebSocketUrl } = await import("./backendUrl");
+    expect(getWebSocketUrl()).toBe("ws://localhost:5173/ws");
+  });
+
+  it("uses wss when window protocol is https", async () => {
+    vi.stubGlobal("window", {
+      __WATCHMAN__: undefined,
+      location: { protocol: "https:", host: "dashboard.example.com" },
+    });
+    const { getWebSocketUrl } = await import("./backendUrl");
+    expect(getWebSocketUrl()).toBe("wss://dashboard.example.com/ws");
   });
 });

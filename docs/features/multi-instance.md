@@ -90,7 +90,7 @@ The `GET /api/services/instances` endpoint returns metadata about all configured
 
 ## Implementation
 
-Instance parsing is handled in [[apps/backend/config.js|config.js]] via `parseServiceInstances()`:
+Instance parsing is handled in `apps/backend/config.js` via `parseServiceInstances()`:
 
 1. Scans `process.env` for `{SERVICE}_{N}_` pattern
 2. Collects all env vars for each instance number
@@ -198,4 +198,4 @@ end note
 
 - [[docs/features/service-monitoring|Service Monitoring]]
 - [[docs/reference/environment-variables|Environment Variables]]
-- [[apps/backend/config.js|config.js]]
+- `apps/backend/config.js`

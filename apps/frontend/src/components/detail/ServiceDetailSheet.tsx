@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { HistoryChart } from "./HistoryChart";
 import { RangePicker } from "./RangePicker";
 import { EventLog, type ServiceEvent } from "./EventLog";
@@ -15,6 +15,7 @@ import {
   StatusDot,
   Badge,
   Button,
+  ConfirmDialog,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -22,6 +23,12 @@ import {
   MetricValue,
 } from "@/components/primitives";
 import { useServiceHealth, useServiceStats } from "@/hooks/useServiceHealth";
+import {
+  useServices,
+  useUpdateService,
+  useDeleteService,
+} from "@/pages/Settings/useConfigQueries";
+import ServiceEditor from "@/pages/Settings/ServiceEditor";
 import { getRenderer, dotGet } from "@/services/renderers";
 import type { ServiceKind, Tone } from "@/services/renderers/types";
 
@@ -39,6 +46,8 @@ export interface ServiceDetailSheetProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type View = "detail" | "edit";
+
 export function ServiceDetailSheet({
   kind,
   instanceId,
@@ -49,6 +58,19 @@ export function ServiceDetailSheet({
     enabled: !!kind,
   });
   const statsQuery = useServiceStats(kind ?? "", instanceId, !!kind);
+  const { data: allServices } = useServices();
+  const updateMut = useUpdateService();
+  const deleteMut = useDeleteService();
+
+  const service = useMemo(
+    () =>
+      allServices?.find(
+        (s) =>
+          s.kind === kind &&
+          (instanceId ? s.instanceId === instanceId : s.instanceId === "main")
+      ),
+    [allServices, kind, instanceId]
+  );
 
   const renderer = kind ? getRenderer(kind) : undefined;
   const statsSnapshot = statsQuery.data as
@@ -80,7 +102,16 @@ export function ServiceDetailSheet({
 
   const [range, setRange] = useState<HistoryRange>("24h");
   const [events, setEvents] = useState<ServiceEvent[]>([]);
+  const [view, setView] = useState<View>("detail");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const serviceKey = instanceId ?? kind ?? "";
+
+  useEffect(() => {
+    if (!open) {
+      setView("detail");
+      setConfirmDelete(false);
+    }
+  }, [open]);
 
   const handleWsEvent = useCallback(
     (ev: WsEvent) => {
@@ -107,6 +138,21 @@ export function ServiceDetailSheet({
     ? primary.format(dotGet(stats, primary.key))
     : "—";
 
+  const handleToggleEnabled = () => {
+    if (!service) return;
+    updateMut.mutate({
+      id: service.id,
+      input: { enabled: !service.enabled },
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!service) return;
+    await deleteMut.mutateAsync(service.id);
+    setConfirmDelete(false);
+    onOpenChange(false);
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent aria-describedby={undefined}>
@@ -131,105 +177,151 @@ export function ServiceDetailSheet({
                     {health.status}
                   </Badge>
                 ) : null}
+                {service && !service.enabled ? (
+                  <Badge tone="mono">disabled</Badge>
+                ) : null}
               </div>
             </SheetHeader>
 
             <SheetBody>
-              {primary ? (
-                <div className="mb-s-6">
-                  <div className="text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
-                    {primary.label}
-                  </div>
-                  <MetricValue size="xl" value={primaryValue} />
-                </div>
-              ) : null}
-
-              <Tabs defaultValue="metrics" className="w-full">
-                <TabsList>
-                  <TabsTrigger value="metrics">Metrics</TabsTrigger>
-                  <TabsTrigger value="charts">Charts</TabsTrigger>
-                  <TabsTrigger value="events">Events</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="metrics" className="pt-s-4 space-y-s-6">
-                  {renderer.detail.map((group) => (
-                    <section key={group.title} className="space-y-s-2">
-                      <h3 className="text-fs-label font-[600] uppercase tracking-[0.06em] text-[var(--text-lo)]">
-                        {group.title}
-                      </h3>
-                      <dl className="grid grid-cols-2 gap-x-s-4 gap-y-s-2 text-fs-body">
-                        {group.metrics.map((m) => (
-                          <div key={m.key} className="min-w-0">
-                            <dt className="truncate text-fs-label text-[var(--text-lo)]">
-                              {m.label}
-                            </dt>
-                            <dd className="truncate font-mono tabular-nums text-[var(--text-hi)]">
-                              {m.format(dotGet(stats, m.key))}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    </section>
-                  ))}
-                </TabsContent>
-
-                <TabsContent value="charts" className="pt-s-4 space-y-s-3">
-                  {renderer.charts.length === 0 ? (
-                    <p className="text-fs-body text-[var(--text-md)]">
-                      No charts configured.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
-                          Range
-                        </span>
-                        <RangePicker value={range} onChange={setRange} />
+              {view === "edit" && service ? (
+                <ServiceEditor
+                  existing={service}
+                  submitting={updateMut.isPending}
+                  onCancel={() => setView("detail")}
+                  onSubmit={async (input) => {
+                    await updateMut.mutateAsync({
+                      id: service.id,
+                      input,
+                    });
+                    setView("detail");
+                  }}
+                />
+              ) : (
+                <>
+                  {primary ? (
+                    <div className="mb-s-6">
+                      <div className="text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
+                        {primary.label}
                       </div>
-                      <ul className="space-y-s-3">
-                        {renderer.charts.map((c) => (
-                          <li
-                            key={c.metric}
-                            className="rounded-r-2 border border-[var(--hairline)] p-s-3"
-                          >
-                            <div className="flex items-baseline justify-between">
-                              <span className="text-fs-label text-[var(--text-lo)]">
-                                {c.label}
-                              </span>
-                              <span className="font-mono tabular-nums text-fs-body text-[var(--text-hi)]">
-                                {c.format(dotGet(stats, c.metric))}
-                              </span>
-                            </div>
-                            {kind ? (
-                              <HistoryChart
-                                kind={kind}
-                                instance={instanceId}
-                                spec={c}
-                                range={range}
-                                tone={tone}
-                              />
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                </TabsContent>
+                      <MetricValue size="xl" value={primaryValue} />
+                    </div>
+                  ) : null}
 
-                <TabsContent value="events" className="pt-s-4">
-                  <EventLog
-                    events={events}
-                    emptyLabel="No live events yet."
-                  />
-                </TabsContent>
-              </Tabs>
+                  <Tabs defaultValue="metrics" className="w-full">
+                    <TabsList>
+                      <TabsTrigger value="metrics">Metrics</TabsTrigger>
+                      <TabsTrigger value="charts">Charts</TabsTrigger>
+                      <TabsTrigger value="events">Events</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="metrics" className="pt-s-4 space-y-s-6">
+                      {renderer.detail.map((group) => (
+                        <section key={group.title} className="space-y-s-2">
+                          <h3 className="text-fs-label font-[600] uppercase tracking-[0.06em] text-[var(--text-lo)]">
+                            {group.title}
+                          </h3>
+                          <dl className="grid grid-cols-2 gap-x-s-4 gap-y-s-2 text-fs-body">
+                            {group.metrics.map((m) => (
+                              <div key={m.key} className="min-w-0">
+                                <dt className="truncate text-fs-label text-[var(--text-lo)]">
+                                  {m.label}
+                                </dt>
+                                <dd className="truncate font-mono tabular-nums text-[var(--text-hi)]">
+                                  {m.format(dotGet(stats, m.key))}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </section>
+                      ))}
+                    </TabsContent>
+
+                    <TabsContent value="charts" className="pt-s-4 space-y-s-3">
+                      {renderer.charts.length === 0 ? (
+                        <p className="text-fs-body text-[var(--text-md)]">
+                          No charts configured.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
+                              Range
+                            </span>
+                            <RangePicker value={range} onChange={setRange} />
+                          </div>
+                          <ul className="space-y-s-3">
+                            {renderer.charts.map((c) => (
+                              <li
+                                key={c.metric}
+                                className="rounded-r-2 border border-[var(--hairline)] p-s-3"
+                              >
+                                <div className="flex items-baseline justify-between">
+                                  <span className="text-fs-label text-[var(--text-lo)]">
+                                    {c.label}
+                                  </span>
+                                  <span className="font-mono tabular-nums text-fs-body text-[var(--text-hi)]">
+                                    {c.format(dotGet(stats, c.metric))}
+                                  </span>
+                                </div>
+                                {kind ? (
+                                  <HistoryChart
+                                    kind={kind}
+                                    instance={instanceId}
+                                    spec={c}
+                                    range={range}
+                                    tone={tone}
+                                  />
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="events" className="pt-s-4">
+                      <EventLog
+                        events={events}
+                        emptyLabel="No live events yet."
+                      />
+                    </TabsContent>
+                  </Tabs>
+                </>
+              )}
             </SheetBody>
 
-            <SheetFooter>
-              <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                Close
-              </Button>
-            </SheetFooter>
+            {view === "detail" ? (
+              <SheetFooter>
+                {service ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      onClick={handleToggleEnabled}
+                      disabled={updateMut.isPending}
+                    >
+                      {service.enabled ? "Disable" : "Enable"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setView("edit")}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setConfirmDelete(true)}
+                      className="text-[var(--crit)] hover:text-[var(--crit)] hover:brightness-110"
+                    >
+                      Delete
+                    </Button>
+                  </>
+                ) : null}
+                <Button variant="tonal" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
+              </SheetFooter>
+            ) : null}
           </>
         ) : (
           <SheetBody>
@@ -239,6 +331,17 @@ export function ServiceDetailSheet({
           </SheetBody>
         )}
       </SheetContent>
+      {service ? (
+        <ConfirmDialog
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          title={`Delete ${service.kind}/${service.instanceId}?`}
+          description="This removes the service and stops polling. Cannot be undone without re-adding."
+          destructive
+          pending={deleteMut.isPending}
+          onConfirm={handleDelete}
+        />
+      ) : null}
     </Sheet>
   );
 }

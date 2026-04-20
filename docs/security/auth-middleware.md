@@ -1,21 +1,26 @@
 ---
-title: Auth Middleware
+title: Auth Middleware (Superseded)
 type: security
-status: active
+status: superseded
 date: 2026-04-11
-tags: [security, middleware, authentication, jwt, backend]
-description: Authentication middleware documentation - JWT token handling, credential validation, and requireAuth middleware
+superseded_by: docs/adr/017-remove-authentication-frontend-v2-migration
+superseded_date: 2026-04-19
+tags: [security, middleware, authentication, jwt, backend, superseded, historical]
+description: Historical JWT auth middleware — removed in v2.3 per ADR-017; retained for archival context only
 aliases: [auth middleware, jwt middleware, authentication, requireAuth]
 ---
 
-# Auth Middleware
+# Auth Middleware (Superseded)
 
-> [!abstract] Overview
-> The auth middleware handles JWT token generation, verification, and credential authentication. It provides the core authentication layer for the Watchman API.
+> [!danger] Superseded — No Longer Implemented
+> This document describes the **historical** `auth.js` middleware that handled JWT generation, verification, and credential checks. As of v2.3, the entire auth layer has been removed. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]. The files, environment variables (`JWT_SECRET`, `AUTH_USERNAME`, `AUTH_PASSWORD_HASH`), and middleware described below no longer exist. Content retained for archival reference only.
+
+> [!abstract] Historical Overview
+> The auth middleware previously handled JWT token generation, verification, and credential authentication. It provided the core authentication layer for the Watchman API.
 
 ## Files
 
-- [[apps/backend/middleware/auth.js|auth.js]] - Main authentication middleware
+- `apps/backend/middleware/auth.js` - Main authentication middleware
 
 ## Core Functions
 
@@ -118,10 +123,10 @@ if (user) {
 
 ## Coverage Notes
 
-- `requireAuth` and credential error-path behavior are covered in [[apps/backend/tests/authMiddleware.test.js]], including the bcrypt failure branch.
-- `requireAuth` decoded-token handling now explicitly covers payloads without `iat` in [[apps/backend/tests/authMiddleware.test.js]] (`req.user.tokenIssuedAt` stays `undefined`).
-- Token extraction/verification edge cases are covered in [[apps/backend/tests/authToken.test.js]], including non-object request handling and empty-key cookie parsing behavior.
-- CSRF validation edge cases for state-changing requests are covered in [[apps/backend/tests/csrf.test.js]], including mismatched-length token rejection and production cookie options (`secure=true`, `sameSite='strict'`).
+- `requireAuth` and credential error-path behavior are covered in `apps/backend/tests/authMiddleware.test.js`, including the bcrypt failure branch.
+- `requireAuth` decoded-token handling now explicitly covers payloads without `iat` in `apps/backend/tests/authMiddleware.test.js` (`req.user.tokenIssuedAt` stays `undefined`).
+- Token extraction/verification edge cases are covered in `apps/backend/tests/authToken.test.js`, including non-object request handling and empty-key cookie parsing behavior.
+- CSRF validation edge cases for state-changing requests are covered in `apps/backend/tests/csrf.test.js`, including mismatched-length token rejection and production cookie options (`secure=true`, `sameSite='strict'`).
 
 ## PlantUML Diagrams
 
@@ -235,5 +240,5 @@ end
 ## Related
 
 - [[docs/security/authentication|Authentication Overview]]
-- [[docs/security/csrf|CSRF Middleware]]
-- [[apps/backend/server.js|Server (middleware order)]]
+- CSRF Middleware
+- `apps/backend/server.js`

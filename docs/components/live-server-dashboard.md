@@ -1,14 +1,20 @@
 ---
 title: "Component: LiveServerDashboard"
 type: component
-status: active
+status: superseded
 date: 2026-04-11
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [component, frontend, react, page, dashboard, layout]
 description: Main dashboard component that orchestrates all service cards into a responsive grid layout
 aliases: [live server dashboard, dashboard, main dashboard, home page]
 ---
 
 # Component: LiveServerDashboard
+
+> [!danger] Superseded — No Longer Implemented
+> The `LiveServerDashboard` component was **replaced by `BentoDashboard`** in the Phase 3 frontend rewrite. The per-service card grid was replaced by the bento tile layout with `ServiceTile` + renderer registry (see [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > The main dashboard component that fetches service health data, determines enabled services, and renders all service cards in a responsive grid layout with overview statistics.
@@ -19,10 +25,10 @@ Serves as the primary view of the Watchman application. Orchestrates data fetchi
 
 ## Data Fetching
 
-Uses `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]` to centralize dashboard query definitions, query keys, and refresh behavior for enabled services. Query keys remain centralized in `[[apps/frontend/src/lib/queryKeys.ts]]`:
+Uses `apps/frontend/src/components/dashboard/useDashboardQueries.ts` to centralize dashboard query definitions, query keys, and refresh behavior for enabled services. Query keys remain centralized in `[[apps/frontend/src/lib/queryKeys.ts]]`:
 
 - `refreshEnabledQueries()` also refetches `queryKeys.servicesHealth()` so overview counters update during manual dashboard refresh.
-- Refresh-scope behavior is covered in [[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]]: enabled-service queries are refetched selectively, and `servicesHealth` is always refetched.
+- Refresh-scope behavior is covered in `apps/frontend/src/components/dashboard/useDashboardQueries.test.ts`: enabled-service queries are refetched selectively, and `servicesHealth` is always refetched.
 
 | Query Key                                | Data                              | Refetch Interval                      |
 | ---------------------------------------- | --------------------------------- | ------------------------------------- |
@@ -71,8 +77,8 @@ This component takes no props. It derives all data from:
 - `[[apps/frontend/src/hooks/useEnabledServices|useEnabledServices]]`
 - `[[apps/frontend/src/hooks/useServiceInstances|useServiceInstances]]`
 - `[[apps/frontend/src/lib/queryKeys.ts]]`
-- `[[apps/frontend/src/components/dashboard/useDashboardQueries.ts]]`
-- `[[apps/frontend/src/components/dashboard/useDashboardQueries.test.ts]]`
+- `apps/frontend/src/components/dashboard/useDashboardQueries.ts`
+- `apps/frontend/src/components/dashboard/useDashboardQueries.test.ts`
 - `[[apps/frontend/src/components/dashboard/dashboardData.test.ts]]`
 - `[[apps/frontend/src/components/dashboard/dashboardStatus.test.ts]]`
 - `[[apps/frontend/src/components/dashboard/DashboardTileSection.tsx]]`
@@ -94,11 +100,11 @@ This component takes no props. It derives all data from:
 
 ## Source
 
-- [[apps/frontend/src/components/LiveServerDashboard.tsx]]
+- `apps/frontend/src/components/LiveServerDashboard.tsx`
 
 ## Test Coverage Notes
 
-- [[apps/frontend/src/components/LiveServerDashboard.test.tsx]] validates dashboard-level behavior in [[apps/frontend/src/components/LiveServerDashboard.tsx]]:
+- `apps/frontend/src/components/LiveServerDashboard.test.tsx` validates dashboard-level behavior in `apps/frontend/src/components/LiveServerDashboard.tsx`:
   - loading-state rendering while dashboard data is still resolving
   - overview counter derivation for mixed online/offline/warning service payloads
   - refresh pending-state rendering/UX behavior during manual refresh cycles

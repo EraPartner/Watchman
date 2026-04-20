@@ -29,7 +29,7 @@ IPFS_API_URL=http://127.0.0.1:5001
 
 ## Service Class
 
-[[apps/backend/services/IpfsService.js|IpfsService.js]]
+`apps/backend/services/IpfsService.js`
 
 ### Methods
 
@@ -39,7 +39,7 @@ IPFS_API_URL=http://127.0.0.1:5001
 
 ## Frontend Component
 
-[[apps/frontend/src/components/IpfsCard.tsx|IpfsCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 

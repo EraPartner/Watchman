@@ -114,7 +114,7 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
   - metrics invalidation and `connection` message toast behavior
   - max reconnect attempts error path and reconnect terminal-state handling
   - cleanup stability for singleton WebSocket state across tests
-- Frontend notification-state coverage now also includes [[apps/frontend/src/hooks/use-toast.test.tsx]] for [[apps/frontend/src/hooks/use-toast.ts]]:
+- Frontend notification-state coverage now also includes `apps/frontend/src/hooks/use-toast.test.tsx` for `apps/frontend/src/hooks/use-toast.ts`:
   - reducer limit and dismiss-all behavior
   - hook lifecycle coverage for add/update/dismiss/remove transitions
 

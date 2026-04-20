@@ -1,55 +1,32 @@
 /**
  * Backend URL Utility
  *
- * Shared utility for detecting and returning the backend URL.
- * Centralizes URL detection logic that was duplicated in ApiClient and useServiceHealth.
+ * In the split deploy model, the Electron preload injects `apiUrl` / `wsUrl`
+ * on `window.__WATCHMAN__` after the user enters the Pi backend URL in the
+ * setup wizard. In dev (vite server), both are empty and requests go through
+ * the vite proxy to `localhost:3001`.
  */
 
-import { env } from "./env";
-
-interface DesktopBridge {
+export interface DesktopBridge {
   apiUrl?: string;
   wsUrl?: string;
   isDesktop?: boolean;
+  getApiUrl?: () => Promise<string>;
+  saveApiUrl?: (url: string) => Promise<boolean>;
+  reload?: () => Promise<boolean>;
 }
 
-function getDesktopBridge(): DesktopBridge | undefined {
+export function getDesktopBridge(): DesktopBridge | undefined {
   if (typeof window === "undefined") return undefined;
   return (window as unknown as { __WATCHMAN__?: DesktopBridge }).__WATCHMAN__;
 }
 
 /**
- * Get the backend URL
- * @returns {string} The backend URL
+ * Return the backend HTTP base URL.
+ * Empty string means "use relative URLs" (vite dev proxy).
  */
 export function getBackendUrl(): string {
-  const desktopUrl = getDesktopBridge()?.apiUrl;
-  if (desktopUrl) {
-    return desktopUrl;
-  }
-
-  const envUrl = env.get("VITE_BACKEND_URL");
-
-  // If explicitly set, use it
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // In development mode, use relative URLs (Vite proxy will handle it)
-  if (import.meta.env.DEV) {
-    return "";
-  }
-
-  // In production, construct URL from current window location
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname;
-    // Use port 3001 for production backend
-    return `${protocol}//${hostname}:3001`;
-  }
-
-  // Fallback
-  return "http://localhost:3001";
+  return getDesktopBridge()?.apiUrl ?? "";
 }
 
 export function getWebSocketUrl(path = "/ws"): string {
@@ -65,51 +42,17 @@ export function getWebSocketUrl(path = "/ws"): string {
     }
   }
 
-  const envUrl = env.get("VITE_BACKEND_URL");
-  const preferredProtocol =
-    typeof window !== "undefined" && window.location.protocol === "https:"
-      ? "wss:"
-      : "ws:";
-
-  if (envUrl) {
-    try {
-      const parsed = new URL(envUrl);
-      const protocol =
-        preferredProtocol === "wss:" || parsed.protocol === "https:"
-          ? "wss:"
-          : "ws:";
-      return `${protocol}//${parsed.host}${normalizedPath}`;
-    } catch {
-      // fall through to runtime-derived defaults
-    }
-  }
-
+  // Dev: vite proxies /ws to localhost:3001
   if (typeof window !== "undefined") {
-    const backendUrl = getBackendUrl();
-
-    if (backendUrl) {
-      try {
-        const parsed = new URL(backendUrl);
-        return `${preferredProtocol}//${parsed.host}${normalizedPath}`;
-      } catch {
-        // fall through
-      }
-    }
-
-    return `${preferredProtocol}//${window.location.host}${normalizedPath}`;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}${normalizedPath}`;
   }
 
   return `ws://localhost:3001${normalizedPath}`;
 }
 
-/**
- * Default API timeout in milliseconds
- */
 export const API_TIMEOUT = 10000;
 
-/**
- * Service-specific timeouts
- */
 export const SERVICE_TIMEOUTS = {
   bitcoin: 120000,
   adguard: 5000,

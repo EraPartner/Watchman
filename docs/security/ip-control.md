@@ -1,22 +1,27 @@
 ---
-title: IP Control
+title: IP Control (Superseded)
 type: security
-status: active
+status: superseded
 date: 2026-04-10
-tags: [security, ip-control, backend]
-description: IP whitelist/blacklist enforcement documentation
+superseded_by: docs/adr/017-remove-authentication-frontend-v2-migration
+superseded_date: 2026-04-19
+tags: [security, ip-control, backend, superseded, historical]
+description: Historical IP whitelist/blacklist middleware — removed in v2.3 per ADR-017; retained for archival context only
 aliases: [ip control, ip whitelist, ip blacklist, access control]
 ---
 
-# IP Control
+# IP Control (Superseded)
 
-> [!abstract] Overview
-> Watchman supports IP-based access control through whitelists and blacklists for sensitive endpoints.
+> [!danger] Superseded — No Longer Implemented
+> This document describes **historical** IP whitelist/blacklist enforcement via `ipControl.js` and `ip.js`. As of v2.3, all IP-control middleware has been removed (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] and [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Watchman now relies on network-level isolation (firewall, VPN, closed LAN) — operator-owned. Content retained for archival reference only.
+
+> [!abstract] Historical Overview
+> Watchman previously supported IP-based access control through whitelists and blacklists for sensitive endpoints.
 
 ## Implementation
 
-[[apps/backend/middleware/ipControl.js|ipControl.js]]
-[[apps/backend/utils/ip.js|ip.js]]
+`apps/backend/middleware/ipControl.js`
+`apps/backend/utils/ip.js`
 
 ### Middleware Functions
 
@@ -27,7 +32,7 @@ aliases: [ip control, ip whitelist, ip blacklist, access control]
 
 ### IP Normalization
 
-- Request IP extraction now uses `getRequestIp(req)` from [[apps/backend/utils/ip.js]]
+- Request IP extraction now uses `getRequestIp(req)` from `apps/backend/utils/ip.js`
 - Stored and compared whitelist/blacklist/temp-block entries are normalized through `normalizeIp(...)`
 - Localhost detection for startup-safe behavior uses `isLocalhostIp(...)`
 - Equivalent representations (for example `::ffff:127.0.0.1` and `127.0.0.1`) are treated as the same IP
@@ -57,7 +62,7 @@ Endpoints requiring IP whitelist:
 
 `enforceIPControl` middleware is applied early in the stack for all requests.
 
-Middleware registration source: [[apps/backend/bootstrap/configureMiddleware.js]], invoked from [[apps/backend/server.js]].
+Middleware registration source: `apps/backend/bootstrap/configureMiddleware.js`, invoked from `apps/backend/server.js`.
 
 ## Related
 

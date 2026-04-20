@@ -1,14 +1,20 @@
 ---
 title: Request Optimization
 type: performance
-status: active
+status: superseded
 date: 2026-04-10
+superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
+superseded_date: 2026-04-20
 tags: [performance, frontend, optimization]
 description: Frontend request batching and deduplication optimization
 aliases: [request optimization, batching, deduplication, request optimizer]
 ---
 
 # Request Optimization
+
+> [!danger] Superseded — No Longer Implemented
+> This document describes **v1 frontend request batching/deduplication**. The frontend was rewritten in v2; request optimization is now handled by React Query (TanStack Query) with WebSocket-triggered invalidations (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
+
 
 > [!abstract] Overview
 > Watchman frontend uses request optimization to batch and deduplicate API calls, reducing network overhead.

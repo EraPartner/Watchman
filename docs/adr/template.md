@@ -17,7 +17,7 @@ aliases: [adr template, decision template]
 
 - **Status**: Proposed | Accepted | Deprecated | Superseded
 - **Date**: YYYY-MM-DD
-- **Superseded by**: [[docs/adr/NNN-title|ADR-NNN]] (if applicable)
+- **Superseded by**: `docs/adr/NNN-title` (if applicable) (if applicable)
 
 ## Context
 

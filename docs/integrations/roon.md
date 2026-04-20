@@ -29,7 +29,7 @@ ROON_PORTS=9003,9330,9100
 
 ## Service Class
 
-[[apps/backend/services/RoonService.js|RoonService.js]]
+`apps/backend/services/RoonService.js`
 
 ### Methods
 
@@ -38,7 +38,7 @@ ROON_PORTS=9003,9330,9100
 
 ## Frontend Component
 
-[[apps/frontend/src/components/RoonCard.tsx|RoonCard.tsx]]
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 
