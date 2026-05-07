@@ -5,7 +5,6 @@ import { metaRoutes } from './routes/meta.js';
 import { servicesRoutes, type ServicesRouteDeps } from './routes/services.js';
 import { instancesRoutes } from './routes/instances.js';
 import { metricsRoutes } from './routes/metrics.js';
-import { historyRoutes, type HistoryRouteDeps } from './routes/history.js';
 import { configRoutes, type ConfigRouteDeps } from './routes/config.js';
 import { setupRoutes, type SetupRouteDeps } from './routes/setup.js';
 import { errorHandlerPlugin } from './plugins/errorHandler.js';
@@ -17,7 +16,6 @@ import type { MetricsRegistry } from '../../core/metrics.js';
 export interface BuildServerDeps {
   logger: Logger;
   services: ServicesRouteDeps;
-  history?: HistoryRouteDeps | undefined;
   listInstances: ListInstances;
   metrics: MetricsRegistry;
   config: ConfigRouteDeps;
@@ -36,7 +34,12 @@ export async function buildServer(deps: BuildServerDeps) {
 
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
-    if (typeof origin === 'string' && origin.startsWith('watchman://')) {
+    const isAllowed =
+      typeof origin === 'string' &&
+      (origin.startsWith('watchman://') ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:'));
+    if (isAllowed) {
       reply.header('Access-Control-Allow-Origin', origin);
       reply.header('Access-Control-Allow-Credentials', 'true');
       reply.header(
@@ -60,9 +63,6 @@ export async function buildServer(deps: BuildServerDeps) {
   await app.register(metaRoutes);
   await app.register(metricsRoutes(deps.metrics));
   await app.register(servicesRoutes(deps.services));
-  if (deps.history) {
-    await app.register(historyRoutes(deps.history));
-  }
   await app.register(instancesRoutes(deps.listInstances));
   await app.register(setupRoutes(deps.setup));
   await app.register(configRoutes(deps.config));

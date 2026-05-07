@@ -20,12 +20,7 @@ import { createPigpioClient } from './infra/gpio/pigpioClientImpl.js';
 import { wsPlugin } from './transport/ws/wsPlugin.js';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join, isAbsolute, resolve } from 'node:path';
-import { createDuckDbPool } from './infra/timeseries/DuckDbPool.js';
-import { runMigrations } from './infra/timeseries/migrations.js';
-import { createTimeSeriesWriter } from './infra/timeseries/TimeSeriesWriter.js';
-import { createTimeSeriesReader } from './infra/timeseries/TimeSeriesReader.js';
-import { createRollupWorker } from './infra/timeseries/RollupWorker.js';
-import { GetServiceHistory } from './application/GetServiceHistory.js';
+import { createDuckDbPool } from './infra/db/DuckDbPool.js';
 import { ServiceRegistry } from './domain/ServiceRegistry.js';
 import { loadEncryptorFromEnv } from './config/store/encryption.js';
 import { loadOrCreateMasterKey } from './config/masterKey.js';
@@ -62,9 +57,6 @@ async function main(): Promise<void> {
   const migConn = await dbPool.connect();
   try {
     await runConfigMigrations(migConn);
-    if (env.TIMESERIES_ENABLED) {
-      await runMigrations(migConn);
-    }
   } finally {
     try {
       migConn.closeSync();
@@ -88,18 +80,6 @@ async function main(): Promise<void> {
 
   metrics.setPollerStats({ snapshot: () => ({ tracked: registry.all().length }) });
 
-  let tsWriter: ReturnType<typeof createTimeSeriesWriter> | null = null;
-  let tsRollup: ReturnType<typeof createRollupWorker> | null = null;
-  let history: { getHistory: GetServiceHistory } | undefined;
-  if (env.TIMESERIES_ENABLED) {
-    tsWriter = createTimeSeriesWriter({ pool: dbPool, bus, clock: systemClock, logger });
-    tsRollup = createRollupWorker({ pool: dbPool, clock: systemClock, logger });
-    await tsWriter.start();
-    await tsRollup.start();
-    const reader = createTimeSeriesReader(dbPool);
-    history = { getHistory: new GetServiceHistory({ registry, reader }) };
-  }
-
   const app = await buildServer({
     logger,
     services: {
@@ -107,7 +87,6 @@ async function main(): Promise<void> {
       aggregated: new GetAggregatedHealth(registry),
       control: new ControlService(registry),
     },
-    history,
     listInstances: new ListInstances(registry),
     metrics,
     config: { store, lifecycle, registry },
@@ -125,8 +104,6 @@ async function main(): Promise<void> {
     close: async () => {
       await poller.stop();
       await lifecycle.stop();
-      if (tsRollup) await tsRollup.stop();
-      if (tsWriter) await tsWriter.stop();
       await dbPool.close();
       await app.close();
     },

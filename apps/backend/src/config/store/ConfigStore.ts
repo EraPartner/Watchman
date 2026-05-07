@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DuckDBBlobValue, type DuckDBConnection } from '@duckdb/node-api';
-import type { DuckDbPool } from '../../infra/timeseries/DuckDbPool.js';
-import { toTs } from '../../infra/timeseries/duckdbTime.js';
+import type { DuckDbPool } from '../../infra/db/DuckDbPool.js';
+import { toTs } from '../../infra/db/DuckDbPool.js';
 import type { EventBus } from '../../core/eventBus.js';
 import {
   KIND_META,

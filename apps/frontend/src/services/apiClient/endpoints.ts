@@ -6,8 +6,6 @@ import type {
   ControlRequest,
   ControlResponse,
   HealthSnapshot,
-  HistoryPayload,
-  HistoryQueryParams,
   InstanceInfo,
   SetupStatus,
   StatsSnapshot,
@@ -52,23 +50,6 @@ export class ApiClientEndpoints {
   ): Promise<StatsSnapshot> {
     const base = `/services/${encodeURIComponent(kind)}/stats`;
     return this.core.request(appendInstance(base, instance));
-  }
-
-  async getServiceHistory(
-    kind: string,
-    params: HistoryQueryParams
-  ): Promise<HistoryPayload> {
-    const q = new URLSearchParams();
-    q.set("metric", params.metric);
-    q.set("from", String(params.from));
-    q.set("to", String(params.to));
-    if (params.instance) q.set("instance", params.instance);
-    if (params.resolution) q.set("resolution", params.resolution);
-    if (params.agg) q.set("agg", params.agg);
-    if (params.limit != null) q.set("limit", String(params.limit));
-    return this.core.request(
-      `/services/${encodeURIComponent(kind)}/history?${q.toString()}`
-    );
   }
 
   async controlService(
