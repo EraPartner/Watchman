@@ -1,19 +1,19 @@
 ---
 title: Time-Series History
 type: feature
-status: active
-date: 2026-04-18
-tags: [feature, timeseries, history, metrics, backend, duckdb, phase1]
-description: Time-series metrics collection and querying with DuckDB - Phase 1 backend (metrics storage, rollups, history endpoint)
+status: superseded
+date: 2026-05-07
+tags: [feature, timeseries, history, metrics, backend, duckdb, phase1, archived, superseded-by-adr-019]
+description: Time-series metrics collection and querying with DuckDB - SUPERSEDED by ADR-019 (feature removed, archived for historical reference)
 aliases: [time-series, metrics history, rollup tiers, DuckDB metrics]
 ---
 
-# Time-Series History Feature
+# Time-Series History Feature (ARCHIVED)
 
-> [!abstract] Overview
-> Watchman **Phase 1** adds time-series metrics collection and querying. The backend stores raw metrics in DuckDB and automatically rolls them up into 1-minute, 5-minute, and 1-hour buckets. A history API endpoint allows queries with auto-resolution based on time window.
+> [!warning] SUPERSEDED — Archived for Historical Reference
+> This feature was removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]. The persistent DuckDB time-series layer (metrics tables, rollup workers, history endpoint, and charting UI) has been deleted. The document below is preserved for historical context.
 >
-> **Phases 2–6** (not yet started) will add the bento-tile frontend UI to visualize time-series data.
+> Time-series storage, history endpoint, and persistent metric charts are no longer available. The dashboard provides real-time status and an in-memory recent-activity ring buffer only.
 
 ## Phase 1: Backend Implementation (LIVE)
 

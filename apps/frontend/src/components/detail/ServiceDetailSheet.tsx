@@ -1,9 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { HistoryChart } from "./HistoryChart";
-import { RangePicker } from "./RangePicker";
 import { EventLog, type ServiceEvent } from "./EventLog";
 import { useWebSocketEvent } from "@/hooks/useWebSocketEvent";
-import type { HistoryRange } from "@/hooks/useServiceHistory";
 import type { WsEvent } from "@/lib/wsEventBus";
 import {
   Sheet,
@@ -100,7 +97,6 @@ export function ServiceDetailSheet({
     }
   }, [renderer, stats, health]);
 
-  const [range, setRange] = useState<HistoryRange>("24h");
   const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [view, setView] = useState<View>("detail");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -211,7 +207,6 @@ export function ServiceDetailSheet({
                   <Tabs defaultValue="metrics" className="w-full">
                     <TabsList>
                       <TabsTrigger value="metrics">Metrics</TabsTrigger>
-                      <TabsTrigger value="charts">Charts</TabsTrigger>
                       <TabsTrigger value="events">Events</TabsTrigger>
                     </TabsList>
 
@@ -235,49 +230,6 @@ export function ServiceDetailSheet({
                           </dl>
                         </section>
                       ))}
-                    </TabsContent>
-
-                    <TabsContent value="charts" className="pt-s-4 space-y-s-3">
-                      {renderer.charts.length === 0 ? (
-                        <p className="text-fs-body text-[var(--text-md)]">
-                          No charts configured.
-                        </p>
-                      ) : (
-                        <>
-                          <div className="flex items-center justify-between">
-                            <span className="text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
-                              Range
-                            </span>
-                            <RangePicker value={range} onChange={setRange} />
-                          </div>
-                          <ul className="space-y-s-3">
-                            {renderer.charts.map((c) => (
-                              <li
-                                key={c.metric}
-                                className="rounded-r-2 border border-[var(--hairline)] p-s-3"
-                              >
-                                <div className="flex items-baseline justify-between">
-                                  <span className="text-fs-label text-[var(--text-lo)]">
-                                    {c.label}
-                                  </span>
-                                  <span className="font-mono tabular-nums text-fs-body text-[var(--text-hi)]">
-                                    {c.format(dotGet(stats, c.metric))}
-                                  </span>
-                                </div>
-                                {kind ? (
-                                  <HistoryChart
-                                    kind={kind}
-                                    instance={instanceId}
-                                    spec={c}
-                                    range={range}
-                                    tone={tone}
-                                  />
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
                     </TabsContent>
 
                     <TabsContent value="events" className="pt-s-4">

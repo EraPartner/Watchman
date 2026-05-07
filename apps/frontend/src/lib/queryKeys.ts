@@ -23,22 +23,4 @@ export const queryKeys = {
     ["homebridge", "accessories", instanceId] as const,
 
   routerArp: (serviceKey: string) => ["router", "arp", serviceKey] as const,
-
-  serviceHistory: (
-    kind: string,
-    params: {
-      instance?: string;
-      metric: string;
-      range: string;
-      resolution?: string;
-    }
-  ) =>
-    [
-      kind,
-      "history",
-      params.instance ?? null,
-      params.metric,
-      params.range,
-      params.resolution ?? "auto",
-    ] as const,
 };

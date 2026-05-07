@@ -1,17 +1,19 @@
 ---
 title: Deploying Watchman to a Raspberry Pi
 type: guide
-status: active
-date: 2026-04-19
-tags: [guide, deployment, raspberry-pi, systemd, nvm, lan, split-deploy]
-description: Step-by-step guide for installing the Watchman backend on a Raspberry Pi under systemd so it runs continuously, while the Electron client runs on the Mac
+status: superseded
+date: 2026-05-07
+tags: [guide, deployment, raspberry-pi, systemd, nvm, lan, split-deploy, archived, superseded-by-adr-019]
+description: Step-by-step guide for installing the Watchman backend on a Raspberry Pi — SUPERSEDED by ADR-019 (split deploy removed, archived for historical reference)
 aliases: [pi deploy, raspberry pi deploy, deploying to pi, split deploy guide]
 ---
 
-# Deploying Watchman to a Raspberry Pi
+# Deploying Watchman to a Raspberry Pi (ARCHIVED)
 
-> [!abstract] Purpose
-> Run the Watchman backend on an always-on Raspberry Pi and connect any Mac on the LAN via the Electron client. Implements [[docs/adr/018-split-deploy-pi-backend|ADR-018]].
+> [!warning] SUPERSEDED — Archived for Historical Reference
+> This guide describes the split-deploy architecture introduced in [[docs/adr/018-split-deploy-pi-backend|ADR-018]], which was removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]. Watchman now runs as a standalone Electron app with an embedded backend subprocess on a single machine. The document below is preserved for historical context.
+>
+> To run Watchman, see [[docs/guides/running-the-desktop-app|Desktop App Guide]] instead.
 
 ## Audience and Assumptions
 

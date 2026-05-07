@@ -1,10 +1,10 @@
 ---
 title: Split Deploy — Raspberry Pi Backend + Mac Electron Client
 type: adr
-status: accepted
+status: superseded
 date: 2026-04-19
-tags: [adr, deployment, raspberry-pi, electron, systemd, lan, split-deploy]
-description: Relocate Watchman backend to an always-on Raspberry Pi and reduce Electron to a pure client so polling is continuous and the Mac's sleep cycle no longer creates history gaps
+tags: [adr, deployment, raspberry-pi, electron, systemd, lan, split-deploy, superseded-by-adr-019]
+description: Relocate Watchman backend to an always-on Raspberry Pi and reduce Electron to a pure client so polling is continuous and the Mac's sleep cycle no longer creates history gaps — SUPERSEDED by ADR-019
 aliases: [ADR-018, pi deploy, split deploy, always-on backend]
 ---
 
@@ -15,7 +15,7 @@ aliases: [ADR-018, pi deploy, split deploy, always-on backend]
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Superseded by [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]
 - **Date**: 2026-04-19
 - **Extends**: [[docs/adr/016-electron-desktop-wrapper|ADR-016]] (Electron wrapper), [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] (single-user, LAN-only posture)
 

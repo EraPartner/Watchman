@@ -1,17 +1,19 @@
 ---
 title: Running the Setup Wizard
 type: guide
-status: active
-date: 2026-04-19
-tags: [guide, setup, wizard, onboarding, first-boot, configuration, services, v2, single-user]
-description: Step-by-step guide to using the Watchman setup wizard for initial service configuration
+status: superseded
+date: 2026-05-07
+tags: [guide, setup, wizard, onboarding, first-boot, configuration, services, v2, single-user, archived, superseded-by-adr-019]
+description: Step-by-step guide to using the Watchman setup wizard — SUPERSEDED by ADR-019 (Connect step removed, archived for historical reference)
 aliases: [setup guide, wizard guide, onboarding, first-time setup]
 ---
 
-# Running the Setup Wizard
+# Running the Setup Wizard (ARCHIVED)
 
-> [!abstract] Summary
-> The **Setup Wizard** is a guided four-step flow that appears when you first start Watchman with no services configured. It walks you through selecting, configuring, and reviewing your monitored services.
+> [!warning] SUPERSEDED — Archived for Historical Reference
+> This guide describes the setup wizard as it existed when the split-deploy architecture was active, including the "Connect" step used to pair with a remote Pi backend. This step was removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]. The wizard now begins at the "Welcome" step and provides a simpler flow. The document below is preserved for historical context.
+>
+> The setup wizard still exists but with fewer steps (no Connect step).
 
 ## When Does the Wizard Appear?
 

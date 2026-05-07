@@ -45,12 +45,14 @@ SORT file.name ASC
 | [[docs/adr/015-ui-driven-service-configuration.md | UI Configuration]] | UI-driven CRUD with DuckDB + encrypted secrets + hot-reload |
 | [[docs/adr/016-electron-desktop-wrapper.md | Electron Desktop Wrapper]] | Custom watchman:// protocol, auto-spawned backend, per-install master key |
 | [[docs/adr/017-remove-authentication-frontend-v2-migration.md | Auth Removal + Frontend v2 Migration]] | Single-user posture, removed JWT/CSRF auth, frontend v2 envelope contract, port 3101→3001 |
-| [[docs/adr/018-split-deploy-pi-backend.md | Split Deploy — Pi Backend]] | Always-on Raspberry Pi backend under systemd + thin Electron client; LAN-only, no TLS, offline banner on Pi unreachable |
+| [[docs/adr/018-split-deploy-pi-backend.md | Split Deploy — Pi Backend]] | Always-on Raspberry Pi backend under systemd + thin Electron client; LAN-only, no TLS, offline banner on Pi unreachable (**superseded by ADR-019**) |
+| [[docs/adr/019-revert-split-deploy-and-remove-time-series.md | Revert Split Deploy + Remove Time-Series]] | Drop persistent history (DuckDB time-series, history route, history chart) and revert Pi split deploy; restore Mac-only Electron + embedded backend |
+| [[docs/adr/020-service-monitoring-methodology.md | Service Monitoring Methodology]] | Two-layer probe model: shared `ReachabilityProbe` (ICMP + TCP) baseline + per-service deep probe; replace external Onionoo with local Tor control-port; drop Mac Mini SSH bounce for Pi; structured `sysctl`/`vm_stat` for Mac Mini |
 
 ## Creating a New ADR
 
 1. Copy [[docs/adr/template|ADR Template]]
-2. Name it `NNN-short-title.md` (next sequential number after 018)
+2. Name it `NNN-short-title.md` (next sequential number after 020)
 3. Fill in all sections:
    - **Status**: Proposed | Accepted | Deprecated | Superseded
    - **Context**: The problem being solved

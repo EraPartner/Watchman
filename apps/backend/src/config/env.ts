@@ -6,10 +6,6 @@ const EnvSchema = z.object({
   BACKEND_V2_HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATA_DIR: z.string().default('./data'),
-  TIMESERIES_ENABLED: z
-    .enum(['true', 'false'])
-    .default('true')
-    .transform((v) => v === 'true'),
   WATCHMAN_MASTER_KEY: z.string().optional(),
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createDuckDbPool, type DuckDbPool } from '../../infra/timeseries/DuckDbPool.js';
+import { createDuckDbPool, type DuckDbPool } from '../../infra/db/DuckDbPool.js';
 import { createEventBus } from '../../core/eventBus.js';
 import { createEncryptor, deriveKey } from './encryption.js';
 import { runConfigMigrations } from './migrations.js';

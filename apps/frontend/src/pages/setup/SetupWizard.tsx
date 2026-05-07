@@ -1,26 +1,18 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ProgressRail, type SetupStep } from "./ProgressRail";
-import { ConnectStep } from "./steps/ConnectStep";
 import { WelcomeStep } from "./steps/WelcomeStep";
 import { KindPickerStep } from "./steps/KindPickerStep";
 import { ConfigureStep } from "./steps/ConfigureStep";
 import { ReviewStep } from "./steps/ReviewStep";
 import { useSetupDismissal } from "../../hooks/useSetupDismissal";
-import { getDesktopBridge } from "../../lib/backendUrl";
 import "./setup.css";
-
-function initialStep(): SetupStep {
-  const bridge = getDesktopBridge();
-  if (!bridge) return "welcome";
-  return bridge.apiUrl ? "welcome" : "connect";
-}
 
 export default function SetupWizard() {
   const navigate = useNavigate();
   const { dismiss } = useSetupDismissal();
 
-  const [step, setStep] = useState<SetupStep>(initialStep);
+  const [step, setStep] = useState<SetupStep>("welcome");
   const [selectedKind, setSelectedKind] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<string[]>([]);
 
@@ -57,9 +49,6 @@ export default function SetupWizard() {
 
       <main className="setup-shell__main">
         <div key={step} className="setup-stage">
-          {step === "connect" && (
-            <ConnectStep onConnected={() => setStep("welcome")} />
-          )}
           {step === "welcome" && (
             <WelcomeStep
               onStart={() => setStep("pick")}

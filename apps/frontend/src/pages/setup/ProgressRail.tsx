@@ -1,5 +1,4 @@
 export type SetupStep =
-  | "connect"
   | "welcome"
   | "pick"
   | "configure"
@@ -17,11 +16,10 @@ interface RailItem {
 }
 
 const ITEMS: readonly RailItem[] = [
-  { id: "connect", index: "01", label: "Connect", hint: "Point at backend" },
-  { id: "welcome", index: "02", label: "Welcome", hint: "Orient" },
-  { id: "pick", index: "03", label: "Pick", hint: "Choose a service" },
-  { id: "configure", index: "04", label: "Configure", hint: "Enter credentials" },
-  { id: "review", index: "05", label: "Review", hint: "Confirm & finish" },
+  { id: "welcome", index: "01", label: "Welcome", hint: "Orient" },
+  { id: "pick", index: "02", label: "Pick", hint: "Choose a service" },
+  { id: "configure", index: "03", label: "Configure", hint: "Enter credentials" },
+  { id: "review", index: "04", label: "Review", hint: "Confirm & finish" },
 ];
 
 function statusOf(current: SetupStep, target: SetupStep): "done" | "active" | "todo" {

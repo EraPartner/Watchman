@@ -5,7 +5,6 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { useSetupStatus } from "./pages/Settings/useConfigQueries";
 import { useSetupDismissal } from "./hooks/useSetupDismissal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { OfflineBanner } from "./components/OfflineBanner";
 import { lazy, Suspense, type ReactNode } from "react";
 import { WebSocketProvider } from "./providers/WebSocketProvider";
 
@@ -70,7 +69,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <WebSocketProvider>
         <Toaster theme="dark" position="top-right" />
-        <OfflineBanner />
         <BrowserRouter>
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
