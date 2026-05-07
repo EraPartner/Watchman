@@ -1,17 +1,19 @@
 ---
 title: Service History API
 type: api
-status: active
-date: 2026-04-18
-tags: [api, endpoints, timeseries, history, backend, fastify]
-description: Time-series history endpoint documentation - query historical metrics for services
+status: superseded
+date: 2026-05-07
+tags: [api, endpoints, timeseries, history, backend, fastify, archived, superseded-by-adr-019]
+description: Time-series history endpoint documentation - SUPERSEDED by ADR-019 (endpoint removed, archived for historical reference)
 aliases: [history endpoint, time-series API, metrics history, service history]
 ---
 
-# Service History API
+# Service History API (ARCHIVED)
 
-> [!abstract] Overview
-> The **History endpoint** provides time-series data for service metrics. Query by service kind, metric name, and time range; the API auto-selects an appropriate resolution tier (raw, 1m, 5m, 1h) based on window size.
+> [!warning] SUPERSEDED — Archived for Historical Reference
+> This endpoint was removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]. The `/services/{kind}/history` endpoint and its time-series storage layer have been deleted. The document below is preserved for historical context.
+>
+> Historical metric queries and charting features are no longer available.
 
 ## Endpoint
 

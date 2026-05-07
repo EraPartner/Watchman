@@ -110,18 +110,17 @@ Watchman is a comprehensive **self-hosted service monitoring dashboard** support
 - **Multi-Instance Support**: Run multiple nodes of the same service type
 - **Real-Time Updates**: WebSocket-based status broadcasting
 - **Single-User Design**: Simplified for home-lab deployments (no authentication)
-- **Time-Series Metrics**: DuckDB-backed historical data with auto-rollups
 - **UI-Driven Configuration**: Service management via web UI with encrypted secrets
 - **OpenAPI**: Full API documentation with Swagger UI
 
 ### Tech Stack
 
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + OKLCH tokens + Geist typography + 14 custom primitives
-- **Backend**: Node.js 18+ + TypeScript + Fastify 4 + Zod validation + Pino logging + DuckDB time-series
+- **Backend**: Node.js 18+ + TypeScript + Fastify 4 + Zod validation + Pino logging + DuckDB ConfigStore
 - **Communication**: WebSocket for real-time updates (WebSocketProvider singleton + useWebSocket hook)
-- **State**: In-process LRU cache, croner-based polling, circuit breaker, DuckDB time-series (raw/1m/5m/1h rollups)
+- **State**: In-process LRU cache, croner-based polling, circuit breaker, in-memory recent-activity ring buffer
 - **Tooling**: ESLint, Prettier, Vitest (396 tests across backend+frontend)
-- **Architecture**: npm workspaces monorepo, layered backend (config → core → infra → domain → application → transport)
+- **Architecture**: npm workspaces monorepo, Electron desktop wrapper spawning backend subprocess, layered backend (config → core → infra → domain → application → transport)
 
 ### Project Structure
 
@@ -131,22 +130,22 @@ Watchman/
 │   ├── frontend/          # React 18 + TypeScript + Vite + Tailwind
 │   │   ├── src/
 │   │   │   ├── components/ # Bento tiles, detail sheets, primitives
-│   │   │   ├── hooks/     # useServiceHealth, useWebSocket, useServiceHistory
+│   │   │   ├── hooks/     # useServiceHealth, useWebSocket
 │   │   │   ├── pages/     # Page components
 │   │   │   ├── services/  # API client, WebSocket, renderer registry
 │   │   │   ├── styles/    # OKLCH tokens, Geist fonts
 │   │   │   ├── providers/ # WebSocketProvider
 │   │   │   └── lib/       # Utilities
 │   │   └── tests/         # Frontend tests (150+)
-│   ├── backend/           # TypeScript + Fastify 4 + DuckDB
+│   ├── backend/           # TypeScript + Fastify 4 + DuckDB ConfigStore
 │   │   ├── src/
-│   │   │   ├── config/    # Env validation, service registry
+│   │   │   ├── config/    # Env validation, service registry, master key
 │   │   │   ├── core/      # Logger, errors, Result, eventBus
-│   │   │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller, timeseries (DuckDB)
+│   │   │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller, DuckDB ConfigStore
 │   │   │   ├── domain/    # BaseService, ServiceRegistry
-│   │   │   ├── application/ # UseCases (GetServiceHistory, etc.)
+│   │   │   ├── application/ # UseCases (GetServiceStatus, ControlService, etc.)
 │   │   │   └── transport/ # Fastify routes, WebSocket
-│   │   ├── openapi.yaml   # OpenAPI 3.1 spec (includes /history)
+│   │   ├── openapi.yaml   # OpenAPI 3.1 spec
 │   │   ├── dist/          # Compiled JavaScript
 │   │   └── package.json
 │   └── desktop/           # Electron 33 wrapper
@@ -166,13 +165,10 @@ Watchman/
 ## Key Concepts
 
 > [!info] Desktop Distribution
-> Watchman ships as a standalone Electron desktop application (macOS dmg, Windows NSIS, Linux AppImage+deb) that auto-spawns the Node.js backend on a loopback port and serves the React frontend via a custom `watchman://` protocol. Each installation gets a unique master key for encrypting service credentials. See [[docs/adr/016-electron-desktop-wrapper|ADR-016]] and [[docs/guides/running-the-desktop-app|Desktop App Guide]].
+> Watchman ships as a standalone Electron desktop application (macOS dmg, Windows NSIS, Linux AppImage+deb) that auto-spawns the Node.js backend as a child process on a loopback port and serves the React frontend via a custom `watchman://` protocol. Each installation gets a unique master key for encrypting service credentials. See [[docs/adr/016-electron-desktop-wrapper|ADR-016]] and [[docs/guides/running-the-desktop-app|Desktop App Guide]].
 
-> [!info] Split Deploy — Pi Backend + Mac Electron Client
-> For always-on polling without Mac-sleep gaps, the backend can run natively on a Raspberry Pi under systemd while the Mac Electron app becomes a pure client paired via setup-wizard URL entry. LAN-only, no auth, no TLS. Offline banner surfaces when the Pi is unreachable. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] and [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]].
-
-> [!info] Time-Series (Phase 1), Design System (Phase 2) & Bento Dashboard (Phase 3)
-> **Phase 1** (LIVE) adds embedded DuckDB time-series storage with tiered rollups (raw/1m/5m/1h) and a `/services/:kind/history` endpoint for querying historical metrics. **Phase 2** (LIVE) ships dark-luxury OKLCH tokens, Geist Variable typography, and 14 custom primitives. **Phase 3** (LIVE — pilot) adds the bento dashboard with a generic `ServiceTile` driven by a `ServiceRenderer` registry. Live behind `?bento=1` flag with Bitcoin and Synology pilot services. See [[docs/features/time-series-history|Time-Series Feature]], [[docs/architecture/frontend-design-system|Frontend Design System]], [[docs/components/primitives/index|Primitives Index]], and [[docs/components/bento-dashboard|Bento Dashboard]].
+> [!info] Design System & Bento Dashboard
+> The frontend uses a dark-luxury OKLCH token set, Geist Variable typography, and 14 custom primitives. The dashboard is a renderer-driven bento grid with a generic `ServiceTile` component driven by a `ServiceRenderer` registry. See [[docs/architecture/frontend-design-system|Frontend Design System]], [[docs/components/primitives/index|Primitives Index]], and [[docs/components/bento-dashboard|Bento Dashboard]].
 
 > [!info] Service Pattern
 > Each service extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` for status checks and `getStats()` for detailed metrics. Services are registered in [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]] using `${kind}:${instanceId}` keys (e.g., `qbittorrent:1`, `qbittorrent:2`).

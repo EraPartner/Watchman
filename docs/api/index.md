@@ -73,32 +73,24 @@ Operational health and version information.
 }
 ```
 
-**Note on `/meta/health`**: In split-deploy mode (Electron client + Pi backend), the setup wizard's ConnectStep probes this endpoint with a 3-second timeout to verify the Pi backend is reachable. The OfflineBanner also polls this endpoint every 10 seconds to detect if the backend goes offline. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]].
+**Note on `/meta/health`**: Useful for monitoring the backend liveness, especially when monitoring the Watchman backend itself as a service.
 
 ### Services Endpoints
 
-Service health, stats, control, and time-series history.
+Service health, stats, and control.
 
-| Endpoint                       | Method | Description                           | Query Parameters         | Since |
-| ------------------------------ | ------ | ------------------------------------- | ------------------------ | ----- |
-| `GET /services`                | GET    | Aggregated health for all services    | -                        | v1.0  |
-| `GET /services/{kind}/health`  | GET    | Health for specific service instance  | `instance` (optional)    | v1.0  |
-| `GET /services/{kind}/stats`   | GET    | Stats for specific service instance   | `instance` (optional)    | v1.0  |
-| `POST /services/{kind}/control`| POST   | Issue control action to service       | `instance` (optional)    | v1.0  |
-| `GET /services/{kind}/history` | GET    | Time-series history for metric (Phase 1) | `instance`, `metric`, `from`, `to`, `resolution`, `agg`, `limit` | v2.1  |
+| Endpoint                       | Method | Description                           | Query Parameters      | Since |
+| ------------------------------ | ------ | ------------------------------------- | --------------------- | ----- |
+| `GET /services`                | GET    | Aggregated health for all services    | -                     | v1.0  |
+| `GET /services/{kind}/health`  | GET    | Health for specific service instance  | `instance` (optional) | v1.0  |
+| `GET /services/{kind}/stats`   | GET    | Stats for specific service instance   | `instance` (optional) | v1.0  |
+| `POST /services/{kind}/control`| POST   | Issue control action to service       | `instance` (optional) | v1.0  |
 
 **Path Parameters:**
 - `{kind}`: Service kind (e.g., `bitcoin`, `ipfs`, `homebridge`, etc.)
 
 **Query Parameters:**
 - `instance`: Instance ID. Omit to use first registered instance for the kind.
-
-**History Endpoint** (`v2.1+`):
-
-The `/services/{kind}/history` endpoint supports time-series queries with auto-resolution. See [[docs/api/history|History API Documentation]] for full details, including:
-- Query parameters: `metric` (required), `from` and `to` (timestamps), `resolution` (auto-selected if omitted), `agg`, `limit`
-- Auto-resolution: `≤1h` → raw · `≤24h` → 1m · `≤7d` → 5m · `≤30d` → 1h
-- Response: Array of `{t, v, min, max}` points
 
 **Health Response**:
 ```json

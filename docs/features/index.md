@@ -29,8 +29,10 @@ SORT file.name ASC
 | [[docs/features/service-monitoring | Service Monitoring]]     | Health checks and statistics for external services |
 | [[docs/features/multi-instance     | Multi-Instance Support]] | Run multiple nodes of the same service type        |
 | [[docs/features/real-time-updates  | Real-Time Updates]]      | WebSocket-based status broadcasting                |
-| [[docs/features/time-series-history | Time-Series History]]    | Historical metrics with DuckDB storage and rollups |
 | [[docs/features/ui-configuration   | UI Configuration]]       | Runtime service CRUD from UI with encryption and hot-reload |
+
+> [!note] Removed Features
+> Time-series history (persistent DuckDB-backed metrics with rollups and charting) was removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]. The dashboard now provides real-time status and recent activity in an in-memory buffer, lost on restart. See [[docs/features/time-series-history|Time-Series Feature (Archived)]] for historical context.
 
 ## Related
 

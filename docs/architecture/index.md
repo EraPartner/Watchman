@@ -35,15 +35,11 @@ SORT file.name ASC
 | [[docs/architecture/core-systems          | Core Systems]]          | Event Bus and Service Lifecycle orchestration  |
 | [[docs/architecture/data-flow             | Data Flow]]             | Authentication, monitoring, and WebSocket flows |
 
-## Deployment Topologies
+## Deployment Topology
 
-### Single-Box (Bundled Electron)
+### Bundled Electron (Single-Box)
 
-Frontend and backend run on the same machine (Mac/Windows/Linux) as a standalone Electron app.
-
-### Split Deploy (Pi Backend + Mac Client)
-
-Backend runs natively on Raspberry Pi under systemd; Electron becomes a pure client on Mac that pairs via setup-wizard URL entry. Polling is continuous and unaffected by Mac sleep. Data lives at `~/.watchman/data/` on the Pi. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] and [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]].
+Frontend and backend run on the same machine (macOS, Windows, or Linux) as a standalone Electron app. The backend process is spawned as a child of the Electron main process at startup and uses a loopback port. Data (master key, service configs) lives at `<userData>/data/`. See [[docs/adr/016-electron-desktop-wrapper|ADR-016]] and [[docs/guides/running-the-desktop-app|Desktop App Guide]].
 
 ## System Overview
 
@@ -72,7 +68,8 @@ Backend runs natively on Raspberry Pi under systemd; Electron becomes a pure cli
 │  │  │AdGuard │ │Bitcoin │ │  Tor   │ │ IPFS   │ ... │   │
 │  │  └────────┘ └────────┘ └────────┘ └────────┘     │   │
 │  │                                                    │   │
-│  │  DuckDB: timeseries + service config + audit     │   │
+│  │  DuckDB: service config + audit trail             │   │
+│  │  In-memory: recent-activity ring buffer           │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                             │
@@ -90,11 +87,10 @@ Backend runs natively on Raspberry Pi under systemd; Electron becomes a pure cli
 - [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]] — TypeScript + Fastify 4 backend
 - [[docs/adr/014-time-series-duckdb-and-bento-design-system|ADR-014]] — Time-series + bento design system
 - [[docs/adr/015-ui-driven-service-configuration|ADR-015]] — UI-driven service configuration with DuckDB + encryption
-- [[docs/adr/016-electron-desktop-wrapper|ADR-016]] — Electron desktop wrapper with custom protocol
+- [[docs/adr/016-electron-desktop-wrapper|ADR-016]] — Electron desktop wrapper with custom protocol and subprocess backend
 - [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] — Single-user design, removed auth, frontend v2 migration
-- [[docs/adr/018-split-deploy-pi-backend|ADR-018]] — Split Deploy: Pi Backend + Mac Electron Client
+- [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]] — Revert Pi split deploy; remove persistent time-series; restore Mac-only Electron + embedded backend
 - [[docs/guides/running-the-desktop-app|Desktop App Guide]] — Build and run the Electron app
-- [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]] — Native systemd deployment on Raspberry Pi
 - [[docs/components/primitives/index|Primitive Components Index]]
 - [[docs/features/index|Features]]
 

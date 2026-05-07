@@ -27,13 +27,14 @@ SORT file.name ASC
 | Guide                           | Description         |
 | ------------------------------- | ------------------- | ------------------------------------ |
 | [[docs/guides/setup             | Setup Guide]]           | Local development environment setup  |
-| [[docs/guides/running-the-setup-wizard | Setup Wizard]]  | First-boot wizard for service configuration  |
 | [[docs/guides/deployment        | Deployment Guide]]      | Production deployment instructions   |
-| [[docs/guides/deploying-to-raspberry-pi | Deploy to Raspberry Pi]] | Install the backend on a Pi under systemd (split-deploy model) |
 | [[docs/guides/running-the-desktop-app | Desktop App]]   | Build and run the Electron desktop application |
 | [[docs/guides/adding-services   | Adding Services]]       | How to add a new service integration |
 | [[docs/guides/contributing      | Contributing]]          | Contribution guidelines and workflow |
 | [[docs/guides/ai-agent-workflow | AI Agent Workflow]]     | Comprehensive AI agent instructions  |
+
+> [!note] Superseded guides
+> `running-the-setup-wizard` and `deploying-to-raspberry-pi` were removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]] (revert split deploy). The setup wizard Connect step and Pi deployment are no longer part of the architecture.
 
 ## AI Agent Resources
 
@@ -99,8 +100,6 @@ if (Set up project?) then (yes)
     :[[docs/guides/setup|Setup Guide]];
 elseif (Deploy to production?) then (yes)
     :[[docs/guides/deployment|Deployment Guide]];
-elseif (Deploy backend to Pi?) then (yes)
-    :[[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]];
 elseif (Add new service?) then (yes)
     :[[docs/guides/adding-services|Adding Services Guide]];
 elseif (Contribute code?) then (yes)

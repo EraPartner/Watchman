@@ -1,10 +1,10 @@
 ---
 title: "ADR-014: Time-Series (DuckDB) + Bento Frontend Rewrite"
 type: adr
-status: accepted
-date: 2026-04-18
-tags: [adr, architecture, time-series, duckdb, frontend, design-system]
-description: Add embedded DuckDB time-series store with tiered rollups and a /history endpoint; rewrite frontend as bento dashboard with renderer registry.
+status: partially-superseded
+date: 2026-05-07
+tags: [adr, architecture, time-series, duckdb, frontend, design-system, superseded-by-adr-019]
+description: Add embedded DuckDB time-series store with tiered rollups and a /history endpoint; rewrite frontend as bento dashboard with renderer registry — PARTIALLY SUPERSEDED by ADR-019 (time-series removed, bento retained).
 aliases: [adr-014, time-series, bento]
 ---
 
@@ -15,8 +15,9 @@ aliases: [adr-014, time-series, bento]
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Partially superseded by [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]
 - **Date**: 2026-04-18
+- **Note**: The time-series backend (DuckDB `TimeSeriesWriter`, `RollupWorker`, `/history` endpoint, `HistoryChart` frontend) was removed. The bento dashboard design system and DuckDB usage for `ConfigStore` are retained.
 
 ## Context
 

@@ -31,7 +31,7 @@ aliases: [env vars, environment, configuration, config]
 | `WATCHMAN_MASTER_KEY` | AES-256-GCM key for encrypting service secrets (base64, 32 bytes, optional) | Auto-provisioned at `{DATA_DIR}/master.key` if not set | `Z0VzN3AxMHBXZ3UyaDRxZ0I1Y...` (base64-decoded = 32 bytes) |
 
 > [!warning] Master Key Loss
-> If `WATCHMAN_MASTER_KEY` is lost or rotated, all encrypted service secrets become unrecoverable. Store the master key file securely (encrypted backup, secrets vault). On Raspberry Pi deployment, preserve `~/.watchman/data/master.key` during backups. Losing it requires re-entering all service credentials.
+> If `WATCHMAN_MASTER_KEY` is lost or rotated, all encrypted service secrets become unrecoverable. Store the master key file securely (encrypted backup, secrets vault). Preserve `{DATA_DIR}/master.key` during backups. Losing it requires re-entering all service credentials.
 
 ## Server Configuration
 
@@ -46,37 +46,23 @@ aliases: [env vars, environment, configuration, config]
 > [!info] Service Configuration
 > As of v2.2, services are managed via the UI and stored in DuckDB. The `ENABLED_SERVICES` and per-service env vars are removed. On first boot, legacy service env vars are migrated to the database. See [[docs/features/ui-configuration|UI Configuration Feature]] for details.
 
-## Time-Series Configuration
-
-| Variable             | Description                                 | Default              | Example            |
-| -------------------- | ------------------------------------------- | -------------------- | ------------------ |
-| `TIMESERIES_ENABLED` | Enable/disable time-series metrics storage  | `true`               | `true`, `false`    |
-
-> [!info] Time-Series Storage
-> When `TIMESERIES_ENABLED=true`, Watchman stores metrics in a DuckDB database at `{DATA_DIR}/timeseries.duckdb`. The database contains 5 tables (metric_raw, metric_1m, metric_5m, metric_1h, rollup_state) with automatic background rollups and retention policies. See [[docs/features/time-series-history|Time-Series Feature Documentation]] for details.
-
-## Raspberry Pi / Standalone Deployment
+## Persistent Data Storage
 
 | Variable             | Description                                 | Default             | Example |
 | -------------------- | ------------------------------------------- | ------------------- | ------- |
-| `DATA_DIR`           | Directory for DuckDB, master key, backups   | `./data`            | `/home/pi/.watchman/data` |
-| `BACKEND_V2_PORT`    | Fastify server port                         | `3001`              | `3001`, `8080` |
-| `BACKEND_V2_HOST`    | Fastify server bind address                 | `0.0.0.0`           | `127.0.0.1`, `0.0.0.0` |
+| `DATA_DIR`           | Directory for DuckDB ConfigStore and master key | `./data`        | `~/.watchman/data` |
 
-> [!info] Pi Data Directory
-> For systemd deployment on Raspberry Pi, set `DATA_DIR=/home/pi/.watchman/data` in the unit file. Master key is auto-provisioned at `{DATA_DIR}/master.key` (mode 0600) on first boot. See [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]] for complete setup.
+> [!info] Data Directory
+> The backend stores encrypted service configuration and the master key at `{DATA_DIR}/`. On desktop (Electron), this is typically `<userData>/data/`. If running standalone, ensure the directory is writable and backed up regularly.
 
 ## Desktop App Configuration (Electron)
-
-> [!warning] Split Deploy — No Backend Spawn
-> As of v2.5, the Electron desktop app no longer spawns a backend subprocess. It is now a pure client that pairs with a remote backend (typically on Raspberry Pi) via setup-wizard URL entry. See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] and [[docs/guides/deploying-to-raspberry-pi|Pi Deploy Guide]].
 
 | Variable                    | Description                                   | Default             | Notes |
 | --------------------------- | --------------------------------------------- | ------------------- | ----- |
 | `WATCHMAN_DEV_URL`          | Frontend URL override (dev mode only)         | `watchman://app/`   | For testing custom frontend server |
 
 > [!info] Desktop Data Directory
-> In Electron, `DATA_DIR` is not used. Client configuration is stored at `<userData>/client-config.json` and contains the remote backend URL set via setup wizard. See [[docs/guides/running-the-desktop-app|Desktop App Guide]] for platform-specific paths.
+> In Electron, `DATA_DIR` is automatically set to `<userData>/data/` where `<userData>` is the platform-specific app data directory (e.g., `~/Library/Application Support/Watchman` on macOS). See [[docs/guides/running-the-desktop-app|Desktop App Guide]] for platform-specific paths.
 
 ## Important Notes
 
