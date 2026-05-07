@@ -1,13 +1,15 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import * as path from 'path';
+import { getFreePort } from './freePort';
+import { startBackend, BackendHandle } from './backend';
 import {
   registerFrontendScheme,
   handleFrontendProtocol,
   FRONTEND_ENTRY_URL,
 } from './frontendProtocol';
-import { load as loadClientConfig, save as saveClientConfig } from './clientConfig';
 
 let mainWindow: BrowserWindow | null = null;
+let backend: BackendHandle | null = null;
 
 registerFrontendScheme();
 
@@ -32,16 +34,10 @@ function resolveFrontendRoot(): string {
   return path.join(__dirname, '..', '..', 'frontend', 'dist');
 }
 
-function wsUrlFor(apiUrl: string): string {
-  if (!apiUrl) return '';
-  return `${apiUrl.replace(/^http/, 'ws')}/ws`;
-}
-
 async function createWindow(apiUrl: string): Promise<void> {
-  const wsUrl = wsUrlFor(apiUrl);
+  const wsUrl = `${apiUrl.replace(/^http/, 'ws')}/ws`;
 
   mainWindow = new BrowserWindow({
-    title: 'Watchman',
     width: 1440,
     height: 900,
     minWidth: 900,
@@ -82,45 +78,30 @@ async function createWindow(apiUrl: string): Promise<void> {
   }
 }
 
-async function reloadWindow(): Promise<void> {
-  if (!mainWindow) return;
-  const config = loadClientConfig();
-  const apiUrl = config.apiUrl ?? '';
-  mainWindow.close();
-  await createWindow(apiUrl);
-}
-
-function registerIpc(): void {
-  ipcMain.handle('watchman:getApiUrl', () => {
-    return loadClientConfig().apiUrl ?? '';
-  });
-
-  ipcMain.handle('watchman:saveApiUrl', (_event, url: unknown) => {
-    const next = typeof url === 'string' ? url.trim() : '';
-    saveClientConfig({ apiUrl: next || undefined });
-    return true;
-  });
-
-  ipcMain.handle('watchman:reload', async () => {
-    await reloadWindow();
-    return true;
-  });
-}
-
 async function bootstrap(): Promise<void> {
   await app.whenReady();
 
   handleFrontendProtocol(resolveFrontendRoot());
-  registerIpc();
 
-  const config = loadClientConfig();
-  const apiUrl = config.apiUrl ?? '';
-  await createWindow(apiUrl);
+  try {
+    const port = await getFreePort();
+    const dataDir = path.join(app.getPath('userData'), 'data');
+    backend = await startBackend(port, dataDir);
+    const apiUrl = `http://${backend.host}:${backend.port}`;
+    await createWindow(apiUrl);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    dialog.showErrorBox('Watchman failed to start', message);
+    app.exit(1);
+    return;
+  }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      const current = loadClientConfig().apiUrl ?? '';
-      void createWindow(current);
+    if (BrowserWindow.getAllWindows().length === 0 && backend) {
+      createWindow(`http://${backend.host}:${backend.port}`).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        dialog.showErrorBox('Failed to reopen window', message);
+      });
     }
   });
 }
@@ -129,4 +110,22 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+let shuttingDown = false;
+app.on('before-quit', (event) => {
+  if (shuttingDown || !backend) {
+    return;
+  }
+  shuttingDown = true;
+  event.preventDefault();
+  backend
+    .stop()
+    .catch(() => {
+      /* best-effort shutdown */
+    })
+    .finally(() => {
+      backend = null;
+      app.quit();
+    });
 });

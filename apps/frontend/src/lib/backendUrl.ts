@@ -1,19 +1,7 @@
-/**
- * Backend URL Utility
- *
- * In the split deploy model, the Electron preload injects `apiUrl` / `wsUrl`
- * on `window.__WATCHMAN__` after the user enters the Pi backend URL in the
- * setup wizard. In dev (vite server), both are empty and requests go through
- * the vite proxy to `localhost:3001`.
- */
-
 export interface DesktopBridge {
   apiUrl?: string;
   wsUrl?: string;
   isDesktop?: boolean;
-  getApiUrl?: () => Promise<string>;
-  saveApiUrl?: (url: string) => Promise<boolean>;
-  reload?: () => Promise<boolean>;
 }
 
 export function getDesktopBridge(): DesktopBridge | undefined {
@@ -23,10 +11,13 @@ export function getDesktopBridge(): DesktopBridge | undefined {
 
 /**
  * Return the backend HTTP base URL.
- * Empty string means "use relative URLs" (vite dev proxy).
+ * - Desktop: injected by Electron preload via window.__WATCHMAN__.apiUrl
+ * - Dev (vite server): "" so requests go through the vite proxy
  */
 export function getBackendUrl(): string {
-  return getDesktopBridge()?.apiUrl ?? "";
+  const bridge = getDesktopBridge();
+  if (bridge?.apiUrl) return bridge.apiUrl;
+  return "";
 }
 
 export function getWebSocketUrl(path = "/ws"): string {
@@ -42,7 +33,6 @@ export function getWebSocketUrl(path = "/ws"): string {
     }
   }
 
-  // Dev: vite proxies /ws to localhost:3001
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}${normalizedPath}`;
