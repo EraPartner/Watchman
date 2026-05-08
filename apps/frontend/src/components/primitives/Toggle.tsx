@@ -2,10 +2,6 @@ import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "reac
 import * as T from "@radix-ui/react-toggle";
 import { cn } from "@/lib/utils";
 
-/**
- * Segmented toggle primitive. Group several <Toggle> buttons in a flex row
- * for a range-picker style control (see RangePicker).
- */
 export const Toggle = forwardRef<
   ElementRef<typeof T.Root>,
   ComponentPropsWithoutRef<typeof T.Root>

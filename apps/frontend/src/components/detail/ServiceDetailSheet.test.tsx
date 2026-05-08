@@ -61,8 +61,6 @@ vi.mock("@/components/primitives", () => {
   };
 });
 
-vi.mock("../detail/HistoryChart", () => ({ HistoryChart: () => null }));
-vi.mock("../detail/RangePicker", () => ({ RangePicker: () => null }));
 vi.mock("../detail/EventLog", () => ({ EventLog: () => null }));
 vi.mock("@/pages/Settings/ServiceEditor", () => ({ default: () => null }));
 
