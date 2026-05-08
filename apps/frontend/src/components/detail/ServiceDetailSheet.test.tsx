@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import React, { act } from "react";
+import { act } from "react";
+import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,26 +37,26 @@ vi.mock("@/services/renderers", () => ({
 }));
 
 // Heavy Radix primitives — replace with minimal HTML so jsdom renders children
-vi.mock("@/components/primitives", () => {
-  const React = require("react");
+vi.mock("@/components/primitives", async () => {
+  const React = await import("react");
   return {
-    Sheet: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    SheetContent: ({ children }: { children: React.ReactNode }) => React.createElement("div", { "data-testid": "sheet-content" }, children),
-    SheetHeader: ({ children }: { children: React.ReactNode }) => React.createElement("div", { "data-testid": "sheet-header" }, children),
-    SheetBody: ({ children }: { children: React.ReactNode }) => React.createElement("div", null, children),
-    SheetFooter: ({ children }: { children: React.ReactNode }) => React.createElement("div", null, children),
-    SheetTitle: ({ children }: { children: React.ReactNode }) => React.createElement("h2", null, children),
-    SheetDescription: ({ children }: { children: React.ReactNode }) => React.createElement("p", null, children),
-    StatusDot: ({ label, tone, pulse }: { label?: string; tone?: string; pulse?: boolean }) =>
+    Sheet: ({ children }: { children: ReactNode }) => React.createElement(React.Fragment, null, children),
+    SheetContent: ({ children }: { children: ReactNode }) => React.createElement("div", { "data-testid": "sheet-content" }, children),
+    SheetHeader: ({ children }: { children: ReactNode }) => React.createElement("div", { "data-testid": "sheet-header" }, children),
+    SheetBody: ({ children }: { children: ReactNode }) => React.createElement("div", null, children),
+    SheetFooter: ({ children }: { children: ReactNode }) => React.createElement("div", null, children),
+    SheetTitle: ({ children }: { children: ReactNode }) => React.createElement("h2", null, children),
+    SheetDescription: ({ children }: { children: ReactNode }) => React.createElement("p", null, children),
+    StatusDot: ({ label, tone }: { label?: string; tone?: string; pulse?: boolean }) =>
       React.createElement("span", { role: "status", "aria-label": label ?? tone ?? undefined }),
-    Badge: ({ children }: { children: React.ReactNode }) => React.createElement("span", null, children),
-    Button: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) =>
+    Badge: ({ children }: { children: ReactNode }) => React.createElement("span", null, children),
+    Button: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) =>
       React.createElement("button", { onClick }, children),
     ConfirmDialog: () => null,
-    Tabs: ({ children }: { children: React.ReactNode }) => React.createElement("div", null, children),
-    TabsList: ({ children }: { children: React.ReactNode }) => React.createElement("div", null, children),
-    TabsTrigger: ({ children }: { children: React.ReactNode }) => React.createElement("button", null, children),
-    TabsContent: ({ children, value }: { children: React.ReactNode; value: string }) =>
+    Tabs: ({ children }: { children: ReactNode }) => React.createElement("div", null, children),
+    TabsList: ({ children }: { children: ReactNode }) => React.createElement("div", null, children),
+    TabsTrigger: ({ children }: { children: ReactNode }) => React.createElement("button", null, children),
+    TabsContent: ({ children, value }: { children: ReactNode; value: string }) =>
       value === "metrics" ? React.createElement("div", null, children) : null,
     MetricValue: ({ value }: { value: string }) => React.createElement("span", null, value),
   };

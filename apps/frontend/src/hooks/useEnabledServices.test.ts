@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const useQueryMock = vi.fn();
-const getFrontendConfigMock = vi.fn();
+const getKindsMock = vi.fn();
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
@@ -9,7 +9,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("../services/ApiClient", () => ({
   apiClient: {
-    getFrontendConfig: (...args: unknown[]) => getFrontendConfigMock(...args),
+    getKinds: (...args: unknown[]) => getKindsMock(...args),
   },
 }));
 
@@ -38,9 +38,7 @@ describe("useEnabledServices", () => {
 
   it("matches enabled services case-insensitively", () => {
     useQueryMock.mockReturnValue({
-      data: {
-        enabledServices: ["adguard", "tor", "bitcoin"],
-      },
+      data: ["adguard", "tor", "bitcoin"],
       isLoading: false,
       error: undefined,
     });
@@ -54,10 +52,11 @@ describe("useEnabledServices", () => {
 
   it("wires query options for frontend config cache behavior", async () => {
     useQueryMock.mockReturnValue({
-      data: { enabledServices: [] },
+      data: [],
       isLoading: false,
       error: undefined,
     });
+    getKindsMock.mockResolvedValue([]);
 
     useEnabledServices();
 
@@ -74,6 +73,6 @@ describe("useEnabledServices", () => {
     expect(options.retry).toBe(2);
 
     await options.queryFn();
-    expect(getFrontendConfigMock).toHaveBeenCalledTimes(1);
+    expect(getKindsMock).toHaveBeenCalledTimes(1);
   });
 });

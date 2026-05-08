@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const useQueryMock = vi.fn();
-const getServiceInstancesMock = vi.fn();
+const getInstancesMock = vi.fn();
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
@@ -9,8 +9,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("../services/ApiClient", () => ({
   apiClient: {
-    getServiceInstances: (...args: unknown[]) =>
-      getServiceInstancesMock(...args),
+    getInstances: (...args: unknown[]) => getInstancesMock(...args),
   },
 }));
 
@@ -73,6 +72,7 @@ describe("useServiceInstances", () => {
 
   it("sets query options for service instance polling", async () => {
     useQueryMock.mockReturnValue({ data: undefined });
+    getInstancesMock.mockResolvedValue([]);
 
     useServiceInstances();
 
@@ -89,6 +89,6 @@ describe("useServiceInstances", () => {
     expect(options.retry).toBe(1);
 
     await options.queryFn();
-    expect(getServiceInstancesMock).toHaveBeenCalledTimes(1);
+    expect(getInstancesMock).toHaveBeenCalledTimes(1);
   });
 });

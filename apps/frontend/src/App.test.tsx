@@ -61,10 +61,6 @@ vi.mock("./components/dashboard/BentoDashboard", () => ({
   default: () => <div>Bento Dashboard</div>,
 }));
 
-vi.mock("./pages/Login", () => ({
-  default: () => <div>Login Page</div>,
-}));
-
 vi.mock("./pages/NotFound", () => ({
   default: () => <div>Not Found Page</div>,
 }));
@@ -99,16 +95,6 @@ describe("App routes", () => {
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = false;
     document.body.innerHTML = "";
-  });
-
-  it("renders Login page for /login route", async () => {
-    const { container, root } = await renderApp("/login");
-
-    expect(container.textContent).toContain("Login Page");
-
-    act(() => {
-      root.unmount();
-    });
   });
 
   it("renders NotFound page for unknown route", async () => {
