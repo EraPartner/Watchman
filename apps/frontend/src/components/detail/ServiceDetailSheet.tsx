@@ -75,8 +75,16 @@ export function ServiceDetailSheet({
     | undefined;
   const stats = statsSnapshot?.metrics as Record<string, unknown> | undefined;
   const healthRaw = healthQuery.data as
-    | { reachable?: boolean; message?: string }
+    | {
+        reachable?: boolean;
+        message?: string;
+        host?: { reachable: boolean; pingMs?: number };
+        service?: { reachable: boolean; latencyMs?: number };
+      }
     | undefined;
+  const hostHealth = healthRaw?.host;
+  const serviceHealth = healthRaw?.service;
+  const hasTwoTiers = hostHealth !== undefined && serviceHealth !== undefined;
   const health = healthRaw
     ? {
         status: (healthRaw.reachable ? "online" : "offline") as
@@ -156,7 +164,22 @@ export function ServiceDetailSheet({
           <>
             <SheetHeader>
               <div className="flex items-center gap-s-3">
-                <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
+                {hasTwoTiers ? (
+                  <>
+                    <StatusDot
+                      tone={hostHealth.reachable ? "ok" : "crit"}
+                      pulse={hostHealth.reachable}
+                      label={`host: ${hostHealth.reachable ? "up" : "down"}`}
+                    />
+                    <StatusDot
+                      tone={serviceHealth.reachable ? "ok" : "crit"}
+                      pulse={serviceHealth.reachable}
+                      label={`service: ${serviceHealth.reachable ? "up" : "down"}`}
+                    />
+                  </>
+                ) : (
+                  <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
+                )}
                 <SheetTitle>{renderer.displayName}</SheetTitle>
                 {health?.status ? (
                   <Badge

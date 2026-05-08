@@ -1,5 +1,5 @@
 import type { PigpioClient } from '../../../infra/gpio/pigpioClient.js';
-import type { SshExecutor, SshExecRequest } from '../../../infra/ssh/sshExecutor.js';
+import type { SshExecutor, SshExecRequest, SshExecResult } from '../../../infra/ssh/sshExecutor.js';
 import type { RaspberryPiInstance } from '../../../config/services.js';
 import { UnavailableError } from '../../../core/errors.js';
 import { getPiModel } from './piModel.js';
@@ -15,6 +15,8 @@ export interface PiStatsSnapshot {
   cpuTemp: number | null;
   clockRate: number | null;
   voltage: number | null;
+  /** vcgencmd get_throttled hex value. Non-zero = throttling/undervoltage active. */
+  throttled: number | null;
   load: number | null;
   swap: number | null;
   memory: string | null;
@@ -32,6 +34,19 @@ export interface PiStatsDeps {
   now: () => number;
 }
 
+interface DirectPiInfo {
+  cpuTemp: number | null;
+  clockRate: number | null;
+  voltage: number | null;
+  throttled: number | null;
+  load: number | null;
+  memory: string | null;
+  uptime: number | null;
+  prettyName: string | null;
+  processor: string | null;
+  isRpi: boolean;
+}
+
 export class PiStatsCollector {
   constructor(private readonly deps: PiStatsDeps) {}
 
@@ -47,6 +62,7 @@ export class PiStatsCollector {
       cpuTemp: null,
       clockRate: null,
       voltage: null,
+      throttled: null,
       load: null,
       swap: null,
       memory: null,
@@ -84,7 +100,24 @@ export class PiStatsCollector {
       await handle.end().catch(() => undefined);
     }
 
-    if (this.sshReady()) {
+    if (this.directSshReady()) {
+      try {
+        const info = await this.fetchDirectSshInfo(signal);
+        snapshot.rpiCliAvailable = true;
+        if (info.cpuTemp !== null) snapshot.cpuTemp = info.cpuTemp;
+        if (info.clockRate !== null) snapshot.clockRate = info.clockRate;
+        if (info.voltage !== null) snapshot.voltage = info.voltage;
+        if (info.throttled !== null) snapshot.throttled = info.throttled;
+        if (info.load !== null) snapshot.load = info.load;
+        if (info.memory !== null) snapshot.memory = info.memory;
+        if (info.uptime !== null) snapshot.uptime = info.uptime;
+        if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
+        if (info.processor !== null) snapshot.processor = info.processor;
+        if (info.isRpi) snapshot.isRpi = true;
+      } catch (e) {
+        snapshot.rpiCliError = e instanceof Error ? e.message : String(e);
+      }
+    } else if (this.macMiniReady()) {
       try {
         const info = await this.fetchRpiInfo(signal);
         snapshot.rpiCliAvailable = true;
@@ -109,9 +142,67 @@ export class PiStatsCollector {
     return snapshot;
   }
 
-  private sshReady(): boolean {
+  private directSshReady(): boolean {
+    const c = this.deps.config;
+    return Boolean(c.sshUser && c.sshKeyPath);
+  }
+
+  private macMiniReady(): boolean {
     const c = this.deps.config;
     return Boolean(c.macMiniHost && c.macMiniSshUser && c.macMiniSshKeyPath && c.rpiCliPath);
+  }
+
+  private async fetchDirectSshInfo(signal: AbortSignal): Promise<DirectPiInfo> {
+    const c = this.deps.config;
+    const req = (command: string): SshExecRequest => ({
+      host: c.host,
+      port: c.sshPort,
+      user: c.sshUser,
+      privateKeyPath: c.sshKeyPath,
+      command,
+      timeoutMs: c.timeoutMs,
+      signal,
+      ...(c.sshPassphrase ? { passphrase: c.sshPassphrase } : {}),
+    });
+
+    const settled = await Promise.allSettled([
+      this.deps.ssh.exec(req('vcgencmd measure_temp')),
+      this.deps.ssh.exec(req('vcgencmd measure_clock arm')),
+      this.deps.ssh.exec(req('vcgencmd measure_volts core')),
+      this.deps.ssh.exec(req('vcgencmd get_throttled')),
+      this.deps.ssh.exec(req('cat /proc/loadavg')),
+      this.deps.ssh.exec(req('cat /proc/meminfo')),
+      this.deps.ssh.exec(req('cat /proc/uptime')),
+      this.deps.ssh.exec(req('cat /proc/cpuinfo')),
+      this.deps.ssh.exec(req('cat /etc/os-release')),
+    ]);
+
+    // If every command failed, SSH is unreachable — re-throw the first error.
+    const allFailed = settled.every((r) => r.status === 'rejected');
+    if (allFailed) {
+      const first = settled[0] as PromiseRejectedResult;
+      throw first.reason instanceof Error ? first.reason : new UnavailableError(String(first.reason));
+    }
+
+    const [tempRes, clockRes, voltsRes, throttledRes, loadRes, memRes, uptimeRes, cpuinfoRes, osRes] = settled;
+
+    const stdout = (r: PromiseSettledResult<SshExecResult>): string =>
+      r.status === 'fulfilled' ? r.value.stdout : '';
+
+    const cpuInfo = parseProcCpuinfo(stdout(cpuinfoRes));
+
+    return {
+      cpuTemp: parseVcgencmdTemp(stdout(tempRes)),
+      clockRate: parseVcgencmdClock(stdout(clockRes)),
+      voltage: parseVcgencmdVolts(stdout(voltsRes)),
+      throttled: parseVcgencmdThrottled(stdout(throttledRes)),
+      load: parseProcLoadAvg(stdout(loadRes)),
+      memory: parseProcMeminfoFormatted(stdout(memRes)),
+      uptime: parseProcUptime(stdout(uptimeRes)),
+      prettyName: parseOsRelease(stdout(osRes)),
+      processor: cpuInfo.processor,
+      isRpi: cpuInfo.isRpi,
+    };
   }
 
   private async fetchRpiInfo(signal: AbortSignal): Promise<RpiInfo> {
@@ -134,4 +225,81 @@ export class PiStatsCollector {
     const parsed: unknown = JSON.parse(res.stdout);
     return parseRpiInfo(parsed, this.deps.now);
   }
+}
+
+// ─── vcgencmd parsers ──────────────────────────────────────────────────────────
+
+function parseVcgencmdTemp(out: string): number | null {
+  // "temp=45.1'C"
+  const m = out.match(/temp=([0-9.]+)/);
+  if (!m || !m[1]) return null;
+  const n = parseFloat(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseVcgencmdClock(out: string): number | null {
+  // "frequency(48)=1500000000"
+  const m = out.match(/=(\d+)/);
+  if (!m || !m[1]) return null;
+  const hz = parseInt(m[1], 10);
+  return Number.isFinite(hz) && hz > 0 ? Math.round(hz / 1_000_000) : null;
+}
+
+function parseVcgencmdVolts(out: string): number | null {
+  // "volt=0.8813V"
+  const m = out.match(/volt=([0-9.]+)/);
+  if (!m || !m[1]) return null;
+  const n = parseFloat(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseVcgencmdThrottled(out: string): number | null {
+  // "throttled=0x0" or "throttled=0x50005"
+  const m = out.match(/throttled=(0x[0-9a-fA-F]+|\d+)/);
+  if (!m || !m[1]) return null;
+  const str = m[1];
+  const n = str.startsWith('0x') ? parseInt(str, 16) : parseInt(str, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+// ─── /proc parsers ─────────────────────────────────────────────────────────────
+
+function parseProcLoadAvg(out: string): number | null {
+  const first = out.trim().split(/\s+/)[0];
+  if (!first) return null;
+  const n = parseFloat(first);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseProcMeminfoFormatted(out: string): string | null {
+  const m = out.match(/MemTotal:\s+(\d+)\s+kB/i);
+  if (!m || !m[1]) return null;
+  const totalKb = parseInt(m[1], 10);
+  const totalGb = (totalKb * 1024) / 1024 ** 3;
+  return `${totalGb.toFixed(1)} GB`;
+}
+
+function parseProcUptime(out: string): number | null {
+  const first = out.trim().split(/\s+/)[0];
+  if (!first) return null;
+  const n = parseFloat(first);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+interface CpuInfoResult {
+  processor: string | null;
+  isRpi: boolean;
+}
+
+function parseProcCpuinfo(out: string): CpuInfoResult {
+  const hwMatch = out.match(/^Hardware\s*:\s*(.+)$/im);
+  const modelMatch = out.match(/^Model\s*:\s*(.+)$/im);
+  const processor = hwMatch && hwMatch[1] ? hwMatch[1].trim() : null;
+  const isRpi = modelMatch ? /raspberry pi/i.test(modelMatch[1]) : false;
+  return { processor, isRpi };
+}
+
+function parseOsRelease(out: string): string | null {
+  const m = out.match(/^PRETTY_NAME="?([^"\n]+)"?/im);
+  return m && m[1] ? m[1].trim() : null;
 }

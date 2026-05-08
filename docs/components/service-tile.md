@@ -2,10 +2,10 @@
 title: ServiceTile Component
 type: component
 status: active
-date: 2026-04-18
-tags: [component, bento, tile, frontend, phase3]
-description: Generic single-tile component replacing all 18 service-specific *Card.tsx components. Driven by ServiceRenderer registry. Includes health query, metrics display, and detail-sheet trigger.
-aliases: [ServiceTile, bento tile, service card, generic tile]
+date: 2026-05-08
+tags: [component, bento, tile, frontend, phase3, two-tier, health, phase-0a]
+description: Generic single-tile component replacing all 18 service-specific *Card.tsx components. Driven by ServiceRenderer registry. Includes health query, metrics display, detail-sheet trigger, and two-tier status dots (Phase 0a F1).
+aliases: [ServiceTile, bento tile, service card, generic tile, two-tier status dots]
 ---
 
 # ServiceTile Component
@@ -46,7 +46,11 @@ export interface ServiceTileProps {
 ### Rendering
 
 1. **Container**: `Surface` primitive with sizing variants (CVA)
-2. **Header**: `StatusDot` (tone-aware) + `Badge` (status label) + optional close button
+2. **Header**: Status dots + `Badge` (status label) + optional close button
+   - When both `host` and `service` tiers present: **two `StatusDot` components** (F1 two-tier status dots — Phase 0a)
+     - First dot: host tier with label "host: up/down" and tone `ok` (green) or `crit` (red)
+     - Second dot: service tier with label "service: up/down" and tone `ok` (green) or `crit` (red)
+   - Otherwise: **single `StatusDot`** for backward compatibility (no tiers or only one tier present)
 3. **Primary Metric**: Single `MetricValue` from `renderer.summary[0]`
 4. **Secondary Metrics** (if room): 2-column definition list (label + value)
 5. **Subtitle**: Optional custom subtitle from `renderer.subtitle(ctx)`
@@ -163,8 +167,15 @@ When clicked, opens `<ServiceDetailSheet>` with the renderer's `detail` groups.
 
 ## Testing
 
-- Unit tests in `[[apps/frontend/src/components/tile/ServiceTile.test.tsx]]` (planned Phase 4)
-- Integration tests with renderers and queries
+Two-tier status dots unit tests (Phase 0a — F1):
+
+- `[[apps/frontend/src/components/tile/ServiceTile.test.tsx]]` — 6 tests covering:
+  - Two dots render when both `host` and `service` tiers present
+  - Single dot fallback when no tiers (backward compat)
+  - Single dot when health undefined
+  - Host and service tier labels correctly set
+  - Partial tier fallbacks (only host or only service tier)
+  - Tone mapping: `ok` for reachable, `crit` for unreachable
 
 ## Related
 

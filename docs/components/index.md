@@ -2,9 +2,9 @@
 title: Frontend Components
 type: index
 status: active
-date: 2026-04-20
-tags: [component, index, frontend, ui, primitives, design-system, bento, phase3, settings, backup, setup-wizard, single-user, v2]
-description: Index of all React component and hook documentation for the Watchman frontend including design system primitives, setup wizard, and Phase 3 bento dashboard (single-user, no auth)
+date: 2026-05-07
+tags: [component, index, frontend, ui, primitives, design-system, bento, phase3, phase0a, settings, backup, setup-wizard, single-user, v2, two-tier, status-dots]
+description: Index of all React component and hook documentation for the Watchman frontend including design system primitives, setup wizard, bento dashboard with two-tier status dots (Phase 0a), and Phase 3 bento dashboard (single-user, no auth)
 aliases: [components index, react components, ui components, bento components, settings pages, setup wizard]
 ---
 

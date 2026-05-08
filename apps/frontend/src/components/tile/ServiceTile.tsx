@@ -53,8 +53,16 @@ export function ServiceTile({
 
   const loading = healthQuery.isLoading || statsQuery.isLoading;
   const healthRaw = healthQuery.data as
-    | { reachable?: boolean; message?: string }
+    | {
+        reachable?: boolean;
+        message?: string;
+        host?: { reachable: boolean; pingMs?: number };
+        service?: { reachable: boolean; latencyMs?: number };
+      }
     | undefined;
+  const hostHealth = healthRaw?.host;
+  const serviceHealth = healthRaw?.service;
+  const hasTwoTiers = hostHealth !== undefined && serviceHealth !== undefined;
   const health = healthRaw
     ? {
         status: (healthRaw.reachable ? "online" : "offline") as
@@ -129,7 +137,22 @@ export function ServiceTile({
       <header className="flex items-start justify-between gap-s-2">
         <div className="min-w-0">
           <div className="flex items-center gap-s-2">
-            <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
+            {hasTwoTiers ? (
+              <>
+                <StatusDot
+                  tone={hostHealth.reachable ? "ok" : "crit"}
+                  pulse={hostHealth.reachable}
+                  label={`host: ${hostHealth.reachable ? "up" : "down"}`}
+                />
+                <StatusDot
+                  tone={serviceHealth.reachable ? "ok" : "crit"}
+                  pulse={serviceHealth.reachable}
+                  label={`service: ${serviceHealth.reachable ? "up" : "down"}`}
+                />
+              </>
+            ) : (
+              <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
+            )}
             <span className="truncate text-fs-label font-[600] uppercase tracking-[0.06em] text-[var(--text-md)]">
               {renderer.displayName}
             </span>

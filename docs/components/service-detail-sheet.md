@@ -2,16 +2,16 @@
 title: ServiceDetailSheet Component
 type: component
 status: active
-date: 2026-04-19
-tags: [component, bento, sheet, modal, detail-view, frontend, phase3, crud, edit, delete]
-description: Right-anchored detail sheet for service inspection, editing, and deletion. Displays tabbed metric groups, charts placeholder, service controls, and inline form editing.
-aliases: [ServiceDetailSheet, detail sheet, service details, service editor]
+date: 2026-05-07
+tags: [component, bento, sheet, modal, detail-view, frontend, phase3, phase0a, crud, edit, delete, two-tier, status-dots]
+description: Right-anchored detail sheet for service inspection, editing, and deletion. Displays two-tier status dots (F2), tabbed metric groups, charts, service controls, and inline form editing.
+aliases: [ServiceDetailSheet, detail sheet, service details, service editor, two-tier status dots]
 ---
 
 # ServiceDetailSheet Component
 
 > [!abstract] Overview
-> `ServiceDetailSheet` provides a detailed drill-down view for each service with full CRUD affordances. Opens from the right side of the screen, displaying tabbed metric groups, charts placeholder (Phase 5), service controls (enable/disable), and inline edit mode. Driven entirely by the `ServiceRenderer` registry.
+> `ServiceDetailSheet` provides a detailed drill-down view for each service with full CRUD affordances. Opens from the right side of the screen, displaying **two-tier status dots** when available (Phase 0a F2), tabbed metric groups, charts placeholder (Phase 5), service controls (enable/disable), and inline edit mode. Driven entirely by the `ServiceRenderer` registry.
 
 ## Location
 
@@ -47,7 +47,59 @@ On sheet close (`open=false`), view resets to `"detail"`.
 
 ### Header
 
-- Service icon/status dot
+#### Two-Tier Status Dots (Phase 0a F2)
+
+When the backend supplies both `host` and `service` health tiers:
+
+- **First dot** (left): **Host tier** — ICMP reachability
+  - Label: `"host: up"` or `"host: down"`
+  - Tone: `"ok"` if reachable, `"crit"` if unreachable
+  - Pulsing when up
+- **Second dot** (right): **Service tier** — Protocol probe result
+  - Label: `"service: up"` or `"service: down"`
+  - Tone: `"ok"` if reachable, `"crit"` if unreachable
+  - Pulsing when up
+
+Fallback (backward compat):
+- Single status dot using `renderer.tone()` when only one or neither tier is present
+- Matches the pattern used in [[docs/components/service-tile|ServiceTile]] (F1)
+
+Implementation:
+```typescript
+const hostHealth = healthRaw?.host;
+const serviceHealth = healthRaw?.service;
+const hasTwoTiers = hostHealth !== undefined && serviceHealth !== undefined;
+
+// In JSX header:
+{hasTwoTiers ? (
+  <>
+    <StatusDot
+      tone={hostHealth.reachable ? "ok" : "crit"}
+      pulse={hostHealth.reachable}
+      label={`host: ${hostHealth.reachable ? "up" : "down"}`}
+    />
+    <StatusDot
+      tone={serviceHealth.reachable ? "ok" : "crit"}
+      pulse={serviceHealth.reachable}
+      label={`service: ${serviceHealth.reachable ? "up" : "down"}`}
+    />
+  </>
+) : (
+  <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
+)}
+```
+
+Tests (5 passing):
+1. Renders two dots when both host and service tiers present
+2. Renders single dot when health has no tiers (backward compat)
+3. Renders single dot when health data is undefined
+4. Single dot fallback when only host tier present
+5. Single dot fallback when only service tier present
+
+See `[[apps/frontend/src/components/detail/ServiceDetailSheet.test.tsx]]` for test coverage.
+
+#### Other Header Elements
+
 - Service display name (from renderer)
 - Status badge (online/warning/error/offline)
 - Optional **disabled badge** — Shows when service exists and `enabled === false`

@@ -1,196 +1,213 @@
 ---
 title: "API: Services Health"
 type: api
-status: superseded
-date: 2026-04-10
-superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
-superseded_date: 2026-04-20
-tags: [api, health, services, batch, backend]
-description: Aggregate and batch health check endpoints for all monitored services
-aliases: [services health, batch health, health batch]
+status: active
+date: 2026-05-07
+tags: [api, health, services, monitoring, two-tier, backend, openapi]
+description: Service health endpoints with two-tier reachability model (host + service tiers)
+aliases: [services health, health endpoint, two-tier health]
 ---
 
-# Services Health Endpoints
-
-> [!danger] Superseded — No Longer Implemented
-> This document describes **v1 aggregate health endpoints** with auth requirements. The backend was rewritten to TypeScript + Fastify 4 in v2.0; current API in OpenAPI spec (see [[docs/adr/013-backend-rewrite-typescript-fastify|ADR-013]]). Content retained for archival reference only.
-
+# Services Health
 
 > [!abstract] Overview
-> Aggregate health checks for all or a subset of monitored services. Used by the frontend dashboard to display service status cards.
+> Per-service health snapshots using a two-tier reachability model. Each service exposes separate ICMP host reachability and protocol-specific service reachability, enabling fine-grained diagnostics.
+>
+> **Two-Tier Model** (since ADR-019 Phase 0a):
+> - **Host tier** (`host.reachable`) — ICMP ping to the host
+> - **Service tier** (`service.reachable`) — Protocol-specific probe (HTTP, RPC, etc.)
+> - **Composite** (`reachable`) — Semantics vary by service; typically `host AND service` for HTTP services, `host OR service` for others
 
 ## Endpoints Summary
 
-| Method | Path                         | Description                 | Auth | Rate Limit      |
-| ------ | ---------------------------- | --------------------------- | ---- | --------------- |
-| `GET`  | `/api/services/health`       | All enabled services health | Yes  | `healthLimiter` |
-| `POST` | `/api/services/health-batch` | Batch health check          | Yes  | `healthLimiter` |
-| `GET`  | `/api/services/instances`    | Service instance metadata   | Yes  | `healthLimiter` |
+| Path                          | Method | Description                                      |
+| ----------------------------- | ------ | ------------------------------------------------ |
+| `/services`                   | GET    | Aggregated health for all registered services   |
+| `/services/{kind}/health`     | GET    | Single service instance health with two-tier model |
+
+See [[docs/api/index|API Index]] for full endpoint reference.
 
 ---
 
-## GET /api/services/health
+## GET /services
 
-Returns health status for all enabled services in a single request.
+Returns aggregated health snapshot for all registered service instances.
 
 ### Response
 
-#### 200 OK
-
 ```json
 {
-  "services": {
-    "adguard": {
-      "status": "online",
-      "timestamp": "2026-04-02T12:00:00.000Z",
-      "data": { "protection": true }
+  "data": [
+    {
+      "id": "bitcoin:main",
+      "kind": "bitcoin",
+      "instanceId": "main",
+      "result": {
+        "ok": true,
+        "value": {
+          "reachable": true,
+          "latencyMs": 45,
+          "message": "OK",
+          "at": 1714668000000,
+          "host": {
+            "reachable": true,
+            "pingMs": 12
+          },
+          "service": {
+            "reachable": true,
+            "latencyMs": 45
+          }
+        }
+      }
     },
-    "bitcoin": {
-      "status": "online",
-      "timestamp": "2026-04-02T12:00:00.000Z"
+    {
+      "id": "adguard:main",
+      "kind": "adguard",
+      "instanceId": "main",
+      "result": {
+        "ok": true,
+        "value": {
+          "reachable": false,
+          "message": "Service probe failed",
+          "at": 1714668000000,
+          "host": {
+            "reachable": true,
+            "pingMs": 8
+          },
+          "service": {
+            "reachable": false,
+            "message": "HTTP GET /control/status: connection refused"
+          }
+        }
+      }
     },
-    "tor": {
-      "status": "offline",
-      "timestamp": "2026-04-02T12:00:00.000Z",
-      "error": "Connection refused"
+    {
+      "id": "tor:main",
+      "kind": "tor",
+      "instanceId": "main",
+      "result": {
+        "ok": false,
+        "error": {
+          "code": "UNAVAILABLE",
+          "message": "Service unreachable"
+        }
+      }
     }
-  },
-  "timestamp": "2026-04-02T12:00:00.000Z"
+  ]
 }
 ```
 
-| Field                  | Type     | Description                              |
-| ---------------------- | -------- | ---------------------------------------- |
-| `services`             | `object` | Map of service name → health result      |
-| `services.*.status`    | `string` | `"online"`, `"offline"`, or `"degraded"` |
-| `services.*.timestamp` | `string` | ISO 8601 timestamp                       |
-| `services.*.data`      | `object` | Optional service-specific data           |
-| `services.*.error`     | `string` | Error message if offline                 |
-| `timestamp`            | `string` | Response timestamp                       |
-
-### Behavior
-
-- Checks only services listed in `ENABLED_SERVICES` env var
-- Each health check has a **5-second timeout**
-- Request abort from `requestTimeout`/client disconnect propagates into per-service health checks via `req.requestAbortSignal`
-- Route uses `healthCacheMiddleware` for cached health responses
-- Timeout handles are cleared in both success and `finally` paths to avoid leaked timers
-- Failed checks return `offline` status with error message
-- Health checks are wrapped with **circuit breaker** protection
-
-### Source
-
-- Route module: `apps/backend/routes/metaRoutes.js`
-- Route registration/dependencies: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
-- Request-timeout/abort source: `apps/backend/middleware/requestTimeout.js`
-- ServiceManager: `apps/backend/services/ServiceManager.js`
+| Field              | Type      | Description                                                           |
+| ------------------ | --------- | --------------------------------------------------------------------- |
+| `id`               | `string`  | Composite ID: `{kind}:{instanceId}`                                  |
+| `kind`             | `string`  | Service kind (bitcoin, adguard, tor, etc.)                           |
+| `instanceId`       | `string`  | Instance identifier for multi-instance services                       |
+| `result.ok`        | `boolean` | `true` if health check succeeded, `false` if error occurred           |
+| `result.value`     | `object`  | **HealthSnapshot** (present only if `ok=true`)                       |
+| `result.error`     | `object`  | **DomainError** with code and message (present only if `ok=false`)   |
 
 ---
 
-## POST /api/services/health-batch
+## GET /services/{kind}/health
 
-Check health for a specific subset of services. More efficient than individual status calls.
+Returns health snapshot for a specific service instance.
 
-### Request
+### Parameters
 
-```json
-{
-  "services": ["adguard", "bitcoin", "tor"]
-}
-```
-
-| Field      | Type       | Required | Description                   |
-| ---------- | ---------- | -------- | ----------------------------- |
-| `services` | `string[]` | Yes      | Array of service IDs to check |
-
-### Validation
-
-- **Max batch size**: 25 services
-- **Service ID validation**: Must match `isValidServiceId()` pattern
-- **Input sanitization**: Strings truncated to 64 chars
-- **Duplicates**: Automatically deduplicated
+- `{kind}` — Service kind (e.g., `bitcoin`, `adguard`, `homebridge`)
+- `?instance` — Instance ID (optional; defaults to first instance of the kind)
 
 ### Response
 
-#### 200 OK
-
 ```json
 {
-  "adguard": {
-    "status": "online",
-    "timestamp": "2026-04-02T12:00:00.000Z"
-  },
-  "bitcoin": {
-    "status": "online",
-    "timestamp": "2026-04-02T12:00:00.000Z"
+  "data": {
+    "reachable": true,
+    "latencyMs": 45,
+    "message": "OK",
+    "at": 1714668000000,
+    "host": {
+      "reachable": true,
+      "pingMs": 12
+    },
+    "service": {
+      "reachable": true,
+      "latencyMs": 45
+    }
   }
 }
 ```
 
-#### 400 Bad Request
+### HealthSnapshot Structure
+
+| Field           | Type      | Description                                                           |
+| --------------- | --------- | --------------------------------------------------------------------- |
+| `reachable`     | `boolean` | Composite reachability. Semantics depend on service type.             |
+| `latencyMs`     | `number?` | Service latency, falls back to `host.pingMs` if service tier has no latency |
+| `message`       | `string?` | Service-level failure reason if `service.reachable=false`            |
+| `details`       | `object?` | Service-specific diagnostic details (varies by service)               |
+| `at`            | `number`  | Timestamp in milliseconds when snapshot was taken                    |
+| `host`          | `object`  | **HostHealth** — ICMP ping tier                                      |
+| `service`       | `object`  | **ServiceHealth** — Protocol probe tier                               |
+
+### HostHealth Structure
+
+| Field       | Type      | Description                      |
+| ----------- | --------- | -------------------------------- |
+| `reachable` | `boolean` | ICMP ping to host succeeded      |
+| `pingMs`    | `number?` | Round-trip time in milliseconds  |
+
+### ServiceHealth Structure
+
+| Field       | Type      | Description                                                    |
+| ----------- | --------- | -------------------------------------------------------------- |
+| `reachable` | `boolean` | Protocol probe succeeded (HTTP, RPC, etc.)                    |
+| `latencyMs` | `number?` | Probe latency in milliseconds                                  |
+| `message`   | `string?` | Human-readable failure reason                                  |
+| `details`   | `object?` | Service-specific data (varies by service and protocol)         |
+
+### Example: Host Up, Service Down
 
 ```json
 {
-  "error": "Invalid request body. Expected { services: string[] }"
-}
-```
-
-```json
-{
-  "error": "Too many services requested. Maximum 25"
-}
-```
-
-```json
-{
-  "error": "Invalid service id: invalid-service-name"
-}
-```
-
-### Frontend Usage
-
-Consumed by React Query hooks and dashboard views (for example `useAllServicesHealth()` in `apps/frontend/src/hooks/useServiceHealth.ts`).
-
-### Source
-
-- Route module: `apps/backend/routes/metaRoutes.js`
-- Route registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
-- Frontend hooks: `apps/frontend/src/hooks/useServiceHealth.ts`, `apps/frontend/src/hooks/useServiceInstances.tsx`
-
----
-
-## GET /api/services/instances
-
-Returns metadata about multi-instance service configurations.
-
-### Response
-
-#### 200 OK
-
-```json
-{
-  "instances": {
-    "qbittorrent": {
-      "count": 2,
-      "instances": [
-        { "id": "qbittorrent_1", "type": "qbittorrent" },
-        { "id": "qbittorrent_2", "type": "qbittorrent" }
-      ]
+  "data": {
+    "reachable": false,
+    "message": "Service probe failed",
+    "at": 1714668000000,
+    "host": {
+      "reachable": true,
+      "pingMs": 8
     },
-    "synology": {
-      "count": 1,
-      "instances": [{ "id": "synology", "type": "synology" }]
+    "service": {
+      "reachable": false,
+      "message": "HTTP GET /control/status: connection refused"
     }
-  },
-  "timestamp": "2026-04-02T12:00:00.000Z"
+  }
 }
 ```
 
-### Source
+This indicates the host is reachable via ICMP, but the service daemon is not responding to its protocol probe.
 
-- Route module: `apps/backend/routes/metaRoutes.js`
-- Route registration: `apps/backend/routes/registerApiRoutes.js`, `apps/backend/bootstrap/registerRoutes.js`
-- ServiceManager: `apps/backend/services/ServiceManager.js`
+### Example: Host Down, Service Down
+
+```json
+{
+  "data": {
+    "reachable": false,
+    "message": "Host unreachable",
+    "at": 1714668000000,
+    "host": {
+      "reachable": false
+    },
+    "service": {
+      "reachable": false,
+      "message": "skipped (host down)"
+    }
+  }
+}
+```
+
+Host is offline; service probe was not attempted.
 
 ---
 

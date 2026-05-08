@@ -2,9 +2,9 @@
 title: Architecture
 type: index
 status: active
-date: 2026-04-20
-tags: [architecture, index, fastify, typescript, layered, duckdb, configuration, electron, single-user]
-description: Index of all architecture documentation for the Watchman project - single-user client-server with TypeScript backend
+date: 2026-05-08
+tags: [architecture, index, fastify, typescript, layered, duckdb, configuration, electron, single-user, roon-api, websocket, rn1, rn2]
+description: Index of all architecture documentation for the Watchman project - single-user client-server with TypeScript backend including Roon WebSocket API support
 aliases: [architecture index, system design, system architecture]
 ---
 

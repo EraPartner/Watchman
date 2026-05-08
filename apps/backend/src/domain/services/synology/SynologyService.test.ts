@@ -3,6 +3,12 @@ import { SynologyService } from './SynologyService.js';
 import { UnauthorizedError, UnavailableError } from '../../../core/errors.js';
 import type { SnmpGetter, SnmpGetRequest, SnmpGetResult } from '../../../infra/snmp/snmpGetter.js';
 import type { SynologyInstance } from '../../../config/services.js';
+import type { PingProber } from '../../../infra/net/pingProbe.js';
+import type { DsmClient } from '../../../infra/synology/dsmClient.js';
+
+function fakePing(): PingProber {
+  return { probe: async () => ({ success: true, avgMs: 5 }) };
+}
 
 function makeConfig(overrides: Partial<SynologyInstance> = {}): SynologyInstance {
   return {
@@ -18,7 +24,20 @@ function makeConfig(overrides: Partial<SynologyInstance> = {}): SynologyInstance
     snmpPrivKey: 'p'.repeat(8),
     snmpAuthProtocol: 'SHA',
     snmpPrivProtocol: 'AES',
+    dsmUrl: '',
+    dsmAccount: '',
+    dsmPassword: '',
     ...overrides,
+  };
+}
+
+function fakeDsm(responses: Record<string, unknown>): DsmClient {
+  return {
+    call: async (api, _version, method) => {
+      const key = `${api}/${method}`;
+      if (key in responses) return responses[key] as never;
+      throw new Error(`unexpected dsm call: ${key}`);
+    },
   };
 }
 
@@ -39,6 +58,7 @@ describe('SynologyService', () => {
     const svc = new SynologyService({
       snmp: fakeSnmp(() => ({ values: [] })),
       config: makeConfig(),
+      ping: fakePing(),
       now: () => 0,
     });
     expect(svc.id).toBe('synology:main');
@@ -51,6 +71,7 @@ describe('SynologyService', () => {
         values: ['"DS920"', '123456', '"DS920+"', '"DSM 7.2"', '1'],
       })),
       config: makeConfig(),
+      ping: fakePing(),
       now: () => (n += 5),
     });
     const res = await svc.checkHealth(new AbortController().signal);
@@ -67,6 +88,7 @@ describe('SynologyService', () => {
     const svc = new SynologyService({
       snmp: fakeSnmp(() => ({ values: [] })),
       config: makeConfig({ snmpUser: '', snmpAuthKey: '', snmpPrivKey: '' }),
+      ping: fakePing(),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
@@ -83,6 +105,7 @@ describe('SynologyService', () => {
         throw new Error('timeout');
       }),
       config: makeConfig(),
+      ping: fakePing(),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
@@ -97,6 +120,7 @@ describe('SynologyService', () => {
     const svc = new SynologyService({
       snmp: fakeSnmp(() => ({ values: [] })),
       config: makeConfig({ snmpUser: '' }),
+      ping: fakePing(),
       now: () => 0,
     });
     const res = await svc.getStats(new AbortController().signal);
@@ -126,6 +150,7 @@ describe('SynologyService', () => {
     const svc = new SynologyService({
       snmp: fakeSnmp(() => ({ values }), calls),
       config: makeConfig(),
+      ping: fakePing(),
       now: () => 42,
     });
     const res = await svc.getStats(new AbortController().signal);
@@ -163,6 +188,7 @@ describe('SynologyService', () => {
     const svc = new SynologyService({
       snmp: fakeSnmp(() => ({ values })),
       config: makeConfig(),
+      ping: fakePing(),
       now: () => 0,
     });
     const res = await svc.getStats(new AbortController().signal);
@@ -176,10 +202,83 @@ describe('SynologyService', () => {
         throw new Error('snmpget exit 1');
       }),
       config: makeConfig(),
+      ping: fakePing(),
       now: () => 0,
     });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toBeInstanceOf(UnavailableError);
+  });
+
+  // SY2: DSM extended stats
+
+  it('getStats merges DSM metrics when dsm dep provided', async () => {
+    const snmpValues = [
+      '"DS920"', '500000', '"DS920+"', '"DSM 7.2"', '1',
+      '37', '42', '8192', '2048', '75',
+      '10000000', '4000000', '40', '123456789', '987654321',
+    ];
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values: snmpValues })),
+      config: makeConfig({ dsmUrl: 'http://nas:5000', dsmAccount: 'admin', dsmPassword: 'pass' }),
+      ping: fakePing(),
+      dsm: fakeDsm({
+        'SYNO.DSM.Info/get': { model: 'DS920+', version: 'DSM 7.2-64570', temperature: 38 },
+        'SYNO.Core.System.Status/get': { cpu_fan_status: 'normal', sys_fan_status: 'normal', power_status: 'normal' },
+        'SYNO.Storage.CGI.Storage/load_info': {
+          volumes: [{ status: 'normal' }, { status: 'normal' }],
+          disks: [{ status: 'normal', temp: 35 }, { status: 'crashed', temp: 37 }],
+        },
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const m = res.value.metrics;
+      expect(m.dsmTemperature).toBe(38);
+      expect(m.cpuFanStatus).toBe('normal');
+      expect(m.sysFanStatus).toBe('normal');
+      expect(m.powerStatus).toBe('normal');
+      expect(m.volumeCount).toBe(2);
+      expect(m.volumeDegradedCount).toBe(0);
+      expect(m.diskCount).toBe(2);
+      expect(m.diskDegradedCount).toBe(1);
+    }
+  });
+
+  it('getStats omits DSM metrics when DSM calls throw', async () => {
+    const snmpValues = ['0', '0', '0', '0', '1', '37', '0', '0', '0', '0', '0', '0', '0', '0', '0'];
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values: snmpValues })),
+      config: makeConfig({ dsmUrl: 'http://nas:5000', dsmAccount: 'admin', dsmPassword: 'pass' }),
+      ping: fakePing(),
+      dsm: { call: async () => { throw new Error('DSM unreachable'); } },
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.cpuUsage).toBe(37);
+      expect(res.value.metrics.dsmTemperature).toBeUndefined();
+      expect(res.value.metrics.volumeCount).toBeUndefined();
+    }
+  });
+
+  it('getStats omits DSM metrics when dsm dep absent', async () => {
+    const snmpValues = ['0', '0', '0', '0', '1', '20', '0', '0', '0', '0', '0', '0', '0', '0', '0'];
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values: snmpValues })),
+      config: makeConfig(),
+      ping: fakePing(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.cpuUsage).toBe(20);
+      expect(res.value.metrics.dsmTemperature).toBeUndefined();
+      expect(res.value.metrics.diskCount).toBeUndefined();
+    }
   });
 });

@@ -2,9 +2,9 @@
 title: Service Integrations
 type: index
 status: active
-date: 2026-04-18
-tags: [integration, index, services, backend, fastify, typescript]
-description: Index of all external service integration documentation for the Watchman project - each implements BaseService
+date: 2026-05-08
+tags: [integration, index, services, backend, fastify, typescript, snmp, snmp-walk, snmp-v2c, router-snmp, hue-api-v2, cert-pinning, ipfs-extended-stats, roon-api, websocket, zones, now-playing, rn1, rn2]
+description: Index of all external service integration documentation for the Watchman project - each implements BaseService; includes SNMP walk support (v2c/v3) for network device monitoring; Philips Hue with API v2 and cert pinning; IPFS with extended metrics; Roon with optional WebSocket API for zone/now-playing tracking
 aliases: [integrations index, services, service docs]
 ---
 
@@ -30,7 +30,7 @@ SORT file.name ASC
 | --------------------------- | -------------- | ----------- | ------------------------------ |
 | [[docs/integrations/adguard | AdGuard Home]] | HTTP API    | DNS-level ad blocker           |
 | [[docs/integrations/tor     | Tor]]          | SOCKS/HTTP  | Tor relay monitoring           |
-| [[docs/integrations/router  | Router]]       | SSH/HTTP    | Network router (Beryl/Telenet) |
+| [[docs/integrations/router  | Router]]       | ICMP/TCP/SNMP | Network router (Beryl/Telenet) |
 
 ### Cryptocurrency
 

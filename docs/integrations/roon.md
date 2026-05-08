@@ -2,39 +2,127 @@
 title: Roon Integration
 type: integration
 status: active
-date: 2026-04-02
-tags: [integration, services, backend, monitoring]
-description: Roon music server integration with multi-instance support
-aliases: [roon, roon server, music server]
+date: 2026-05-08
+tags: [integration, services, backend, monitoring, two-tier, icmp, tcp, roon-api, websocket, zones, now-playing, rn1, rn2]
+description: Roon music server integration with two-tier health model (ICMP + TCP probe) + optional WebSocket API support for zone tracking and now-playing status
+aliases: [roon, roon server, music server, roon api, zones]
 ---
 
 # Roon Integration
 
 > [!abstract] Overview
-> Monitors Roon music server with multi-instance support.
+> Monitors Roon music server with two-tier health model (ICMP ping + TCP probe) and optional WebSocket API integration for real-time zone and now-playing tracking.
 
-## Configuration
+## Health Model (Phase 0a)
+
+Two-tier health with inline parallel probe:
+
+- **Host tier** — ICMP ping to Roon host
+- **Service tier** — TCP connection probe on Roon ports (default 9100)
+- **Composite reachability** — `host.reachable OR service.reachable` (device considered up if either tier responds)
+
+## Roon WebSocket API Integration (RN1 + RN2)
+
+When `useRoonApi: true` (optional, default `false`), the service establishes a persistent WebSocket connection to the Roon Core API and tracks zones, playback state, and now-playing metadata in real time.
+
+### Configuration
 
 ```bash
 ROON_HOST=192.0.2.150
-ROON_PORTS=9003,9330,9100
+ROON_PORTS=9100                    # TCP probe ports
+ROON_API_PORT=9100                 # Roon Core API (WebSocket) port, default 9100
+ROON_USE_ROON_API=false            # Enable API integration (opt-in)
+ROON_TIMEOUT=10000                 # optional, default 10s
+ROON_PING_ENABLED=true             # optional ICMP ping (default true)
+ROON_PING_COUNT=2                  # ICMP count (default 2)
+```
+
+### Lifecycle
+
+- **`onStart()`** — When `useRoonApi=true`, connects to Roon Core API via `roonConnect()` and initializes WebSocket. Pairing is asynchronous; initial connection attempt is non-blocking.
+- **`onStop()`** — Closes the WebSocket handle and releases resources.
+
+### Roon API Infrastructure (RN1)
+
+Located in `[[apps/backend/src/infra/roon/]]`:
+
+**Contract** (`roonClient.ts`):
+- `RoonZone` — Zone state: zoneId, displayName, state (playing|paused|loading|stopped), queueItemsRemaining, queueTimeRemaining, nowPlaying (oneLine, seekPosition, length), outputCount
+- `RoonHandle` — Active connection: `getZones()`, `isPaired()`, `close()`
+- `RoonConnectFn` — DI factory: `(opts: RoonConnectOptions) => Promise<RoonHandle>`
+- `RoonConnectOptions` — host, port, extensionId, displayName, onZonesChanged callback
+
+**Implementation** (`roonClientImpl.ts`):
+- Uses `@roonlabs/node-roon-api` (CJS via `createRequire`)
+- Wraps `init_services()` + `ws_connect()`
+- Subscribes to `com.roonlabs.transport:2` zones via `core.moo._subscribe_helper()`
+- Handles zone subscription events: `Subscribed`, `Changed`, `zones_added`, `zones_changed`, `zones_removed`
+- Exposes zone snapshot via `getZones()` and pairing status via `isPaired()`
+
+**Tests** (`roonClient.test.ts`):
+- 7 contract tests with `makeFakeRoon()` factory covering connection, pairing, zone updates, cleanup
+
+### Stats with API
+
+When API is enabled, `getStats()` includes:
+
+```json
+{
+  "metrics": {
+    "host": "192.0.2.150",
+    "portCount": 1,
+    "pingEnabled": true,
+    "configured": true,
+    "paired": true,                    // Extension pairing status
+    "zoneCount": 2,                    // Total zones
+    "activeZones": 1,                  // Currently playing
+    "nowPlaying": "Album - Track Name" // Optional, if track playing
+  },
+  "at": 1714953600000
+}
+```
+
+When API is disabled (`useRoonApi=false`), only basic metrics returned:
+
+```json
+{
+  "metrics": {
+    "host": "192.0.2.150",
+    "portCount": 1,
+    "pingEnabled": true,
+    "configured": true
+  },
+  "at": 1714953600000
+}
 ```
 
 ## Endpoints
 
-| Endpoint               | Description        | Auth              |
-| ---------------------- | ------------------ | ----------------- |
-| `GET /api/roon/status` | Health check       | No (rate limited) |
-| `GET /api/roon/stats`  | Server info, zones | Yes               |
+| Endpoint               | Description                    | Auth              |
+| ---------------------- | ------------------------------ | ----------------- |
+| `GET /services/roon/health` | Health check (two-tier)        | No (rate limited) |
+| `GET /services/roon/stats`  | Server info, zones, now-playing | Yes               |
 
-## Service Class
+## Service Implementation
 
-`apps/backend/services/RoonService.js`
+**Class**: `[[apps/backend/src/domain/services/roon/RoonService.ts|RoonService.ts]]`
+
+### Config Fields
+
+- `host` — Roon Core IP/hostname
+- `ports` — TCP probe ports (array, default [9100])
+- `timeoutMs` — Probe timeout (default 5000)
+- `usePing` — Enable ICMP probing (default true)
+- `pingCount` — ICMP count (default 2)
+- **`apiPort`** (RN2) — WebSocket API port (default 9100)
+- **`useRoonApi`** (RN2) — Enable zone tracking (default false)
 
 ### Methods
 
-- `checkHealth()` - Port connectivity check
-- `getStats()` - Server status, active zones
+- `checkHealth()` — Parallel ICMP + TCP probes, returns composite reachability
+- `getStats()` — Service metrics; includes zone data when API enabled
+- **`onStart()`** (RN2) — Connect to API when enabled
+- **`onStop()`** (RN2) — Gracefully close API connection
 
 ## Frontend Component
 
@@ -42,4 +130,8 @@ Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 
+- [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 Phase 0a — Two-Tier Health]]
+- [[docs/adr/020-two-tier-health-and-monitoring-upgrades|ADR-020 Phase 0b + Two-Tier Health Enhancements]]
 - [[docs/integrations/index|Service Integrations]]
+- [[docs/api/services-health|Services Health API]]
+- [[docs/architecture/backend-architecture#roon-websocket-client-rn1--real-time-zone-tracking|Roon WebSocket Client Documentation]]

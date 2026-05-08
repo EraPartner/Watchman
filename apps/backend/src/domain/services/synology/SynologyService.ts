@@ -1,12 +1,17 @@
 import { BaseService, type HealthResult, type PollPolicy, type StatsResult } from '../../BaseService.js';
+import { withHostPing } from '../../health.js';
 import { ok, err } from '../../../core/result.js';
 import { UnavailableError, UnauthorizedError, isDomainError } from '../../../core/errors.js';
 import type { SynologyInstance } from '../../../config/services.js';
 import type { SnmpGetter, SnmpV3Credentials } from '../../../infra/snmp/snmpGetter.js';
+import type { PingProber } from '../../../infra/net/pingProbe.js';
+import type { DsmClient } from '../../../infra/synology/dsmClient.js';
 
 export interface SynologyDeps {
   snmp: SnmpGetter;
+  ping: PingProber;
   config: SynologyInstance;
+  dsm?: DsmClient;
   now: () => number;
 }
 
@@ -28,6 +33,12 @@ const OIDS = {
   networkTx: '1.3.6.1.2.1.2.2.1.16.1',
 } as const;
 
+interface DsmInfoData { model?: string; version?: string; temperature?: number }
+interface SysStatusData { cpu_fan_status?: string; sys_fan_status?: string; power_status?: string }
+interface StorageVolume { status: string }
+interface StorageDisk { status: string }
+interface StorageData { volumes?: StorageVolume[]; disks?: StorageDisk[] }
+
 const HEALTH_OIDS: readonly string[] = [
   OIDS.systemName,
   OIDS.systemUptime,
@@ -46,6 +57,8 @@ export class SynologyService extends BaseService {
   private readonly timeoutMs: number;
   private readonly snmp: SnmpGetter;
   private readonly credentials: SnmpV3Credentials;
+  private readonly pinger: PingProber;
+  private readonly dsm: DsmClient | undefined;
   private readonly now: () => number;
 
   constructor(deps: SynologyDeps) {
@@ -55,6 +68,8 @@ export class SynologyService extends BaseService {
     this.host = deps.config.host;
     this.timeoutMs = deps.config.timeoutMs;
     this.snmp = deps.snmp;
+    this.pinger = deps.ping;
+    this.dsm = deps.dsm;
     this.credentials = {
       user: deps.config.snmpUser,
       authKey: deps.config.snmpAuthKey,
@@ -70,44 +85,48 @@ export class SynologyService extends BaseService {
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
-    if (!this.credentialsReady) {
-      return ok({
-        reachable: false,
-        message: 'snmp credentials not configured',
-        at: this.now(),
-        details: { host: this.host, credentialsConfigured: false },
-      });
-    }
-    const started = this.now();
-    try {
-      const res = await this.snmp.get({
-        host: this.host,
-        oids: HEALTH_OIDS,
-        credentials: this.credentials,
-        timeoutMs: this.timeoutMs,
-        signal,
-      });
-      const values = res.values;
-      return ok({
-        reachable: true,
-        latencyMs: this.now() - started,
-        at: this.now(),
-        details: {
-          host: this.host,
-          credentialsConfigured: true,
-          systemName: clean(values[0]) || 'Unknown',
-          systemModel: clean(values[2]) || 'Unknown',
-          systemVersion: clean(values[3]) || 'Unknown',
-        },
-      });
-    } catch (e) {
-      return ok({
-        reachable: false,
-        message: e instanceof Error ? e.message : String(e),
-        at: this.now(),
-        details: { host: this.host, credentialsConfigured: true },
-      });
-    }
+    return withHostPing(
+      { host: this.host, timeoutMs: this.timeoutMs, pingCount: 1, prober: this.pinger },
+      async (sig) => {
+        if (!this.credentialsReady) {
+          return {
+            reachable: false,
+            message: 'snmp credentials not configured',
+            details: { host: this.host, credentialsConfigured: false },
+          };
+        }
+        const started = this.now();
+        try {
+          const res = await this.snmp.get({
+            host: this.host,
+            oids: HEALTH_OIDS,
+            credentials: this.credentials,
+            timeoutMs: this.timeoutMs,
+            signal: sig,
+          });
+          const values = res.values;
+          return {
+            reachable: true,
+            latencyMs: this.now() - started,
+            details: {
+              host: this.host,
+              credentialsConfigured: true,
+              systemName: clean(values[0]) || 'Unknown',
+              systemModel: clean(values[2]) || 'Unknown',
+              systemVersion: clean(values[3]) || 'Unknown',
+            },
+          };
+        } catch (e) {
+          return {
+            reachable: false,
+            message: e instanceof Error ? e.message : String(e),
+            details: { host: this.host, credentialsConfigured: true },
+          };
+        }
+      },
+      this.now(),
+      signal,
+    );
   }
 
   async getStats(signal: AbortSignal): Promise<StatsResult> {
@@ -115,14 +134,22 @@ export class SynologyService extends BaseService {
       return err(new UnauthorizedError('synology snmp credentials not configured'));
     }
     try {
-      const res = await this.snmp.get({
-        host: this.host,
-        oids: ALL_OIDS,
-        credentials: this.credentials,
-        timeoutMs: this.timeoutMs,
-        signal,
-      });
-      const v = res.values.map(clean);
+      const [snmpResult, dsmInfoResult, sysStatusResult, storageResult] = await Promise.allSettled([
+        this.snmp.get({
+          host: this.host,
+          oids: ALL_OIDS,
+          credentials: this.credentials,
+          timeoutMs: this.timeoutMs,
+          signal,
+        }),
+        this.dsm?.call<DsmInfoData>('SYNO.DSM.Info', 1, 'get', {}, signal) ?? Promise.resolve(null),
+        this.dsm?.call<SysStatusData>('SYNO.Core.System.Status', 1, 'get', {}, signal) ?? Promise.resolve(null),
+        this.dsm?.call<StorageData>('SYNO.Storage.CGI.Storage', 1, 'load_info', {}, signal) ?? Promise.resolve(null),
+      ]);
+
+      if (snmpResult.status === 'rejected') throw snmpResult.reason as unknown;
+
+      const v = snmpResult.value.values.map(clean);
       const uptimeTicks = toInt(v[1]);
       const cpuUsage = toInt(v[5]);
       const cpuTemp = toInt(v[6]);
@@ -141,6 +168,13 @@ export class SynologyService extends BaseService {
       const diskTotal = diskTotalKB * 1024;
       const diskUsed = diskUsedKB * 1024;
       const diskFree = Math.max(0, diskTotal - diskUsed);
+
+      const dsmInfo = dsmInfoResult.status === 'fulfilled' ? dsmInfoResult.value : null;
+      const sysStatus = sysStatusResult.status === 'fulfilled' ? sysStatusResult.value : null;
+      const storage = storageResult.status === 'fulfilled' ? storageResult.value : null;
+
+      const volumes = storage?.volumes ?? null;
+      const disks = storage?.disks ?? null;
 
       return ok({
         at: this.now(),
@@ -163,6 +197,24 @@ export class SynologyService extends BaseService {
           diskUsagePercent,
           networkRx,
           networkTx,
+          ...(dsmInfo !== null ? {
+            dsmModel: dsmInfo.model ?? '',
+            dsmVersion: dsmInfo.version ?? '',
+            dsmTemperature: dsmInfo.temperature ?? 0,
+          } : {}),
+          ...(sysStatus !== null ? {
+            cpuFanStatus: sysStatus.cpu_fan_status ?? '',
+            sysFanStatus: sysStatus.sys_fan_status ?? '',
+            powerStatus: sysStatus.power_status ?? '',
+          } : {}),
+          ...(volumes !== null ? {
+            volumeCount: volumes.length,
+            volumeDegradedCount: volumes.filter((vol) => vol.status !== 'normal').length,
+          } : {}),
+          ...(disks !== null ? {
+            diskCount: disks.length,
+            diskDegradedCount: disks.filter((d) => d.status !== 'normal').length,
+          } : {}),
         },
       });
     } catch (e) {

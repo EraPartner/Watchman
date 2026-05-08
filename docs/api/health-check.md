@@ -2,8 +2,8 @@
 title: "API: Health Check"
 type: api
 status: active
-date: 2026-04-02
-tags: [api, health, backend, endpoints]
+date: 2026-05-07
+tags: [api, health, backend, endpoints, two-tier]
 description: GET /health - Backend server health check endpoint
 aliases: [health endpoint, health check, ping]
 ---
@@ -12,6 +12,8 @@ aliases: [health endpoint, health check, ping]
 
 > [!abstract] Overview
 > Lightweight health check to verify the backend server is running and responsive. No authentication required.
+>
+> Related: [[docs/api/services-health|Services Health]] covers per-service health snapshots with two-tier reachability model.
 
 ## Endpoint
 

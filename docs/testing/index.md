@@ -2,10 +2,10 @@
 title: Testing
 type: index
 status: active
-date: 2026-04-18
-tags: [testing, index, coverage, vitest]
-description: Index of all testing documentation for the Watchman project
-aliases: [testing index, tests, test docs]
+date: 2026-05-07
+tags: [testing, index, coverage, vitest, phase-0b, tcp-server, control-port]
+description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing
+aliases: [testing index, tests, test docs, service testing, protocol testing]
 ---
 
 # Testing
@@ -180,6 +180,67 @@ apps/backend/src/                      # TypeScript tests colocated with source
     ├── http/http.test.ts              # Fastify HTTP route behavior
     └── ws/ws.test.ts                  # WebSocket plugin behavior
 ```
+
+## Service Testing Pattern (Phase 0b)
+
+**Test Setup** (2026-05-07):
+
+All service unit tests follow a consistent pattern with mocked HTTP server and `fakePing()` helper:
+
+```typescript
+import type { PingProber } from '../../../infra/net/pingProbe.js';
+
+function fakePing(): PingProber {
+  return { probe: async () => ({ success: true, avgMs: 5 }) };
+}
+
+describe('AdGuardService', () => {
+  it('checkHealth reports reachable when running', async () => {
+    const svc = new AdGuardService({ 
+      http: createHttpClient(), 
+      ping: fakePing(),  // Always required
+      config: makeConfig(), 
+      now: () => 1 
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);  // Always ok(), never err()
+    if (res.ok) {
+      expect(res.value.reachable).toBe(true);
+      expect(res.value.host?.reachable).toBe(true);
+      expect(res.value.service?.ok).toBe(true);
+    }
+  });
+
+  it('connection failure yields unreachable snapshot', async () => {
+    const svc = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ baseUrl: 'http://127.0.0.1:1' }),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);  // Still ok()
+    if (res.ok) expect(res.value.reachable).toBe(false);  // But snapshot shows unreachable
+  });
+});
+```
+
+**Key patterns:**
+
+- **`ping: fakePing()` is required** in all service constructors during tests
+- **`checkHealth` always returns `ok(HealthSnapshot)`** — errors become `reachable: false` snapshots
+- **No `err()` assertions** on health checks; errors are captured in snapshot fields
+- **Two-tier snapshot** — `host` (ICMP) and `service` (protocol probe) tiers both populated
+- **Unreachable tests** verify `res.value.reachable === false` rather than checking for error states
+
+**Protocol-Level Testing: Fake TCP Server Pattern** (Phase 0b+):
+
+Services using protocol clients (Tor ControlPort, Roon WebSocket, etc.) use a shared fake TCP server for isolation instead of mocking. See [[docs/testing/testing-strategy.md|Testing Strategy § Protocol-Level Testing: Fake TCP Server Pattern]] for full pattern and example with Tor ControlClient.
+
+Test files updated in Phase 0b (28 files, 226 tests passing):
+- `AdGuardService.test.ts`, `AlbyHubService.test.ts`, `BitcoinService.test.ts`, `HomebridgeService.test.ts`, `IpfsService.test.ts`, `QBittorrentService.test.ts`, `SynologyService.test.ts` — added `ping: fakePing()` to constructors and updated health assertions
+- `TorService.test.ts` — added ControlPort path tests using `fakePing()` and `fakeTorControl()` helpers
+- Also fixed reachability logic in `RaspberryPiService.ts`: `host.reachable || service.reachable` (was `host.reachable` only)
 
 ## Backend Coverage Configuration
 

@@ -4,6 +4,13 @@ import { TorService } from './TorService.js';
 import { createHttpClient } from '../../../infra/http/client.js';
 import { NotFoundError, UnavailableError } from '../../../core/errors.js';
 import type { TorInstance } from '../../../config/services.js';
+import type { PingProber } from '../../../infra/net/pingProbe.js';
+import type { TorControlClient } from '../../../infra/tor/controlClient.js';
+import type {
+  TorEventSubscription,
+  TorEventSubscriptionFactory,
+  TorEventHandler,
+} from '../../../infra/tor/eventSubscription.js';
 
 let server: Server;
 let port: number;
@@ -80,18 +87,98 @@ function makeConfig(overrides: Partial<TorInstance> = {}): TorInstance {
     timeoutMs: 2_000,
     relayNickname: 'MyRelay',
     onionooBaseUrl: `http://127.0.0.1:${port}`,
+    host: '127.0.0.1',
+    pingCount: 1,
+    controlPort: 9051,
+    controlPassword: '',
+    cookieAuthFile: '',
+    useControlPort: false,
     ...overrides,
+  };
+}
+
+function fakePing(success = true, avgMs = 5): PingProber {
+  return {
+    probe: async () => (success ? { success: true, avgMs } : { success: false }),
+  };
+}
+
+function fakeTorControl(info: Map<string, string> = new Map()): TorControlClient {
+  return {
+    connect: async () => ({
+      getinfo: async () => info,
+      getconf: async () => new Map(),
+      signal: async () => undefined,
+      close: async () => undefined,
+    }),
+  };
+}
+
+interface FakeTorEventSub extends TorEventSubscription {
+  lastSetevents: string[];
+  wasClosed: boolean;
+  fire(event: string, args: string[]): void;
+}
+
+function makeFakeSub(): FakeTorEventSub {
+  const handlers = new Map<string, TorEventHandler[]>();
+  const sub: FakeTorEventSub = {
+    lastSetevents: [],
+    wasClosed: false,
+    fire(event: string, args: string[]): void {
+      for (const h of handlers.get(event) ?? []) h(event, args);
+    },
+    async setevents(events: string[], _signal: AbortSignal): Promise<void> {
+      sub.lastSetevents = events;
+    },
+    on(event: string, handler: TorEventHandler): void {
+      const existing = handlers.get(event);
+      if (existing) existing.push(handler);
+      else handlers.set(event, [handler]);
+    },
+    async close(): Promise<void> {
+      sub.wasClosed = true;
+    },
+  };
+  return sub;
+}
+
+function makeFakeSubFactory(sub: FakeTorEventSub): TorEventSubscriptionFactory {
+  return { create: async () => sub };
+}
+
+function failingTorControl(e: Error = new UnavailableError('connection refused')): TorControlClient {
+  return {
+    connect: async () => {
+      throw e;
+    },
+  };
+}
+
+/**
+ * Returns a TorControlClient that iterates through a sequence of info maps,
+ * one per getinfo call (cycling back after exhausted).
+ */
+function sequenceTorControl(infos: Map<string, string>[]): TorControlClient {
+  let idx = 0;
+  return {
+    connect: async () => ({
+      getinfo: async () => infos[idx++ % infos.length] ?? new Map(),
+      getconf: async () => new Map(),
+      signal: async () => undefined,
+      close: async () => undefined,
+    }),
   };
 }
 
 describe('TorService', () => {
   it('id is tor:main', () => {
-    const svc = new TorService({ http: createHttpClient(), config: makeConfig(), now: () => 0 });
+    const svc = new TorService({ http: createHttpClient(), ping: fakePing(), torControl: fakeTorControl(), config: makeConfig(), now: () => 0 });
     expect(svc.id).toBe('tor:main');
   });
 
   it('checkHealth reports reachable when relay is running', async () => {
-    const svc = new TorService({ http: createHttpClient(), config: makeConfig(), now: () => 1 });
+    const svc = new TorService({ http: createHttpClient(), ping: fakePing(), torControl: fakeTorControl(), config: makeConfig(), now: () => 1 });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -103,7 +190,7 @@ describe('TorService', () => {
 
   it('returns NotFoundError when relay missing', async () => {
     state.payload = { relays: [] };
-    const svc = new TorService({ http: createHttpClient(), config: makeConfig(), now: () => 0 });
+    const svc = new TorService({ http: createHttpClient(), ping: fakePing(), torControl: fakeTorControl(), config: makeConfig(), now: () => 0 });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toBeInstanceOf(NotFoundError);
@@ -111,7 +198,7 @@ describe('TorService', () => {
 
   it('warns and marks unreachable when hibernating', async () => {
     state.payload = { relays: [{ ...(state.payload as { relays: unknown[] }).relays[0] as object, hibernating: true }] };
-    const svc = new TorService({ http: createHttpClient(), config: makeConfig(), now: () => 0 });
+    const svc = new TorService({ http: createHttpClient(), ping: fakePing(), torControl: fakeTorControl(), config: makeConfig(), now: () => 0 });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -121,7 +208,7 @@ describe('TorService', () => {
   });
 
   it('getStats exposes relay metrics', async () => {
-    const svc = new TorService({ http: createHttpClient(), config: makeConfig(), now: () => 42 });
+    const svc = new TorService({ http: createHttpClient(), ping: fakePing(), torControl: fakeTorControl(), config: makeConfig(), now: () => 42 });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -143,7 +230,7 @@ describe('TorService', () => {
         { nickname: 'MyRelay', fingerprint: 'AAA', running: true },
       ],
     };
-    const svc = new TorService({ http: createHttpClient(), config: makeConfig(), now: () => 0 });
+    const svc = new TorService({ http: createHttpClient(), ping: fakePing(), torControl: fakeTorControl(), config: makeConfig(), now: () => 0 });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.metrics.nickname).toBe('MyRelay');
@@ -152,7 +239,7 @@ describe('TorService', () => {
   it('upstream 500 yields UnavailableError', async () => {
     state.status = 500;
     state.payload = {};
-    const svc = new TorService({ http: createHttpClient(), config: makeConfig(), now: () => 0 });
+    const svc = new TorService({ http: createHttpClient(), ping: fakePing(), torControl: fakeTorControl(), config: makeConfig(), now: () => 0 });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toBeInstanceOf(UnavailableError);
@@ -161,11 +248,263 @@ describe('TorService', () => {
   it('connection failure yields UnavailableError', async () => {
     const svc = new TorService({
       http: createHttpClient(),
+      ping: fakePing(),
+      torControl: fakeTorControl(),
       config: makeConfig({ onionooBaseUrl: 'http://127.0.0.1:1' }),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toBeInstanceOf(UnavailableError);
+  });
+
+  describe('ControlPort path', () => {
+    it('checkHealth circuit established → reachable', async () => {
+      const info = new Map([['status/circuit-established', '1']]);
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(true, 10),
+        torControl: fakeTorControl(info),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 100,
+      });
+      const res = await svc.checkHealth(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.reachable).toBe(true);
+        expect(res.value.service?.reachable).toBe(true);
+        expect(res.value.host?.reachable).toBe(true);
+        expect(res.value.details?.circuitEstablished).toBe(true);
+      }
+    });
+
+    it('checkHealth circuit not established → service unreachable, host reachable', async () => {
+      const info = new Map([['status/circuit-established', '0']]);
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(true, 10),
+        torControl: fakeTorControl(info),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 100,
+      });
+      const res = await svc.checkHealth(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.service?.reachable).toBe(false);
+        expect(res.value.host?.reachable).toBe(true);
+        expect(res.value.reachable).toBe(true);
+        expect(res.value.details?.circuitEstablished).toBe(false);
+      }
+    });
+
+    it('checkHealth connect fails → returns ok (ping still succeeds)', async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(true, 10),
+        torControl: failingTorControl(),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 100,
+      });
+      const res = await svc.checkHealth(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.service?.reachable).toBe(false);
+        expect(res.value.host?.reachable).toBe(true);
+        expect(res.value.reachable).toBe(true);
+      }
+    });
+
+    it('getStats returns traffic metrics from control port', async () => {
+      const info = new Map([
+        ['traffic/read', '10240'],
+        ['traffic/written', '8192'],
+        ['version/current', '0.4.8.10'],
+        ['dormant', '0'],
+        ['process/descriptor-limit', '65535'],
+      ]);
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(info),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 99,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.at).toBe(99);
+        expect(res.value.metrics).toMatchObject({
+          trafficRead: 10240,
+          trafficWritten: 8192,
+          version: '0.4.8.10',
+          dormant: false,
+          descriptorLimit: 65535,
+        });
+      }
+    });
+
+    it('getStats connect fails → err(UnavailableError)', async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: failingTorControl(),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBeInstanceOf(UnavailableError);
+    });
+  });
+
+  describe('SETEVENTS subscription (B5)', () => {
+    it('onStart subscribes to BW when useControlPort=true', async () => {
+      const sub = makeFakeSub();
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: makeFakeSubFactory(sub),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      await svc.onStart?.();
+      expect(sub.lastSetevents).toContain('BW');
+    });
+
+    it('onStop closes the subscription', async () => {
+      const sub = makeFakeSub();
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: makeFakeSubFactory(sub),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      await svc.onStart?.();
+      await svc.onStop?.();
+      expect(sub.wasClosed).toBe(true);
+    });
+
+    it('BW event updates bwRead/bwWritten in getStats', async () => {
+      const sub = makeFakeSub();
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: makeFakeSubFactory(sub),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 7,
+      });
+      await svc.onStart?.();
+      sub.fire('BW', ['2048', '1024']);
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.bwRead).toBe(2048);
+        expect(res.value.metrics.bwWritten).toBe(1024);
+      }
+    });
+
+    it('onStart is a no-op when useControlPort=false', async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig({ useControlPort: false }),
+        now: () => 0,
+      });
+      // Must not throw; no subscription created
+      await svc.onStart?.();
+      await svc.onStop?.();
+    });
+  });
+
+  describe('traffic deltas (B6)', () => {
+    it('first getStats has trafficDeltaRead=0 and trafficDeltaWritten=0', async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(new Map([['traffic/read', '10000'], ['traffic/written', '5000']])),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.trafficDeltaRead).toBe(0);
+        expect(res.value.metrics.trafficDeltaWritten).toBe(0);
+      }
+    });
+
+    it('second getStats returns diff of traffic/read and traffic/written', async () => {
+      const poll1 = new Map([['traffic/read', '1000'], ['traffic/written', '500']]);
+      const poll2 = new Map([['traffic/read', '4000'], ['traffic/written', '2500']]);
+      // Each getStatsControlPort does 2 getinfo calls (core + accounting).
+      // Sequence: poll1-core, poll1-accounting(empty), poll2-core, poll2-accounting(empty)
+      const torControl = sequenceTorControl([poll1, new Map(), poll2, new Map()]);
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl,
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      await svc.getStats(new AbortController().signal); // first poll seeds baseline
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.trafficDeltaRead).toBe(3000);
+        expect(res.value.metrics.trafficDeltaWritten).toBe(2000);
+      }
+    });
+  });
+
+  describe('Onionoo enrichment (B7)', () => {
+    it('controlPort getStats merges country and consensusWeight from Onionoo', async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        // Default state has a relay with country_name='United States', consensus_weight=1234
+        expect(res.value.metrics.country).toBe('United States');
+        expect(res.value.metrics.consensusWeight).toBe(1234);
+      }
+    });
+
+    it('controlPort getStats still succeeds when Onionoo returns no relay', async () => {
+      state.payload = { relays: [] };
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true); // enrichment failure is non-fatal
+      if (res.ok) {
+        expect(res.value.metrics.country).toBeUndefined();
+      }
+    });
+
+    it('controlPort getStats still succeeds when Onionoo request fails', async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig({ useControlPort: true, onionooBaseUrl: 'http://127.0.0.1:1' }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true); // enrichment failure is non-fatal
+    });
   });
 });

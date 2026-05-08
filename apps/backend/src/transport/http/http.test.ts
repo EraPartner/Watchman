@@ -12,6 +12,7 @@ import { ok, err } from '../../core/result.js';
 import { UnavailableError } from '../../core/errors.js';
 import type { ConfigStore } from '../../config/store/ConfigStore.js';
 import type { ServiceLifecycle } from '../../application/ServiceLifecycle.js';
+import type { HttpClient } from '../../infra/http/client.js';
 
 class FakeSvc extends BaseService implements Controllable {
   readonly kind: string;
@@ -38,6 +39,7 @@ async function makeApp(registry: ServiceRegistry) {
   const logger = pino({ level: 'silent' });
   const fakeStore = { loadAll: async () => [] } as unknown as ConfigStore;
   const fakeLifecycle = {} as ServiceLifecycle;
+  const fakeHttp = { send: async () => { throw new Error('not used in tests'); } } as HttpClient;
   return buildServer({
     logger,
     services: {
@@ -48,7 +50,7 @@ async function makeApp(registry: ServiceRegistry) {
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
     config: { store: fakeStore, lifecycle: fakeLifecycle, registry },
-    setup: { store: fakeStore },
+    setup: { store: fakeStore, http: fakeHttp },
   });
 }
 

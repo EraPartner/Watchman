@@ -2,10 +2,10 @@
 title: API Documentation
 type: index
 status: active
-date: 2026-04-20
-tags: [api, index, backend, openapi, endpoint, rest, fastify, backup, export, import, v2, single-user]
-description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.1 specification, no authentication required
-aliases: [api index, endpoints, rest api, swagger, openapi spec, backup api]
+date: 2026-05-08
+tags: [api, index, backend, openapi, endpoint, rest, fastify, backup, export, import, v2, single-user, stats, service-metrics, ipfs, ipfs-extended-stats, dht, raspberry-pi, throttled, pi1, roon, zones, now-playing, rn1, rn2]
+description: Complete API endpoint documentation for Watchman - REST API with OpenAPI 3.1 specification, no authentication required, service stats and metrics including IPFS extended metrics, Raspberry Pi vcgencmd + /proc metrics with throttling detection (PI1), and Roon zone/now-playing tracking (RN1/RN2)
+aliases: [api index, endpoints, rest api, swagger, openapi spec, backup api, stats api]
 ---
 
 # API Documentation
@@ -92,7 +92,7 @@ Service health, stats, and control.
 **Query Parameters:**
 - `instance`: Instance ID. Omit to use first registered instance for the kind.
 
-**Health Response**:
+**Health Response** (with two-tier model):
 ```json
 {
   "data": {
@@ -100,10 +100,25 @@ Service health, stats, and control.
     "latencyMs": 45,
     "message": "OK",
     "details": { /* service-specific details */ },
-    "at": 1713446400000
+    "at": 1713446400000,
+    "host": {
+      "reachable": true,
+      "pingMs": 12
+    },
+    "service": {
+      "reachable": true,
+      "latencyMs": 45
+    }
   }
 }
 ```
+
+The **two-tier health model** (since Phase 0a) separates ICMP host reachability from service protocol probe reachability:
+- `host.reachable` — ICMP ping to the host succeeded
+- `service.reachable` — Service protocol probe (HTTP, RPC, etc.) succeeded
+- `reachable` (top-level) — Composite: semantics depend on service (typically `host AND service`)
+
+See [[docs/api/services-health|Services Health]] for full details.
 
 **Stats Response**:
 ```json
@@ -119,6 +134,13 @@ Service health, stats, and control.
 }
 ```
 
+**Examples by Service:**
+- **Raspberry Pi** (direct SSH, PI1) — cpuTemp, clockRate, voltage, **throttled**, load, memory, uptime, prettyName, processor, isRpi, pigpioVersion. The `throttled` field (0 = healthy, non-zero = throttling/undervoltage) comes from `vcgencmd get_throttled`. See [[docs/integrations/raspberry-pi#metrics|Raspberry Pi Metrics]].
+- **IPFS** (IP1) — 9 endpoints with graceful degradation; extended stats on daemon, DHT, pinning, and listen addresses. See [[docs/integrations/ipfs|IPFS Integration]].
+- **Roon** (RN1/RN2) — Zone tracking and now-playing metadata when API enabled (optional). Includes paired, zoneCount, activeZones, nowPlaying. See [[docs/integrations/roon#stats-with-api|Roon Integration]].
+- **qBittorrent** (QB1) — Per-torrent stats with speeds, progress, ETA, and incremental update windows.
+- **AdGuard Home** (AG1) — Filtering, clients, DHCP, security features. See [[docs/integrations/adguard|AdGuard Integration]].
+
 **Control Request Body** (`/services/{kind}/control`):
 ```json
 {
@@ -126,25 +148,29 @@ Service health, stats, and control.
 }
 ```
 
-### Configuration Endpoints
+### Configuration & Setup Endpoints
 
-Runtime service configuration CRUD with encryption, audit trail, and backup/restore.
+Runtime service configuration CRUD with encryption, audit trail, backup/restore, and service-specific pairing wizards.
 
-| Endpoint                         | Method | Description                                | Since |
-| -------------------------------- | ------ | ------------------------------------------ | ----- |
-| `GET /setup/status`              | GET    | Setup wizard status                        | v2.2  |
-| `GET /config/kinds`              | GET    | Service kind schemas with field metadata   | v2.2  |
-| `GET /config/services`           | GET    | List all configured services               | v2.2  |
-| `POST /config/services`          | POST   | Create new service instance                | v2.2  |
-| `GET /config/services/{id}`      | GET    | Fetch single service instance              | v2.2  |
-| `PUT /config/services/{id}`      | PUT    | Update service instance (hot-reload)       | v2.2  |
-| `DELETE /config/services/{id}`   | DELETE | Delete service instance                    | v2.2  |
-| `POST /config/services/{id}/test`| POST   | Test connection with credentials           | v2.2  |
-| `GET /config/audit`              | GET    | Configuration audit trail                  | v2.2  |
-| `GET /config/export`             | GET    | Export all configs as encrypted bundle     | v2.3  |
-| `POST /config/import`            | POST   | Import encrypted bundle (backup restore)   | v2.3  |
+| Endpoint                              | Method | Description                                | Since |
+| ------------------------------------- | ------ | ------------------------------------------ | ----- |
+| `GET /setup/status`                   | GET    | Setup wizard status                        | v2.2  |
+| `POST /setup/philips-bridge/pair`     | POST   | Pair with Philips Hue Bridge (link button)| v2.4  |
+| `GET /config/kinds`                   | GET    | Service kind schemas with field metadata   | v2.2  |
+| `GET /config/services`                | GET    | List all configured services               | v2.2  |
+| `POST /config/services`               | POST   | Create new service instance                | v2.2  |
+| `GET /config/services/{id}`           | GET    | Fetch single service instance              | v2.2  |
+| `PUT /config/services/{id}`           | PUT    | Update service instance (hot-reload)       | v2.2  |
+| `DELETE /config/services/{id}`        | DELETE | Delete service instance                    | v2.2  |
+| `POST /config/services/{id}/test`     | POST   | Test connection with credentials           | v2.2  |
+| `GET /config/audit`                   | GET    | Configuration audit trail                  | v2.2  |
+| `GET /config/export`                  | GET    | Export all configs as encrypted bundle     | v2.3  |
+| `POST /config/import`                 | POST   | Import encrypted bundle (backup restore)   | v2.3  |
 
 Full reference: [[docs/api/config|Configuration API Documentation]]
+
+**Setup/Pairing Endpoints:**
+- **Philips Hue Pairing** (`POST /setup/philips-bridge/pair`) — Automates obtaining `applicationKey` and `certHash` by probing TLS cert and calling the bridge's `/api` endpoint. Requires physical link button press. See [[docs/integrations/philips-hue#pairing-wizard-h2-task|Pairing Wizard documentation]].
 
 ### Instances Endpoints
 
@@ -228,7 +254,10 @@ The specification is the canonical source for all endpoint definitions, request/
 
 Key schemas defined in the OpenAPI spec:
 
-- **HealthSnapshot** - Service reachability, latency, details, and timestamp
+**Core Schemas:**
+- **HealthSnapshot** - Composite reachability, latency, details, timestamp, plus `host` and `service` tiers
+- **HostHealth** - ICMP reachability tier (reachable, pingMs)
+- **ServiceHealth** - Service protocol probe tier (reachable, latencyMs, message, details)
 - **StatsSnapshot** - Service metrics dictionary and timestamp
 - **AggregatedEntry** - Service result (success or error) with health snapshot
 - **InstanceInfo** - Service instance metadata (id, kind, instanceId)
@@ -237,6 +266,12 @@ Key schemas defined in the OpenAPI spec:
 - **CacheStats** - Cache hit/miss counts and size
 - **PollerStats** - Poll timing and frequency statistics
 - **DomainError** - Standard error envelope (code, message)
+
+**Service-Specific Schemas:**
+- **AdGuardStats** - AdGuard Home metrics with extended filtering, clients, DHCP, and security feature states (AG1 — 27 metrics; 2 core endpoints + 7 optional with graceful degradation)
+- **IpfsStats** - IPFS node metrics including system diagnostics, DHT routing table, pins, and listen addresses (IP1 — 9 endpoints total; 5 core + 4 optional with graceful degradation)
+- **QBittorrentStats** - qBittorrent metrics including per-torrent details, error counts, and log events (QB1 — incremental sync + per-torrent stats + logs)
+- **QBittorrentTorrentInfo** - Individual torrent metadata (hash, name, state, progress, speeds, sizes, ETA, category)
 
 See [[apps/backend/openapi.yaml]] for complete definitions with examples.
 

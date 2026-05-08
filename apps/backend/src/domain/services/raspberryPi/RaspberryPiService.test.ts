@@ -256,6 +256,133 @@ describe('RaspberryPiService.getStats', () => {
   });
 });
 
+describe('RaspberryPiService.getStats — direct SSH path', () => {
+  const DIRECT_SSH_MAP: Record<string, SshExecResult> = {
+    'measure_temp': { stdout: "temp=49.5'C", stderr: '', code: 0 },
+    'measure_clock': { stdout: 'frequency(48)=1800000000', stderr: '', code: 0 },
+    'measure_volts': { stdout: 'volt=0.8813V', stderr: '', code: 0 },
+    'get_throttled': { stdout: 'throttled=0x0', stderr: '', code: 0 },
+    'loadavg': { stdout: '0.12 0.08 0.05 1/250 1234', stderr: '', code: 0 },
+    'meminfo': { stdout: 'MemTotal:       3944936 kB\nMemFree:        123456 kB\n', stderr: '', code: 0 },
+    'uptime': { stdout: '12345.67 23456.78', stderr: '', code: 0 },
+    'cpuinfo': { stdout: 'Hardware\t: BCM2711\nModel\t\t: Raspberry Pi 4 Model B Rev 1.1\n', stderr: '', code: 0 },
+    'os-release': { stdout: 'PRETTY_NAME="Raspberry Pi OS Lite (64-bit)"\n', stderr: '', code: 0 },
+  };
+
+  function makeDirectConfig(overrides: Partial<RaspberryPiInstance> = {}): RaspberryPiInstance {
+    return makeConfig({
+      sshUser: 'pi',
+      sshPort: 22,
+      sshKeyPath: '/tmp/pi_id_rsa',
+      sshPassphrase: '',
+      // Omit macMini fields — direct SSH takes priority
+      macMiniHost: '',
+      macMiniSshUser: '',
+      macMiniSshKeyPath: '',
+      rpiCliPath: '',
+      ...overrides,
+    });
+  }
+
+  it('uses direct SSH when sshUser + sshKeyPath configured', async () => {
+    const calls: SshExecRequest[] = [];
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle({ hwRevision: 0xa22082, pigpioVersion: 79, currentTick: 0 })),
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh(DIRECT_SSH_MAP, calls),
+      config: makeDirectConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics['rpiCliAvailable']).toBe(true);
+      expect(res.value.metrics['cpuTemp']).toBe(49.5);
+      expect(res.value.metrics['clockRate']).toBe(1800);
+      expect(res.value.metrics['voltage']).toBeCloseTo(0.8813);
+      expect(res.value.metrics['throttled']).toBe(0);
+      expect(res.value.metrics['load']).toBeCloseTo(0.12);
+      expect(res.value.metrics['memory']).toBe('3.8 GB');
+      expect(res.value.metrics['uptime']).toBe(12345);
+      expect(res.value.metrics['prettyName']).toBe('Raspberry Pi OS Lite (64-bit)');
+      expect(res.value.metrics['processor']).toBe('BCM2711');
+      expect(res.value.metrics['isRpi']).toBe(true);
+    }
+    // All direct SSH calls target the Pi host, not macMini
+    for (const call of calls) {
+      expect(call.host).toBe('192.168.1.40');
+      expect(call.user).toBe('pi');
+    }
+  });
+
+  it('reports non-zero throttled value when Pi is throttled', async () => {
+    const throttledMap = { ...DIRECT_SSH_MAP, 'get_throttled': { stdout: 'throttled=0x50005', stderr: '', code: 0 } };
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle()),
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh(throttledMap),
+      config: makeDirectConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics['throttled']).toBe(0x50005);
+  });
+
+  it('direct SSH takes priority over macMini relay when both configured', async () => {
+    const calls: SshExecRequest[] = [];
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle()),
+      ping: fakePing({ success: true }),
+      // Map includes both direct and relay patterns; direct path never calls cli.js
+      ssh: fakeSsh({ ...DIRECT_SSH_MAP, 'cli.js': { stdout: '{}', stderr: '', code: 0 } }, calls),
+      config: makeConfig({
+        sshUser: 'pi',
+        sshKeyPath: '/tmp/pi_id_rsa',
+        macMiniHost: '192.168.1.50',
+        macMiniSshUser: 'me',
+        macMiniSshKeyPath: '/tmp/mini_key',
+        rpiCliPath: '/opt/rpi/cli.js',
+      }),
+      now: () => 0,
+    });
+    await svc.getStats(new AbortController().signal);
+    const hitCli = calls.some((c) => c.command.includes('cli.js'));
+    expect(hitCli).toBe(false);
+  });
+
+  it('captures direct SSH error as rpiCliError without failing stats', async () => {
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle()),
+      ping: fakePing({ success: true }),
+      ssh: { exec: async () => { throw new Error('ECONNREFUSED'); } },
+      config: makeDirectConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics['rpiCliAvailable']).toBe(false);
+      expect(String(res.value.metrics['rpiCliError'])).toMatch(/ECONNREFUSED/);
+    }
+  });
+
+  it('skips ssh entirely when neither direct nor macMini configured', async () => {
+    const calls: SshExecRequest[] = [];
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle()),
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh({}, calls),
+      config: makeConfig({ sshUser: '', sshKeyPath: '', macMiniSshUser: '', macMiniSshKeyPath: '' }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics['rpiCliAvailable']).toBe(false);
+    expect(calls.length).toBe(0);
+  });
+});
+
 describe('GpioController', () => {
   it('read returns 0 or 1', async () => {
     const ctrl = new GpioController({

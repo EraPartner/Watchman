@@ -1,24 +1,42 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { IpfsService } from './IpfsService.js';
 import { createHttpClient } from '../../../infra/http/client.js';
-import { UnavailableError } from '../../../core/errors.js';
 import type { IpfsInstance } from '../../../config/services.js';
+import type { PingProber } from '../../../infra/net/pingProbe.js';
+
+function fakePing(): PingProber {
+  return { probe: async () => ({ success: true, avgMs: 5 }) };
+}
 
 let server: Server;
 let port: number;
-let failMode: 'none' | 'down' | 'slow' = 'none';
+let state: { failMode: 'none' | 'down'; failOptional: boolean };
+
+const DHT_NDJSON = [
+  JSON.stringify({ Name: 'wan', Buckets: 20, PeerInfos: [{}, {}, {}] }),
+  JSON.stringify({ Name: 'lan', Buckets: 20, PeerInfos: [{}, {}] }),
+].join('\n');
 
 beforeAll(
   () =>
     new Promise<void>((resolve) => {
       server = createServer((req, res) => {
-        if (failMode === 'down') {
+        const url = req.url ?? '';
+
+        if (state.failMode === 'down') {
           res.writeHead(500);
           res.end('boom');
           return;
         }
-        const url = req.url ?? '';
+
+        const optionalPaths = ['/api/v0/diag/sys', '/api/v0/stats/dht', '/api/v0/pin/ls', '/api/v0/swarm/addrs/listen'];
+        if (state.failOptional && optionalPaths.some((p) => url.startsWith(p))) {
+          res.writeHead(500);
+          res.end('error');
+          return;
+        }
+
         res.setHeader('content-type', 'application/json');
         if (url === '/api/v0/version') {
           if (req.method !== 'POST') {
@@ -40,6 +58,32 @@ beforeAll(
         } else if (url.startsWith('/api/v0/stats/bw')) {
           res.writeHead(200);
           res.end(JSON.stringify({ TotalIn: 10, TotalOut: 20, RateIn: 1, RateOut: 2 }));
+        } else if (url === '/api/v0/diag/sys') {
+          res.writeHead(200);
+          res.end(JSON.stringify({ MemoryAlloc: 52_428_800, GoNumGoroutine: 64, NumCPU: 4 }));
+        } else if (url === '/api/v0/stats/dht') {
+          // Returns NDJSON: one JSON object per line
+          res.setHeader('content-type', 'application/x-ndjson');
+          res.writeHead(200);
+          res.end(DHT_NDJSON);
+        } else if (url.startsWith('/api/v0/pin/ls')) {
+          res.writeHead(200);
+          res.end(
+            JSON.stringify({
+              Keys: {
+                QmHash1: { Type: 'recursive' },
+                QmHash2: { Type: 'recursive' },
+                QmHash3: { Type: 'recursive' },
+              },
+            }),
+          );
+        } else if (url === '/api/v0/swarm/addrs/listen') {
+          res.writeHead(200);
+          res.end(
+            JSON.stringify({
+              Strings: ['/ip4/0.0.0.0/tcp/4001', '/ip6/::/tcp/4001', '/ip4/0.0.0.0/udp/4001/quic-v1'],
+            }),
+          );
         } else {
           res.writeHead(404);
           res.end();
@@ -60,6 +104,10 @@ afterAll(
     }),
 );
 
+beforeEach(() => {
+  state = { failMode: 'none', failOptional: false };
+});
+
 function makeConfig(overrides: Partial<IpfsInstance> = {}): IpfsInstance {
   return {
     kind: 'ipfs',
@@ -76,13 +124,12 @@ function makeConfig(overrides: Partial<IpfsInstance> = {}): IpfsInstance {
 
 describe('IpfsService', () => {
   it('exposes kind:instanceId id', () => {
-    const svc = new IpfsService({ http: createHttpClient(), config: makeConfig(), now: () => 0 });
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
     expect(svc.id).toBe('ipfs:main');
   });
 
   it('checkHealth returns reachable on 200', async () => {
-    failMode = 'none';
-    const svc = new IpfsService({ http: createHttpClient(), config: makeConfig(), now: () => 1 });
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 1 });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -91,18 +138,16 @@ describe('IpfsService', () => {
     }
   });
 
-  it('checkHealth returns UnavailableError on 500', async () => {
-    failMode = 'down';
-    const svc = new IpfsService({ http: createHttpClient(), config: makeConfig(), now: () => 0 });
+  it('checkHealth returns unreachable on 500', async () => {
+    state.failMode = 'down';
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
     const res = await svc.checkHealth(new AbortController().signal);
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toBeInstanceOf(UnavailableError);
-    failMode = 'none';
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.reachable).toBe(false);
   });
 
-  it('getStats aggregates endpoints', async () => {
-    failMode = 'none';
-    const svc = new IpfsService({ http: createHttpClient(), config: makeConfig(), now: () => 5 });
+  it('getStats aggregates core endpoints', async () => {
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 5 });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -119,10 +164,67 @@ describe('IpfsService', () => {
     }
   });
 
+  it('getStats returns diag/sys metrics', async () => {
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 1 });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // 50 MB = 52_428_800 bytes
+      expect(res.value.metrics.memAllocMb).toBe(50);
+      expect(res.value.metrics.goroutines).toBe(64);
+      expect(res.value.metrics.numCPU).toBe(4);
+    }
+  });
+
+  it('getStats sums DHT peers across routing tables', async () => {
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 1 });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // wan: 3 peers + lan: 2 peers = 5 total
+      expect(res.value.metrics.dhtPeers).toBe(5);
+    }
+  });
+
+  it('getStats counts pinned CIDs', async () => {
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 1 });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.pinnedCount).toBe(3);
+    }
+  });
+
+  it('getStats counts listen addresses', async () => {
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 1 });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.listenAddrCount).toBe(3);
+    }
+  });
+
+  it('getStats succeeds when optional endpoints return 500', async () => {
+    state.failOptional = true;
+    const svc = new IpfsService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 1 });
+    const res = await svc.getStats(new AbortController().signal);
+    // Core stats still succeed
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.version).toBe('0.28.0');
+      // Optional metrics fall back to null/0
+      expect(res.value.metrics.memAllocMb).toBeNull();
+      expect(res.value.metrics.goroutines).toBeNull();
+      expect(res.value.metrics.dhtPeers).toBe(0);
+      expect(res.value.metrics.pinnedCount).toBeNull();
+      expect(res.value.metrics.listenAddrCount).toBeNull();
+    }
+  });
+
   it('GET falls back to POST on 405', async () => {
-    failMode = 'none';
     const svc = new IpfsService({
       http: createHttpClient(),
+      ping: fakePing(),
       config: makeConfig({ forcePost: false }),
       now: () => 0,
     });
@@ -130,14 +232,15 @@ describe('IpfsService', () => {
     expect(res.ok).toBe(true);
   });
 
-  it('connection failure yields UnavailableError', async () => {
+  it('connection failure yields unreachable snapshot', async () => {
     const svc = new IpfsService({
       http: createHttpClient(),
+      ping: fakePing(),
       config: makeConfig({ apiUrl: 'http://127.0.0.1:1' }),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toBeInstanceOf(UnavailableError);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.reachable).toBe(false);
   });
 });
