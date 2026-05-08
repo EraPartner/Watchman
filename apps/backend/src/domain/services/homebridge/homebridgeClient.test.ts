@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createHomebridgeClient, type HomebridgeClientConfig } from './homebridgeClient.js';
 import type { HttpClient, HttpRequest, HttpResponse } from '../../../infra/http/client.js';
 import { UnauthorizedError, UnavailableError } from '../../../core/errors.js';
@@ -133,5 +133,88 @@ describe('homebridgeClient', () => {
     });
     await client.get('api/status', new AbortController().signal);
     expect(calls[0]?.url).toBe('http://hb.local/api/status');
+  });
+
+  // ── HB1: JWT via createJwtClient ─────────────────────────────────────────
+
+  it('HB1 — concurrent 401s share one login call (no thundering herd)', async () => {
+    let loginCalls = 0;
+    let resolveLogin!: () => void;
+    const loginGate = new Promise<void>((res) => { resolveLogin = res; });
+
+    const http: HttpClient = {
+      send: vi.fn(async (req: HttpRequest): Promise<HttpResponse> => {
+        if (req.url.includes(baseCfg.loginPath)) {
+          loginCalls++;
+          await loginGate;
+          return {
+            status: 200, headers: {},
+            text: async () => '{"token":"hb-fresh"}',
+            json: async () => ({ token: 'hb-fresh' }),
+          };
+        }
+        if ((req.headers?.['authorization'] ?? '') === 'Bearer hb-fresh') {
+          return {
+            status: 200, headers: { 'content-type': 'application/json' },
+            text: async () => '{"ok":true}',
+            json: async () => ({ ok: true }),
+          };
+        }
+        return { status: 401, headers: {}, text: async () => '', json: async () => ({}) };
+      }),
+    };
+    const client = createHomebridgeClient({ http, config: { ...baseCfg, username: 'u', password: 'p' } });
+    const sig = () => new AbortController().signal;
+
+    const [r1, r2, r3] = await Promise.all([
+      (async () => {
+        const p = client.get<{ ok: boolean }>('/api/a', sig());
+        resolveLogin();
+        return p;
+      })(),
+      client.get<{ ok: boolean }>('/api/b', sig()),
+      client.get<{ ok: boolean }>('/api/c', sig()),
+    ]);
+
+    expect(r1).toEqual({ ok: true });
+    expect(r2).toEqual({ ok: true });
+    expect(r3).toEqual({ ok: true });
+    // createJwtClient shares one pendingRefresh — login called exactly once
+    expect(loginCalls).toBe(1);
+  });
+
+  it('HB1 — uses refreshed token for all requests after first 401', async () => {
+    const responses: HttpResponse[] = [
+      // request 1 first attempt → 401
+      { status: 401, headers: {}, text: async () => '', json: async () => ({}) },
+      // login → token
+      { status: 200, headers: {}, text: async () => '{"token":"new-tok"}', json: async () => ({ token: 'new-tok' }) },
+      // request 1 retry → 200
+      { status: 200, headers: { 'content-type': 'application/json' }, text: async () => '{"v":1}', json: async () => ({ v: 1 }) },
+      // request 2 (subsequent) → 200
+      { status: 200, headers: { 'content-type': 'application/json' }, text: async () => '{"v":2}', json: async () => ({ v: 2 }) },
+    ];
+    let idx = 0;
+    const { http, calls } = fakeHttp(() => {
+      const r = responses[idx++]!;
+      return { status: r.status, headers: r.headers, body: '' };
+    });
+    // Override fakeHttp to return proper text/json from HttpResponse objects
+    const smartHttp: HttpClient = {
+      send: async (req: HttpRequest): Promise<HttpResponse> => {
+        calls.push(req);
+        return responses[idx++]!;
+      },
+    };
+    idx = 0;
+
+    const client = createHomebridgeClient({ http: smartHttp, config: { ...baseCfg, username: 'u', password: 'p' } });
+    const sig = new AbortController().signal;
+
+    await client.get('/api/a', sig);
+    await client.get('/api/b', sig);
+
+    // 4th call (index 3) should have Bearer new-tok
+    expect(calls[3]?.headers?.['authorization']).toBe('Bearer new-tok');
   });
 });

@@ -251,6 +251,56 @@ describe('Broadcaster', () => {
     expect(a.sent.length).toBe(1);
   });
 
+  it('includes snapshot in health broadcast when present', () => {
+    const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
+    const a = fakeWs();
+    cm.add(a, 'a', { username: 'u' });
+    const bus = createEventBus();
+    const bc = new Broadcaster({ manager: cm, bus, now: () => 0 });
+    bc.start();
+    const snap = {
+      reachable: true,
+      at: 123,
+      host: { reachable: true, pingMs: 4 },
+      service: { reachable: true, latencyMs: 10 },
+    };
+    bus.emit('service.health.updated', {
+      id: 'tor:main', kind: 'tor', instanceId: 'main', at: 123, snapshot: snap,
+    });
+    const msg = JSON.parse(a.sent[0]!);
+    expect(msg.snapshot).toMatchObject(snap);
+    bc.stop();
+  });
+
+  it('omits snapshot key when health event has none', () => {
+    const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
+    const a = fakeWs();
+    cm.add(a, 'a', { username: 'u' });
+    const bus = createEventBus();
+    const bc = new Broadcaster({ manager: cm, bus, now: () => 0 });
+    bc.start();
+    bus.emit('service.health.updated', { id: 'tor:main', kind: 'tor', instanceId: 'main', at: 123 });
+    const msg = JSON.parse(a.sent[0]!);
+    expect('snapshot' in msg).toBe(false);
+    bc.stop();
+  });
+
+  it('includes snapshot in stats broadcast when present', () => {
+    const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
+    const a = fakeWs();
+    cm.add(a, 'a', { username: 'u' });
+    const bus = createEventBus();
+    const bc = new Broadcaster({ manager: cm, bus, now: () => 0 });
+    bc.start();
+    const snap = { metrics: { blocks: 800_000 }, at: 456 };
+    bus.emit('service.stats.updated', {
+      id: 'bitcoin:main', kind: 'bitcoin', instanceId: 'main', at: 456, snapshot: snap,
+    });
+    const msg = JSON.parse(a.sent[0]!);
+    expect(msg.snapshot).toMatchObject(snap);
+    bc.stop();
+  });
+
   it('welcome sends once', () => {
     const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
     const a = fakeWs();

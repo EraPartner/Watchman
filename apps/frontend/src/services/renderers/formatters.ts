@@ -81,6 +81,12 @@ export const fmtBool =
   (v) =>
     v === true ? on : v === false ? off : "—";
 
+export const fmtVolt: MetricFormatter = (v) => {
+  const n = toNumber(v);
+  if (n === undefined) return "—";
+  return `${n.toFixed(4)}V`;
+};
+
 export const fmtVersion: MetricFormatter = (v) => {
   if (typeof v !== "string") return v == null ? "—" : String(v);
   const match = v.match(/\/Satoshi:([^/]+)\//);

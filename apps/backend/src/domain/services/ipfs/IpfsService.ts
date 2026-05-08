@@ -1,13 +1,36 @@
 import { BaseService, type HealthResult, type PollPolicy, type StatsResult } from '../../BaseService.js';
+import { withHostPing } from '../../health.js';
 import type { HttpClient } from '../../../infra/http/client.js';
 import { ok, err } from '../../../core/result.js';
 import { UnavailableError, TimeoutError, isDomainError } from '../../../core/errors.js';
 import type { IpfsInstance } from '../../../config/services.js';
+import type { PingProber } from '../../../infra/net/pingProbe.js';
 
 export interface IpfsDeps {
   http: HttpClient;
+  ping: PingProber;
   config: IpfsInstance;
   now: () => number;
+}
+
+interface DiagSys {
+  MemoryAlloc?: number;
+  GoNumGoroutine?: number;
+  NumCPU?: number;
+}
+
+interface DhtEntry {
+  Name?: string;
+  Buckets?: number;
+  PeerInfos?: unknown[];
+}
+
+interface PinLs {
+  Keys?: Record<string, unknown>;
+}
+
+interface SwarmAddrsListen {
+  Strings?: string[];
 }
 
 export class IpfsService extends BaseService {
@@ -18,6 +41,8 @@ export class IpfsService extends BaseService {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly forcePost: boolean;
+  private readonly pinger: PingProber;
+  private readonly pingHost: string;
   private readonly now: () => number;
 
   constructor(deps: IpfsDeps) {
@@ -28,33 +53,44 @@ export class IpfsService extends BaseService {
     this.baseUrl = deps.config.apiUrl.replace(/\/+$/, '');
     this.timeoutMs = deps.config.timeoutMs;
     this.forcePost = deps.config.forcePost;
+    this.pinger = deps.ping;
+    this.pingHost = new URL(deps.config.apiUrl).hostname;
     this.now = deps.now;
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
-    const started = this.now();
-    const res = await this.fetchVersion(signal);
-    if (!res.ok) return err(res.error);
-    const latencyMs = this.now() - started;
-    return ok({
-      reachable: true,
-      latencyMs,
-      at: this.now(),
-      details: { version: res.value },
-    });
+    return withHostPing(
+      { host: this.pingHost, timeoutMs: this.timeoutMs, pingCount: 1, prober: this.pinger },
+      async (sig) => {
+        const started = this.now();
+        const res = await this.fetchVersion(sig);
+        if (!res.ok) return { reachable: false, message: res.error.message };
+        return { reachable: true, latencyMs: this.now() - started, details: { version: res.value } };
+      },
+      this.now(),
+      signal,
+    );
   }
 
   async getStats(signal: AbortSignal): Promise<StatsResult> {
     try {
-      const [version, id, peers, repo, bw] = await Promise.all([
+      const [version, id, peers, repo, bw, diagSys, dhtEntries, pinLs, listenAddrs] = await Promise.all([
         this.post<{ Version?: string }>('/api/v0/version', signal),
         this.call<{ ID?: string; Addresses?: string[] }>('/api/v0/id', signal),
         this.call<{ Peers?: unknown[] } | unknown[]>('/api/v0/swarm/peers?format=json', signal).catch(() => null),
-        this.call<{ RepoSize?: number; NumObjects?: number }>('/api/v0/repo/stat?format=json', signal).catch(() => null),
+        this.call<{ RepoSize?: number; NumObjects?: number }>('/api/v0/repo/stat?format=json', signal).catch(
+          () => null,
+        ),
         this.call<{ TotalIn?: number; TotalOut?: number; RateIn?: number; RateOut?: number }>(
           '/api/v0/stats/bw?format=json',
           signal,
         ).catch(() => null),
+        this.call<DiagSys>('/api/v0/diag/sys', signal).catch((): DiagSys | null => null),
+        this.postNdjson<DhtEntry>('/api/v0/stats/dht', signal).catch((): DhtEntry[] => []),
+        this.call<PinLs>('/api/v0/pin/ls?type=recursive', signal).catch((): PinLs | null => null),
+        this.call<SwarmAddrsListen>('/api/v0/swarm/addrs/listen', signal).catch(
+          (): SwarmAddrsListen | null => null,
+        ),
       ]);
 
       const peersCount = Array.isArray(peers)
@@ -62,6 +98,11 @@ export class IpfsService extends BaseService {
         : peers && Array.isArray((peers as { Peers?: unknown[] }).Peers)
           ? (peers as { Peers: unknown[] }).Peers.length
           : 0;
+
+      const dhtPeers = dhtEntries.reduce((sum, e) => sum + (e.PeerInfos?.length ?? 0), 0);
+      const pinnedCount = pinLs?.Keys ? Object.keys(pinLs.Keys).length : null;
+      const listenAddrCount = listenAddrs?.Strings?.length ?? null;
+      const memAllocMb = diagSys?.MemoryAlloc != null ? Math.round(diagSys.MemoryAlloc / 1_048_576) : null;
 
       return ok({
         at: this.now(),
@@ -76,6 +117,12 @@ export class IpfsService extends BaseService {
           bwTotalOut: bw?.TotalOut ?? null,
           bwRateIn: bw?.RateIn ?? null,
           bwRateOut: bw?.RateOut ?? null,
+          memAllocMb,
+          goroutines: diagSys?.GoNumGoroutine ?? null,
+          numCPU: diagSys?.NumCPU ?? null,
+          dhtPeers,
+          pinnedCount,
+          listenAddrCount,
         },
       });
     } catch (e) {
@@ -122,6 +169,28 @@ export class IpfsService extends BaseService {
       timeoutMs: this.timeoutMs,
     });
     return this.parse<T>(res, path);
+  }
+
+  // For endpoints that return newline-delimited JSON (NDJSON), e.g. stats/dht.
+  private async postNdjson<T>(path: string, signal: AbortSignal): Promise<T[]> {
+    const res = await this.http.send({
+      url: `${this.baseUrl}${path}`,
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '',
+      signal,
+      timeoutMs: this.timeoutMs,
+    });
+    if (res.status < 200 || res.status >= 300) {
+      const text = await res.text().catch(() => '');
+      throw new UnavailableError(`ipfs ${path} returned ${res.status}: ${text.slice(0, 200)}`);
+    }
+    const text = await res.text();
+    return text
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as T);
   }
 
   private async parse<T>(res: { status: number; text: () => Promise<string> }, path: string): Promise<T> {

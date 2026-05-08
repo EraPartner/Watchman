@@ -26,10 +26,15 @@ aliases: [time-series, metrics history, rollup tiers, DuckDB metrics]
    - `metric_1h` — 1-hour rollup (30-day retention)
    - `rollup_state` — Watermark tracking for background workers
 
-2. **Metrics Collection** — EventBus-driven writer:
-   - Subscribes to `service.stats.updated` event
+2. **Metrics Collection** — EventBus-driven writer (X1 boolean rollup fix):
+   - Subscribes to **both** `service.stats.updated` **and** `service.health.updated` events
    - Batches raw metrics (1-second cadence, ≤500 rows)
    - Drops non-finite values
+   - **X1 Boolean Dual-Column Fix**: Boolean metrics (from stats and health events) are stored in **two columns**:
+     - `value_bool` — Exact boolean value (true/false)
+     - `value_num` — Numeric representation (1 for true, 0 for false)
+     - This enables rollup aggregations (e.g., `AVG(value_num)`) to compute uptime fractions
+     - Example: `reachable` boolean stored as both `value_bool = true` and `value_num = 1` allows `AVG(value_num) * 100` to compute uptime percentage
    - Writes to `metric_raw` table
 
 3. **Automatic Rollups** — Background workers (setTimeout-based):
@@ -64,8 +69,12 @@ Each row contains:
 - `ts` — Bucket start time (timestamp)
 - `kind` — Service type (e.g., "bitcoin")
 - `instance_id` — Instance identifier (e.g., "main")
-- `metric` — Metric name (e.g., "block_height")
-- For raw: `value_num`, `value_text`, `value_bool` (one is populated)
+- `metric` — Metric name (e.g., "block_height" or "reachable")
+- For raw: `value_num`, `value_text`, `value_bool` (one or two may be populated)
+  - **Numeric values**: Only `value_num` populated
+  - **Text values**: Only `value_text` populated
+  - **Boolean values** (X1 fix): **Both** `value_num` (0/1) **and** `value_bool` (true/false) populated
+    - Enables aggregations like `AVG(value_num)` to compute uptime percentages
 - For rollup: min/max/avg/last (aggregates), sample_count
 
 #### Component Breakdown

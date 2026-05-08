@@ -1,13 +1,11 @@
 ---
 title: Testing Strategy and Patterns
 type: doc
-status: superseded
-date: 2026-04-11
-superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
-superseded_date: 2026-04-20
-tags: [testing, strategy, vitest, patterns]
-description: Comprehensive testing strategy, patterns, and conventions for the Watchman project
-aliases: [testing strategy, test patterns, test conventions]
+status: active
+date: 2026-05-07
+tags: [testing, strategy, vitest, patterns, phase-0b, task-b5, task-b6, task-b7, backend, tcp-server, control-port, event-subscription, traffic-deltas, onionoo-enrichment]
+description: Comprehensive testing strategy, patterns, and conventions for the Watchman project — service class testing patterns, health check contract, fake TCP server pattern, Phase 0b updates, Task B5 event subscription lifecycle testing, Task B6 traffic delta computation, Task B7 Onionoo enrichment
+aliases: [testing strategy, test patterns, test conventions, service testing, health check testing, fake tcp server, protocol testing]
 ---
 
 # Testing Strategy and Patterns
@@ -386,27 +384,144 @@ Frontend Vitest setup now also includes alias/plugin configuration in [[apps/fro
 - Added Vitest `test.alias` mapping and per-project alias mapping for both `node` and `jsdom` projects
 - This supports alias-based imports/mocks consistently in utility tests and DOM-based route/component tests
 
-### Service Class Testing
+### Service Class Testing (Phase 0b+)
 
-```javascript
-import { describe, it, expect, vi } from "vitest";
-import { AdGuardService } from "./AdGuardService.js";
+All service classes require a `ping: PingProber` dependency mock and follow the two-tier health model:
+
+```typescript
+import type { PingProber } from '../../../infra/net/pingProbe.js';
+import { AdGuardService } from './AdGuardService.js';
+
+function fakePing(): PingProber {
+  return { probe: async () => ({ success: true, avgMs: 5 }) };
+}
 
 describe("AdGuardService", () => {
-  it("returns enabled when config is valid", () => {
-    const service = new AdGuardService({
-      host: "localhost",
-      port: 3000,
+  it("checkHealth always returns ok() with reachable snapshot", async () => {
+    const svc = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),  // REQUIRED — two-tier health needs ICMP probe mock
+      config: makeConfig(),
+      now: () => 1,
     });
-    expect(service.enabled).toBe(true);
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);  // Always ok(), never err()
+    if (res.ok) {
+      expect(res.value).toHaveProperty('host');       // ICMP tier
+      expect(res.value).toHaveProperty('service');    // Protocol tier
+      expect(res.value).toHaveProperty('reachable');  // Composite
+    }
   });
 
-  it("returns disabled when config is missing", () => {
-    const service = new AdGuardService({});
-    expect(service.enabled).toBe(false);
+  it("connection failure yields unreachable snapshot, not error", async () => {
+    const svc = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ baseUrl: 'http://127.0.0.1:1' }),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);  // Still ok()
+    if (res.ok) {
+      expect(res.value.reachable).toBe(false);  // Failure as state, not error
+    }
   });
 });
 ```
+
+**Key contract (Phase 0a+):**
+- `checkHealth()` **always returns `ok(HealthSnapshot)`** — never throws or returns `err()`
+- Errors (network, timeout, parse failure) are captured in the snapshot as `reachable: false` or `service.ok: false`
+- Tests assert snapshot state, not error paths
+- The snapshot includes both `host` (ICMP) and `service` (protocol) tiers for diagnostic clarity
+
+### Protocol-Level Testing: Fake TCP Server Pattern (Phase 0b+)
+
+Services that use protocol clients (e.g., Tor ControlPort, SNMP, Roon WebSocket) use a shared fake TCP server for isolation:
+
+```typescript
+import net from 'node:net';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createTorControlClient } from './controlClient.js';
+
+let server: net.Server | null = null;
+let serverHandler: ((socket: net.Socket) => void) | null = null;
+
+beforeEach(() => {
+  server = net.createServer((socket) => {
+    if (serverHandler) {
+      serverHandler(socket);
+    }
+  });
+  return new Promise<void>((resolve) => {
+    server!.listen(0, '127.0.0.1', resolve);
+  });
+});
+
+afterEach(() => {
+  return new Promise<void>((resolve) => {
+    if (server) {
+      server.close(resolve);
+    } else {
+      resolve();
+    }
+  });
+});
+
+function torResponder(responseLines: string[]): (socket: net.Socket) => void {
+  return (socket) => {
+    const lines = [...responseLines];
+    socket.on('data', () => {
+      for (const line of lines) {
+        socket.write(line + '\r\n');
+      }
+    });
+  };
+}
+
+describe('TorControlClient', () => {
+  it('connects with password and retrieves GETINFO', async () => {
+    const addr = server!.address() as net.AddressInfo;
+    serverHandler = torResponder(['250 OK', '250-key=value', '250 OK']);
+
+    const client = createTorControlClient();
+    const handle = await client.connect(
+      { host: '127.0.0.1', port: addr.port, password: 'secret', timeoutMs: 1000 },
+      new AbortController().signal
+    );
+
+    const info = await handle.getinfo(['key'], new AbortController().signal);
+    expect(info.get('key')).toBe('value');
+    await handle.close();
+  });
+});
+```
+
+**Key pattern:**
+- Shared `net.Server` per test suite, re-bound for each test
+- Mutable `serverHandler` callback allows per-test response logic
+- Responder helper wraps response lines and auto-sends on data
+- Tests isolate protocol behavior without mocking (true socket I/O)
+- Used for: Tor ControlPort, Roon WebSocket, Synology, SNMP, etc.
+
+**Task B5 Addition (Tor Event Subscription):**
+- Tests for `TorEventSubscription` use the same fake TCP server pattern
+- Subscription lifecycle tested: `authenticate()` → `setevents()` → `on(event, handler)` → `close()`
+- Async `650` event routing and FIFO reply-waiter queue tested via fake server response sequencing
+- TorService integration tests cover `onStart()` creating subscription, `BW` event handling updating `bwRead`/`bwWritten`, and `onStop()` closing subscription gracefully
+
+**Task B6 Addition (Tor Traffic Deltas):**
+- `TorService` unit tests verify delta computation: `trafficDeltaRead = currentRead - lastRead`, `trafficDeltaWritten = currentWritten - lastWritten`
+- First poll returns deltas of 0 (sentinel -1 means no baseline)
+- Subsequent polls compute correct deltas from cumulative byte counts
+- State persistence across polls tested via sequential calls to `getStatsControlPort()`
+
+**Task B7 Addition (Tor Onionoo Supplemental Enrichment):**
+- `TorService.enrich()` tested via fake Onionoo HTTP server response injection
+- Successful enrichment: verifies country, consensusWeight, asName, and consensusWeightFraction fields conditionally present in metrics
+- Error handling: verifies Onionoo failures swallowed silently and ControlPort metrics complete without enrichment
+- Integration: `getStatsControlPort()` tests confirm enrichment fields only spread into metrics when present
+- Non-blocking: enrichment latency does not materially impact stats output time
 
 ### Middleware Testing
 

@@ -2,9 +2,9 @@
 title: Renderer Registry
 type: architecture
 status: active
-date: 2026-04-18
-tags: [architecture, frontend, renderers, service-driven, phase3, bento]
-description: Service renderer registry driving tile summary, detail-sheet metrics, charts, and tone derivation. One renderer per service kind; pluggable per-service customization.
+date: 2026-05-08
+tags: [architecture, frontend, renderers, service-driven, phase3, phase4, bento, pi1, x3-renderer, voltage, fmtVolt, throttle]
+description: Service renderer registry driving tile summary, detail-sheet metrics, charts, and tone derivation. One renderer per service kind; pluggable per-service customization. Phase 3 pilots Bitcoin, Synology, and Raspberry Pi (X3 with voltage charting and throttle detection).
 aliases: [renderer, service renderer, renderer registry]
 ---
 
@@ -100,11 +100,16 @@ Used internally by `ServiceTile` to extract metric values from stats.
 
 ### Common Metric Formatters
 
-- `formatBytes(n)` — Converts bytes to KB/MB/GB/TB
-- `formatPercent(n)` — Converts 0–1 or 0–100 to "45%"
-- `formatNumber(n)` — Localizes number with thousands separators
-- `formatTime(ms)` — Converts milliseconds to human time
-- Custom formatters per service (e.g., Bitcoin uses SAT, Synology uses GB)
+- `fmtNumber(precision)` — Localizes number with thousands separators and optional decimals
+- `fmtPercent(precision, scale)` — Converts 0–1 or 0–100 to percentage string
+- `fmtBytes(n)` — Converts bytes to KiB/MiB/GiB/TiB
+- `fmtUptime(seconds)` — Converts seconds to human-readable uptime (e.g., "2d 4h")
+- `fmtTempC(celsius)` — Formats temperature with one decimal place + °C suffix
+- `fmtVolt(volts)` — Formats voltage with four decimal places + V suffix (X3 addition)
+- `fmtRaw(value)` — Returns value as-is or "—" if null/undefined
+- `fmtBool(onLabel, offLabel)` — Converts boolean to custom labels
+- `fmtVersion(string)` — Extracts semantic version from version strings
+- `dotGet(obj, path)` — Safe nested object access using dot notation
 
 ## Registry API
 
@@ -121,7 +126,7 @@ Used by:
 - `ServiceTile` to get summary, detail, tone, and quick-link
 - `ServiceDetailSheet` to get detail groups and charts
 
-## Phase 3: Bitcoin & Synology
+## Phase 3: Bitcoin, Synology & Raspberry Pi
 
 ### Bitcoin Renderer
 
@@ -187,6 +192,81 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStats> = {
 File: `[[apps/frontend/src/services/renderers/synology.ts]]`
 
 Similar structure; drives Synology tile with CPU/memory/disk metrics.
+
+### Raspberry Pi Renderer (PI1 + X3)
+
+File: `[[apps/frontend/src/services/renderers/raspberryPi.ts]]`
+
+Implements CPU, memory, and host metrics with voltage and load charting:
+
+```typescript
+export const raspberryPiRenderer: ServiceRenderer<Stats> = {
+  kind: "raspi",
+  displayName: "Raspberry Pi",
+  summary: [
+    { key: "cpuTemp", label: "Temp", format: fmtTempC },
+    { key: "clockRate", label: "Clock", format: fmtNumber(0) },
+    { key: "uptime", label: "Uptime", format: fmtUptime },
+  ],
+  detail: [
+    {
+      title: "CPU",
+      metrics: [
+        { key: "cpuTemp", label: "Temperature", format: fmtTempC },
+        { key: "clockRate", label: "Clock rate", format: fmtNumber(0) },
+        { key: "voltage", label: "Core voltage", format: fmtVolt },
+        { key: "throttled", label: "Throttle status", format: fmtThrottled },
+        { key: "load", label: "Load avg (1m)", format: fmtNumber(2) },
+      ],
+    },
+    {
+      title: "Memory",
+      metrics: [
+        { key: "memory", label: "Total RAM", format: fmtRaw },
+      ],
+    },
+    {
+      title: "Host",
+      metrics: [
+        { key: "piModel", label: "Model", format: fmtRaw },
+        { key: "prettyName", label: "OS", format: fmtRaw },
+        { key: "processor", label: "Processor", format: fmtRaw },
+        { key: "isRpi", label: "Is Raspberry Pi", format: fmtRaw },
+        { key: "pigpioVersion", label: "pigpio", format: fmtRaw },
+        { key: "rpiCliAvailable", label: "rpi-cli", format: fmtRaw },
+        { key: "rpiCliError", label: "rpi-cli error", format: fmtRaw },
+        { key: "uptime", label: "Uptime", format: fmtUptime },
+      ],
+    },
+  ],
+  charts: [
+    { metric: "cpuTemp", label: "CPU temp", kind: "line", format: fmtTempC },
+    { metric: "clockRate", label: "Clock rate", kind: "line", format: fmtNumber(0) },
+    { metric: "voltage", label: "Core voltage", kind: "line", format: fmtVolt },
+    { metric: "load", label: "Load avg", kind: "line", format: fmtNumber(2) },
+  ],
+  tone: (ctx) => {
+    if (ctx.health?.status === "offline") return "crit";
+    if (ctx.health?.status === "warning") return "warn";
+    const throttled = ctx.stats ? dotGet(ctx.stats, "throttled") : undefined;
+    if (typeof throttled === "number" && throttled !== 0) return "warn";
+    const temp = ctx.stats ? dotGet(ctx.stats, "cpuTemp") : undefined;
+    if (typeof temp === "number") {
+      if (temp >= 80) return "crit";
+      if (temp >= 70) return "warn";
+    }
+    return "ok";
+  },
+}
+```
+
+**Key features (X3 additions):**
+- **Voltage chart** — Tracks core voltage over time using new `fmtVolt` formatter
+- **Load chart** — CPU load average tracking
+- **Throttle detection** — Status tone returns `"warn"` when `throttled !== 0` (thermal/voltage throttling)
+- **Expanded host section** — Pi model, OS, processor, pigpio version, rpi-cli status
+
+See [[docs/integrations/raspberry-pi|Raspberry Pi Integration]] for backend implementation details.
 
 ## Phase 4: Remaining Renderers (Stubbed)
 

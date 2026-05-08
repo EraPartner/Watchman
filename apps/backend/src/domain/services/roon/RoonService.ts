@@ -1,14 +1,16 @@
-import { BaseService, type HealthResult, type PollPolicy, type StatsResult } from '../../BaseService.js';
+import { BaseService, type HealthResult, type HostHealth, type PollPolicy, type StatsResult } from '../../BaseService.js';
 import { ok } from '../../../core/result.js';
 import type { RoonInstance } from '../../../config/services.js';
 import type { PingProber } from '../../../infra/net/pingProbe.js';
 import type { TcpProber } from '../../../infra/net/tcpProbe.js';
+import type { RoonConnectFn, RoonHandle } from '../../../infra/roon/roonClient.js';
 
 export interface RoonDeps {
   ping: PingProber;
   tcp: TcpProber;
   config: RoonInstance;
   now: () => number;
+  roonConnect?: RoonConnectFn;
 }
 
 export class RoonService extends BaseService {
@@ -20,9 +22,13 @@ export class RoonService extends BaseService {
   private readonly timeoutMs: number;
   private readonly pingCount: number;
   private readonly usePing: boolean;
+  private readonly apiPort: number;
+  private readonly useRoonApi: boolean;
   private readonly pinger: PingProber;
   private readonly tcp: TcpProber;
   private readonly now: () => number;
+  private readonly roonConnect?: RoonConnectFn;
+  private handle: RoonHandle | null = null;
 
   constructor(deps: RoonDeps) {
     super();
@@ -33,9 +39,29 @@ export class RoonService extends BaseService {
     this.timeoutMs = deps.config.timeoutMs;
     this.pingCount = deps.config.pingCount;
     this.usePing = deps.config.usePing;
+    this.apiPort = deps.config.apiPort;
+    this.useRoonApi = deps.config.useRoonApi;
     this.pinger = deps.ping;
     this.tcp = deps.tcp;
     this.now = deps.now;
+    this.roonConnect = deps.roonConnect;
+  }
+
+  async onStart(): Promise<void> {
+    if (!this.useRoonApi || !this.roonConnect) return;
+    this.handle = await this.roonConnect({
+      host: this.host,
+      port: this.apiPort,
+      extensionId: 'com.watchman.roon',
+      displayName: 'Watchman',
+    });
+  }
+
+  async onStop(): Promise<void> {
+    if (this.handle) {
+      await this.handle.close();
+      this.handle = null;
+    }
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
@@ -55,13 +81,18 @@ export class RoonService extends BaseService {
 
     const anyPortOpen = Object.values(ports).some((v) => v);
     const icmpAlive = this.usePing && pingRes.success;
-    const reachable = anyPortOpen || icmpAlive;
+    const pingMs = this.usePing ? pingRes.avgMs : undefined;
+    const host: HostHealth = { reachable: icmpAlive, ...(pingMs !== undefined ? { pingMs } : {}) };
+    const service = { reachable: anyPortOpen, details: { ports } };
+    const reachable = host.reachable || service.reachable;
     const latencyMs = pingRes.avgMs ?? this.now() - started;
 
     return ok({
       reachable,
       latencyMs,
       at: this.now(),
+      host,
+      service,
       details: {
         icmpAlive,
         anyPortOpen,
@@ -73,6 +104,11 @@ export class RoonService extends BaseService {
   }
 
   async getStats(_signal: AbortSignal): Promise<StatsResult> {
+    const zones = this.handle?.getZones() ?? [];
+    const paired = this.handle?.isPaired() ?? false;
+    const activeZones = zones.filter((z) => z.state === 'playing').length;
+    const nowPlaying = zones.find((z) => z.state === 'playing')?.nowPlaying?.oneLine;
+
     return ok({
       at: this.now(),
       metrics: {
@@ -80,6 +116,14 @@ export class RoonService extends BaseService {
         portCount: this.ports.length,
         pingEnabled: this.usePing,
         configured: Boolean(this.host),
+        ...(this.useRoonApi
+          ? {
+              paired,
+              zoneCount: zones.length,
+              activeZones,
+              ...(nowPlaying !== undefined ? { nowPlaying } : {}),
+            }
+          : {}),
       },
     });
   }

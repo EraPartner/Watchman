@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { HomebridgeService } from './HomebridgeService.js';
 import type { HomebridgeClient } from './homebridgeClient.js';
 import type { HomebridgeInstance } from '../../../config/services.js';
+import type { PingProber } from '../../../infra/net/pingProbe.js';
 import { UnauthorizedError, UnavailableError } from '../../../core/errors.js';
+
+function fakePing(): PingProber {
+  return { probe: async () => ({ success: true, avgMs: 5 }) };
+}
 
 const cfg: HomebridgeInstance = {
   kind: 'homebridge',
@@ -35,7 +40,7 @@ describe('HomebridgeService', () => {
   const now = () => 1_000;
 
   it('id composes kind and instance', () => {
-    const svc = new HomebridgeService({ client: fakeClient(() => ({})), config: cfg, now });
+    const svc = new HomebridgeService({ client: fakeClient(() => ({})), ping: fakePing(), config: cfg, now });
     expect(svc.id).toBe('homebridge:main');
   });
 
@@ -46,6 +51,7 @@ describe('HomebridgeService', () => {
         if (p === cfg.versionPath) return { installedVersion: '1.8.0' };
         return null;
       }),
+      ping: fakePing(),
       config: cfg,
       now,
     });
@@ -64,6 +70,7 @@ describe('HomebridgeService', () => {
         if (p === cfg.statusPath) return { hostname: 'pi' };
         return new Error('version endpoint down');
       }),
+      ping: fakePing(),
       config: cfg,
       now,
     });
@@ -71,26 +78,28 @@ describe('HomebridgeService', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('checkHealth err on status failure; domain error passthrough', async () => {
+  it('checkHealth err on status failure yields unreachable snapshot', async () => {
     const svc = new HomebridgeService({
       client: fakeClient(() => new UnauthorizedError('nope')),
+      ping: fakePing(),
       config: cfg,
       now,
     });
     const r = await svc.checkHealth(new AbortController().signal);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toBeInstanceOf(UnauthorizedError);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.reachable).toBe(false);
   });
 
-  it('checkHealth wraps non-domain error as Unavailable', async () => {
+  it('checkHealth wraps non-domain error as unreachable snapshot', async () => {
     const svc = new HomebridgeService({
       client: fakeClient(() => new Error('ECONNREFUSED')),
+      ping: fakePing(),
       config: cfg,
       now,
     });
     const r = await svc.checkHealth(new AbortController().signal);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toBeInstanceOf(UnavailableError);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.reachable).toBe(false);
   });
 
   it('getStats returns primitive metrics', async () => {
@@ -101,6 +110,7 @@ describe('HomebridgeService', () => {
         if (p === cfg.versionPath) return 'v1.8.0';
         return null;
       }),
+      ping: fakePing(),
       config: cfg,
       now,
     });
@@ -116,6 +126,7 @@ describe('HomebridgeService', () => {
   it('getStats defaults when status fields missing', async () => {
     const svc = new HomebridgeService({
       client: fakeClient(() => ({})),
+      ping: fakePing(),
       config: cfg,
       now,
     });
@@ -131,6 +142,7 @@ describe('HomebridgeService', () => {
   it('getStats err with domain error passthrough', async () => {
     const svc = new HomebridgeService({
       client: fakeClient(() => new UnavailableError('down')),
+      ping: fakePing(),
       config: cfg,
       now,
     });

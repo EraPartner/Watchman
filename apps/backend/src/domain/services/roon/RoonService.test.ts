@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { RoonService } from './RoonService.js';
 import type { PingProber, PingResult } from '../../../infra/net/pingProbe.js';
 import type { TcpProber, TcpProbeRequest } from '../../../infra/net/tcpProbe.js';
 import type { RoonInstance } from '../../../config/services.js';
+import type { RoonConnectFn, RoonHandle, RoonZone } from '../../../infra/roon/roonClient.js';
 
 function makeConfig(overrides: Partial<RoonInstance> = {}): RoonInstance {
   return {
@@ -16,8 +17,38 @@ function makeConfig(overrides: Partial<RoonInstance> = {}): RoonInstance {
     ports: [9100, 9200],
     pingCount: 2,
     usePing: true,
+    apiPort: 9100,
+    useRoonApi: false,
     ...overrides,
   };
+}
+
+// ─── Fake Roon connect ────────────────────────────────────────────────────────
+
+function makeFakeConnect(): { connect: RoonConnectFn; handle: RoonHandle } {
+  let zones: RoonZone[] = [];
+  let paired = false;
+  let closed = false;
+
+  const handle: RoonHandle = {
+    getZones: () => (closed ? [] : [...zones]),
+    isPaired: () => !closed && paired,
+    close: async () => {
+      closed = true;
+      zones = [];
+      paired = false;
+    },
+  };
+
+  // Allow tests to inject state before onStart resolves
+  (handle as unknown as Record<string, unknown>)._setZones = (z: RoonZone[], p: boolean) => {
+    zones = z;
+    paired = p;
+  };
+
+  const connect: RoonConnectFn = async () => handle;
+
+  return { connect, handle };
 }
 
 function fakePing(result: PingResult): PingProber {
@@ -99,5 +130,95 @@ describe('RoonService', () => {
       expect(res.value.metrics.portCount).toBe(2);
       expect(res.value.metrics.pingEnabled).toBe(true);
     }
+  });
+});
+
+describe('RoonService — Roon API (RN2)', () => {
+  it('onStart no-op when useRoonApi=false', async () => {
+    const { connect } = makeFakeConnect();
+    const connectSpy = vi.fn(connect);
+    const svc = new RoonService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      config: makeConfig({ useRoonApi: false }),
+      now: () => 0,
+      roonConnect: connectSpy,
+    });
+    await svc.onStart();
+    expect(connectSpy).not.toHaveBeenCalled();
+  });
+
+  it('onStart connects when useRoonApi=true', async () => {
+    const { connect } = makeFakeConnect();
+    const connectSpy = vi.fn(connect);
+    const svc = new RoonService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      config: makeConfig({ useRoonApi: true }),
+      now: () => 0,
+      roonConnect: connectSpy,
+    });
+    await svc.onStart();
+    expect(connectSpy).toHaveBeenCalledOnce();
+    expect(connectSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ host: '192.168.1.20', port: 9100 }),
+    );
+  });
+
+  it('getStats includes paired + zoneCount when useRoonApi=true', async () => {
+    const { connect, handle } = makeFakeConnect();
+    const svc = new RoonService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      config: makeConfig({ useRoonApi: true }),
+      now: () => 0,
+      roonConnect: connect,
+    });
+    await svc.onStart();
+    (handle as unknown as Record<string, unknown>)._setZones(
+      [{ zoneId: 'z1', displayName: 'Kitchen', state: 'playing', queueItemsRemaining: 1, queueTimeRemaining: 120, outputCount: 1, nowPlaying: { oneLine: 'Abbey Road' } }],
+      true,
+    );
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.paired).toBe(true);
+      expect(res.value.metrics.zoneCount).toBe(1);
+      expect(res.value.metrics.activeZones).toBe(1);
+      expect(res.value.metrics.nowPlaying).toBe('Abbey Road');
+    }
+  });
+
+  it('getStats omits roon fields when useRoonApi=false', async () => {
+    const svc = new RoonService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      config: makeConfig({ useRoonApi: false }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.paired).toBeUndefined();
+      expect(res.value.metrics.zoneCount).toBeUndefined();
+    }
+  });
+
+  it('onStop closes handle', async () => {
+    const { connect, handle } = makeFakeConnect();
+    const closeSpy = vi.spyOn(handle, 'close');
+    const svc = new RoonService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      config: makeConfig({ useRoonApi: true }),
+      now: () => 0,
+      roonConnect: connect,
+    });
+    await svc.onStart();
+    await svc.onStop();
+    expect(closeSpy).toHaveBeenCalledOnce();
+    // getStats after stop returns no zones
+    const res = await svc.getStats(new AbortController().signal);
+    if (res.ok) expect(res.value.metrics.zoneCount).toBe(0);
   });
 });

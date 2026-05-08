@@ -1,11 +1,14 @@
 import { BaseService, type HealthResult, type PollPolicy, type StatsResult } from '../../BaseService.js';
+import { withHostPing } from '../../health.js';
 import { ok, err } from '../../../core/result.js';
 import { UnavailableError, isDomainError } from '../../../core/errors.js';
 import type { HomebridgeInstance } from '../../../config/services.js';
 import type { HomebridgeClient } from './homebridgeClient.js';
+import type { PingProber } from '../../../infra/net/pingProbe.js';
 
 export interface HomebridgeDeps {
   client: HomebridgeClient;
+  ping: PingProber;
   config: HomebridgeInstance;
   now: () => number;
 }
@@ -53,6 +56,9 @@ export class HomebridgeService extends BaseService {
   private readonly client: HomebridgeClient;
   private readonly statusPath: string;
   private readonly versionPath: string;
+  private readonly timeoutMs: number;
+  private readonly pinger: PingProber;
+  private readonly pingHost: string;
   private readonly now: () => number;
 
   constructor(deps: HomebridgeDeps) {
@@ -62,31 +68,30 @@ export class HomebridgeService extends BaseService {
     this.client = deps.client;
     this.statusPath = deps.config.statusPath;
     this.versionPath = deps.config.versionPath;
+    this.timeoutMs = deps.config.timeoutMs;
+    this.pinger = deps.ping;
+    this.pingHost = new URL(deps.config.baseUrl).hostname;
     this.now = deps.now;
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
-    const started = this.now();
-    try {
-      const [status, version] = await Promise.all([
-        this.client.get<ServerInformation>(this.statusPath, signal),
-        this.client.get<VersionInfo | string>(this.versionPath, signal).catch(() => null),
-      ]);
-      const details: Record<string, unknown> = {};
-      if (status?.hostname) details['hostname'] = status.hostname;
-      const currentVersion = extractVersion(version);
-      if (currentVersion !== 'unknown') details['currentVersion'] = currentVersion;
-      return ok({
-        reachable: true,
-        latencyMs: this.now() - started,
-        at: this.now(),
-        details,
-      });
-    } catch (e) {
-      if (isDomainError(e)) return err(e);
-      const msg = e instanceof Error ? e.message : String(e);
-      return err(new UnavailableError(`homebridge unreachable: ${msg}`));
-    }
+    return withHostPing(
+      { host: this.pingHost, timeoutMs: this.timeoutMs, pingCount: 1, prober: this.pinger },
+      async (sig) => {
+        const started = this.now();
+        const [status, version] = await Promise.all([
+          this.client.get<ServerInformation>(this.statusPath, sig),
+          this.client.get<VersionInfo | string>(this.versionPath, sig).catch(() => null),
+        ]);
+        const details: Record<string, unknown> = {};
+        if (status?.hostname) details['hostname'] = status.hostname;
+        const currentVersion = extractVersion(version);
+        if (currentVersion !== 'unknown') details['currentVersion'] = currentVersion;
+        return { reachable: true, latencyMs: this.now() - started, details };
+      },
+      this.now(),
+      signal,
+    );
   }
 
   async getStats(signal: AbortSignal): Promise<StatsResult> {

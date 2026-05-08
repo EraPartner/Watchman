@@ -21,6 +21,8 @@ tags:
   - name: services
   - name: instances
   - name: metrics
+  - name: config
+  - name: setup
 paths:
   /meta/health:
     get:
@@ -217,6 +219,61 @@ paths:
                 required: [data]
                 properties:
                   data: { $ref: '#/components/schemas/SetupStatus' }
+  /setup/philips-bridge/pair:
+    post:
+      tags: [setup]
+      summary: Pair with a Philips Hue Bridge (press-link wizard)
+      description: |
+        Press the physical link button on the bridge, then call this endpoint.
+        Simultaneously probes the TLS certificate SHA-256 fingerprint and posts to the
+        bridge `/api` endpoint to obtain an application key.
+        Returns `applicationKey` and `certHash` for use in the service configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host]
+              properties:
+                host:
+                  type: string
+                  description: IP or hostname of the Hue bridge
+                timeoutMs:
+                  type: integer
+                  default: 10000
+                  description: Request timeout in milliseconds
+      responses:
+        '200':
+          description: Pairing successful
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [applicationKey, certHash]
+                    properties:
+                      applicationKey:
+                        type: string
+                        description: Hue API v2 application key (username)
+                      certHash:
+                        type: string
+                        description: SHA-256 fingerprint of the bridge TLS certificate (hex)
+        '400':
+          description: Missing host or link button not pressed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Bridge unreachable or connection error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /config/kinds:
     get:
       tags: [config]
@@ -427,30 +484,66 @@ components:
                 - CIRCUIT_OPEN
                 - VALIDATION
             message: { type: string }
+    HostHealth:
+      type: object
+      required: [reachable]
+      properties:
+        reachable: { type: boolean, description: ICMP ping succeeded }
+        pingMs: { type: number, description: Round-trip time in milliseconds }
+    ServiceHealth:
+      type: object
+      required: [reachable]
+      properties:
+        reachable: { type: boolean, description: Service protocol probe succeeded }
+        latencyMs: { type: number, description: Protocol probe latency in milliseconds }
+        message: { type: string, description: Human-readable failure reason }
+        details:
+          type: object
+          additionalProperties: true
+          description: Service-specific diagnostic details
     HealthSnapshot:
       type: object
       required: [reachable, at]
       properties:
-        reachable: { type: boolean }
-        latencyMs: { type: number }
+        reachable: { type: boolean, description: 'Composite: host AND service reachable' }
+        latencyMs: { type: number, description: 'Service latency, falls back to ping latency' }
         message: { type: string }
         details:
           type: object
           additionalProperties: true
         at: { type: number, description: Timestamp (ms) when snapshot was taken }
+        host:
+          $ref: '#/components/schemas/HostHealth'
+          description: ICMP reachability tier
+        service:
+          $ref: '#/components/schemas/ServiceHealth'
+          description: Protocol probe tier
     StatsSnapshot:
       type: object
       required: [metrics, at]
       properties:
         metrics:
           type: object
+          description: |
+            Service-specific metrics. Keys and types vary by service kind.
+            See service integration docs for metric details:
+            - **Bitcoin** (BT1, BT2): blocks, difficulty, connections, mempool metrics (BT1); zmqLastBlockHash, zmqLastBlockAt, zmqBlockCount when zmqHashblockEndpoint configured (BT2 — real-time ZMQ)
+            - **Raspberry Pi** (PI1): cpuTemp (°C), clockRate (MHz), voltage (V), throttled (0=healthy, non-zero=throttling/undervoltage), load (avg), memory (string), uptime (s), prettyName (string), processor (string), isRpi (bool), pigpioVersion (number). The `throttled` field comes from vcgencmd get_throttled.
+            - **IPFS** (IP1): system diagnostics, DHT routing, pins, listen addresses
+            - **Roon** (RN1/RN2): host, portCount, pingEnabled, configured; when useRoonApi=true: paired (bool), zoneCount (number), activeZones (number), nowPlaying (string, optional)
+            - **Alby Hub**: NWC fields when legacyProbe=false (connected, setupCompleted, backendType, appCount)
+            - **qBittorrent** (QB1): per-torrent stats, speeds, progress, ETA
+            - **AdGuard Home** (AG1): filtering, clients, DHCP, security features
+            - **Philips Hue** (X3): lightCount, onCount, offCount with time-series charting
           additionalProperties:
             oneOf:
               - { type: number }
               - { type: string }
               - { type: boolean }
               - { type: 'null' }
-        at: { type: number }
+        at:
+          type: number
+          description: Timestamp (milliseconds since epoch) when snapshot was taken
     AggregatedEntry:
       type: object
       required: [id, kind, instanceId, result]
@@ -644,3 +737,86 @@ components:
               kind: { type: string }
               instanceId: { type: string }
               message: { type: string }
+    QBittorrentTorrentInfo:
+      type: object
+      description: Per-torrent detail from qBittorrent /api/v2/torrents/info
+      properties:
+        hash: { type: string, description: Torrent hash }
+        name: { type: string, description: Torrent name }
+        state: { type: string, description: Torrent state (downloading, uploading, pausedDL, pausedUP, error, etc.) }
+        progress: { type: number, description: Progress 0..1 }
+        dlspeed: { type: number, description: Download speed in bytes/sec }
+        upspeed: { type: number, description: Upload speed in bytes/sec }
+        size: { type: number, description: Total size in bytes }
+        downloaded: { type: number, description: Downloaded bytes }
+        uploaded: { type: number, description: Uploaded bytes }
+        eta: { type: number, description: ETA seconds }
+        category: { type: string, description: Torrent category }
+    QBittorrentStats:
+      type: object
+      description: qBittorrent service metrics (QB1 — incremental sync + per-torrent details + logs)
+      required: [torrentsTotal, torrentsDownloading, torrentsSeeding, torrentsPaused, torrentsCompleted, torrentsError, dlSpeed, upSpeed, activeTorrents, recentErrors, recentWarnings]
+      properties:
+        version: { type: string, description: qBittorrent API version }
+        uptime: { type: number, description: Uptime in seconds }
+        torrentsTotal: { type: integer, description: Total torrent count }
+        torrentsDownloading: { type: integer, description: Torrents in downloading state }
+        torrentsSeeding: { type: integer, description: Torrents in uploading state }
+        torrentsPaused: { type: integer, description: Paused torrents }
+        torrentsCompleted: { type: integer, description: Completed torrents }
+        torrentsError: { type: integer, description: Torrents in error or missingFiles state }
+        dlSpeed: { type: number, description: Global download speed in bytes/sec }
+        upSpeed: { type: number, description: Global upload speed in bytes/sec }
+        dlData: { type: number, description: Total downloaded in bytes }
+        upData: { type: number, description: Total uploaded in bytes }
+        connectionStatus: { type: string, description: Connection status (connected, disconnected, firewalled) }
+        listenPort: { type: integer, description: Listen port }
+        dhtNodes: { type: integer, description: DHT node count }
+        freeSpaceOnDisk: { type: number, description: Free disk space in bytes }
+        activeTorrents:
+          type: array
+          maxItems: 20
+          description: Top 20 torrents by combined dl+ul speed (per-torrent sync)
+          items: { $ref: '#/components/schemas/QBittorrentTorrentInfo' }
+        recentErrors:
+          type: array
+          description: Critical log messages from /api/v2/log/main (type=8) since last poll
+          items: { type: string }
+        recentWarnings:
+          type: array
+          description: Warning log messages from /api/v2/log/main (type=4) since last poll
+          items: { type: string }
+    AdGuardStats:
+      type: object
+      description: AdGuard Home service metrics (AG1 — extended stats with filtering, clients, DHCP, security features; graceful degradation on optional endpoint failures)
+      properties:
+        version: { type: string, description: AdGuard Home version }
+        running: { type: boolean, description: Service running state }
+        protectionEnabled: { type: boolean, description: DNS protection enabled flag }
+        dnsPort: { type: integer, description: DNS server port }
+        httpPort: { type: integer, description: HTTP API port }
+        totalQueries: { type: integer, description: Total DNS queries processed }
+        blockedQueries: { type: integer, description: Sum of all blocked queries (filtering + safebrowsing + safesearch + parental) }
+        allowedQueries: { type: integer, description: Allowed queries = totalQueries - blockedQueries }
+        blockingRate: { type: number, description: Percentage of blocked queries (0–100, rounded to 2 decimals) }
+        avgProcessingTime: { type: number, description: Average DNS query processing time (milliseconds) }
+        topBlockedDomain: { type: string, description: Most-blocked domain name (or 'N/A') }
+        topQueriedDomain: { type: string, description: Most-queried domain name (or 'N/A') }
+        topClient: { type: string, description: Most-active client IP (or 'N/A') }
+        safebrowsingBlocked: { type: integer, description: Queries blocked by SafeBrowsing filter }
+        safesearchBlocked: { type: integer, description: Queries blocked by SafeSearch enforcement }
+        parentalBlocked: { type: integer, description: Queries blocked by Parental Control filter }
+        filteringEnabled: { type: [boolean, 'null'], description: Filtering toggle state (null on /control/filtering/status fetch failure) }
+        filterCount: { type: integer, description: Number of configured filter lists }
+        totalRules: { type: integer, description: Sum of rules from enabled filter lists only (filters with enabled !== false) }
+        userRules: { type: integer, description: Count of custom user-defined rules }
+        clientCount: { type: integer, description: Number of unique clients }
+        autoClientCount: { type: integer, description: Number of auto-detected clients }
+        dhcpEnabled: { type: [boolean, 'null'], description: DHCP server enabled (null on /control/dhcp/status fetch failure) }
+        dhcpLeases: { type: integer, description: Active DHCP leases }
+        dhcpStaticLeases: { type: integer, description: Static DHCP leases }
+        safebrowsingEnabled: { type: [boolean, 'null'], description: SafeBrowsing protection enabled (null on /control/safebrowsing/status fetch failure) }
+        parentalEnabled: { type: [boolean, 'null'], description: Parental Control enabled (null on /control/parental/status fetch failure) }
+        safesearchEnabled: { type: [boolean, 'null'], description: SafeSearch enforcement enabled (null on /control/safesearch/status fetch failure) }
+        upstreamCount: { type: integer, description: Number of configured upstream DNS servers }
+        upstreamMode: { type: [string, 'null'], description: Upstream DNS mode (e.g., 'parallel', 'sequential', or null on /control/dns_info fetch failure) }

@@ -20,10 +20,10 @@ export class Broadcaster {
     if (this.unsubs.length > 0) return;
     this.unsubs.push(
       this.deps.bus.on('service.health.updated', (p) => {
-        this.broadcast({ type: 'service_update', scope: 'health', id: p.id, kind: p.kind, instanceId: p.instanceId, at: p.at });
+        this.broadcast({ type: 'service_update', scope: 'health', id: p.id, kind: p.kind, instanceId: p.instanceId, at: p.at, ...(p.snapshot !== undefined ? { snapshot: p.snapshot } : {}) });
       }),
       this.deps.bus.on('service.stats.updated', (p) => {
-        this.broadcast({ type: 'service_update', scope: 'stats', id: p.id, kind: p.kind, instanceId: p.instanceId, at: p.at });
+        this.broadcast({ type: 'service_update', scope: 'stats', id: p.id, kind: p.kind, instanceId: p.instanceId, at: p.at, ...(p.snapshot !== undefined ? { snapshot: p.snapshot } : {}) });
       }),
     );
   }

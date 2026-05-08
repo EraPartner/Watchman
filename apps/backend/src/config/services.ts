@@ -25,6 +25,9 @@ export const RouterInstanceSchema = BaseInstanceSchema.extend({
   host: z.string().min(1),
   ports: z.array(z.number().int().positive()).default([]),
   pingCount: z.number().int().positive().default(1),
+  snmpVersion: z.enum(['v2c', 'v3']).default('v2c').optional(),
+  snmpCommunity: z.string().optional(),
+  interfaceFilter: z.array(z.string()).default([]),
 });
 
 export const PhilipsBridgeInstanceSchema = BaseInstanceSchema.extend({
@@ -32,6 +35,8 @@ export const PhilipsBridgeInstanceSchema = BaseInstanceSchema.extend({
   host: z.string().min(1),
   pingCount: z.number().int().positive().default(2),
   usePing: z.boolean().default(true),
+  applicationKey: z.string().optional(),
+  certHash: z.string().optional(),
 });
 
 export const RoonInstanceSchema = BaseInstanceSchema.extend({
@@ -40,6 +45,8 @@ export const RoonInstanceSchema = BaseInstanceSchema.extend({
   ports: z.array(z.number().int().positive()).default([9100]),
   pingCount: z.number().int().positive().default(2),
   usePing: z.boolean().default(true),
+  apiPort: z.number().int().positive().default(9100),
+  useRoonApi: z.boolean().default(false),
 });
 
 export const QbittorrentInstanceSchema = BaseInstanceSchema.extend({
@@ -60,6 +67,9 @@ export const AlbyHubInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal('albyHub'),
   baseUrl: z.string().url(),
   token: z.string().default(''),
+  // When true (default for one release): probe candidate paths to discover endpoints.
+  // When false: use deterministic NWC API paths (/api/info, /api/apps).
+  legacyProbe: z.boolean().default(true),
 });
 
 export const HomebridgeInstanceSchema = BaseInstanceSchema.extend({
@@ -82,6 +92,9 @@ export const SynologyInstanceSchema = BaseInstanceSchema.extend({
   snmpPrivKey: z.string().default(''),
   snmpAuthProtocol: z.enum(['SHA', 'MD5']).default('SHA'),
   snmpPrivProtocol: z.enum(['AES', 'DES']).default('AES'),
+  dsmUrl: z.string().default(''),
+  dsmAccount: z.string().default(''),
+  dsmPassword: z.string().default(''),
 });
 
 export const MacMiniInstanceSchema = BaseInstanceSchema.extend({
@@ -98,6 +111,12 @@ export const RaspberryPiInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal('raspberryPi'),
   host: z.string().min(1),
   port: z.number().int().positive().default(8888),
+  // Direct SSH to Pi (preferred path; uses SSH pool)
+  sshUser: z.string().default(''),
+  sshPort: z.number().int().positive().default(22),
+  sshKeyPath: z.string().default(''),
+  sshPassphrase: z.string().default(''),
+  // Legacy macMini relay (used when direct SSH not configured)
   macMiniHost: z.string().default(''),
   macMiniSshPort: z.number().int().positive().default(22),
   macMiniSshUser: z.string().default(''),
@@ -113,12 +132,22 @@ export const BitcoinInstanceSchema = BaseInstanceSchema.extend({
   rpcUrl: z.string().url().default('http://127.0.0.1:8332'),
   rpcUser: z.string().default(''),
   rpcPassword: z.string().default(''),
+  /** ZMQ endpoint for hashblock notifications, e.g. tcp://127.0.0.1:28332 */
+  zmqHashblockEndpoint: z.string().default(''),
+  /** ZMQ endpoint for rawtx notifications, e.g. tcp://127.0.0.1:28333 */
+  zmqRawtxEndpoint: z.string().default(''),
 });
 
 export const TorInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal('tor'),
-  relayNickname: z.string().min(1),
+  relayNickname: z.string().default(''),
   onionooBaseUrl: z.string().url().default('https://onionoo.torproject.org'),
+  host: z.string().default('127.0.0.1'),
+  pingCount: z.number().int().positive().default(1),
+  controlPort: z.number().int().min(1).max(65535).default(9051),
+  controlPassword: z.string().default(''),
+  cookieAuthFile: z.string().default(''),
+  useControlPort: z.boolean().default(false),
 });
 
 export const ServiceInstanceSchema = z.discriminatedUnion('kind', [

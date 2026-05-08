@@ -14,9 +14,11 @@ import { createBackgroundPoller } from './infra/scheduler/poller.js';
 import { createHttpClient } from './infra/http/client.js';
 import { createPingProber } from './infra/net/pingProbe.js';
 import { createTcpProber } from './infra/net/tcpProbe.js';
-import { createSshExecutor } from './infra/ssh/sshExecutorImpl.js';
+import { createSshPool } from './infra/ssh/sshPool.js';
 import { createSnmpGetter } from './infra/snmp/snmpGetterImpl.js';
 import { createPigpioClient } from './infra/gpio/pigpioClientImpl.js';
+import { createTorControlClient } from './infra/tor/controlClient.js';
+import { roonConnect } from './infra/roon/roonClientImpl.js';
 import { wsPlugin } from './transport/ws/wsPlugin.js';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join, isAbsolute, resolve } from 'node:path';
@@ -40,13 +42,16 @@ async function main(): Promise<void> {
   const bus = createEventBus((err) => logger.error({ err }, 'eventBus handler error'));
   const metrics = createMetricsRegistry();
 
+  const sshPool = createSshPool();
   const infra = {
     http: createHttpClient(),
     ping: createPingProber(),
     tcp: createTcpProber(),
-    ssh: createSshExecutor(),
+    ssh: sshPool,
     snmp: createSnmpGetter(),
     pigpio: createPigpioClient(),
+    torControl: createTorControlClient(),
+    roonConnect,
     now: () => systemClock.now(),
   };
 
@@ -90,7 +95,7 @@ async function main(): Promise<void> {
     listInstances: new ListInstances(registry),
     metrics,
     config: { store, lifecycle, registry },
-    setup: { store },
+    setup: { store, http: infra.http },
   });
 
   await app.register(wsPlugin, {

@@ -1,11 +1,25 @@
 // v2 API types. Matches apps/backend/openapi.yaml.
 
+export interface HostHealth {
+  reachable: boolean;
+  pingMs?: number;
+}
+
+export interface ServiceHealth {
+  reachable: boolean;
+  latencyMs?: number;
+  message?: string;
+  details?: Record<string, unknown>;
+}
+
 export interface HealthSnapshot {
   reachable: boolean;
   latencyMs?: number;
   message?: string;
   details?: Record<string, unknown>;
   at: string;
+  host?: HostHealth;
+  service?: ServiceHealth;
 }
 
 export type StatsMetricValue = number | string | boolean | null;

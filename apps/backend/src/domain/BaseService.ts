@@ -7,12 +7,26 @@ export interface PollPolicy {
   jitterRatio?: number;
 }
 
+export interface HostHealth {
+  reachable: boolean;
+  pingMs?: number;
+}
+
+export interface ServiceHealth {
+  reachable: boolean;
+  latencyMs?: number;
+  message?: string;
+  details?: Readonly<Record<string, unknown>>;
+}
+
 export interface HealthSnapshot {
   reachable: boolean;
   latencyMs?: number;
   message?: string;
   details?: Readonly<Record<string, unknown>>;
   at: number;
+  host?: HostHealth;
+  service?: ServiceHealth;
 }
 
 export interface StatsSnapshot {

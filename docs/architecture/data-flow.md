@@ -2,16 +2,18 @@
 title: Data Flow
 type: architecture
 status: active
-date: 2026-04-09
-tags: [architecture, backend, frontend, data-flow]
-description: Data flow documentation for authentication, monitoring, and real-time updates
+date: 2026-05-07
+tags: [architecture, backend, frontend, data-flow, two-tier, health, websocket-snapshots, phase-0b, task-b5, event-subscription]
+description: Data flow documentation for authentication, service monitoring (two-tier health model), real-time updates with full snapshot payloads, and Tor ControlPort event subscription lifecycle (Task B5)
 aliases: [data flow, request flow, communication patterns]
 ---
 
 # Data Flow
 
 > [!abstract] Overview
-> This document describes the primary data flows in Watchman: authentication, service monitoring, and real-time updates.
+> This document describes the primary data flows in Watchman: authentication, service monitoring with two-tier health model, and real-time updates.
+>
+> **Two-Tier Health Model** (Phase 0a): Each service check now runs ICMP ping and protocol probe in parallel, returning separate `host` and `service` tiers. See [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019]] Phase 0a.
 
 ## Authentication Flow
 
@@ -35,19 +37,44 @@ aliases: [data flow, request flow, communication patterns]
 - `sameSite: strict` (production) - CSRF protection
 - `maxAge: 8 hours` - Session duration
 
-## Service Monitoring Flow
+## Service Monitoring Flow (Two-Tier Health)
 
 ```
-1. Frontend requests service status → GET /api/{service}/status
-2. Rate limiting middleware checks request quota
-3. Cache middleware checks for cached response (30s TTL)
-4. ServiceManager retrieves service instance
-5. Circuit breaker checks service health state
-6. Service makes HTTP/SSH call to external service
-7. Response normalized and cached
-8. JSON response sent to frontend
-9. Frontend updates UI with service status
+1. Backend runs BackgroundPoller on healthMs interval
+2. ServiceManager.getHealth(service) invokes service.checkHealth(signal)
+3. Each service calls withHostPing() helper (new in Phase 0a):
+   a. Promise.allSettled() runs in parallel:
+      - ICMP ping to host via PingProber.probe()
+      - Protocol probe (HTTP, RPC, SSH, etc.) via service-specific probe()
+   b. Results assembled into HostHealth + ServiceHealth tiers
+   c. Top-level reachable = AND/OR logic (service-dependent)
+4. HealthSnapshot returned with host, service, and at timestamp
+5. Frontend requests → GET /services/{kind}/health
+6. Response cached (service-dependent TTL)
+7. Frontend renders two indicator dots (host + service)
+8. Tooltip shows host.pingMs + service.latencyMs + service.message
 ```
+
+### Two-Tier Response Structure
+
+```json
+{
+  "host": {
+    "reachable": true,
+    "pingMs": 12
+  },
+  "service": {
+    "reachable": true,
+    "latencyMs": 45,
+    "message": "OK"
+  },
+  "reachable": true
+}
+```
+
+- **host** — ICMP reachability (always attempted first)
+- **service** — Protocol probe reachability (HTTP, RPC, SSH, etc.)
+- **reachable** — Composite (semantics vary; HTTP services use `host AND service`, routers use `host OR service`)
 
 ### Stats Flow (requires auth)
 
@@ -64,14 +91,34 @@ aliases: [data flow, request flow, communication patterns]
 
 ```
 1. Frontend loads → establishes WebSocket connection
-2. WebSocketManager tracks connected clients
-3. ServiceManager polls services on configured interval
-4. Status change detected → WebSocketManager.broadcast()
-5. All connected clients receive update
-6. Frontend hook (useWebSocket) processes message
-7. React Query cache invalidated
-8. UI re-renders with updated status
+2. ConnectionManager tracks connected clients
+3. BackgroundPoller polls services on configured interval (15s)
+4. Status change detected → eventBus emits service.stats.updated or service.health.updated
+5. Broadcaster receives event with snapshot payload
+6. Broadcaster sends WebSocket message to all connected clients with snapshot included
+7. Frontend hook (useWebSocket) processes message
+8. React Query cache invalidated
+9. UI re-renders with updated status
 ```
+
+### WebSocket Message Payload (Phase 0a+)
+
+All `service_update` messages now include optional `snapshot` field:
+
+```json
+{
+  "type": "service_update",
+  "scope": "health" | "stats",
+  "id": "bitcoin:main",
+  "kind": "bitcoin",
+  "instanceId": "main",
+  "at": 1714000000000,
+  "snapshot": { /* HealthSnapshot or StatsSnapshot if present */ }
+}
+```
+
+- **snapshot** — Full `HealthSnapshot` or `StatsSnapshot` included when event is published; eliminates need for REST re-fetch on every WS event
+- **scope** — "health" or "stats" to distinguish event type
 
 ## Configuration Flow
 
@@ -84,9 +131,13 @@ aliases: [data flow, request flow, communication patterns]
    - TorManager default data dir is `apps/backend/.tor-data`
    - Tor SOCKS readiness is determined via local TCP probe on `127.0.0.1:{socksPort}`
 6. Initialize each service via factory pattern
-7. Frontend requests config → GET /api/config/frontend
-8. FrontendConfigService returns enabled services list
-9. Frontend renders cards for enabled services
+   - Tor service receives TorEventSubscriptionFactory if useControlPort=true (Task B5)
+7. Start background poller
+   - For Tor ControlPort mode: onStart() creates event subscription for BW events (Task B5)
+   - onStop() gracefully closes subscription on shutdown
+8. Frontend requests config → GET /api/config/frontend
+9. FrontendConfigService returns enabled services list
+10. Frontend renders cards for enabled services
 ```
 
 ## PlantUML Diagrams

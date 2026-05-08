@@ -2,9 +2,9 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-04-19
-tags: [feature, websocket, frontend, backend, real-time, fastify]
-description: WebSocket-based real-time status broadcasting for live dashboard updates using split architecture
+date: 2026-05-08
+tags: [feature, websocket, frontend, backend, real-time, fastify, snapshots, phase-0a]
+description: WebSocket-based real-time status broadcasting with full snapshot payloads (HealthSnapshot, StatsSnapshot) for live dashboard updates using split architecture
 aliases: [websocket, real-time, live updates, status broadcasting]
 ---
 
@@ -43,7 +43,8 @@ Maintains connection liveness:
 ### Broadcaster
 
 Publishes status changes to connected clients:
-- Receives status-change events from domain layer via eventBus
+- Receives `service.stats.updated` and `service.health.updated` events from domain layer via eventBus
+- Includes full `snapshot` (HealthSnapshot or StatsSnapshot) in payload when present (Phase 0a+)
 - Serializes events to JSON message format
 - Sends to all connected clients (or filtered by service type if needed)
 - Handles send errors gracefully (disconnected clients don't crash broadcaster)

@@ -4,6 +4,8 @@ import type { TcpProber } from '../infra/net/tcpProbe.js';
 import type { SshExecutor } from '../infra/ssh/sshExecutor.js';
 import type { SnmpGetter } from '../infra/snmp/snmpGetter.js';
 import type { PigpioClient } from '../infra/gpio/pigpioClient.js';
+import type { TorControlClient } from '../infra/tor/controlClient.js';
+import type { RoonConnectFn } from '../infra/roon/roonClient.js';
 import type { ServiceInstance, ServicesConfig } from '../config/services.js';
 import type { BaseService } from '../domain/BaseService.js';
 import { ServiceRegistry } from '../domain/ServiceRegistry.js';
@@ -20,7 +22,9 @@ import { RaspberryPiService } from '../domain/services/raspberryPi/RaspberryPiSe
 import { RoonService } from '../domain/services/roon/RoonService.js';
 import { RouterService } from '../domain/services/router/RouterService.js';
 import { SynologyService } from '../domain/services/synology/SynologyService.js';
+import { createDsmClient } from '../infra/synology/dsmClient.js';
 import { TorService } from '../domain/services/tor/TorService.js';
+import { createTorEventSubscriptionFactory } from '../infra/tor/eventSubscription.js';
 
 export interface ServiceInfra {
   http: HttpClient;
@@ -29,6 +33,8 @@ export interface ServiceInfra {
   ssh: SshExecutor;
   snmp: SnmpGetter;
   pigpio: PigpioClient;
+  torControl: TorControlClient;
+  roonConnect?: RoonConnectFn;
   now: () => number;
 }
 
@@ -37,30 +43,55 @@ export function createService(instance: ServiceInstance, infra: ServiceInfra): B
 }
 
 function buildService(instance: ServiceInstance, infra: ServiceInfra): BaseService {
-  const { http, ping, tcp, ssh, snmp, pigpio, now } = infra;
+  const { http, ping, tcp, ssh, snmp, pigpio, torControl, roonConnect, now } = infra;
   switch (instance.kind) {
     case 'ipfs':
-      return new IpfsService({ http, config: instance, now });
+      return new IpfsService({ http, ping, config: instance, now });
     case 'router':
-      return new RouterService({ ping, tcp, config: instance, now });
+      return new RouterService({ ping, tcp, snmp, config: instance, now });
     case 'philipsBridge':
-      return new PhilipsBridgeService({ ping, config: instance, now });
+      return new PhilipsBridgeService({ ping, http, config: instance, now });
     case 'roon':
-      return new RoonService({ ping, tcp, config: instance, now });
+      return new RoonService({ ping, tcp, config: instance, now, ...(roonConnect ? { roonConnect } : {}) });
     case 'qbittorrent':
-      return new QBittorrentService({ http, config: instance, now });
+      return new QBittorrentService({ http, ping, config: instance, now });
     case 'adguard':
-      return new AdGuardService({ http, config: instance, now });
+      return new AdGuardService({ http, ping, config: instance, now });
     case 'albyHub':
-      return new AlbyHubService({ http, config: instance, now });
+      return new AlbyHubService({ http, ping, config: instance, now });
     case 'tor':
-      return new TorService({ http, config: instance, now });
+      return new TorService({
+        http,
+        ping,
+        torControl,
+        eventSubscriptionFactory: createTorEventSubscriptionFactory(),
+        config: instance,
+        now,
+      });
     case 'bitcoin':
-      return new BitcoinService({ http, config: instance, now });
+      return new BitcoinService({ http, ping, config: instance, now });
     case 'macMini':
       return new MacMiniService({ ping, ssh, config: instance, now });
-    case 'synology':
-      return new SynologyService({ snmp, config: instance, now });
+    case 'synology': {
+      const dsmClient = instance.dsmUrl && instance.dsmAccount && instance.dsmPassword
+        ? createDsmClient({
+            http,
+            config: {
+              baseUrl: instance.dsmUrl,
+              account: instance.dsmAccount,
+              password: instance.dsmPassword,
+              timeoutMs: instance.timeoutMs,
+            },
+          })
+        : undefined;
+      return new SynologyService({
+        snmp,
+        ping,
+        config: instance,
+        now,
+        ...(dsmClient ? { dsm: dsmClient } : {}),
+      });
+    }
     case 'homebridge': {
       const client = createHomebridgeClient({
         http,
@@ -73,7 +104,7 @@ function buildService(instance: ServiceInstance, infra: ServiceInfra): BaseServi
           timeoutMs: instance.timeoutMs,
         },
       });
-      return new HomebridgeService({ client, config: instance, now });
+      return new HomebridgeService({ client, ping, config: instance, now });
     }
     case 'raspberryPi':
       return new RaspberryPiService({ pigpio, ping, ssh, config: instance, now });
