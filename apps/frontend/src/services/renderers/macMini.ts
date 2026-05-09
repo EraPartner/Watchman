@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import {
   dotGet,
   fmtBytes,
@@ -18,6 +19,13 @@ const getNum = (s: Stats | undefined, path: string): number | undefined => {
 export const macMiniRenderer: ServiceRenderer<Stats> = {
   kind: "macmini",
   displayName: "Mac Mini",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["host", "address"],
+      portKeys: ["port"],
+      scheme: "https",
+    }),
+  quickLinkLabel: "Open host",
 
   summary: [
     { key: "cpuLoad", label: "CPU", format: fmtPercent(0, 100) },

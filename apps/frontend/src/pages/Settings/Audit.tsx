@@ -1,58 +1,65 @@
-import { Link } from "react-router-dom";
-import { Button } from "../../components/primitives";
+import { SettingsLayout } from "./SettingsLayout";
 import { useAudit } from "./useConfigQueries";
+
+const ACTION_TONE: Record<string, string> = {
+  create: "var(--ok)",
+  update: "var(--accent)",
+  delete: "var(--crit)",
+  import: "var(--warn)",
+  export: "var(--text-md)",
+};
 
 export default function Audit() {
   const { data: entries, isLoading, error } = useAudit(200);
 
   return (
-    <div className="min-h-screen bg-[var(--surface-0)] p-6">
-      <div className="max-w-4xl mx-auto">
-        <header className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold">Config audit</h1>
-            <p className="text-sm text-muted-foreground">
-              Recent configuration changes.
-            </p>
-          </div>
-          <Link to="/settings/services">
-            <Button variant="ghost">Back</Button>
-          </Link>
-        </header>
+    <SettingsLayout
+      eyebrow="settings · audit"
+      title="Config audit"
+      description="Recent configuration changes, most recent first."
+    >
+      {isLoading && <p className="text-fs-body text-[var(--text-md)]">Loading…</p>}
+      {error && (
+        <p className="text-fs-label text-[var(--crit)]">
+          {(error as Error).message ?? "Failed to load"}
+        </p>
+      )}
 
-        {isLoading && <p>Loading…</p>}
-        {error && (
-          <p className="text-red-500 text-sm">
-            {(error as Error).message ?? "Failed to load"}
-          </p>
+      <ol className="space-y-s-2">
+        {entries?.length === 0 && (
+          <li className="text-fs-body text-[var(--text-lo)]">No activity yet.</li>
         )}
-
-        <ol className="space-y-2">
-          {entries?.length === 0 && (
-            <li className="text-sm text-muted-foreground">No activity yet.</li>
-          )}
-          {entries?.map((e) => (
-            <li
-              key={e.id}
-              className="rounded border p-3 flex items-start justify-between gap-4"
-            >
+        {entries?.map((e) => (
+          <li
+            key={e.id}
+            className="rounded-r-2 border border-[var(--hairline)] bg-[var(--surface-1)] px-s-4 py-s-3"
+          >
+            <div className="flex items-baseline justify-between gap-s-4">
               <div>
-                <div className="text-sm font-medium">
-                  <span className="uppercase tracking-wide">{e.action}</span>
-                  {" · "}
-                  {e.targetKind}/{e.targetId}
+                <div className="flex items-baseline gap-s-2 text-fs-body">
+                  <span
+                    className="font-mono uppercase tracking-[0.06em] text-fs-label"
+                    style={{ color: ACTION_TONE[e.action] ?? "var(--text-md)" }}
+                  >
+                    {e.action}
+                  </span>
+                  <span className="font-mono text-[var(--text-hi)]">
+                    {e.targetKind}/{e.targetId}
+                  </span>
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="mt-s-1 text-fs-label text-[var(--text-lo)]">
                   {new Date(e.ts).toLocaleString()} · {e.actor ?? "system"}
                 </div>
               </div>
-              <pre className="text-xs text-muted-foreground max-w-md overflow-x-auto">
-                {JSON.stringify(e.diff, null, 0)}
-              </pre>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </div>
+              {e.diff && Object.keys(e.diff).length > 0 ? (
+                <pre className="max-w-md overflow-x-auto rounded-r-1 bg-[var(--surface-2)] px-s-2 py-s-1 font-mono text-fs-label text-[var(--text-md)]">
+                  {JSON.stringify(e.diff)}
+                </pre>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </SettingsLayout>
   );
 }

@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import { dotGet, fmtNumber, fmtRaw, fmtTempC, fmtUptime, fmtVolt } from "./formatters";
 
 type Stats = Record<string, unknown>;
@@ -14,6 +15,12 @@ function fmtThrottled(v: unknown): string {
 export const raspberryPiRenderer: ServiceRenderer<Stats> = {
   kind: "raspi",
   displayName: "Raspberry Pi",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["host", "address"],
+      portKeys: ["port"],
+    }),
+  quickLinkLabel: "Open host",
 
   summary: [
     { key: "cpuTemp", label: "Temp", format: fmtTempC },

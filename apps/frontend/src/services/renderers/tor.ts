@@ -6,6 +6,14 @@ type Stats = Record<string, unknown>;
 export const torRenderer: ServiceRenderer<Stats> = {
   kind: "tor",
   displayName: "Tor Relay",
+  quickLink: (ctx) => {
+    const fp = ctx.config?.fingerprint;
+    if (typeof fp === "string" && fp.length > 0) {
+      return `https://metrics.torproject.org/rs.html#details/${encodeURIComponent(fp)}`;
+    }
+    return undefined;
+  },
+  quickLinkLabel: "View on Tor metrics",
 
   summary: [
     { key: "bandwidthCurrent", label: "BW/s", format: fmtBytes },

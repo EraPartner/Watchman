@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import { dotGet, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
@@ -6,6 +7,11 @@ type Stats = Record<string, unknown>;
 export const albyHubRenderer: ServiceRenderer<Stats> = {
   kind: "albyhub",
   displayName: "Alby Hub",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["url", "endpoint", "host"],
+    }),
+  quickLinkLabel: "Open Alby Hub",
 
   summary: [
     { key: "name", label: "Name", format: fmtRaw },

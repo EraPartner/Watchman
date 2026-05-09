@@ -19,8 +19,11 @@ export interface ServiceInstancesData {
   timestamp: string;
 }
 
-function groupByKind(list: InstanceInfo[]): ServiceInstancesData {
+function groupByKind(list: InstanceInfo[] | unknown): ServiceInstancesData {
   const instances: ServiceInstancesData["instances"] = {};
+  if (!Array.isArray(list)) {
+    return { instances, timestamp: new Date().toISOString() };
+  }
   for (const info of list) {
     const bucket = instances[info.kind] ?? { count: 0, instances: [] };
     bucket.instances = [

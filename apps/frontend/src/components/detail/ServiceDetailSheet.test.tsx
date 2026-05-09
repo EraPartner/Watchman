@@ -33,6 +33,7 @@ vi.mock("@/services/renderers", () => ({
     detail: [],
     charts: [],
   }),
+  rendererTrackedMetrics: () => [] as ReadonlyArray<string>,
   dotGet: () => undefined,
 }));
 

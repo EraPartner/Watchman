@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/primitives";
 import { DashboardGrid } from "./DashboardGrid";
+import { TopNav } from "./TopNav";
 import { ServiceTile } from "@/components/tile/ServiceTile";
 import { ServiceDetailSheet } from "@/components/detail/ServiceDetailSheet";
 import { BENTO_LAYOUT } from "@/config/bentoLayout";
@@ -38,52 +39,95 @@ export default function BentoDashboard() {
 
   return (
     <TooltipProvider>
-      <main className="min-h-screen bg-[var(--surface-0)] px-s-8 py-s-10 text-[var(--text-hi)]">
-        <header className="mb-s-8 flex items-start justify-between gap-s-4">
-          <div className="space-y-s-2">
-            <p className="text-fs-label uppercase tracking-[0.12em] text-[var(--text-lo)]">
-              Watchman · Bento
-            </p>
-            <h1 className="text-fs-h1 font-[700] tracking-[-0.02em]">
-              Service dashboard
-            </h1>
-          </div>
-          <Button variant="accent" onClick={openCreate}>
-            + Add service
-          </Button>
-        </header>
+      <div className="relative min-h-screen bg-[var(--surface-0)] text-[var(--text-hi)]">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, oklch(80% 0.13 85 / 0.06) 0%, transparent 60%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.025] mix-blend-overlay"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+          }}
+        />
 
-        {!isLoading && entries.length === 0 ? (
-          <div className="rounded-lg border border-[var(--border-lo)] bg-[var(--surface-1)] p-s-8 text-center text-[var(--text-lo)]">
-            <p className="text-fs-body">No services configured yet.</p>
-            <p className="mt-s-2 text-fs-label">
-              Add your first service to populate the dashboard.
-            </p>
-            <div className="mt-s-4 flex justify-center">
-              <Button variant="accent" onClick={openCreate}>
-                Add your first service
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <DashboardGrid>
-            {entries.flatMap((entry) => {
-              const instances =
-                configuredKinds[entry.kind]?.instances ?? [];
-              return instances.map((inst) => (
-                <ServiceTile
-                  key={`${entry.kind}:${inst.id}`}
-                  kind={entry.kind}
-                  instanceId={inst.id}
-                  size={entry.size}
-                  onOpenDetail={({ kind, instanceId }) =>
-                    setOpenCtx({ kind, instanceId })
-                  }
+        <TopNav onAddService={openCreate} />
+
+        <main className="relative mx-auto max-w-screen-2xl px-s-8 py-s-10">
+          <header className="mb-s-10 flex items-end justify-between gap-s-6">
+            <div className="space-y-s-3">
+              <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--accent)]">
+                home-lab observatory
+              </p>
+              <h1 className="text-[clamp(2.5rem,2rem+2vw,4rem)] font-[700] leading-[0.95] tracking-[-0.03em] text-[var(--text-hi)]">
+                Service dashboard
+              </h1>
+              <div className="flex items-center gap-s-3">
+                <span
+                  aria-hidden
+                  className="inline-block h-px w-12 bg-[var(--accent)]"
                 />
-              ));
-            })}
-          </DashboardGrid>
-        )}
+                <p className="font-mono text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
+                  {entries.length} renderer
+                  {entries.length === 1 ? "" : "s"} active ·{" "}
+                  {Object.values(configuredKinds).reduce(
+                    (sum, k) => sum + (k?.count ?? 0),
+                    0
+                  )}{" "}
+                  instance
+                  {Object.values(configuredKinds).reduce(
+                    (sum, k) => sum + (k?.count ?? 0),
+                    0
+                  ) === 1
+                    ? ""
+                    : "s"}
+                </p>
+              </div>
+            </div>
+          </header>
+
+          {!isLoading && entries.length === 0 ? (
+            <div className="rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] p-s-12 text-center">
+              <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--accent)]">
+                empty observatory
+              </p>
+              <h2 className="mt-s-3 text-fs-h2 font-[600] tracking-[-0.02em] text-[var(--text-hi)]">
+                No services configured yet
+              </h2>
+              <p className="mt-s-2 text-fs-body text-[var(--text-md)]">
+                Add your first service to populate the dashboard.
+              </p>
+              <div className="mt-s-6 flex justify-center">
+                <Button variant="accent" onClick={openCreate}>
+                  Add your first service
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <DashboardGrid>
+              {entries.flatMap((entry) => {
+                const instances = configuredKinds[entry.kind]?.instances ?? [];
+                return instances.map((inst) => (
+                  <ServiceTile
+                    key={`${entry.kind}:${inst.id}`}
+                    kind={entry.kind}
+                    instanceId={inst.id}
+                    size={entry.size}
+                    onOpenDetail={({ kind, instanceId }) =>
+                      setOpenCtx({ kind, instanceId })
+                    }
+                  />
+                ));
+              })}
+            </DashboardGrid>
+          )}
+        </main>
 
         <ServiceDetailSheet
           kind={openCtx?.kind}
@@ -110,7 +154,7 @@ export default function BentoDashboard() {
             )}
           </DialogContent>
         </Dialog>
-      </main>
+      </div>
     </TooltipProvider>
   );
 }

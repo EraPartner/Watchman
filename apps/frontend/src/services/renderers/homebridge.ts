@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import { fmtRaw, fmtUptime } from "./formatters";
 
 type Stats = Record<string, unknown>;
@@ -6,6 +7,13 @@ type Stats = Record<string, unknown>;
 export const homebridgeRenderer: ServiceRenderer<Stats> = {
   kind: "homebridge",
   displayName: "Homebridge",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["url", "host"],
+      portKeys: ["port"],
+      defaultPort: 8581,
+    }),
+  quickLinkLabel: "Open Homebridge UI",
 
   summary: [
     { key: "currentVersion", label: "Version", format: fmtRaw },

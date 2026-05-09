@@ -49,11 +49,12 @@ SORT file.name ASC
 | [[docs/adr/019-revert-split-deploy-and-remove-time-series.md | Revert Split Deploy + Remove Time-Series]] | Drop persistent history (DuckDB time-series, history route, history chart) and revert Pi split deploy; restore Mac-only Electron + embedded backend |
 | [[docs/adr/019-two-tier-health-and-monitoring-upgrades.md | Two-Tier Health + Monitoring Upgrades]] | Universal ICMP layer in `BaseService` (host vs service tier) + per-service methodology upgrades (Tor ControlPort, router SNMP, Hue API v2, Bitcoin ZMQ, Synology DSM API, Roon WebSocket, Homebridge Config UI X) |
 | [[docs/adr/020-service-monitoring-methodology.md | Service Monitoring Methodology]] | Two-layer probe model: shared `ReachabilityProbe` (ICMP + TCP) baseline + per-service deep probe; replace external Onionoo with local Tor control-port; drop Mac Mini SSH bounce for Pi; structured `sysctl`/`vm_stat` for Mac Mini |
+| [[docs/adr/021-frontend-dashboard-upgrade.md | Frontend Dashboard Upgrade]] | Aggregated `/services` fan-out for tile health, client-side metric history ring buffer, sparklines on tiles + detail-sheet charts, editorial top-bar nav with global summary chip, quickLink on every renderer, Raw + Config + custom panels in detail sheet |
 
 ## Creating a New ADR
 
 1. Copy [[docs/adr/template|ADR Template]]
-2. Name it `NNN-short-title.md` (next sequential number after 020)
+2. Name it `NNN-short-title.md` (next sequential number after 021)
 3. Fill in all sections:
    - **Status**: Proposed | Accepted | Deprecated | Superseded
    - **Context**: The problem being solved

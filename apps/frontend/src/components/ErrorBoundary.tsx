@@ -54,13 +54,19 @@ export class ErrorBoundary extends Component<Props, State> {
             An unexpected error occurred. Please try refreshing the page or
             contact support if the problem persists.
           </p>
-          {import.meta.env.MODE === "development" && this.state.error && (
-            <div className="p-s-3 bg-[var(--surface-1)] rounded-r-2">
-              <pre className="text-fs-label overflow-auto font-mono">
-                {this.state.error.message}
-                {this.state.errorInfo?.componentStack}
+          {this.state.error && (
+            <details
+              open
+              className="rounded-r-2 bg-[var(--surface-1)] p-s-3 max-h-[60vh] overflow-auto"
+            >
+              <summary className="cursor-pointer text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
+                {this.state.error.message || "Error details"}
+              </summary>
+              <pre className="mt-s-2 whitespace-pre-wrap break-words font-mono text-fs-label text-[var(--text-md)]">
+                {this.state.error.stack ?? this.state.error.message}
+                {this.state.errorInfo?.componentStack ?? ""}
               </pre>
-            </div>
+            </details>
           )}
           <Button
             onClick={this.handleReset}

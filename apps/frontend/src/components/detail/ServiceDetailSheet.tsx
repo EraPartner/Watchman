@@ -1,5 +1,9 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
+import { ExternalLink } from "lucide-react";
 import { EventLog, type ServiceEvent } from "./EventLog";
+import { ChartsPanel } from "./ChartsPanel";
+import { RawStatsPanel } from "./RawStatsPanel";
+import { ConfigPanel } from "./ConfigPanel";
 import { useWebSocketEvent } from "@/hooks/useWebSocketEvent";
 import type { WsEvent } from "@/lib/wsEventBus";
 import {
@@ -26,7 +30,11 @@ import {
   useDeleteService,
 } from "@/pages/Settings/useConfigQueries";
 import ServiceEditor from "@/pages/Settings/ServiceEditor";
-import { getRenderer, dotGet } from "@/services/renderers";
+import {
+  dotGet,
+  getRenderer,
+  rendererTrackedMetrics,
+} from "@/services/renderers";
 import type { ServiceKind, Tone } from "@/services/renderers/types";
 
 const TONE_TO_STATUS: Record<Tone, "neutral" | "ok" | "warn" | "crit"> = {
@@ -35,6 +43,13 @@ const TONE_TO_STATUS: Record<Tone, "neutral" | "ok" | "warn" | "crit"> = {
   warn: "warn",
   crit: "crit",
 };
+
+function fmtMs(ms?: number): string | undefined {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return undefined;
+  if (ms < 1) return "<1 ms";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+}
 
 export interface ServiceDetailSheetProps {
   kind: ServiceKind | undefined;
@@ -51,59 +66,62 @@ export function ServiceDetailSheet({
   open,
   onOpenChange,
 }: ServiceDetailSheetProps) {
-  const healthQuery = useServiceHealth(kind ?? "", instanceId, {
-    enabled: !!kind,
-  });
-  const statsQuery = useServiceStats(kind ?? "", instanceId, !!kind);
+  const renderer = kind ? getRenderer(kind) : undefined;
+  const trackedMetrics = useMemo(
+    () => rendererTrackedMetrics(renderer),
+    [renderer]
+  );
+
+  const health = useServiceHealth(kind ?? "", instanceId);
+  const stats = useServiceStats(kind ?? "", instanceId, !!kind, trackedMetrics);
   const { data: allServices } = useServices();
   const updateMut = useUpdateService();
   const deleteMut = useDeleteService();
 
   const service = useMemo(
     () =>
-      allServices?.find(
-        (s) =>
-          s.kind === kind &&
-          (instanceId ? s.instanceId === instanceId : s.instanceId === "main")
-      ),
+      Array.isArray(allServices)
+        ? allServices.find(
+            (s) =>
+              s.kind === kind &&
+              (instanceId ? s.instanceId === instanceId : s.instanceId === "main")
+          )
+        : undefined,
     [allServices, kind, instanceId]
   );
 
-  const renderer = kind ? getRenderer(kind) : undefined;
-  const statsSnapshot = statsQuery.data as
-    | { metrics?: Record<string, unknown> }
+  const statsSnapshot = stats.data;
+  const statsMetrics = statsSnapshot?.metrics as
+    | Record<string, unknown>
     | undefined;
-  const stats = statsSnapshot?.metrics as Record<string, unknown> | undefined;
-  const healthRaw = healthQuery.data as
-    | {
-        reachable?: boolean;
-        message?: string;
-        host?: { reachable: boolean; pingMs?: number };
-        service?: { reachable: boolean; latencyMs?: number };
-      }
-    | undefined;
+
+  const healthRaw = health.data;
   const hostHealth = healthRaw?.host;
   const serviceHealth = healthRaw?.service;
   const hasTwoTiers = hostHealth !== undefined && serviceHealth !== undefined;
-  const health = healthRaw
-    ? {
-        status: (healthRaw.reachable ? "online" : "offline") as
-          | "online"
-          | "offline"
-          | "warning"
-          | "loading",
-        error: healthRaw.message,
-      }
-    : undefined;
+  const healthShape = useMemo(
+    () =>
+      healthRaw
+        ? {
+            status: (healthRaw.reachable ? "online" : "offline") as
+              | "online"
+              | "offline"
+              | "warning"
+              | "loading",
+            error: healthRaw.message,
+          }
+        : undefined,
+    [healthRaw]
+  );
 
   const tone = useMemo<Tone>(() => {
     if (!renderer) return "neutral";
     try {
-      return renderer.tone({ stats, health });
+      return renderer.tone({ stats: statsMetrics, health: healthShape });
     } catch {
       return "neutral";
     }
-  }, [renderer, stats, health]);
+  }, [renderer, statsMetrics, healthShape]);
 
   const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [view, setView] = useState<View>("detail");
@@ -139,7 +157,7 @@ export function ServiceDetailSheet({
 
   const primary = renderer?.summary[0];
   const primaryValue = primary
-    ? primary.format(dotGet(stats, primary.key))
+    ? primary.format(dotGet(statsMetrics, primary.key))
     : "—";
 
   const handleToggleEnabled = () => {
@@ -156,6 +174,13 @@ export function ServiceDetailSheet({
     setConfirmDelete(false);
     onOpenChange(false);
   };
+
+  const quickLinkUrl =
+    renderer?.quickLink && service
+      ? renderer.quickLink({
+          config: service.config as Record<string, unknown>,
+        })
+      : undefined;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -181,7 +206,7 @@ export function ServiceDetailSheet({
                   <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
                 )}
                 <SheetTitle>{renderer.displayName}</SheetTitle>
-                {health?.status ? (
+                {healthShape?.status ? (
                   <Badge
                     tone={
                       tone === "ok"
@@ -193,13 +218,47 @@ export function ServiceDetailSheet({
                             : "mono"
                     }
                   >
-                    {health.status}
+                    {healthShape.status}
                   </Badge>
                 ) : null}
                 {service && !service.enabled ? (
                   <Badge tone="mono">disabled</Badge>
                 ) : null}
+                {quickLinkUrl ? (
+                  <a
+                    href={quickLinkUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="ml-auto inline-flex items-center gap-s-1 rounded-r-2 px-s-2 py-s-1 text-fs-label text-[var(--text-md)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
+                  >
+                    <ExternalLink size={12} aria-hidden />
+                    {renderer.quickLinkLabel ?? "Open"}
+                  </a>
+                ) : null}
               </div>
+
+              {hasTwoTiers ? (
+                <div className="mt-s-2 flex flex-wrap gap-s-3 font-mono tabular-nums text-fs-label text-[var(--text-lo)]">
+                  {fmtMs(hostHealth.pingMs) ? (
+                    <span>
+                      host ping <span className="text-[var(--text-md)]">{fmtMs(hostHealth.pingMs)}</span>
+                    </span>
+                  ) : null}
+                  {fmtMs(serviceHealth.latencyMs) ? (
+                    <span>
+                      service latency{" "}
+                      <span className="text-[var(--text-md)]">{fmtMs(serviceHealth.latencyMs)}</span>
+                    </span>
+                  ) : null}
+                  {serviceHealth.message ? (
+                    <span className="text-[var(--warn)]">{serviceHealth.message}</span>
+                  ) : null}
+                </div>
+              ) : healthShape?.error ? (
+                <div className="mt-s-2 text-fs-label text-[var(--crit)]">
+                  {healthShape.error}
+                </div>
+              ) : null}
             </SheetHeader>
 
             <SheetBody>
@@ -230,6 +289,14 @@ export function ServiceDetailSheet({
                   <Tabs defaultValue="metrics" className="w-full">
                     <TabsList>
                       <TabsTrigger value="metrics">Metrics</TabsTrigger>
+                      <TabsTrigger value="charts">Charts</TabsTrigger>
+                      {renderer.customPanel ? (
+                        <TabsTrigger value="custom">
+                          {renderer.customPanelLabel ?? "Service"}
+                        </TabsTrigger>
+                      ) : null}
+                      <TabsTrigger value="raw">Raw</TabsTrigger>
+                      <TabsTrigger value="config">Config</TabsTrigger>
                       <TabsTrigger value="events">Events</TabsTrigger>
                     </TabsList>
 
@@ -246,13 +313,39 @@ export function ServiceDetailSheet({
                                   {m.label}
                                 </dt>
                                 <dd className="truncate font-mono tabular-nums text-[var(--text-hi)]">
-                                  {m.format(dotGet(stats, m.key))}
+                                  {m.format(dotGet(statsMetrics, m.key))}
                                 </dd>
                               </div>
                             ))}
                           </dl>
                         </section>
                       ))}
+                    </TabsContent>
+
+                    <TabsContent value="charts" className="pt-s-4">
+                      <ChartsPanel
+                        kind={renderer.kind}
+                        instanceId={instanceId}
+                        charts={renderer.charts}
+                        tone={tone}
+                      />
+                    </TabsContent>
+
+                    {renderer.customPanel ? (
+                      <TabsContent value="custom" className="pt-s-4">
+                        {renderer.customPanel({ stats: statsMetrics, health: healthShape })}
+                      </TabsContent>
+                    ) : null}
+
+                    <TabsContent value="raw" className="pt-s-4">
+                      <RawStatsPanel
+                        renderer={renderer}
+                        stats={statsMetrics}
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="config" className="pt-s-4">
+                      <ConfigPanel service={service} />
                     </TabsContent>
 
                     <TabsContent value="events" className="pt-s-4">

@@ -36,3 +36,19 @@ export const RENDERERS: Partial<Record<ServiceKind, ServiceRenderer>> = {
 export const getRenderer = (
   kind: string
 ): ServiceRenderer | undefined => RENDERERS[kind as ServiceKind];
+
+/** Flatten every metric key surfaced by a renderer (summary + detail
+ *  groups + charts), de-duplicated. Used by the tile + sheet to register
+ *  series in the metric history ring buffer. */
+export function rendererTrackedMetrics(
+  renderer: ServiceRenderer | undefined
+): ReadonlyArray<string> {
+  if (!renderer) return [];
+  const set = new Set<string>();
+  for (const m of renderer.summary) set.add(m.key);
+  for (const group of renderer.detail) {
+    for (const m of group.metrics) set.add(m.key);
+  }
+  for (const c of renderer.charts) set.add(c.metric);
+  return Array.from(set);
+}

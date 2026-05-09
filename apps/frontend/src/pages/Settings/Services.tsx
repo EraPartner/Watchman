@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import {
   Button,
   StatusDot,
@@ -9,6 +8,7 @@ import {
   ConfirmDialog,
 } from "../../components/primitives";
 import ServiceEditor from "./ServiceEditor";
+import { SettingsLayout } from "./SettingsLayout";
 import {
   useServices,
   useCreateService,
@@ -33,89 +33,76 @@ export default function Services() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--surface-0)] p-6">
-      <div className="max-w-5xl mx-auto">
-        <header className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold">Services</h1>
-            <p className="text-sm text-muted-foreground">
-              Configure monitored services.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Link to="/settings/audit">
-              <Button variant="ghost">Audit</Button>
-            </Link>
-            <Link to="/settings/backup">
-              <Button variant="ghost">Backup</Button>
-            </Link>
-            <Button
-              variant="accent"
-              onClick={() => setEditor({ mode: "create" })}
-            >
-              + Add service
-            </Button>
-          </div>
-        </header>
+    <SettingsLayout
+      eyebrow="settings · services"
+      title="Services"
+      description="Configure monitored services. Secrets are encrypted with the server master key."
+      actions={
+        <Button variant="accent" onClick={() => setEditor({ mode: "create" })}>
+          + Add service
+        </Button>
+      }
+    >
+      {isLoading && <p className="text-fs-body text-[var(--text-md)]">Loading…</p>}
+      {error && (
+        <p className="text-fs-label text-[var(--crit)]">
+          {(error as Error).message ?? "Failed to load"}
+        </p>
+      )}
 
-        {isLoading && <p>Loading…</p>}
-        {error && (
-          <p className="text-red-500 text-sm">
-            {(error as Error).message ?? "Failed to load"}
+      <div className="rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] divide-y divide-[var(--hairline)]">
+        {services?.length === 0 && (
+          <p className="p-s-6 text-fs-body text-[var(--text-lo)]">
+            No services configured yet.
           </p>
         )}
-
-        <div className="rounded border divide-y">
-          {services?.length === 0 && (
-            <p className="p-4 text-sm text-muted-foreground">
-              No services configured yet.
-            </p>
-          )}
-          {services?.map((svc) => (
-            <div
-              key={svc.id}
-              className="flex items-center justify-between p-3"
-            >
-              <div className="flex items-center gap-3">
-                <StatusDot tone={svc.enabled ? "ok" : "neutral"} />
-                <div>
-                  <div className="font-medium">
-                    {svc.kind} / {svc.instanceId}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{svc.id}</div>
+        {services?.map((svc) => (
+          <div
+            key={svc.id}
+            className="flex items-center justify-between gap-s-4 px-s-4 py-s-3"
+          >
+            <div className="flex min-w-0 items-center gap-s-3">
+              <StatusDot tone={svc.enabled ? "ok" : "neutral"} />
+              <div className="min-w-0">
+                <div className="truncate font-mono text-fs-body text-[var(--text-hi)]">
+                  {svc.kind} / {svc.instanceId}
+                </div>
+                <div className="truncate text-fs-label text-[var(--text-lo)]">
+                  {svc.id}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    updateMut.mutate({
-                      id: svc.id,
-                      input: { enabled: !svc.enabled },
-                    })
-                  }
-                >
-                  {svc.enabled ? "Disable" : "Enable"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditor({ mode: "edit", service: svc })}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPendingDelete(svc)}
-                >
-                  Delete
-                </Button>
-              </div>
             </div>
-          ))}
-        </div>
+            <div className="flex items-center gap-s-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  updateMut.mutate({
+                    id: svc.id,
+                    input: { enabled: !svc.enabled },
+                  })
+                }
+              >
+                {svc.enabled ? "Disable" : "Enable"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditor({ mode: "edit", service: svc })}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[var(--crit)] hover:text-[var(--crit)] hover:brightness-110"
+                onClick={() => setPendingDelete(svc)}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
 
       <Dialog
@@ -161,6 +148,6 @@ export default function Services() {
           }}
         />
       ) : null}
-    </div>
+    </SettingsLayout>
   );
 }

@@ -1,5 +1,6 @@
 import type { BitcoinStats } from "@/types/api";
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import {
   fmtBytes,
   fmtNumber,
@@ -12,6 +13,12 @@ import {
 export const bitcoinRenderer: ServiceRenderer<BitcoinStats> = {
   kind: "bitcoin",
   displayName: "Bitcoin Core",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["onionUrl", "rpcHost", "host"],
+      portKeys: ["rpcPort", "port"],
+    }),
+  quickLinkLabel: "Open RPC host",
 
   summary: [
     { key: "blocks", label: "Blocks", format: fmtNumber(0) },

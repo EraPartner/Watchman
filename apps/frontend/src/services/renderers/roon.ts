@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import { dotGet, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
@@ -6,6 +7,11 @@ type Stats = Record<string, unknown>;
 export const roonRenderer: ServiceRenderer<Stats> = {
   kind: "roon",
   displayName: "Roon Core",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["host"],
+    }),
+  quickLinkLabel: "Open host",
 
   summary: [
     { key: "reachable", label: "Reachable", format: fmtRaw },

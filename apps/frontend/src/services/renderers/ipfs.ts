@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import { fmtBytes, fmtNumber, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
@@ -6,6 +7,14 @@ type Stats = Record<string, unknown>;
 export const ipfsRenderer: ServiceRenderer<Stats> = {
   kind: "ipfs",
   displayName: "IPFS",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["webuiUrl", "host"],
+      portKeys: ["webuiPort", "port", "apiPort"],
+      defaultPort: 5001,
+      path: "/webui",
+    }),
+  quickLinkLabel: "Open WebUI",
 
   summary: [
     { key: "peers", label: "Peers", format: fmtNumber(0) },

@@ -144,8 +144,10 @@ export class ApiClientCore {
 
     const method = (options?.method || "GET").toUpperCase();
     const headers = this.normalizeHeaders(options?.headers);
+    const hasBody = options?.body != null && options.body !== "";
 
     if (
+      hasBody &&
       method !== "GET" &&
       method !== "HEAD" &&
       !this.hasHeader(headers, "content-type")
@@ -164,9 +166,20 @@ export class ApiClientCore {
       try {
         const response = await fetch(url, fetchOptions);
 
-        const responseBody = await response
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
+        const contentType = response.headers.get("content-type") ?? "";
+        const isJson = contentType.toLowerCase().includes("application/json");
+        let parsedBody: unknown = undefined;
+        let parseFailed = false;
+        if (isJson || response.status !== 204) {
+          try {
+            parsedBody = await response.json();
+          } catch {
+            parseFailed = true;
+          }
+        }
+        const responseBody: unknown = parseFailed
+          ? { error: "Non-JSON response" }
+          : (parsedBody ?? {});
 
         if (!response.ok) {
           const error = new Error(
@@ -174,6 +187,14 @@ export class ApiClientCore {
               responseBody,
               `API request failed: ${response.status} ${response.statusText}`
             )
+          );
+          (error as Error & { status?: number }).status = response.status;
+          throw error;
+        }
+
+        if (parseFailed || (!isJson && response.status !== 204)) {
+          const error = new Error(
+            `Unexpected non-JSON response from ${endpoint} (status ${response.status}, content-type "${contentType || "none"}").`
           );
           (error as Error & { status?: number }).status = response.status;
           throw error;

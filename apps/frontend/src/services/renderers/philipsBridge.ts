@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import { dotGet, fmtBool, fmtNumber, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
@@ -6,6 +7,12 @@ type Stats = Record<string, unknown>;
 export const philipsBridgeRenderer: ServiceRenderer<Stats> = {
   kind: "philips",
   displayName: "Hue Bridge",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["host"],
+      scheme: "https",
+    }),
+  quickLinkLabel: "Open Hue Bridge",
 
   summary: [
     { key: "reachable", label: "Reachable", format: fmtBool() },

@@ -2,9 +2,9 @@
 title: BentoDashboard Component
 type: component
 status: active
-date: 2026-04-19
-tags: [component, bento, dashboard, page, frontend, phase3, multi-instance, dynamic-layout, crud, add-service]
-description: Main page component for the bento dashboard. Dynamic, instance-aware layout orchestrator combining DashboardGrid, ServiceTile, and ServiceDetailSheet. Includes header add-service button and empty-state discovery. Filters by configured service instances. Gated behind ?bento=1 query flag in Phase 3.
+date: 2026-05-09
+tags: [component, bento, dashboard, page, frontend, multi-instance, dynamic-layout, crud, add-service, top-bar, summary-chip]
+description: Main page component for the bento dashboard. Dynamic, instance-aware layout orchestrator combining TopNav, DashboardGrid, ServiceTile, and ServiceDetailSheet. Editorial dark-luxury header with global up/warn/crit summary chip and atmospheric accent.
 aliases: [BentoDashboard, bento page, dashboard page, add service]
 ---
 
@@ -26,12 +26,19 @@ None. Designed as a page component (mounted directly in routing).
 ```
 BentoDashboard
 ├── TooltipProvider (context for primitives)
+├── atmospheric overlay (radial gold + SVG noise)
+├── TopNav
+│   ├── brand mark (gold pulse + "Watchman · Bento")
+│   ├── nav links (Dashboard, Services, Audit, Backup)
+│   ├── status summary chip (ok / warn / crit · last poll)
+│   ├── breaker warning chip (when /metrics shows open breakers)
+│   ├── WebSocket connectivity dot
+│   └── "+ Add service" CTA
 ├── main
-│   ├── header
-│   │   ├── left: Label + h1
-│   │   │   ├── Label: "Watchman · Bento"
-│   │   │   └── h1: "Service dashboard"
-│   │   └── right: "+ Add service" button → opens editor dialog
+│   ├── editorial header
+│   │   ├── eyebrow: "home-lab observatory" (gold mono uppercase)
+│   │   ├── h1: clamp() display, tracking-tight
+│   │   └── thin gold rule + counts ("N renderers active · M instances")
 │   ├── [DashboardGrid OR empty-state]
 │   │   ├── DashboardGrid
 │   │   │   └── ServiceTile[] (filtered from BENTO_LAYOUT)
@@ -73,7 +80,13 @@ const { data, isLoading } = useServiceInstances();
 const configuredKinds = data?.instances ?? {};
 ```
 
-Fetches the list of configured service instances from `/api/instances` endpoint. `configuredKinds` is a map of service kind → `{ count, instances }`.
+Fetches the list of configured service instances from `/instances` endpoint. `configuredKinds` is a map of service kind → `{ count, instances }`.
+
+### Aggregated Health Fetching (ADR-021)
+
+Tile health is read by `useServiceHealth` from a single shared `useAggregatedHealth` query against `/services` (10 s refetch). The dashboard does not call `/services/{kind}/health` per tile any more — N tiles share 1 underlying request. The same aggregated query also drives the `TopNav` summary chip.
+
+Per-tile stats remain through `useServiceStats(kind, instance, enabled, trackedMetrics)`; tracked metrics flow into the client ring buffer (see [[apps/frontend/src/lib/metricHistory.ts]]) so sparklines on tiles and chart panels in the detail sheet have data without any backend persistence.
 
 ### Layout Filtering
 
@@ -231,8 +244,10 @@ Will become the default dashboard (replacing `LiveServerDashboard`) after Phase 
 ## Performance
 
 - **Lazy loading**: Component code-splits via React Router
-- **Query deduping**: React Query caches health/stats queries; multiple tiles requesting same service share results
+- **Aggregated fan-out**: Tile health collapsed to 1 request (`/services`) regardless of tile count (ADR-021)
+- **Query deduping**: React Query caches stats queries per kind/instance; multiple tiles requesting same service share results
 - **Memoization**: ServiceTile accepts `size` and `kind`; consider wrapping in `memo()` if re-renders become noisy
+- **Sparkline**: pure SVG, no chart-library cost; client ring buffer holds 60 samples per metric
 
 ## Responsive Layout
 

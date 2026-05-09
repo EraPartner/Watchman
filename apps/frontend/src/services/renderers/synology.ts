@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import {
   dotGet,
   fmtBytes,
@@ -21,6 +22,14 @@ const getNum = (
 export const synologyRenderer: ServiceRenderer<SynologyStats> = {
   kind: "synology",
   displayName: "Synology",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["url", "host"],
+      portKeys: ["port"],
+      defaultPort: 5000,
+      scheme: "https",
+    }),
+  quickLinkLabel: "Open DSM",
 
   summary: [
     { key: "cpu.usage", label: "CPU", format: fmtPercent(0, 100) },

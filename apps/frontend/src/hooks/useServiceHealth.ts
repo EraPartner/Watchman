@@ -1,33 +1,52 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
 import { queryKeys } from "../lib/queryKeys";
+import { recordStats } from "../lib/metricHistory";
+import {
+  pickError,
+  pickHealth,
+  useAggregatedHealth,
+} from "./useAggregatedHealth";
+import type {
+  HealthSnapshot,
+  StatsSnapshot,
+} from "../services/apiClient/types";
 
-// Service health hook (v2): kind + optional instance.
+interface AggregatedHealthResult {
+  data: HealthSnapshot | undefined;
+  isLoading: boolean;
+  error: { code: string; message: string } | undefined;
+}
+
+/**
+ * Tile-friendly health hook backed by the aggregated /services endpoint.
+ * One request per refetch interval, regardless of how many tiles render.
+ */
 export const useServiceHealth = (
   kind: string,
-  instance?: string,
-  options = {}
-) => {
-  return useQuery({
-    queryKey: instance
-      ? [...queryKeys.serviceStatus(kind), instance]
-      : queryKeys.serviceStatus(kind),
-    queryFn: async () => apiClient.getServiceHealth(kind, instance),
-    refetchInterval: 10000,
-    staleTime: 5000,
-    retry: 2,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-    ...options,
-  });
+  instance?: string
+): AggregatedHealthResult => {
+  const { data, isLoading } = useAggregatedHealth();
+  return {
+    data: pickHealth(data, kind, instance),
+    isLoading: isLoading && !data,
+    error: pickError(data, kind, instance),
+  };
 };
 
-// Service stats hook (v2): kind + optional instance.
+/**
+ * Stats hook — per-tile fetch. Tiles call this only when a renderer needs
+ * stats for their summary; the detail sheet always calls it. Records
+ * snapshots into the in-memory metric history ring buffer for sparklines.
+ */
 export const useServiceStats = (
   kind: string,
   instance?: string,
-  enabled = true
+  enabled = true,
+  trackedMetrics: ReadonlyArray<string> = []
 ) => {
-  return useQuery({
+  const query = useQuery<StatsSnapshot>({
     queryKey: instance
       ? [...queryKeys.serviceStats(kind), instance]
       : queryKeys.serviceStats(kind),
@@ -37,15 +56,28 @@ export const useServiceStats = (
     enabled,
     retry: 1,
   });
+
+  useEffect(() => {
+    if (!query.data) return;
+    if (trackedMetrics.length === 0) return;
+    const at =
+      typeof query.data.at === "number"
+        ? query.data.at
+        : Number(query.data.at) || Date.now();
+    recordStats(
+      kind,
+      instance,
+      query.data.metrics as Record<string, unknown>,
+      trackedMetrics,
+      at
+    );
+  }, [query.data, kind, instance, trackedMetrics]);
+
+  return query;
 };
 
-// All services health — v2 aggregated endpoint.
-export const useAllServicesHealth = () => {
-  return useQuery({
-    queryKey: queryKeys.servicesHealth(),
-    queryFn: async () => apiClient.getAggregatedServices(),
-    refetchInterval: 15000,
-    staleTime: 7500,
-    retry: 2,
-  });
-};
+/** Convenience wrapper around the aggregated query for components that
+ * want the raw entries (e.g. the global summary). */
+export { useAggregatedHealth } from "./useAggregatedHealth";
+
+export const useAllServicesHealth = useAggregatedHealth;

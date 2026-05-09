@@ -1,4 +1,5 @@
 import type { ServiceRenderer } from "./types";
+import { buildQuickLink } from "./quickLink";
 import { dotGet, fmtNumber, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
@@ -6,6 +7,13 @@ type Stats = Record<string, unknown>;
 export const routerRenderer: ServiceRenderer<Stats> = {
   kind: "router",
   displayName: "Router",
+  quickLink: (ctx) =>
+    buildQuickLink(ctx, {
+      hostKeys: ["host", "uiUrl", "address"],
+      portKeys: ["uiPort"],
+      scheme: "http",
+    }),
+  quickLinkLabel: "Open router UI",
 
   summary: [
     { key: "reachable", label: "Reachable", format: fmtRaw },

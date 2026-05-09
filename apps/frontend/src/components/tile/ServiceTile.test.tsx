@@ -12,6 +12,10 @@ vi.mock("@/hooks/useServiceHealth", () => ({
   useServiceStats: () => ({ data: statsData, isLoading: false }),
 }));
 
+vi.mock("@/pages/Settings/useConfigQueries", () => ({
+  useServices: () => ({ data: [] }),
+}));
+
 vi.mock("@/services/renderers", () => ({
   getRenderer: () => ({
     displayName: "Bitcoin",
@@ -22,6 +26,11 @@ vi.mock("@/services/renderers", () => ({
     detail: [],
     charts: [],
   }),
+  rendererTrackedMetrics: () => [] as ReadonlyArray<string>,
+}));
+
+vi.mock("@/lib/metricHistory", () => ({
+  useMetricSeries: () => [] as ReadonlyArray<{ t: number; v: number }>,
 }));
 
 import { ServiceTile } from "./ServiceTile";
@@ -109,7 +118,6 @@ describe("ServiceTile two-tier status dots", () => {
     const dots = statusDots(container);
 
     expect(dots.length).toBe(2);
-    // tone is encoded in aria-label or class; check label contains expected state
     expect(dots[0]!.getAttribute("aria-label")).toMatch(/host/i);
     expect(dots[1]!.getAttribute("aria-label")).toMatch(/service/i);
 
