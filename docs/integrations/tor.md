@@ -87,6 +87,30 @@ The legacy **Onionoo** HTTP API path queries Tor Project public consensus data:
 - **Bandwidth and flags**: Reads `observed_bandwidth`, `running`, `hibernating` flags
 - No host-level ICMP tier (reliance on external HTTP service)
 
+### Off-LAN Fallback (Automatic)
+
+When `useControlPort=true`, `TorService` automatically falls back to the Onionoo path when it detects the relay's network is unreachable. This lets a single config monitor a relay both from the LAN (rich, real-time) and away from it (Onionoo, ~1h stale but always reachable).
+
+**Detection heuristic** (`checkHealthControlPort`):
+
+- Run ICMP ping and ControlPort connect in parallel via `Promise.allSettled`.
+- If **both** fail, mark the ControlPort "unreachable" and serve the Onionoo result for this poll.
+- If ICMP succeeds but ControlPort fails, do **not** trigger fallback — surface as `service.reachable=false` (a real local Tor outage worth alerting on, not an off-LAN scenario).
+
+**Sticky cooldown** (`CONTROL_PORT_FALLBACK_COOLDOWN_MS = 5 min`):
+
+- Once both probes fail, subsequent `checkHealth` and `getStats` calls skip the ControlPort attempt entirely for 5 minutes and serve Onionoo data, so we don't pay a TCP timeout per poll while away.
+- A successful ControlPort probe immediately clears the cooldown.
+- After the cooldown expires, the next call retries ControlPort.
+
+**Result markers**:
+
+- ControlPort responses include `details.source = 'control-port'` and `details.controlPortReachable: boolean`.
+- Fallback responses include `details.source = 'onionoo'` and `details.controlPortReachable: false`.
+- ControlPort stats include `metrics.source = 'control-port'`; fallback stats include `metrics.source = 'onionoo'`.
+
+**Tradeoff**: A few minutes of stale routing after returning to LAN (until the cooldown expires) — invisible in practice because Onionoo data is already ~1h stale.
+
 ## Stats (Metrics)
 
 ### Control Port Mode

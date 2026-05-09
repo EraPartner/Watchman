@@ -10,6 +10,13 @@ import type {
   TorEventSubscriptionFactory,
 } from '../../../infra/tor/eventSubscription.js';
 
+/**
+ * After both ICMP and ControlPort fail (signals "off-LAN"), skip the ControlPort
+ * probe for this long and serve Onionoo data instead, so we don't pay a TCP
+ * timeout on every poll while away from the relay's network.
+ */
+const CONTROL_PORT_FALLBACK_COOLDOWN_MS = 5 * 60 * 1000;
+
 export interface TorDeps {
   http: HttpClient;
   ping: PingProber;
@@ -71,6 +78,8 @@ export class TorService extends BaseService {
   private lastTrafficRead = -1;
   /** Cumulative traffic/written from last poll; -1 = no baseline yet */
   private lastTrafficWritten = -1;
+  /** Until this timestamp, skip ControlPort and serve Onionoo (off-LAN cooldown). */
+  private controlPortUnreachableUntil = 0;
 
   constructor(deps: TorDeps) {
     super();
@@ -121,13 +130,51 @@ export class TorService extends BaseService {
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
-    if (this.useControlPort) return this.checkHealthControlPort(signal);
-    return this.checkHealthOnionoo(signal);
+    if (!this.useControlPort) return this.checkHealthOnionoo(signal);
+    if (this.isControlPortInCooldown()) return this.fallbackCheckHealth(signal);
+    return this.checkHealthControlPort(signal);
   }
 
   async getStats(signal: AbortSignal): Promise<StatsResult> {
-    if (this.useControlPort) return this.getStatsControlPort(signal);
-    return this.getStatsOnionoo(signal);
+    if (!this.useControlPort) return this.getStatsOnionoo(signal);
+    if (this.isControlPortInCooldown()) return this.fallbackGetStats(signal);
+    return this.getStatsControlPort(signal);
+  }
+
+  // ─── Fallback orchestration ────────────────────────────────────────────────
+
+  private isControlPortInCooldown(): boolean {
+    return this.now() < this.controlPortUnreachableUntil;
+  }
+
+  private markControlPortUnreachable(): void {
+    this.controlPortUnreachableUntil = this.now() + CONTROL_PORT_FALLBACK_COOLDOWN_MS;
+  }
+
+  private clearControlPortCooldown(): void {
+    this.controlPortUnreachableUntil = 0;
+  }
+
+  private async fallbackCheckHealth(signal: AbortSignal): Promise<HealthResult> {
+    const result = await this.checkHealthOnionoo(signal);
+    if (!result.ok) return result;
+    return ok({
+      ...result.value,
+      details: {
+        ...(result.value.details ?? {}),
+        source: 'onionoo',
+        controlPortReachable: false,
+      },
+    });
+  }
+
+  private async fallbackGetStats(signal: AbortSignal): Promise<StatsResult> {
+    const result = await this.getStatsOnionoo(signal);
+    if (!result.ok) return result;
+    return ok({
+      ...result.value,
+      metrics: { ...result.value.metrics, source: 'onionoo' },
+    });
   }
 
   // ─── ControlPort path ──────────────────────────────────────────────────────
@@ -141,8 +188,18 @@ export class TorService extends BaseService {
 
     const icmpAlive = pingSettled.status === 'fulfilled' && pingSettled.value.success;
     const pingMs = pingSettled.status === 'fulfilled' ? pingSettled.value.avgMs : undefined;
-    const host: HostHealth = { reachable: icmpAlive, ...(pingMs !== undefined ? { pingMs } : {}) };
+    const controlPortReachable = controlSettled.status === 'fulfilled';
 
+    // Off-LAN heuristic: if both ICMP and ControlPort fail, we likely can't
+    // reach the relay's network at all. Mark cooldown and serve Onionoo so
+    // we don't retry the doomed ControlPort connection on every poll.
+    if (!icmpAlive && !controlPortReachable) {
+      this.markControlPortUnreachable();
+      return this.fallbackCheckHealth(signal);
+    }
+    this.clearControlPortCooldown();
+
+    const host: HostHealth = { reachable: icmpAlive, ...(pingMs !== undefined ? { pingMs } : {}) };
     const circuitEstablished = controlSettled.status === 'fulfilled' && controlSettled.value;
     const service = { reachable: circuitEstablished, details: { controlPort: this.controlPort } };
     const reachable = host.reachable || service.reachable;
@@ -159,6 +216,8 @@ export class TorService extends BaseService {
         icmpAlive,
         circuitEstablished,
         controlPort: this.controlPort,
+        source: 'control-port',
+        controlPortReachable,
       },
     });
   }
@@ -204,6 +263,7 @@ export class TorService extends BaseService {
         return ok({
           at: this.now(),
           metrics: {
+            source: 'control-port',
             host: this.host,
             controlPort: this.controlPort,
             trafficRead,

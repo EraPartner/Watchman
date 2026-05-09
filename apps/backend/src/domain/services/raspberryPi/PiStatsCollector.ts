@@ -100,46 +100,62 @@ export class PiStatsCollector {
       await handle.end().catch(() => undefined);
     }
 
+    // Prefer direct SSH; fall back to Mac Mini relay if direct fails or isn't configured.
+    let directError: string | null = null;
     if (this.directSshReady()) {
       try {
-        const info = await this.fetchDirectSshInfo(signal);
-        snapshot.rpiCliAvailable = true;
-        if (info.cpuTemp !== null) snapshot.cpuTemp = info.cpuTemp;
-        if (info.clockRate !== null) snapshot.clockRate = info.clockRate;
-        if (info.voltage !== null) snapshot.voltage = info.voltage;
-        if (info.throttled !== null) snapshot.throttled = info.throttled;
-        if (info.load !== null) snapshot.load = info.load;
-        if (info.memory !== null) snapshot.memory = info.memory;
-        if (info.uptime !== null) snapshot.uptime = info.uptime;
-        if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
-        if (info.processor !== null) snapshot.processor = info.processor;
-        if (info.isRpi) snapshot.isRpi = true;
+        this.applyDirectSshInfo(snapshot, await this.fetchDirectSshInfo(signal));
       } catch (e) {
-        snapshot.rpiCliError = e instanceof Error ? e.message : String(e);
-      }
-    } else if (this.macMiniReady()) {
-      try {
-        const info = await this.fetchRpiInfo(signal);
-        snapshot.rpiCliAvailable = true;
-        if (info.cpuTemp !== null) snapshot.cpuTemp = info.cpuTemp;
-        if (info.clockRate !== null) snapshot.clockRate = info.clockRate;
-        if (info.voltage !== null) snapshot.voltage = info.voltage;
-        if (info.load !== null) snapshot.load = info.load;
-        if (info.swap !== null) snapshot.swap = info.swap;
-        if (info.memory !== null) snapshot.memory = info.memory;
-        if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
-        if (info.processor !== null) snapshot.processor = info.processor;
-        if (info.isRpi) snapshot.isRpi = true;
-        if (info.hwRevision !== null && snapshot.hwRevision === null) {
-          snapshot.hwRevision = info.hwRevision;
-          snapshot.piModel = getPiModel(info.hwRevision);
-        }
-      } catch (e) {
-        snapshot.rpiCliError = e instanceof Error ? e.message : String(e);
+        directError = e instanceof Error ? e.message : String(e);
       }
     }
 
+    const directSucceeded = snapshot.rpiCliAvailable === true;
+    if (!directSucceeded && this.macMiniReady()) {
+      try {
+        this.applyRelayInfo(snapshot, await this.fetchRpiInfo(signal));
+      } catch (e) {
+        const relayError = e instanceof Error ? e.message : String(e);
+        snapshot.rpiCliError = directError
+          ? `direct ssh: ${directError}; relay: ${relayError}`
+          : relayError;
+      }
+    } else if (directError && !directSucceeded) {
+      snapshot.rpiCliError = directError;
+    }
+
     return snapshot;
+  }
+
+  private applyDirectSshInfo(snapshot: PiStatsSnapshot, info: DirectPiInfo): void {
+    snapshot.rpiCliAvailable = true;
+    if (info.cpuTemp !== null) snapshot.cpuTemp = info.cpuTemp;
+    if (info.clockRate !== null) snapshot.clockRate = info.clockRate;
+    if (info.voltage !== null) snapshot.voltage = info.voltage;
+    if (info.throttled !== null) snapshot.throttled = info.throttled;
+    if (info.load !== null) snapshot.load = info.load;
+    if (info.memory !== null) snapshot.memory = info.memory;
+    if (info.uptime !== null) snapshot.uptime = info.uptime;
+    if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
+    if (info.processor !== null) snapshot.processor = info.processor;
+    if (info.isRpi) snapshot.isRpi = true;
+  }
+
+  private applyRelayInfo(snapshot: PiStatsSnapshot, info: RpiInfo): void {
+    snapshot.rpiCliAvailable = true;
+    if (info.cpuTemp !== null) snapshot.cpuTemp = info.cpuTemp;
+    if (info.clockRate !== null) snapshot.clockRate = info.clockRate;
+    if (info.voltage !== null) snapshot.voltage = info.voltage;
+    if (info.load !== null) snapshot.load = info.load;
+    if (info.swap !== null) snapshot.swap = info.swap;
+    if (info.memory !== null) snapshot.memory = info.memory;
+    if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
+    if (info.processor !== null) snapshot.processor = info.processor;
+    if (info.isRpi) snapshot.isRpi = true;
+    if (info.hwRevision !== null && snapshot.hwRevision === null) {
+      snapshot.hwRevision = info.hwRevision;
+      snapshot.piModel = getPiModel(info.hwRevision);
+    }
   }
 
   private directSshReady(): boolean {

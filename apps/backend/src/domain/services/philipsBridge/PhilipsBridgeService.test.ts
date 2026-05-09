@@ -86,6 +86,42 @@ describe('PhilipsBridgeService', () => {
       expect(res.value.metrics.configured).toBe(true);
     }
   });
+
+  it('usePing=false skips ICMP probe entirely', async () => {
+    const probe = vi.fn(async (): Promise<PingResult> => ({ success: true, avgMs: 5 }));
+    const svc = new PhilipsBridgeService({
+      ping: { probe },
+      http: fakeHttp(200, {}),
+      config: makeConfig({ usePing: false }),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(probe).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.host?.reachable).toBe(false);
+      expect(res.value.details?.icmpAlive).toBe(false);
+      expect(res.value.details?.pingEnabled).toBe(false);
+    }
+  });
+
+  it('usePing=false + applicationKey set: still probes API and reports service reachable', async () => {
+    const probe = vi.fn(async (): Promise<PingResult> => ({ success: true, avgMs: 5 }));
+    const svc = new PhilipsBridgeService({
+      ping: { probe },
+      http: fakeHttp(200, { errors: [], data: [] }),
+      config: makeConfig({ usePing: false, applicationKey: 'k' }),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(probe).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.host?.reachable).toBe(false);
+      expect(res.value.service?.reachable).toBe(true);
+      expect(res.value.reachable).toBe(true); // service alive overrides ping-disabled host
+    }
+  });
 });
 
 // ─── Hue API v2 (H1) ─────────────────────────────────────────────────────────

@@ -367,6 +367,79 @@ describe('RaspberryPiService.getStats — direct SSH path', () => {
     }
   });
 
+  it('falls back to macMini relay when direct SSH fails and relay is configured', async () => {
+    const rpiJson = JSON.stringify({
+      model: 'Pi 4B',
+      state: { temp: '50.1', freq: 1_800_000_000, load: '0.2' },
+    });
+    const calls: SshExecRequest[] = [];
+    // Direct SSH commands fail (vcgencmd / cat → reject); only the relay's cli.js succeeds.
+    const ssh: SshExecutor = {
+      exec: async (req) => {
+        calls.push(req);
+        if (req.command.includes('cli.js')) {
+          return { stdout: rpiJson, stderr: '', code: 0 };
+        }
+        throw new Error('ECONNREFUSED');
+      },
+    };
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle()),
+      ping: fakePing({ success: true }),
+      ssh,
+      config: makeConfig({
+        sshUser: 'pi',
+        sshKeyPath: '/tmp/pi_id_rsa',
+        macMiniHost: '192.168.1.50',
+        macMiniSshUser: 'me',
+        macMiniSshKeyPath: '/tmp/mini_key',
+        rpiCliPath: '/opt/rpi/cli.js',
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics['rpiCliAvailable']).toBe(true);
+      expect(res.value.metrics['cpuTemp']).toBe(50.1);
+      expect(res.value.metrics['rpiCliError']).toBeUndefined();
+    }
+    // We attempted direct SSH first, then fell through to the relay.
+    expect(calls.some((c) => c.command.includes('cli.js'))).toBe(true);
+    expect(calls.some((c) => c.command.includes('vcgencmd') || c.command.includes('/proc/'))).toBe(true);
+  });
+
+  it('combines errors from both paths when direct fails and relay also fails', async () => {
+    const ssh: SshExecutor = {
+      exec: async (req) => {
+        if (req.command.includes('cli.js')) throw new Error('relay-down');
+        throw new Error('direct-down');
+      },
+    };
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle()),
+      ping: fakePing({ success: true }),
+      ssh,
+      config: makeConfig({
+        sshUser: 'pi',
+        sshKeyPath: '/tmp/pi_id_rsa',
+        macMiniHost: '192.168.1.50',
+        macMiniSshUser: 'me',
+        macMiniSshKeyPath: '/tmp/mini_key',
+        rpiCliPath: '/opt/rpi/cli.js',
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics['rpiCliAvailable']).toBe(false);
+      const err = String(res.value.metrics['rpiCliError']);
+      expect(err).toMatch(/direct-down/);
+      expect(err).toMatch(/relay-down/);
+    }
+  });
+
   it('skips ssh entirely when neither direct nor macMini configured', async () => {
     const calls: SshExecRequest[] = [];
     const svc = new RaspberryPiService({

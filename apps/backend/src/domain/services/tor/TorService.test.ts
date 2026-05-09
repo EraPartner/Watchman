@@ -461,6 +461,191 @@ describe('TorService', () => {
     });
   });
 
+  describe('ControlPort → Onionoo fallback (off-LAN)', () => {
+    it('checkHealth: ICMP fail + ControlPort fail → falls back to Onionoo, marks cooldown', async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(false),
+        torControl: failingTorControl(),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 1_000,
+      });
+      const res = await svc.checkHealth(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        // Onionoo says relay is running → reachable
+        expect(res.value.reachable).toBe(true);
+        expect(res.value.details?.source).toBe('onionoo');
+        expect(res.value.details?.controlPortReachable).toBe(false);
+      }
+      // Cooldown set: subsequent ControlPort calls would now be skipped.
+      expect(state.lastSearch).toBe('MyRelay');
+    });
+
+    it('cooldown: subsequent checkHealth skips ControlPort entirely', async () => {
+      let connectAttempts = 0;
+      const counting: TorControlClient = {
+        connect: async () => {
+          connectAttempts++;
+          throw new UnavailableError('refused');
+        },
+      };
+      let nowMs = 1_000;
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(false),
+        torControl: counting,
+        config: makeConfig({ useControlPort: true }),
+        now: () => nowMs,
+      });
+      await svc.checkHealth(new AbortController().signal); // first call → 1 attempt + cooldown set
+      expect(connectAttempts).toBe(1);
+      nowMs = 60_000; // < 5 min later: still in cooldown
+      await svc.checkHealth(new AbortController().signal);
+      await svc.checkHealth(new AbortController().signal);
+      expect(connectAttempts).toBe(1); // ControlPort not retried during cooldown
+    });
+
+    it('cooldown expires after 5 min, ControlPort is retried', async () => {
+      let connectAttempts = 0;
+      const counting: TorControlClient = {
+        connect: async () => {
+          connectAttempts++;
+          throw new UnavailableError('refused');
+        },
+      };
+      let nowMs = 1_000;
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(false),
+        torControl: counting,
+        config: makeConfig({ useControlPort: true }),
+        now: () => nowMs,
+      });
+      await svc.checkHealth(new AbortController().signal);
+      expect(connectAttempts).toBe(1);
+      nowMs = 1_000 + 5 * 60 * 1000 + 1; // past cooldown window
+      await svc.checkHealth(new AbortController().signal);
+      expect(connectAttempts).toBe(2);
+    });
+
+    it('successful ControlPort clears the cooldown', async () => {
+      // First call: ICMP+ControlPort fail → cooldown set
+      // Second call (after manual cooldown bypass): ControlPort works → cooldown cleared
+      // Third call: ControlPort would be tried again
+      let pingOk = false;
+      let connectShouldFail = true;
+      let connectAttempts = 0;
+      const ping: PingProber = {
+        probe: async () => (pingOk ? { success: true, avgMs: 5 } : { success: false }),
+      };
+      const torControl: TorControlClient = {
+        connect: async () => {
+          connectAttempts++;
+          if (connectShouldFail) throw new UnavailableError('refused');
+          return {
+            getinfo: async () => new Map([['status/circuit-established', '1']]),
+            getconf: async () => new Map(),
+            signal: async () => undefined,
+            close: async () => undefined,
+          };
+        },
+      };
+      let nowMs = 1_000;
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping,
+        torControl,
+        config: makeConfig({ useControlPort: true }),
+        now: () => nowMs,
+      });
+
+      await svc.checkHealth(new AbortController().signal); // off-LAN, cooldown set
+      expect(connectAttempts).toBe(1);
+
+      // Simulate "back on LAN": expire cooldown, ICMP works, control works
+      nowMs = 1_000 + 5 * 60 * 1000 + 1;
+      pingOk = true;
+      connectShouldFail = false;
+      const onLan = await svc.checkHealth(new AbortController().signal);
+      expect(connectAttempts).toBe(2);
+      expect(onLan.ok).toBe(true);
+      if (onLan.ok) expect(onLan.value.details?.source).toBe('control-port');
+
+      // Cooldown was cleared by success → next failure shouldn't be skipped immediately
+      pingOk = false;
+      connectShouldFail = true;
+      await svc.checkHealth(new AbortController().signal);
+      expect(connectAttempts).toBe(3);
+    });
+
+    it('on-LAN ControlPort failure (ICMP up) does NOT trigger fallback — surfaces as service down', async () => {
+      let connectAttempts = 0;
+      const counting: TorControlClient = {
+        connect: async () => {
+          connectAttempts++;
+          throw new UnavailableError('refused');
+        },
+      };
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(true, 5),
+        torControl: counting,
+        config: makeConfig({ useControlPort: true }),
+        now: () => 1_000,
+      });
+      const res = await svc.checkHealth(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.details?.source).toBe('control-port');
+        expect(res.value.host?.reachable).toBe(true);
+        expect(res.value.service?.reachable).toBe(false);
+      }
+      // Cooldown NOT set — try again immediately
+      await svc.checkHealth(new AbortController().signal);
+      expect(connectAttempts).toBe(2);
+    });
+
+    it('getStats honors cooldown set by checkHealth and serves Onionoo metrics', async () => {
+      let nowMs = 1_000;
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(false),
+        torControl: failingTorControl(),
+        config: makeConfig({ useControlPort: true }),
+        now: () => nowMs,
+      });
+      await svc.checkHealth(new AbortController().signal); // sets cooldown
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.source).toBe('onionoo');
+        expect(res.value.metrics.nickname).toBe('MyRelay');
+        expect(res.value.metrics.relayType).toBe('guard');
+      }
+    });
+
+    it('falls back to Onionoo gracefully even when relay is hibernating', async () => {
+      state.payload = {
+        relays: [{ ...(state.payload as { relays: unknown[] }).relays[0] as object, hibernating: true }],
+      };
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(false),
+        torControl: failingTorControl(),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 1_000,
+      });
+      const res = await svc.checkHealth(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.reachable).toBe(false);
+        expect(res.value.details?.source).toBe('onionoo');
+        expect(res.value.details?.warning).toMatch(/hibernat/i);
+      }
+    });
+  });
+
   describe('Onionoo enrichment (B7)', () => {
     it('controlPort getStats merges country and consensusWeight from Onionoo', async () => {
       const svc = new TorService({

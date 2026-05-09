@@ -33,6 +33,7 @@ export class PhilipsBridgeService extends BaseService {
   private readonly host: string;
   private readonly timeoutMs: number;
   private readonly pingCount: number;
+  private readonly usePing: boolean;
   private readonly applicationKey: string | undefined;
   private readonly pinger: PingProber;
   private readonly http: HttpClient;
@@ -45,6 +46,7 @@ export class PhilipsBridgeService extends BaseService {
     this.host = deps.config.host;
     this.timeoutMs = deps.config.timeoutMs;
     this.pingCount = deps.config.pingCount;
+    this.usePing = deps.config.usePing;
     this.applicationKey = deps.config.applicationKey;
     this.now = deps.now;
     this.pinger = deps.ping;
@@ -55,25 +57,28 @@ export class PhilipsBridgeService extends BaseService {
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
     const started = this.now();
-    const pingRes = await this.pinger.probe({
-      host: this.host,
-      timeoutMs: this.timeoutMs,
-      count: this.pingCount,
-      signal,
-    });
+    const pingRes = this.usePing
+      ? await this.pinger.probe({
+          host: this.host,
+          timeoutMs: this.timeoutMs,
+          count: this.pingCount,
+          signal,
+        })
+      : { success: false, avgMs: undefined };
     const latencyMs = pingRes.avgMs ?? this.now() - started;
+    const icmpAlive = this.usePing && pingRes.success;
     const host: HostHealth = {
-      reachable: pingRes.success,
+      reachable: icmpAlive,
       ...(pingRes.avgMs !== undefined ? { pingMs: pingRes.avgMs } : {}),
     };
 
     if (!this.applicationKey) {
       return ok({
-        reachable: pingRes.success,
+        reachable: icmpAlive,
         latencyMs,
         at: this.now(),
         host,
-        details: { host: this.host, icmpAlive: pingRes.success },
+        details: { host: this.host, icmpAlive, pingEnabled: this.usePing },
       });
     }
 
@@ -87,7 +92,7 @@ export class PhilipsBridgeService extends BaseService {
       at: this.now(),
       host,
       service,
-      details: { host: this.host, icmpAlive: pingRes.success, apiReachable },
+      details: { host: this.host, icmpAlive, apiReachable, pingEnabled: this.usePing },
     });
   }
 

@@ -23,7 +23,6 @@ const cfg: HomebridgeInstance = {
   statusPath: '/api/status/server-information',
   versionPath: '/api/status/homebridge-version',
   loginPath: '/api/auth/login',
-  accessoriesPath: '/accessories',
 };
 
 function fakeClient(handler: (path: string) => unknown): HomebridgeClient {
