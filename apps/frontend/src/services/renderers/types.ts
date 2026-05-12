@@ -33,12 +33,7 @@ export interface MetricSpec {
   format: MetricFormatter;
   unit?: string;
   hint?: string;
-  /**
-   * Which payload to read the value from. Defaults to `"stats"` when omitted
-   * to preserve existing renderer behavior. Set to `"health"` to read from
-   * the `HealthSnapshot` (top-level `reachable`, `host.*`, `service.*`,
-   * `details.*`, etc.).
-   */
+  /** Which snapshot the metric should be read from. Defaults to `stats`. */
   source?: MetricSource;
 }
 

@@ -8,6 +8,7 @@ import type { ServiceRenderer } from "@/services/renderers/types";
 // ---- mutable data shared across tests (closures capture the binding) ----
 let healthData: unknown = undefined;
 let statsData: unknown = undefined;
+let statsError: unknown = undefined;
 
 const defaultRenderer = (): ServiceRenderer => ({
   displayName: "Bitcoin",
@@ -21,10 +22,25 @@ const defaultRenderer = (): ServiceRenderer => ({
 
 let currentRenderer: ServiceRenderer = defaultRenderer();
 
-vi.mock("@/hooks/useServiceHealth", () => ({
-  useServiceHealth: () => ({ data: healthData, isLoading: false }),
-  useServiceStats: () => ({ data: statsData, isLoading: false }),
-}));
+vi.mock("@/hooks/useServiceHealth", () => {
+  class StatsApiError extends Error {
+    readonly code: string;
+    constructor(code: string, message: string) {
+      super(message);
+      this.name = "StatsApiError";
+      this.code = code;
+    }
+  }
+  return {
+    useServiceHealth: () => ({ data: healthData, isLoading: false }),
+    useServiceStats: () => ({
+      data: statsData,
+      isLoading: false,
+      error: statsError,
+    }),
+    StatsApiError,
+  };
+});
 
 vi.mock("@/pages/Settings/useConfigQueries", () => ({
   useServices: () => ({ data: [] }),
@@ -60,20 +76,24 @@ function statusDots(container: HTMLElement) {
   return Array.from(container.querySelectorAll('[role="status"]'));
 }
 
+function resetState() {
+  healthData = undefined;
+  statsData = undefined;
+  statsError = undefined;
+  currentRenderer = defaultRenderer();
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+}
+
+function teardownState() {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  document.body.innerHTML = "";
+}
+
 // ---- tests ------------------------------------------------------------------
 
 describe("ServiceTile two-tier status dots", () => {
-  beforeEach(() => {
-    healthData = undefined;
-    statsData = undefined;
-    currentRenderer = defaultRenderer();
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
-  afterEach(() => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
-    document.body.innerHTML = "";
-  });
+  beforeEach(resetState);
+  afterEach(teardownState);
 
   it("renders two dots when host and service tiers are both present", async () => {
     healthData = {
@@ -163,17 +183,8 @@ describe("ServiceTile two-tier status dots", () => {
 });
 
 describe("ServiceTile metric source resolution", () => {
-  beforeEach(() => {
-    healthData = undefined;
-    statsData = undefined;
-    currentRenderer = defaultRenderer();
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  });
-
-  afterEach(() => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
-    document.body.innerHTML = "";
-  });
+  beforeEach(resetState);
+  afterEach(teardownState);
 
   it("reads primary metric from health snapshot when source='health'", async () => {
     currentRenderer = {
@@ -260,6 +271,62 @@ describe("ServiceTile metric source resolution", () => {
     // source='health' is an explicit opt-in to the health payload only.
     expect(container.textContent).toContain("—");
     expect(container.textContent).not.toContain("true");
+
+    await cleanup();
+  });
+});
+
+describe("ServiceTile stats-error badge", () => {
+  beforeEach(resetState);
+  afterEach(teardownState);
+
+  it("renders 'needs config' badge when stats error mentions credentials", async () => {
+    healthData = { reachable: true };
+    statsData = undefined;
+    statsError = new Error("UNAUTHORIZED: snmp credentials not configured");
+
+    const { container, cleanup } = await render();
+
+    expect(container.textContent).toContain("needs config");
+    expect(container.textContent).toContain("configure to see metrics");
+
+    await cleanup();
+  });
+
+  it("renders 'stats unavailable' badge when stats error has no auth signal", async () => {
+    healthData = { reachable: true };
+    statsData = undefined;
+    statsError = new Error("UNAVAILABLE: upstream returned 502");
+
+    const { container, cleanup } = await render();
+
+    expect(container.textContent).toContain("stats unavailable");
+
+    await cleanup();
+  });
+
+  it("does not render a stats badge when stats data exists despite error", async () => {
+    healthData = { reachable: true };
+    statsData = { metrics: { x: 1 }, at: "now" };
+    statsError = new Error("UNAUTHORIZED: bad creds");
+
+    const { container, cleanup } = await render();
+
+    expect(container.textContent).not.toContain("needs config");
+    expect(container.textContent).not.toContain("stats unavailable");
+
+    await cleanup();
+  });
+
+  it("suppresses stats badge while tile is offline", async () => {
+    healthData = { reachable: false, message: "host down" };
+    statsData = undefined;
+    statsError = new Error("UNAUTHORIZED: bad creds");
+
+    const { container, cleanup } = await render();
+
+    expect(container.textContent).not.toContain("needs config");
+    expect(container.textContent).toContain("Unavailable");
 
     await cleanup();
   });

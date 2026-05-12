@@ -32,74 +32,84 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
   quickLinkLabel: "Open DSM",
 
   summary: [
-    { key: "cpu.usage", label: "CPU", format: fmtPercent(0, 100) },
-    { key: "cpu.temperature", label: "Temp", format: fmtTempC },
-    { key: "network.bytesReceived", label: "Net RX", format: fmtBytes },
+    { key: "cpuUsage", label: "CPU", format: fmtPercent(0, 100) },
+    { key: "cpuTemp", label: "Temp", format: fmtTempC },
+    { key: "networkRx", label: "Net RX", format: fmtBytes },
   ],
 
   detail: [
     {
       title: "System",
       metrics: [
-        { key: "system.name", label: "Name", format: fmtRaw },
-        { key: "system.model", label: "Model", format: fmtRaw },
-        { key: "system.version", label: "DSM version", format: fmtRaw },
-        { key: "system.status", label: "Status", format: fmtRaw },
-        { key: "system.uptime", label: "Uptime", format: fmtUptime },
+        { key: "systemName", label: "Name", format: fmtRaw },
+        { key: "systemModel", label: "Model", format: fmtRaw },
+        { key: "systemVersion", label: "DSM version", format: fmtRaw },
+        { key: "systemStatus", label: "Status", format: fmtRaw },
+        { key: "uptime", label: "Uptime", format: fmtUptime },
       ],
     },
     {
       title: "CPU",
       metrics: [
-        { key: "cpu.usage", label: "Usage", format: fmtPercent(1, 100) },
-        { key: "cpu.temperature", label: "Temperature", format: fmtTempC },
+        { key: "cpuUsage", label: "Usage", format: fmtPercent(1, 100) },
+        { key: "cpuTemp", label: "Temperature", format: fmtTempC },
+      ],
+    },
+    {
+      title: "Memory",
+      metrics: [
+        { key: "memoryTotal", label: "Total", format: fmtBytes },
+        { key: "memoryUsed", label: "Used", format: fmtBytes },
+        { key: "memoryAvailable", label: "Available", format: fmtBytes },
+        { key: "memoryUsagePercent", label: "Used %", format: fmtPercent(1, 100) },
+      ],
+    },
+    {
+      title: "Disk",
+      metrics: [
+        { key: "diskTotal", label: "Total", format: fmtBytes },
+        { key: "diskUsed", label: "Used", format: fmtBytes },
+        { key: "diskFree", label: "Free", format: fmtBytes },
+        { key: "diskUsagePercent", label: "Used %", format: fmtPercent(1, 100) },
       ],
     },
     {
       title: "Network",
       metrics: [
-        {
-          key: "network.bytesReceived",
-          label: "Bytes received",
-          format: fmtBytes,
-        },
-        {
-          key: "network.bytesTransmitted",
-          label: "Bytes transmitted",
-          format: fmtBytes,
-        },
+        { key: "networkRx", label: "Bytes received", format: fmtBytes },
+        { key: "networkTx", label: "Bytes transmitted", format: fmtBytes },
       ],
     },
     {
       title: "Status",
       metrics: [
-        { key: "status", label: "Service", format: fmtRaw },
-        { key: "timestamp", label: "Last update", format: fmtRaw },
+        { key: "host", label: "Host", format: fmtRaw, source: 'health' },
+        { key: "latencyMs", label: "Latency", format: fmtRaw, source: 'health' },
       ],
     },
   ],
 
   charts: [
     {
-      metric: "cpu.usage",
+      metric: "cpuUsage",
       label: "CPU usage",
       kind: "area",
       format: fmtPercent(0, 100),
     },
     {
-      metric: "cpu.temperature",
+      metric: "cpuTemp",
       label: "CPU temperature",
       kind: "line",
       format: fmtTempC,
     },
     {
-      metric: "network.bytesReceived",
+      metric: "networkRx",
       label: "Network RX",
       kind: "area",
       format: fmtBytes,
     },
     {
-      metric: "network.bytesTransmitted",
+      metric: "networkTx",
       label: "Network TX",
       kind: "area",
       format: fmtBytes,
@@ -109,17 +119,17 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
   tone: ({ stats, health }) => {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
-    const status = stats ? dotGet(stats, "status") : undefined;
+    const status = stats ? dotGet(stats, "systemStatus") : undefined;
     if (status === "error" || status === "offline") return "crit";
-    const cpu = getNum(stats, "cpu.usage");
-    const temp = getNum(stats, "cpu.temperature");
+    const cpu = getNum(stats, "cpuUsage");
+    const temp = getNum(stats, "cpuTemp");
     if ((cpu ?? 0) >= 90 || (temp ?? 0) >= 80) return "crit";
     if ((cpu ?? 0) >= 80 || (temp ?? 0) >= 70) return "warn";
     return "ok";
   },
 
   subtitle: ({ stats }) => {
-    const model = stats ? dotGet(stats, "system.model") : undefined;
-    return typeof model === "string" ? model : null;
+    const model = stats ? dotGet(stats, "systemModel") : undefined;
+    return typeof model === "string" && model.length > 0 ? model : null;
   },
 };
