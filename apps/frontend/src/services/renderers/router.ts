@@ -16,7 +16,7 @@ export const routerRenderer: ServiceRenderer<Stats> = {
   quickLinkLabel: "Open router UI",
 
   summary: [
-    { key: "reachable", label: "Reachable", format: fmtRaw },
+    { key: "reachable", label: "Reachable", source: "health", format: fmtRaw },
     { key: "portCount", label: "Ports", format: fmtNumber(0) },
     { key: "host", label: "Host", format: fmtRaw },
   ],

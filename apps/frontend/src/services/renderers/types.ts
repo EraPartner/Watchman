@@ -24,13 +24,22 @@ export type Tone = "neutral" | "ok" | "warn" | "crit";
 
 export type MetricFormatter = (value: unknown) => string;
 
+export type MetricSource = "stats" | "health";
+
 export interface MetricSpec {
-  /** Dot-path into stats (e.g. `mempool.bytes`). */
+  /** Dot-path into the chosen source (e.g. `mempool.bytes`, `host.pingMs`). */
   key: string;
   label: string;
   format: MetricFormatter;
   unit?: string;
   hint?: string;
+  /**
+   * Which payload to read the value from. Defaults to `"stats"` when omitted
+   * to preserve existing renderer behavior. Set to `"health"` to read from
+   * the `HealthSnapshot` (top-level `reachable`, `host.*`, `service.*`,
+   * `details.*`, etc.).
+   */
+  source?: MetricSource;
 }
 
 export interface MetricGroup {
