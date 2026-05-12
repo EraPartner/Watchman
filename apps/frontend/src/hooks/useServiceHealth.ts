@@ -12,11 +12,23 @@ import type {
   HealthSnapshot,
   StatsSnapshot,
 } from "../services/apiClient/types";
+import { parseApiErrorCode } from "../services/apiClient/types";
 
 interface AggregatedHealthResult {
   data: HealthSnapshot | undefined;
   isLoading: boolean;
   error: { code: string; message: string } | undefined;
+}
+
+/** Error subclass thrown from useServiceStats's queryFn carrying the parsed
+ *  API error code so the tile can branch on it without substring-matching. */
+export class StatsApiError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "StatsApiError";
+    this.code = code;
+  }
 }
 
 /**
@@ -46,11 +58,19 @@ export const useServiceStats = (
   enabled = true,
   trackedMetrics: ReadonlyArray<string> = []
 ) => {
-  const query = useQuery<StatsSnapshot>({
+  const query = useQuery<StatsSnapshot, StatsApiError>({
     queryKey: instance
       ? [...queryKeys.serviceStats(kind), instance]
       : queryKeys.serviceStats(kind),
-    queryFn: async () => apiClient.getServiceStats(kind, instance),
+    queryFn: async () => {
+      try {
+        return await apiClient.getServiceStats(kind, instance);
+      } catch (e) {
+        const raw = e instanceof Error ? e.message : String(e);
+        const { code, message } = parseApiErrorCode(raw);
+        throw new StatsApiError(code, message);
+      }
+    },
     refetchInterval: 30000,
     staleTime: 15000,
     enabled,

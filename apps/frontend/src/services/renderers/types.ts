@@ -31,6 +31,8 @@ export interface MetricSpec {
   format: MetricFormatter;
   unit?: string;
   hint?: string;
+  /** Which snapshot the metric should be read from. Defaults to `stats`. */
+  source?: 'stats' | 'health';
 }
 
 export interface MetricGroup {

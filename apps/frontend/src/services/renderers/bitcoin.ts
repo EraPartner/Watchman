@@ -1,7 +1,7 @@
-import type { BitcoinStats } from "@/types/api";
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
 import {
+  dotGet,
   fmtBytes,
   fmtNumber,
   fmtPercent,
@@ -10,7 +10,9 @@ import {
   fmtVersion,
 } from "./formatters";
 
-export const bitcoinRenderer: ServiceRenderer<BitcoinStats> = {
+type BitcoinStatsMetrics = Record<string, unknown>;
+
+export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
   kind: "bitcoin",
   displayName: "Bitcoin Core",
   quickLink: (ctx) =>
@@ -59,10 +61,10 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStats> = {
     {
       title: "Mempool",
       metrics: [
-        { key: "mempool.size", label: "Tx count", format: fmtNumber(0) },
-        { key: "mempool.bytes", label: "Size", format: fmtBytes },
-        { key: "mempool.usage", label: "Memory", format: fmtBytes },
-        { key: "mempool.maxmempool", label: "Max", format: fmtBytes },
+        { key: "mempoolSize", label: "Tx count", format: fmtNumber(0) },
+        { key: "mempoolBytes", label: "Size", format: fmtBytes },
+        { key: "mempoolUsage", label: "Memory", format: fmtBytes },
+        { key: "mempoolMax", label: "Max", format: fmtBytes },
       ],
     },
     {
@@ -78,21 +80,23 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStats> = {
   charts: [
     { metric: "blocks", label: "Block height", kind: "area", format: fmtNumber(0) },
     { metric: "connections", label: "Peers", kind: "line", format: fmtNumber(0) },
-    { metric: "mempool.bytes", label: "Mempool size", kind: "area", format: fmtBytes },
+    { metric: "mempoolBytes", label: "Mempool size", kind: "area", format: fmtBytes },
   ],
 
   tone: ({ stats, health }) => {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
-    if (stats?.initialBlockDownload === true) return "warn";
-    if (stats && stats.connections <= 1) return "warn";
+    if (dotGet(stats, "initialBlockDownload") === true) return "warn";
+    const connections = dotGet(stats, "connections");
+    if (typeof connections === "number" && connections <= 1) return "warn";
     return "ok";
   },
 
   subtitle: ({ stats }) => {
     if (!stats) return null;
-    if (stats.initialBlockDownload) return "Syncing";
-    if (stats.verificationProgress >= 0.9999) return "Full node";
+    if (dotGet(stats, "initialBlockDownload") === true) return "Syncing";
+    const vp = dotGet(stats, "verificationProgress");
+    if (typeof vp === "number" && vp >= 0.9999) return "Full node";
     return "Synced";
   },
 };

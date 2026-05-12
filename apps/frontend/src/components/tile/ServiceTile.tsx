@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/primitives/Skeleton";
 import { Sparkline } from "@/components/primitives/Sparkline";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/primitives/Tooltip";
 import { cn } from "@/lib/utils";
-import { useServiceHealth, useServiceStats } from "@/hooks/useServiceHealth";
+import { useServiceHealth, useServiceStats, StatsApiError } from "@/hooks/useServiceHealth";
 import { useServices } from "@/pages/Settings/useConfigQueries";
 import type { ServiceInstance } from "@/hooks/useServiceInstances";
 import { getRenderer, rendererTrackedMetrics } from "@/services/renderers";
@@ -54,6 +54,29 @@ function fmtMs(ms?: number): string | undefined {
   if (ms < 1) return "<1 ms";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(2)} s`;
+}
+
+interface StatsErrorBadge {
+  label: string;
+  title: string;
+}
+
+const NEEDS_CONFIG_CODES = new Set(["UNAUTHORIZED", "VALIDATION"]);
+
+function computeStatsErrorBadge(
+  error: unknown,
+  data: unknown
+): StatsErrorBadge | undefined {
+  if (!error || data !== undefined) return undefined;
+  const code = error instanceof StatsApiError ? error.code : undefined;
+  const message = error instanceof Error ? error.message : String(error);
+  const needsConfig =
+    (code !== undefined && NEEDS_CONFIG_CODES.has(code)) ||
+    /credentials?/i.test(message);
+  return {
+    label: needsConfig ? "needs config" : "stats unavailable",
+    title: message,
+  };
 }
 
 export function ServiceTile({
@@ -157,6 +180,8 @@ export function ServiceTile({
     healthShape?.status === "offline" || (!!health.error && !healthRaw);
   const offlineMessage =
     healthShape?.error ?? health.error?.message ?? "Service unavailable";
+
+  const statsErrorBadge = computeStatsErrorBadge(stats.error, stats.data);
 
   const handleOpen = () => {
     if (!onOpenDetail) return;
@@ -278,6 +303,11 @@ export function ServiceTile({
               {healthShape.status}
             </Badge>
           ) : null}
+          {statsErrorBadge && !offline ? (
+            <Badge tone="warn" title={statsErrorBadge.title}>
+              {statsErrorBadge.label}
+            </Badge>
+          ) : null}
         </div>
       </header>
 
@@ -291,6 +321,10 @@ export function ServiceTile({
               {offlineMessage}
             </p>
           </div>
+        ) : statsErrorBadge ? (
+          <p className="text-fs-label text-[var(--text-lo)]">
+            configure to see metrics
+          </p>
         ) : (
           <>
             {loading ? (

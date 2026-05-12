@@ -1,6 +1,6 @@
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
-import { dotGet, fmtBool, fmtNumber, fmtRaw } from "./formatters";
+import { fmtBool, fmtNumber, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
 
@@ -15,16 +15,18 @@ export const philipsBridgeRenderer: ServiceRenderer<Stats> = {
   quickLinkLabel: "Open Hue Bridge",
 
   summary: [
-    { key: "reachable", label: "Reachable", format: fmtBool() },
-    { key: "onCount", label: "Lights on", format: fmtNumber(0) },
+    { key: "lightCount", label: "Lights", format: fmtNumber(0) },
+    { key: "onCount", label: "On", format: fmtNumber(0) },
+    { key: "offCount", label: "Off", format: fmtNumber(0) },
   ],
 
   detail: [
     {
       title: "Bridge",
       metrics: [
-        { key: "reachable", label: "Reachable", format: fmtBool() },
+        { key: "reachable", label: "Reachable", format: fmtBool("yes", "no"), source: 'health' },
         { key: "host", label: "Host", format: fmtRaw },
+        { key: "configured", label: "Configured", format: fmtBool("yes", "no") },
         { key: "lightCount", label: "Total lights", format: fmtNumber(0) },
         { key: "onCount", label: "Lights on", format: fmtNumber(0) },
         { key: "offCount", label: "Lights off", format: fmtNumber(0) },
@@ -38,10 +40,9 @@ export const philipsBridgeRenderer: ServiceRenderer<Stats> = {
     { metric: "offCount", label: "Lights off", kind: "area", format: fmtNumber(0) },
   ],
 
-  tone: ({ stats, health }) => {
+  tone: ({ health }) => {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
-    if (stats && dotGet(stats, "reachable") === false) return "crit";
     return "ok";
   },
 };
