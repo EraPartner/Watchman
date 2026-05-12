@@ -2,8 +2,8 @@
 title: Architecture Decision Records
 type: index
 status: active
-date: 2026-04-19
-tags: [adr, architecture, index, decision, design]
+date: 2026-05-12
+tags: [adr, architecture, index, decision, design, startup-flows]
 description: Index of all Architecture Decision Records for the Watchman project - why design choices were made
 aliases: [adr index, decisions, architecture decisions, design decisions]
 ---
@@ -50,11 +50,13 @@ SORT file.name ASC
 | [[docs/adr/019-two-tier-health-and-monitoring-upgrades.md | Two-Tier Health + Monitoring Upgrades]] | Universal ICMP layer in `BaseService` (host vs service tier) + per-service methodology upgrades (Tor ControlPort, router SNMP, Hue API v2, Bitcoin ZMQ, Synology DSM API, Roon WebSocket, Homebridge Config UI X) |
 | [[docs/adr/020-service-monitoring-methodology.md | Service Monitoring Methodology]] | Two-layer probe model: shared `ReachabilityProbe` (ICMP + TCP) baseline + per-service deep probe; replace external Onionoo with local Tor control-port; drop Mac Mini SSH bounce for Pi; structured `sysctl`/`vm_stat` for Mac Mini |
 | [[docs/adr/021-frontend-dashboard-upgrade.md | Frontend Dashboard Upgrade]] | Aggregated `/services` fan-out for tile health, client-side metric history ring buffer, sparklines on tiles + detail-sheet charts, editorial top-bar nav with global summary chip, quickLink on every renderer, Raw + Config + custom panels in detail sheet |
+| [[docs/adr/022-instance-id-rename.md | Instance ID Rename Support]] | Allow renaming service instances in-place with audit trail and dedicated lifecycle event |
+| [[docs/adr/023-startup-flow-npm-script-overhaul.md | Startup Flow & npm Script Overhaul]] | Three startup modes (Desktop, Production, Development), unified npm script surface, Playwright e2e scaffold, OpenAPI→TypeScript generation |
 
 ## Creating a New ADR
 
 1. Copy [[docs/adr/template|ADR Template]]
-2. Name it `NNN-short-title.md` (next sequential number after 021)
+2. Name it `NNN-short-title.md` (next sequential number after 023)
 3. Fill in all sections:
    - **Status**: Proposed | Accepted | Deprecated | Superseded
    - **Context**: The problem being solved

@@ -2,16 +2,21 @@
 title: Setup Guide
 type: guide
 status: active
-date: 2026-04-02
-tags: [guide, setup, development]
-description: Step-by-step guide to setting up the Watchman development environment
-aliases: [setup, install, getting started, local development]
+date: 2026-05-12
+tags: [guide, setup, development, startup-flows]
+description: Step-by-step guide to setting up the Watchman development environment (Option C — Development mode)
+aliases: [setup, install, getting started, local development, option c, dev mode]
 ---
 
-# Setup Guide
+# Setup Guide — Development Mode (Option C)
 
 > [!abstract] Overview
-> This guide walks you through setting up Watchman for local development.
+> This guide walks you through setting up Watchman for local development with hot reload.
+>
+> **Looking for other startup modes?** See [[docs/getting-started|Getting Started]] for:
+> - Option A: macOS Desktop
+> - Option B: Production Server
+> - Option C: Development (this guide)
 
 ## Prerequisites
 
@@ -71,11 +76,11 @@ ADGUARD_MAIN_AUTH=your-adguard-auth-token
 npm run dev
 ```
 
-This starts both frontend and backend concurrently:
+This starts both frontend and backend concurrently with hot reload:
 
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3001`
-- API Docs: `http://localhost:3001/api/docs`
+- **Frontend (Vite)**: `http://localhost:5173` — Hot Module Reload (HMR) enabled, instant feedback on code changes
+- **Backend (Fastify)**: `http://localhost:3001` — Auto-restart via nodemon on file changes
+- **API Docs (Swagger)**: `http://localhost:3001/api/docs` — Interactive OpenAPI documentation
 
 ### 5. Verify Setup
 
@@ -114,7 +119,20 @@ npm run format:check
 ### Testing
 
 ```bash
+# Backend unit/integration tests
 npm run test
+
+# Frontend component tests
+npm run test:frontend
+
+# Run all (backend + frontend concurrently)
+npm run test:all
+
+# Watch mode (backend tests + auto-rerun on changes)
+npm run test:watch
+
+# E2E tests (Playwright smoke tests)
+npm run test:e2e
 ```
 
 ## Project Structure

@@ -16,7 +16,9 @@
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:visual": "playwright test --update-snapshots"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -40,6 +42,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.49.1",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

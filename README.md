@@ -61,29 +61,61 @@ See full docs: [`docs/integrations/index.md`](./docs/integrations/index.md)
 | Backend  | Node.js, Express, WebSocket (`ws`), OpenAPI              | Service polling, API endpoints, auth, security   |
 | Monorepo | npm workspaces                                           | Shared development workflow for frontend/backend |
 
-## Quick Start (Local Development)
+## Quick Start
 
-### 1) Prerequisites
+### Option A — macOS Desktop (recommended for end users)
 
-- Node.js **18+**
-- npm
-- Git
+The `install.sh` script sets up everything from scratch — Homebrew, Node.js, workspace dependencies, and a `.app` launcher:
 
-### 2) Clone and install
+```bash
+git clone https://github.com/EraPartner/Watchman.git
+cd Watchman
+./install.sh
+```
+
+After installation, double-click the `Launch Watchman.command` shortcut or run:
+
+```bash
+npm run electron:prod
+```
+
+> On first launch you'll need `apps/backend/.env.local` populated. The installer prints a copy hint if it's missing.
+
+### Option B — Native production self-host (any platform)
 
 ```bash
 git clone https://github.com/EraPartner/Watchman.git
 cd Watchman
 npm install
+cp apps/backend/.env.example apps/backend/.env.local   # edit auth + JWT secret
+
+npm run build
+npm run start
 ```
 
-### 3) Configure backend environment
+| Service | URL |
+|---------|-----|
+| Frontend (preview) | `http://localhost:4173` |
+| Backend API | `http://localhost:3001` |
+| API Docs (Swagger) | `http://localhost:3001/api/docs` |
+
+### Option C — Development mode
 
 ```bash
+git clone https://github.com/EraPartner/Watchman.git
+cd Watchman
+npm install
 cp apps/backend/.env.example apps/backend/.env.local
+
+npm run dev
 ```
 
-Required values in `apps/backend/.env.local`:
+| Service | URL |
+|---------|-----|
+| Frontend | `http://localhost:5173` |
+| Backend API | `http://localhost:3001` |
+
+### Required backend env vars
 
 | Variable             | Why it is required                                     |
 | -------------------- | ------------------------------------------------------ |
@@ -92,33 +124,55 @@ Required values in `apps/backend/.env.local`:
 | `JWT_SECRET`         | Token signing secret (minimum 32 chars)                |
 | `FRONTEND_URL`       | Allowed frontend origin (e.g. `http://localhost:5173`) |
 
-### 4) Start the app
+## All Scripts
 
 ```bash
-npm run dev
+# Development
+npm run dev                  # frontend + backend in watch mode (concurrent)
+npm run dev:frontend         # frontend only
+npm run dev:backend          # backend only
+npm run backend              # alias of dev:backend
+
+# Building
+npm run build                # production build (backend + frontend)
+npm run build:frontend       # frontend production build
+npm run build:backend        # backend production build
+npm run build:dev            # dev-mode frontend build
+npm run preview              # preview production frontend build
+npm run dist                 # build backend + frontend, then package Electron .app
+npm run clean                # remove all node_modules / dist / out folders
+
+# Production self-host
+npm run start                # backend + frontend preview (concurrent)
+npm run start:backend        # backend only
+npm run start:frontend       # frontend preview only
+
+# Linting
+npm run lint                 # frontend ESLint
+npm run lint:frontend        # frontend ESLint (explicit alias)
+npm run lint:backend         # backend ESLint
+npm run lint:fix             # autofix across workspaces
+npm run format               # Prettier across workspaces
+npm run format:check         # Prettier check across workspaces
+npm run typecheck            # tsc across backend + frontend
+
+# Testing
+npm run test                 # backend Vitest suite
+npm run test:frontend        # frontend Vitest suite
+npm run test:all             # backend + frontend (concurrent)
+npm run test:coverage        # frontend coverage report
+npm run test:watch           # backend watch mode
+npm run test:e2e             # Playwright e2e suite
+npm run test:e2e:visual      # Playwright with snapshot updates
+
+# Electron (desktop app)
+npm run electron:dev         # desktop dev mode (NODE_ENV=development)
+npm run electron:prod        # desktop production mode (built backend + frontend)
+npm run electron:clean       # clean install, rebuild, launch
+
+# Types
+npm run generate:types       # regenerate TypeScript types from openapi.yaml
 ```
-
-Default local URLs:
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3001`
-- API Docs (Swagger): `http://localhost:3001/api/docs`
-
-## Common Commands
-
-From repository root:
-
-| Command                | Purpose                                 |
-| ---------------------- | --------------------------------------- |
-| `npm run dev`          | Start frontend + backend                |
-| `npm run dev:frontend` | Start frontend only                     |
-| `npm run dev:backend`  | Start backend only                      |
-| `npm run build`        | Build frontend + backend                |
-| `npm run start`        | Start production backend bundle         |
-| `npm run lint`         | Run lint across workspaces              |
-| `npm run format`       | Format code                             |
-| `npm run test`         | Run workspace tests                     |
-| `npm run clean`        | Remove workspace `node_modules` folders |
 
 ## Project Structure
 

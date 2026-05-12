@@ -2,16 +2,21 @@
 title: Deployment Guide
 type: guide
 status: active
-date: 2026-04-02
-tags: [guide, deployment, production]
-description: Step-by-step guide to deploying Watchman in production
-aliases: [deploy, production, hosting, nginx]
+date: 2026-05-12
+tags: [guide, deployment, production, startup-flows]
+description: Step-by-step guide to deploying Watchman in production (Option B — Production Server)
+aliases: [deploy, production, hosting, nginx, option b, server]
 ---
 
-# Deployment Guide
+# Deployment Guide — Production Server (Option B)
 
 > [!abstract] Overview
-> This guide covers deploying Watchman in a production environment.
+> This guide covers deploying Watchman in a production environment on a server (Raspberry Pi, VPS, etc.) without Docker.
+>
+> **Looking for other startup modes?** See [[docs/getting-started|Getting Started]] for:
+> - Option A: macOS Desktop
+> - Option B: Production Server (this guide)
+> - Option C: Development
 
 ## Prerequisites
 
@@ -20,26 +25,36 @@ aliases: [deploy, production, hosting, nginx]
 - SSL certificate (Let's Encrypt recommended)
 - PM2 or systemd for process management
 
-## Build
-
-### 1. Install Production Dependencies
+## Quick Start
 
 ```bash
-npm install --production
+npm install && npm run build && npm run start
 ```
 
-### 2. Build Frontend
+This:
+1. Installs dependencies (including devDeps needed for build)
+2. Builds production frontend + backend
+3. Starts backend + frontend preview concurrently
+
+For a test run on the target machine, this is all you need. For production with systemd/PM2, see Process Management below.
+
+## Build Details
+
+### Build All (Frontend + Backend)
 
 ```bash
-npm run build:frontend
+npm run build
 ```
 
-This creates optimized static files in `apps/frontend/dist/`.
+This creates:
+- `apps/frontend/dist/` — Optimized React build
+- `apps/backend/dist/` — Compiled TypeScript backend
 
-### 3. Build Backend
+Alternatively, build individually:
 
 ```bash
-npm run build:backend
+npm run build:dev        # Dev-mode frontend (fast, unminified)
+npm run build            # Production frontend (minified, optimized)
 ```
 
 ## Environment Configuration

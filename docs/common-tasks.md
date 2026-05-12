@@ -2,8 +2,8 @@
 title: Common Tasks
 type: reference
 status: active
-date: 2026-04-09
-tags: [reference, tasks, quick-reference]
+date: 2026-05-12
+tags: [reference, tasks, quick-reference, startup-flows]
 description: Task-oriented quick reference for common Watchman development operations
 aliases: [common tasks, quick reference, cheat sheet]
 ---
@@ -13,13 +13,34 @@ aliases: [common tasks, quick reference, cheat sheet]
 > [!abstract] Purpose
 > Quick reference for frequently performed tasks in the Watchman project.
 
-## Development
+## Startup Flows
 
-### Start Development
+### Option A — macOS Desktop
+
+```bash
+./install.sh
+npm run electron:prod
+```
+
+Installs to `/Applications/Watchman.app`. Backend auto-spawns on loopback port.
+
+### Option B — Production Self-Host (Server)
+
+```bash
+npm install && npm run build && npm run start
+```
+
+Builds production artifacts and runs concurrently (suitable for Raspberry Pi, VPS, etc.).
+
+### Option C — Development
 
 ```bash
 npm install && npm run dev
 ```
+
+Starts Vite (5173) + Fastify (3001) with hot reload. See [[docs/guides/setup|Setup Guide]].
+
+## Development Tasks
 
 ### Check Backend Health
 
@@ -29,13 +50,29 @@ curl http://localhost:3001/health
 
 ### View API Documentation
 
-Open `http://localhost:3001/api/docs`
+Open `http://localhost:3001/api/docs` (Swagger UI).
 
-### Generate Password Hash
+### Watch Backend Tests
 
 ```bash
-node -e "console.log(require('bcrypt').hashSync('yourpassword', 10))"
+npm run test:watch
 ```
+
+### Run All Tests
+
+```bash
+npm run test:all       # Backend + frontend concurrently
+npm run test:e2e       # Playwright smoke tests
+npm run test:e2e:visual # Update E2E snapshots
+```
+
+### Generate TypeScript Types from OpenAPI
+
+```bash
+npm run generate:types
+```
+
+This syncs `apps/backend/openapi.yaml` → `apps/frontend/src/types/generated.ts`.
 
 ## Adding a Service
 
@@ -71,24 +108,47 @@ curl -X POST http://localhost:3001/api/cache/clear \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
+## Code Quality
+
+### Lint Frontend & Backend
+
+```bash
+npm run lint            # Frontend ESLint
+npm run lint:backend    # Backend ESLint
+```
+
+### Format Code
+
+```bash
+npm run format          # Uses Prettier
+npm run format:check    # Check formatting without changes
+```
+
 ## Troubleshooting
 
 ### Backend Won't Start
 
-- Check required env vars: `AUTH_USERNAME`, `AUTH_PASSWORD_HASH`, `JWT_SECRET`, `FRONTEND_URL`
 - Check port availability: `lsof -i :3001`
+- Check required env vars are set (see `.env.example`)
+- Check Node.js version: `node --version` (need 18+)
 
-### Frontend Can't Connect
+### Frontend Won't Build
 
-- Verify `FRONTEND_URL` matches frontend origin
-- Check CORS configuration
-- Verify backend is running on port 3001
+- Check Node.js version and npm cache: `npm cache clean --force && npm install`
+- If Vite errors, delete `apps/frontend/dist/` and rebuild: `npm run build`
+
+### Desktop App Won't Launch (Option A)
+
+- Verify `.app` built: `ls -la /Applications/Watchman.app`
+- Check quarantine attribute: `xattr /Applications/Watchman.app` (should be empty)
+- Manually remove quarantine: `xattr -d com.apple.quarantine /Applications/Watchman.app`
 
 ### Service Shows Offline
 
 - Check service env vars are set
 - Verify service is in `ENABLED_SERVICES`
 - Check network connectivity to service host
+- Check backend logs: `tail -f apps/backend/logs/*`
 
 ## Related
 
@@ -98,7 +158,7 @@ curl -X POST http://localhost:3001/api/cache/clear \
 
 ## PlantUML Diagrams
 
-### Development Workflow
+### Development Workflow (Option C)
 
 ```plantuml
 @startuml
@@ -112,15 +172,15 @@ box "Development"
     participant "Frontend" as FE
 end box
 
-Dev -> Term : npm run dev
+Dev -> Term : npm install && npm run dev
 
 par
-    Term -> BE : npm run dev:backend\n(Express on :3001)
+    Term -> BE : npm run dev:backend\n(Fastify on :3001)
     Term -> FE : npm run dev:frontend\n(Vite on :5173)
 end
 
-BE --> BE : Server running
-FE --> FE : Dev server ready
+BE --> BE : Fastify running\n(nodemon watching)
+FE --> FE : Vite dev server\nHMR enabled
 
 Dev -> Term : curl http://localhost:3001/health
 Term -> BE : Health check
@@ -128,7 +188,7 @@ BE --> Term : {status: ok}
 
 Dev -> Term : Open http://localhost:5173
 Term -> FE : Browser loads
-FE --> Term : Dashboard UI
+FE --> Term : Dashboard UI\n(hot reload on changes)
 @enduml
 ```
 

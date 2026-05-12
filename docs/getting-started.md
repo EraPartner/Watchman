@@ -2,8 +2,8 @@
 title: Getting Started
 type: map-of-content
 status: active
-date: 2026-04-02
-tags: [getting-started, onboarding, moc, new-developer, ai-agent]
+date: 2026-05-12
+tags: [getting-started, onboarding, moc, new-developer, ai-agent, startup-flows]
 description: Map of Content for new developers and AI agents to quickly navigate the Watchman knowledge base
 aliases: [start here, onboarding, new dev, beginner, setup, how to start]
 ---
@@ -15,53 +15,76 @@ aliases: [start here, onboarding, new dev, beginner, setup, how to start]
 >
 > **For AI Agents**: Start with [[docs/guides/ai-agent-workflow|AI Agent Workflow]] for complete instructions.
 
-## Quick Navigation
+## Quick Start — Three Startup Flows
 
-```mermaid
-graph TD
-    A[Who are you?] --> B{Developer}
-    A --> C{AI Agent}
-    A --> D{User}
-    B --> E[Setup & Development]
-    C --> F[AI Agent Workflow]
-    D --> G[Usage Guide]
-    E --> H[Architecture & Code]
-    F --> I[ADRs & API]
-    G --> J[Service Dashboard]
+Watchman can be started in three ways depending on your use case:
+
+### Option A — macOS Desktop (Recommended for Users)
+
+One-command desktop installation with auto-spawned backend:
+
+```bash
+./install.sh
+npm run electron:prod
 ```
 
-## I'm a New Developer
+→ See [[docs/guides/running-the-desktop-app|Desktop App Guide]]
+
+### Option B — Production Self-Host (Server Deployment)
+
+Native backend + frontend on a server (Raspberry Pi, Linux VPS, etc.):
+
+```bash
+npm install && npm run build && npm run start
+```
+
+→ See [[docs/guides/deployment|Deployment Guide]]
+
+### Option C — Development Mode (Contributors)
+
+Full dev environment with hot reload:
+
+```bash
+npm install && npm run dev
+```
+
+→ See [[docs/guides/setup|Setup Guide]]
+
+## I'm a New Developer (Option C — Development Mode)
 
 ### 1. Set Up Your Environment
 
-Start with the [[docs/guides/setup|Setup Guide]] to get the project running locally.
+Follow **Option C** above to get the full dev environment running:
 
+```bash
+npm install && npm run dev
 ```
-Setup Guide
-├── Prerequisites (Node.js 18+, npm)
-├── Clone & Install
-├── Environment Variables
-└── Run Development Server
-```
+
+This starts:
+- Frontend: Vite dev server on `http://localhost:5173`
+- Backend: Fastify server on `http://localhost:3001` (with nodemon auto-reload)
+
+See [[docs/guides/setup|Setup Guide]] for full details.
 
 ### 2. Understand the Architecture
 
 Get a high-level view before diving into code:
 
-- [[docs/architecture/index|Architecture Overview]] - System diagrams
-- [[docs/architecture/backend-architecture|Backend Architecture]] - Services, middleware, API layer
-- [[docs/architecture/frontend-architecture|Frontend Architecture]] - Pages, components, hooks
+- [[docs/architecture/index|Architecture Overview]] - System diagrams and data flow
+- [[docs/architecture/backend-architecture|Backend Architecture]] - Layered design, services, middleware
+- [[docs/architecture/frontend-architecture|Frontend Architecture]] - Pages, components, hooks, WebSocket
 
-### 3. Learn the Code Style
+### 3. Learn the Code Style & Development Workflow
 
-- [[docs/guides/contributing|Contributing Guide]] - Workflow and conventions
+- [[docs/guides/contributing|Contributing Guide]] - Contribution workflow and conventions
 - [[docs/reference/code-patterns|Code Patterns]] - Standard patterns for all layers
+- [[docs/reference/scripts|Scripts Reference]] - All npm commands grouped by purpose
 
 ### 4. Understand Key Features
 
 - [[docs/features/service-monitoring|Service Monitoring]] - Core feature
-- [[docs/features/multi-instance|Multi-Instance Support]] - Running multiple service nodes
-- [[docs/features/real-time-updates|Real-Time Updates]] - WebSocket broadcasting
+- [[docs/features/multi-instance|Multi-Instance Support]] - Multiple service node instances
+- [[docs/features/real-time-updates|Real-Time Updates]] - WebSocket real-time broadcasts
 
 ## I'm an AI Agent
 
@@ -138,23 +161,36 @@ Get a high-level view before diving into code:
 
 ## Quick Reference
 
-### Build Commands
+### Core Commands
 
+**Development** (Option C):
 ```bash
-# Install and start development
-npm install && npm run dev
+npm run dev              # Vite + Fastify concurrently (5173, 3001)
+npm run dev:frontend     # Frontend only (Vite on 5173)
+npm run dev:backend      # Backend only (Fastify on 3001)
+```
 
-# Individual services
-npm run dev:frontend    # Frontend only (Vite on 5173)
-npm run dev:backend     # Backend only (Express on 3001)
+**Building & Production**:
+```bash
+npm run build            # Build prod frontend + backend
+npm run dist             # Build + package Electron app
+npm run electron:prod    # Launch pre-built Electron app
+npm run start            # Backend + frontend preview concurrently
+```
 
-# Production
-npm run build           # Build all
-npm run start           # Start production
+**Code Quality**:
+```bash
+npm run lint             # Lint frontend (ESLint)
+npm run lint:backend     # Lint backend (ESLint)
+npm run test             # Backend tests (Vitest)
+npm run test:frontend    # Frontend tests (Vitest)
+npm run test:all         # Backend + frontend concurrently
+npm run test:e2e         # Playwright smoke tests
+```
 
-# Quality
-npm run lint            # Lint all workspaces
-npm run test            # Run tests
+**Types**:
+```bash
+npm run generate:types   # OpenAPI → TypeScript types (apps/frontend/src/types/generated.ts)
 ```
 
 ### Key Directories
@@ -168,20 +204,22 @@ npm run test            # Run tests
 
 ### Default Ports
 
-| Service           | Port |
-| ----------------- | ---- |
-| Frontend (Vite)   | 5173 |
-| Backend (Express) | 3001 |
+| Service           | Port | Notes                           |
+| ----------------- | ---- | ------------------------------- |
+| Frontend (Vite)   | 5173 | Dev server only (Option C)      |
+| Backend (Fastify) | 3001 | Dev or production mode          |
+| Desktop (Electron) | —   | Uses loopback port (randomized) |
 
 ### Important Files
 
-| File                        | Purpose                 |
-| --------------------------- | ----------------------- |
-| `apps/backend/server.js`    | Backend entry point     |
-| `apps/backend/config.js`    | Configuration           |
-| `apps/backend/openapi.yaml` | API specification       |
-| `apps/frontend/src/App.tsx` | Main frontend component |
-| `package.json`              | Root package config     |
+| File                            | Purpose                                 |
+| ------------------------------- | --------------------------------------- |
+| `apps/backend/src/index.ts`     | Backend entry point                     |
+| `apps/backend/openapi.yaml`     | OpenAPI specification                   |
+| `apps/frontend/src/main.tsx`    | Frontend entry point                    |
+| `apps/desktop/src/main.ts`      | Electron main process (desktop only)    |
+| `package.json` (root)           | Root workspace config, npm scripts      |
+| `install.sh`                    | macOS desktop installer (Option A)      |
 
 ## Common Tasks
 

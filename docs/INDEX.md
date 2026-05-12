@@ -2,8 +2,8 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-04-19
-tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2]
+date: 2026-05-12
+tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
 ---
@@ -15,18 +15,27 @@ aliases: [KB, docs, documentation, knowledge base, home, README]
 >
 > **For AI Agents**: Use `Ctrl/Cmd+O` to quick-open any document. Start with the [[docs/guides/ai-agent-workflow|AI Agent Workflow]] document for comprehensive instructions.
 
-## Quick Start
+## Quick Start — Three Startup Flows
 
-| If you're...                         | Start here                      |
-| ------------------------------------ | ------------------------------- | ------------------------------------------- | ---------------------- |
-| **New developer**                    | [[docs/getting-started          | Getting Started MOC]] → [[docs/guides/setup | Setup Guide]]          |
-| **Running the desktop app**          | [[docs/guides/running-the-desktop-app | Desktop App Guide]]       |
-| **Deploying backend to Pi**          | [[docs/guides/deploying-to-raspberry-pi | Pi Deploy Guide]]         |
-| **Looking for an API**               | [[docs/api/index                | API Overview]] or [[docs/integrations/index | Service Integrations]] |
-| **Making an architectural decision** | [[docs/adr/index                | ADR Index]] → [[docs/adr/template           | ADR Template]]         |
-| **Understanding the architecture**   | [[docs/architecture/index       | Architecture Overview]]                     |
-| **Adding a service**                 | [[docs/guides/adding-services   | Adding Services Guide]]                     |
-| **An AI agent**                      | [[docs/guides/ai-agent-workflow | AI Agent Workflow]] (start here!)           |
+Choose the path that matches your use case:
+
+| Startup Flow                    | Commands                              | Next Steps                                         |
+| ------------------------------- | ------------------------------------- | -------------------------------------------------- |
+| **Option A — macOS Desktop**    | `./install.sh && npm run electron:prod` | [[docs/guides/running-the-desktop-app | Desktop App Guide]] |
+| **Option B — Production Server** | `npm install && npm run build && npm run start` | [[docs/guides/deployment | Deployment Guide]] |
+| **Option C — Development**      | `npm install && npm run dev`          | [[docs/guides/setup | Setup Guide]]               |
+
+Or jump to:
+
+| If you're...                         | Start here                            |
+| ------------------------------------ | ------------------------------------- |
+| **New developer**                    | [[docs/getting-started | Getting Started MOC]] |
+| **Contributing**                     | [[docs/guides/contributing | Contributing Guide]] |
+| **Looking for an API**               | [[docs/api/index | API Overview]] or [[docs/integrations/index | Service Integrations]] |
+| **Making an architectural decision** | [[docs/adr/index | ADR Index]] → [[docs/adr/template | ADR Template]] |
+| **Understanding the architecture**   | [[docs/architecture/index | Architecture Overview]] |
+| **Adding a service**                 | [[docs/guides/adding-services | Adding Services Guide]] |
+| **An AI agent**                      | [[docs/guides/ai-agent-workflow | AI Agent Workflow]] (start here!) |
 
 > [!tip] AI Agent Quick Reference
 >
@@ -41,7 +50,7 @@ aliases: [KB, docs, documentation, knowledge base, home, README]
 
 | Area                         | Description              | Documents                            |
 | ---------------------------- | ------------------------ | ------------------------------------ | ------------------- |
-| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 18 ADRs             |
+| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 23 ADRs             |
 | 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 9 endpoints         |
 | 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, Pi deploy, contributing, and wizard  | 7 guides            |
 | ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 5 features          |
@@ -80,14 +89,14 @@ graph TD
 ## Reference
 
 | Resource                                  | Description             |
-| ----------------------------------------- | ----------------------- | ---------------------------------------- |
+| ----------------------------------------- | ----------------------- |
 | 📚 [[docs/glossary                        | Glossary]]              | Key terms, aliases, and disambiguation   |
 | 🏷️ [[docs/tag-taxonomy                    | Tag Taxonomy]]          | Controlled vocabulary for KB tags        |
 | 🔧 [[docs/troubleshooting                 | Troubleshooting]]       | Common issues and solutions              |
 | 🗺️ [[docs/getting-started                 | Getting Started]]       | Map of Content for navigation            |
 | 📋 [[docs/common-tasks                    | Common Tasks]]          | Task-oriented quick reference            |
 | 🔑 [[docs/reference/environment-variables | Environment Variables]] | All env vars in one place                |
-| ⚙️ [[docs/reference/scripts               | Scripts Reference]]     | All npm commands                         |
+| ⚙️ [[docs/reference/scripts               | Scripts Reference]]     | All npm commands grouped by purpose      |
 | 💻 [[docs/reference/code-patterns         | Code Patterns]]         | Standard code patterns for all layers    |
 | ❌ [[docs/reference/error-codes           | Error Codes]]           | All API error responses and status codes |
 | 📝 [[docs/LOGGING.md                      | Logging]]               | Structured logging configuration         |
@@ -163,6 +172,9 @@ Watchman/
 ```
 
 ## Key Concepts
+
+> [!info] Startup Flows
+> Watchman supports three startup modes: **(A) macOS Desktop** — single-click installer with auto-spawned backend; **(B) Production Server** — native backend + frontend for Raspberry Pi or VPS; **(C) Development** — full dev environment with hot reload. See [[docs/adr/023-startup-flow-npm-script-overhaul|ADR-023]] for the unified npm script surface.
 
 > [!info] Desktop Distribution
 > Watchman ships as a standalone Electron desktop application (macOS dmg, Windows NSIS, Linux AppImage+deb) that auto-spawns the Node.js backend as a child process on a loopback port and serves the React frontend via a custom `watchman://` protocol. Each installation gets a unique master key for encrypting service credentials. See [[docs/adr/016-electron-desktop-wrapper|ADR-016]] and [[docs/guides/running-the-desktop-app|Desktop App Guide]].

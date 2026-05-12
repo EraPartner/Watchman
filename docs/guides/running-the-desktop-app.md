@@ -18,7 +18,7 @@ aliases: [desktop app, electron, desktop guide]
 ### Run in Development Mode
 
 ```bash
-npm run dev:desktop
+npm run electron:dev
 ```
 
 This command:
@@ -31,21 +31,21 @@ The app will reload on backend/frontend code changes.
 ### Run in Production Mode (Packaged)
 
 ```bash
-npm run start:desktop
+npm run electron:prod
 ```
 
-Starts the packaged Electron app (requires a prior `npm run package:desktop`).
+Builds the backend + frontend and launches the Electron app against the built artifacts.
 
 ### Build Distributable Package
 
 ```bash
-npm run package:desktop
+npm run dist
 ```
 
 This command:
 1. Builds frontend and backend
 2. Runs electron-builder for all platforms (macOS dmg, Windows nsis, Linux AppImage+deb)
-3. Outputs to `apps/desktop/dist/`
+3. Outputs to `apps/desktop/out/`
 
 ## Data and Configuration
 
@@ -80,7 +80,7 @@ All time-series metrics and service configuration:
 To develop the frontend independently or test the backend separately, skip the auto-spawned backend:
 
 ```bash
-WATCHMAN_SKIP_BACKEND_SPAWN=1 npm run dev:desktop
+WATCHMAN_SKIP_BACKEND_SPAWN=1 npm run electron:dev
 ```
 
 Then start your backend manually:
@@ -97,7 +97,7 @@ The frontend will connect to `http://localhost:3001` (or your configured backend
 If your system `node` is not in `PATH`, specify it explicitly:
 
 ```bash
-WATCHMAN_BACKEND_NODE=/usr/local/bin/node npm run dev:desktop
+WATCHMAN_BACKEND_NODE=/usr/local/bin/node npm run electron:dev
 ```
 
 ### Override Frontend Dev URL
@@ -105,7 +105,7 @@ WATCHMAN_BACKEND_NODE=/usr/local/bin/node npm run dev:desktop
 For testing a custom frontend server:
 
 ```bash
-WATCHMAN_DEV_URL=http://localhost:5173 npm run dev:desktop
+WATCHMAN_DEV_URL=http://localhost:5173 npm run electron:dev
 ```
 
 ## Building for Distribution
@@ -113,33 +113,33 @@ WATCHMAN_DEV_URL=http://localhost:5173 npm run dev:desktop
 ### macOS (arm64 + x64 Universal)
 
 ```bash
-npm run package:desktop
+npm run dist
 ```
 
 Outputs:
-- `apps/desktop/dist/Watchman-<version>.dmg` — Universal DMG installer
-- `apps/desktop/dist/mac/` — unsigned binaries
+- `apps/desktop/out/Watchman-<version>.dmg` — Universal DMG installer
+- `apps/desktop/out/mac/` — unsigned binaries
 
 ### Windows (NSIS)
 
 Requires running on Windows or cross-compile setup.
 
 ```bash
-npm run package:desktop
+npm run dist
 ```
 
 Outputs:
-- `apps/desktop/dist/Watchman Setup <version>.exe` — NSIS installer
+- `apps/desktop/out/Watchman Setup <version>.exe` — NSIS installer
 
 ### Linux (AppImage + deb)
 
 ```bash
-npm run package:desktop
+npm run dist
 ```
 
 Outputs:
-- `apps/desktop/dist/watchman-<version>.AppImage` — Portable AppImage
-- `apps/desktop/dist/watchman-<version>.deb` — Debian package
+- `apps/desktop/out/watchman-<version>.AppImage` — Portable AppImage
+- `apps/desktop/out/watchman-<version>.deb` — Debian package
 
 ## Environment Variables
 
