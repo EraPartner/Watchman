@@ -116,3 +116,23 @@ export type ApiRequestOptions = {
   body?: unknown;
   signal?: unknown;
 };
+
+/** Structured error carried on thrown Errors from API calls. The message
+ *  preserves the original "CODE: detail" string; `code` is best-effort parsed
+ *  from a leading `CODE:` prefix (e.g. `UNAUTHORIZED`, `VALIDATION`,
+ *  `UNAVAILABLE`). Defaults to `UNKNOWN` when no prefix is present. */
+export interface ApiErrorDetails {
+  code: string;
+  message: string;
+}
+
+const ERROR_CODE_RE = /^([A-Z][A-Z0-9_]{2,}):\s*(.+)$/;
+
+export function parseApiErrorCode(message: string | undefined | null): ApiErrorDetails {
+  const raw = (message ?? "").trim();
+  const match = ERROR_CODE_RE.exec(raw);
+  if (match && match[1] && match[2]) {
+    return { code: match[1], message: match[2] };
+  }
+  return { code: "UNKNOWN", message: raw };
+}

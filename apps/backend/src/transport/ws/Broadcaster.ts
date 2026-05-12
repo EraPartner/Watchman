@@ -25,6 +25,15 @@ export class Broadcaster {
       this.deps.bus.on('service.stats.updated', (p) => {
         this.broadcast({ type: 'service_update', scope: 'stats', id: p.id, kind: p.kind, instanceId: p.instanceId, at: p.at, ...(p.snapshot !== undefined ? { snapshot: p.snapshot } : {}) });
       }),
+      this.deps.bus.on('config:service.created', (p) => {
+        this.broadcast({ type: 'service_config_changed', kind: p.kind, instanceId: p.instanceId, action: 'created' });
+      }),
+      this.deps.bus.on('config:service.updated', (p) => {
+        this.broadcast({ type: 'service_config_changed', kind: p.kind, instanceId: p.instanceId, action: 'updated' });
+      }),
+      this.deps.bus.on('config:service.deleted', (p) => {
+        this.broadcast({ type: 'service_config_changed', kind: p.kind, instanceId: p.instanceId, action: 'deleted' });
+      }),
     );
   }
 

@@ -8,16 +8,18 @@ import { Skeleton } from "@/components/primitives/Skeleton";
 import { Sparkline } from "@/components/primitives/Sparkline";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/primitives/Tooltip";
 import { cn } from "@/lib/utils";
-import { useServiceHealth, useServiceStats } from "@/hooks/useServiceHealth";
+import { useServiceHealth, useServiceStats, StatsApiError } from "@/hooks/useServiceHealth";
 import { useServices } from "@/pages/Settings/useConfigQueries";
 import type { ServiceInstance } from "@/hooks/useServiceInstances";
 import { getRenderer, rendererTrackedMetrics } from "@/services/renderers";
 import type {
+  MetricSpec,
   ServiceKind,
   ServiceRenderer,
   Tone,
 } from "@/services/renderers/types";
 import { dotGet } from "@/services/renderers/formatters";
+import type { HealthSnapshot } from "@/services/apiClient/types";
 import { useMetricSeries } from "@/lib/metricHistory";
 import { tileVariants, type TileDensity, type TileSize } from "./tileVariants";
 
@@ -54,6 +56,47 @@ function fmtMs(ms?: number): string | undefined {
   if (ms < 1) return "<1 ms";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(2)} s`;
+}
+
+interface StatsErrorBadge {
+  label: string;
+  title: string;
+}
+
+const NEEDS_CONFIG_CODES = new Set(["UNAUTHORIZED", "VALIDATION"]);
+
+function computeStatsErrorBadge(
+  error: unknown,
+  data: unknown
+): StatsErrorBadge | undefined {
+  if (!error || data !== undefined) return undefined;
+  const code = error instanceof StatsApiError ? error.code : undefined;
+  const message = error instanceof Error ? error.message : String(error);
+  const needsConfig =
+    (code !== undefined && NEEDS_CONFIG_CODES.has(code)) ||
+    /credentials?/i.test(message);
+  return {
+    label: needsConfig ? "needs config" : "stats unavailable",
+    title: message,
+  };
+}
+
+/**
+ * Resolve a metric's value from the correct payload. Defaults to stats when
+ * the metric does not declare a source so existing renderers keep working.
+ * Dotted paths are supported for both stats (e.g. `mempool.bytes`) and the
+ * health snapshot (e.g. `host.pingMs`, `details.host`).
+ */
+function pickSource(
+  metric: Pick<MetricSpec, "key" | "source">,
+  stats: Record<string, unknown> | undefined,
+  health: HealthSnapshot | undefined,
+): unknown {
+  if (metric.source === "health") {
+    if (!health) return undefined;
+    return dotGet(health, metric.key);
+  }
+  return stats ? dotGet(stats, metric.key) : undefined;
 }
 
 export function ServiceTile({
@@ -138,7 +181,7 @@ export function ServiceTile({
 
   const secondary = renderer.summary.slice(1, 3);
   const primaryValue = primary
-    ? primary.format(dotGet(statsMetrics, primary.key))
+    ? primary.format(pickSource(primary, statsMetrics, healthRaw))
     : "—";
   const subtitle =
     renderer.subtitle?.({ stats: statsMetrics, health: healthShape, instance }) ??
@@ -157,6 +200,8 @@ export function ServiceTile({
     healthShape?.status === "offline" || (!!health.error && !healthRaw);
   const offlineMessage =
     healthShape?.error ?? health.error?.message ?? "Service unavailable";
+
+  const statsErrorBadge = computeStatsErrorBadge(stats.error, stats.data);
 
   const handleOpen = () => {
     if (!onOpenDetail) return;
@@ -278,6 +323,11 @@ export function ServiceTile({
               {healthShape.status}
             </Badge>
           ) : null}
+          {statsErrorBadge && !offline ? (
+            <Badge tone="warn" title={statsErrorBadge.title}>
+              {statsErrorBadge.label}
+            </Badge>
+          ) : null}
         </div>
       </header>
 
@@ -291,6 +341,10 @@ export function ServiceTile({
               {offlineMessage}
             </p>
           </div>
+        ) : statsErrorBadge ? (
+          <p className="text-fs-label text-[var(--text-lo)]">
+            configure to see metrics
+          </p>
         ) : (
           <>
             {loading ? (
@@ -320,7 +374,7 @@ export function ServiceTile({
                   <div key={m.key} className="min-w-0">
                     <dt className="truncate text-[var(--text-lo)]">{m.label}</dt>
                     <dd className="truncate font-mono tabular-nums text-[var(--text-hi)]">
-                      {m.format(dotGet(statsMetrics, m.key))}
+                      {m.format(pickSource(m, statsMetrics, healthRaw))}
                     </dd>
                   </div>
                 ))}

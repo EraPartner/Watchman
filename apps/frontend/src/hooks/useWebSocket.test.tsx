@@ -443,6 +443,38 @@ describe("useWebSocket", () => {
     });
   });
 
+  it("invalidates dashboard queries on service_config_changed", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<HookProbe onHook={() => {}} />);
+    });
+
+    const socket = FakeWebSocket.instances[0];
+    expect(socket).toBeTruthy();
+
+    socket.emitMessage({
+      type: "service_config_changed",
+      kind: "bitcoin",
+      instanceId: "main",
+      action: "created",
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["services", "instances"],
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["services", "health"],
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
   it("shows error toast when max reconnect attempts are reached", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

@@ -1,6 +1,6 @@
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
-import { dotGet, fmtRaw } from "./formatters";
+import { dotGet, fmtBool, fmtNumber, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
 
@@ -14,9 +14,9 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
   quickLinkLabel: "Open Alby Hub",
 
   summary: [
-    { key: "name", label: "Name", format: fmtRaw },
     { key: "version", label: "Version", format: fmtRaw },
-    { key: "reachable", label: "Reachable", format: fmtRaw },
+    { key: "appCount", label: "Apps", format: fmtNumber(0) },
+    { key: "connected", label: "Connected", format: fmtBool("yes", "no") },
   ],
 
   detail: [
@@ -31,14 +31,25 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
     {
       title: "Network",
       metrics: [
-        { key: "reachable", label: "Reachable", format: fmtRaw },
+        { key: "reachable", label: "Reachable", format: fmtBool("yes", "no"), source: 'health' },
         { key: "endpoint", label: "Endpoint", format: fmtRaw },
         { key: "url", label: "URL", format: fmtRaw },
       ],
     },
+    {
+      title: "NWC",
+      metrics: [
+        { key: "connected", label: "Connected", format: fmtBool("yes", "no") },
+        { key: "setupCompleted", label: "Setup complete", format: fmtBool("yes", "no") },
+        { key: "backendType", label: "Backend", format: fmtRaw },
+        { key: "appCount", label: "Apps", format: fmtNumber(0) },
+      ],
+    },
   ],
 
-  charts: [],
+  charts: [
+    { metric: "appCount", label: "Apps", kind: "line", format: fmtNumber(0) },
+  ],
 
   tone: ({ stats, health }) => {
     if (health?.status === "offline") return "crit";
