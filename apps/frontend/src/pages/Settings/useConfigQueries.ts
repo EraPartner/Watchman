@@ -10,6 +10,7 @@ import {
   type ExportBundle,
   type ImportResult,
 } from "../../services/configApi";
+import { queryKeys } from "@/lib/queryKeys";
 
 const KEYS = {
   setup: ["config", "setup"] as const,
@@ -18,6 +19,14 @@ const KEYS = {
   service: (id: string) => ["config", "services", id] as const,
   audit: (limit: number) => ["config", "audit", limit] as const,
 };
+
+// Settings mutations live under ["config", ...] keys, but the dashboard reads
+// from ["services","instances"] and ["services","health"] — invalidate both
+// families so tiles appear/update/disappear without a manual refresh.
+function invalidateDashboardQueries(qc: ReturnType<typeof useQueryClient>): void {
+  qc.invalidateQueries({ queryKey: queryKeys.servicesInstances() });
+  qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
+}
 
 export function useSetupStatus() {
   return useQuery<SetupStatus>({
@@ -64,6 +73,7 @@ export function useCreateService() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      invalidateDashboardQueries(qc);
     },
   });
 }
@@ -82,6 +92,7 @@ export function useUpdateService() {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: KEYS.service(id) });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      invalidateDashboardQueries(qc);
     },
   });
 }
@@ -93,6 +104,7 @@ export function useDeleteService() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      invalidateDashboardQueries(qc);
     },
   });
 }
@@ -116,6 +128,7 @@ export function useImportConfig() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      invalidateDashboardQueries(qc);
     },
   });
 }

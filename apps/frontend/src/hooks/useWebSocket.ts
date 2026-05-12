@@ -7,12 +7,20 @@ import { getWebSocketUrl } from "../lib/backendUrl";
 import { publishWsEvent } from "../lib/wsEventBus";
 
 interface WebSocketMessage {
-  type: "connection" | "service_update" | "alert" | "metrics";
+  type:
+    | "connection"
+    | "service_update"
+    | "alert"
+    | "metrics"
+    | "service_config_changed";
   service?: string;
   data?: unknown;
   level?: "info" | "warning" | "error";
   message?: string;
   timestamp: string;
+  kind?: string;
+  instanceId?: string;
+  action?: "created" | "updated" | "deleted";
 }
 
 // Global singleton to prevent multiple WebSocket instances
@@ -209,6 +217,20 @@ export const useWebSocket = (url?: string) => {
             scheduleInvalidationForKey("metrics");
             break;
 
+          case "service_config_changed":
+            logger.debug("[WEBSOCKET] Service config changed", {
+              kind: message.kind,
+              instanceId: message.instanceId,
+              action: message.action,
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.servicesInstances(),
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.servicesHealth(),
+            });
+            break;
+
           default:
             logger.warn("[WEBSOCKET] Unknown message type", { message });
         }
@@ -216,7 +238,7 @@ export const useWebSocket = (url?: string) => {
         logger.error("[WEBSOCKET] Error parsing message", error);
       }
     },
-    [scheduleInvalidationForKey]
+    [scheduleInvalidationForKey, queryClient]
   );
 
   const scheduleReconnect = useCallback(() => {
