@@ -3,6 +3,7 @@ import { DuckDBBlobValue, type DuckDBConnection } from '@duckdb/node-api';
 import type { DuckDbPool } from '../../infra/db/DuckDbPool.js';
 import { toTs } from '../../infra/db/DuckDbPool.js';
 import type { EventBus } from '../../core/eventBus.js';
+import { ValidationError } from '../../core/errors.js';
 import {
   KIND_META,
   ServiceInstanceSchema,
@@ -12,6 +13,25 @@ import {
 } from '../schemas/index.js';
 import type { ServiceInstance } from '../services.js';
 import type { Encryptor } from './encryption.js';
+
+const INSTANCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const INSTANCE_ID_MAX_LENGTH = 64;
+
+function assertValidInstanceId(instanceId: string): void {
+  if (instanceId.length === 0) {
+    throw new ValidationError('instance id is required');
+  }
+  if (instanceId.length > INSTANCE_ID_MAX_LENGTH) {
+    throw new ValidationError(
+      `instance id '${instanceId}' exceeds max length ${INSTANCE_ID_MAX_LENGTH}`,
+    );
+  }
+  if (!INSTANCE_ID_PATTERN.test(instanceId)) {
+    throw new ValidationError(
+      `instance id '${instanceId}' must match ${INSTANCE_ID_PATTERN.source}`,
+    );
+  }
+}
 
 export interface StoredService {
   id: string;
@@ -36,7 +56,7 @@ export interface RedactedService {
 export interface AuditEntry {
   id: number;
   ts: Date;
-  action: 'create' | 'update' | 'delete' | 'import' | 'export';
+  action: 'create' | 'update' | 'delete' | 'import' | 'export' | 'rename';
   targetKind: string | null;
   targetId: string | null;
   diff: unknown;
@@ -244,13 +264,16 @@ export function createConfigStore(
       const config = validate(input);
       const parts = extractStorable(config);
       if (!KIND_META[parts.kind]) throw new Error(`Unsupported kind: ${parts.kind}`);
+      assertValidInstanceId(parts.instanceId);
       const stored = await withConn(async (c): Promise<StoredService> => {
         const dup = await c.runAndReadAll(
           `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
           [parts.kind, parts.instanceId],
         );
         if (dup.getRowObjects().length > 0) {
-          throw new Error(`Instance already exists: ${parts.kind}/${parts.instanceId}`);
+          throw new ValidationError(
+            `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`,
+          );
         }
         const id = randomUUID();
         const now = new Date();
@@ -299,7 +322,21 @@ export function createConfigStore(
         throw new Error(`Cannot change kind on update (${existing.kind} -> ${config.kind})`);
       }
       const parts = extractStorable(config);
+      assertValidInstanceId(parts.instanceId);
+      const isRename = parts.instanceId !== existing.instanceId;
       const stored = await withConn(async (c): Promise<StoredService> => {
+        if (isRename) {
+          const dup = await c.runAndReadAll(
+            `SELECT id FROM app_service_instance
+             WHERE kind = ? AND instance_id = ? AND id <> ?`,
+            [parts.kind, parts.instanceId, id],
+          );
+          if (dup.getRowObjects().length > 0) {
+            throw new ValidationError(
+              `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`,
+            );
+          }
+        }
         const now = new Date();
         const secretCipher = Object.keys(parts.secretPart).length > 0
           ? new DuckDBBlobValue(encryptor.encryptJson(parts.secretPart))
@@ -329,6 +366,16 @@ export function createConfigStore(
         );
         const diff = { before: redactConfig(existing.kind, existing.config as unknown as Record<string, unknown>), after: redactConfig(parts.kind, config as unknown as Record<string, unknown>) };
         await insertAudit(c, 'update', parts.kind, id, diff, actor ?? null);
+        if (isRename) {
+          await insertAudit(
+            c,
+            'rename',
+            parts.kind,
+            id,
+            { from: existing.instanceId, to: parts.instanceId },
+            actor ?? null,
+          );
+        }
         return {
           id,
           kind: parts.kind,
@@ -340,6 +387,14 @@ export function createConfigStore(
         };
       });
       bus.emit('config:service.updated', { id, kind: parts.kind, instanceId: parts.instanceId });
+      if (isRename) {
+        bus.emit('config:service.renamed', {
+          id,
+          kind: parts.kind,
+          oldInstanceId: existing.instanceId,
+          newInstanceId: parts.instanceId,
+        });
+      }
       return stored;
     },
 

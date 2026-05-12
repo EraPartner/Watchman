@@ -21,6 +21,12 @@ export interface EventMap {
   'config:service.created': { id: string; kind: string; instanceId: string };
   'config:service.updated': { id: string; kind: string; instanceId: string };
   'config:service.deleted': { id: string; kind: string; instanceId: string };
+  'config:service.renamed': {
+    id: string;
+    kind: string;
+    oldInstanceId: string;
+    newInstanceId: string;
+  };
   'cache:revalidate.failed': { key: string; error: string };
 }
 
