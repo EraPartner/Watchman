@@ -24,15 +24,17 @@ export type Tone = "neutral" | "ok" | "warn" | "crit";
 
 export type MetricFormatter = (value: unknown) => string;
 
+export type MetricSource = "stats" | "health";
+
 export interface MetricSpec {
-  /** Dot-path into stats (e.g. `mempool.bytes`). */
+  /** Dot-path into the chosen source (e.g. `mempool.bytes`, `host.pingMs`). */
   key: string;
   label: string;
   format: MetricFormatter;
   unit?: string;
   hint?: string;
   /** Which snapshot the metric should be read from. Defaults to `stats`. */
-  source?: 'stats' | 'health';
+  source?: MetricSource;
 }
 
 export interface MetricGroup {
