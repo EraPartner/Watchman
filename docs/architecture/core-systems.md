@@ -54,6 +54,12 @@ interface EventMap {
     id: string;
     kind: string;
   };
+  'config:service.renamed': {
+    id: string;
+    kind: string;
+    oldInstanceId: string;
+    newInstanceId: string;
+  };
   'cache:revalidate.failed': {
     key: string;
     error: string;
@@ -105,6 +111,7 @@ const safeOnError = (err: unknown): void => {
 | `config:service.created`      | [[apps/backend/src/application/ServiceLifecycle.ts]]         | New service instance created                            |
 | `config:service.updated`      | [[apps/backend/src/application/ServiceLifecycle.ts]]         | Service config updated                                  |
 | `config:service.deleted`      | [[apps/backend/src/application/ServiceLifecycle.ts]]         | Service deleted                                         |
+| `config:service.renamed`      | [[apps/backend/src/config/store/ConfigStore.ts]]             | Service instanceId renamed (in addition to `updated`)   |
 | `cache:revalidate.failed`     | [[apps/backend/src/infra/cache/swr.ts]]                      | SWR stale-branch revalidation fails (optional EventBus) |
 
 ### Event Subscribers

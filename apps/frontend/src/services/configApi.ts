@@ -61,7 +61,7 @@ export interface TestConnectionResult {
 export interface AuditEntry {
   id: number;
   ts: string;
-  action: "create" | "update" | "delete" | "import" | "export";
+  action: "create" | "update" | "delete" | "import" | "export" | "rename";
   targetKind: string;
   targetId: string;
   diff: Record<string, unknown>;

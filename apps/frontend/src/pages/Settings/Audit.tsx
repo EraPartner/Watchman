@@ -7,6 +7,7 @@ const ACTION_TONE: Record<string, string> = {
   delete: "var(--crit)",
   import: "var(--warn)",
   export: "var(--text-md)",
+  rename: "var(--accent)",
 };
 
 export default function Audit() {

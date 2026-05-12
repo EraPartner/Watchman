@@ -30,6 +30,19 @@ const COMMON_FIELD_NAMES = new Set([
 ]);
 const DEFAULT_CACHE_TTL_MS = 10_000;
 const DEFAULT_TIMEOUT_MS = 5_000;
+const INSTANCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const INSTANCE_ID_MAX_LENGTH = 64;
+
+function validateInstanceId(value: string): string | null {
+  if (value.length === 0) return "Instance id is required";
+  if (value.length > INSTANCE_ID_MAX_LENGTH) {
+    return `Max ${INSTANCE_ID_MAX_LENGTH} characters`;
+  }
+  if (!INSTANCE_ID_PATTERN.test(value)) {
+    return "Use lowercase letters, digits, and dashes; must start with a letter or digit";
+  }
+  return null;
+}
 
 function defaultFor(f: FieldMeta): FormValue {
   if (f.default !== undefined && f.default !== null) {
@@ -106,6 +119,11 @@ export default function ServiceEditor({
     [kindSchema]
   );
 
+  const trimmedInstanceId = instanceId.trim();
+  const instanceIdError = validateInstanceId(trimmedInstanceId);
+  const isRenaming =
+    !!existing && existing.instanceId !== trimmedInstanceId && !instanceIdError;
+
   useEffect(() => {
     if (kindSchema) {
       setValues(initialValues(kindSchema, existing));
@@ -133,7 +151,7 @@ export default function ServiceEditor({
     e.preventDefault();
     setError(null);
     if (!selectedKind) return setError("Pick a service kind");
-    if (!instanceId.trim()) return setError("Instance id required");
+    if (instanceIdError) return setError(instanceIdError);
 
     const config: Record<string, unknown> = {};
     for (const f of renderedFields) {
@@ -147,7 +165,7 @@ export default function ServiceEditor({
     try {
       await onSubmit({
         kind: selectedKind,
-        instanceId: instanceId.trim(),
+        instanceId: trimmedInstanceId,
         enabled,
         cacheTtlMs,
         timeoutMs,
@@ -205,12 +223,24 @@ export default function ServiceEditor({
           className="mt-1 block w-full rounded border bg-transparent px-3 py-2"
           value={instanceId}
           onChange={(e) => setInstanceId(e.target.value)}
-          disabled={!!existing}
           placeholder="main"
+          aria-invalid={instanceIdError !== null}
+          aria-describedby="instance-id-help"
         />
-        <span className="text-xs text-muted-foreground">
-          Unique name for this instance. Default "main".
-        </span>
+        {instanceIdError ? (
+          <span
+            id="instance-id-help"
+            className="text-xs text-red-500"
+            role="alert"
+          >
+            {instanceIdError}
+          </span>
+        ) : (
+          <span id="instance-id-help" className="text-xs text-muted-foreground">
+            Unique name for this instance. Lowercase letters, digits, dashes;
+            up to {INSTANCE_ID_MAX_LENGTH} characters. Default "main".
+          </span>
+        )}
       </label>
 
       <label className="flex items-center gap-2 text-sm">
@@ -277,6 +307,16 @@ export default function ServiceEditor({
       {testResult && <p className="text-sm">{testResult}</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
 
+      {isRenaming && (
+        <p
+          className="text-xs text-[var(--warn,#b58900)]"
+          role="status"
+          data-testid="rename-hint"
+        >
+          Renaming will reset the in-memory metric history for this instance.
+        </p>
+      )}
+
       <div className="flex gap-2 justify-end">
         {existing && (
           <Button type="button" variant="ghost" onClick={handleTest}>
@@ -288,7 +328,11 @@ export default function ServiceEditor({
             Cancel
           </Button>
         )}
-        <Button type="submit" variant="accent" disabled={submitting}>
+        <Button
+          type="submit"
+          variant="accent"
+          disabled={submitting || instanceIdError !== null}
+        >
           {submitting ? "Saving…" : "Save"}
         </Button>
       </div>

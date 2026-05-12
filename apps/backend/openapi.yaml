@@ -348,7 +348,13 @@ paths:
         '404': { $ref: '#/components/responses/DomainError' }
     put:
       tags: [config]
-      summary: Update service instance. Secret fields sent as "***" preserve existing value.
+      summary: |
+        Update service instance. Secret fields sent as "***" preserve existing value.
+        The `instanceId` may be changed; renames are validated against
+        `^[a-z0-9][a-z0-9-]*$` (max 64 chars), checked for uniqueness within the
+        same kind, recorded as a dedicated `rename` audit row, and broadcast as
+        a `config:service.renamed` event. Returns 400 on a conflicting or
+        malformed instanceId.
       requestBody:
         required: true
         content:
