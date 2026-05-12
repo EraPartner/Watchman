@@ -286,7 +286,7 @@ export function createConfigStore(
           updatedAt: now,
         };
       });
-      bus.emit('config:service.created', { id: stored.id, kind: stored.kind });
+      bus.emit('config:service.created', { id: stored.id, kind: stored.kind, instanceId: stored.instanceId });
       return stored;
     },
 
@@ -339,7 +339,7 @@ export function createConfigStore(
           updatedAt: now,
         };
       });
-      bus.emit('config:service.updated', { id, kind: parts.kind });
+      bus.emit('config:service.updated', { id, kind: parts.kind, instanceId: parts.instanceId });
       return stored;
     },
 
@@ -350,7 +350,7 @@ export function createConfigStore(
         await c.run(`DELETE FROM app_service_instance WHERE id = ?`, [id]);
         await insertAudit(c, 'delete', existing.kind, id, { kind: existing.kind, instanceId: existing.instanceId }, actor ?? null);
       });
-      bus.emit('config:service.deleted', { id, kind: existing.kind });
+      bus.emit('config:service.deleted', { id, kind: existing.kind, instanceId: existing.instanceId });
     },
 
     redact(svc: StoredService): RedactedService {

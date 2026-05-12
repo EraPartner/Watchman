@@ -18,9 +18,9 @@ export interface EventMap {
     snapshot?: StatsSnapshot;
   };
   'service.error': { id: string; error: unknown; at: number };
-  'config:service.created': { id: string; kind: string };
-  'config:service.updated': { id: string; kind: string };
-  'config:service.deleted': { id: string; kind: string };
+  'config:service.created': { id: string; kind: string; instanceId: string };
+  'config:service.updated': { id: string; kind: string; instanceId: string };
+  'config:service.deleted': { id: string; kind: string; instanceId: string };
   'cache:revalidate.failed': { key: string; error: string };
 }
 

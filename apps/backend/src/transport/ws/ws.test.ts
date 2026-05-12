@@ -301,6 +301,34 @@ describe('Broadcaster', () => {
     bc.stop();
   });
 
+  it('broadcasts service_config_changed for created/updated/deleted config events', () => {
+    const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
+    const a = fakeWs();
+    cm.add(a, 'a', { username: 'u' });
+    const bus = createEventBus();
+    const bc = new Broadcaster({ manager: cm, bus, now: () => 0 });
+    bc.start();
+
+    bus.emit('config:service.created', { id: 'stored-1', kind: 'bitcoin', instanceId: 'main' });
+    bus.emit('config:service.updated', { id: 'stored-1', kind: 'bitcoin', instanceId: 'main2' });
+    bus.emit('config:service.deleted', { id: 'stored-1', kind: 'bitcoin', instanceId: 'main2' });
+
+    expect(a.sent.length).toBe(3);
+    expect(JSON.parse(a.sent[0]!)).toMatchObject({
+      type: 'service_config_changed', kind: 'bitcoin', instanceId: 'main', action: 'created',
+    });
+    expect(JSON.parse(a.sent[1]!)).toMatchObject({
+      type: 'service_config_changed', kind: 'bitcoin', instanceId: 'main2', action: 'updated',
+    });
+    expect(JSON.parse(a.sent[2]!)).toMatchObject({
+      type: 'service_config_changed', kind: 'bitcoin', instanceId: 'main2', action: 'deleted',
+    });
+
+    bc.stop();
+    bus.emit('config:service.created', { id: 'x', kind: 'tor', instanceId: 'x' });
+    expect(a.sent.length).toBe(3);
+  });
+
   it('welcome sends once', () => {
     const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
     const a = fakeWs();
