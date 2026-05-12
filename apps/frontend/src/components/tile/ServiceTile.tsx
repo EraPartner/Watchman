@@ -13,11 +13,13 @@ import { useServices } from "@/pages/Settings/useConfigQueries";
 import type { ServiceInstance } from "@/hooks/useServiceInstances";
 import { getRenderer, rendererTrackedMetrics } from "@/services/renderers";
 import type {
+  MetricSpec,
   ServiceKind,
   ServiceRenderer,
   Tone,
 } from "@/services/renderers/types";
 import { dotGet } from "@/services/renderers/formatters";
+import type { HealthSnapshot } from "@/services/apiClient/types";
 import { useMetricSeries } from "@/lib/metricHistory";
 import { tileVariants, type TileDensity, type TileSize } from "./tileVariants";
 
@@ -54,6 +56,24 @@ function fmtMs(ms?: number): string | undefined {
   if (ms < 1) return "<1 ms";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(2)} s`;
+}
+
+/**
+ * Resolve a metric's value from the correct payload. Defaults to stats when
+ * the metric does not declare a source so existing renderers keep working.
+ * Dotted paths are supported for both stats (e.g. `mempool.bytes`) and the
+ * health snapshot (e.g. `host.pingMs`, `details.host`).
+ */
+function pickSource(
+  metric: Pick<MetricSpec, "key" | "source">,
+  stats: Record<string, unknown> | undefined,
+  health: HealthSnapshot | undefined,
+): unknown {
+  if (metric.source === "health") {
+    if (!health) return undefined;
+    return dotGet(health, metric.key);
+  }
+  return stats ? dotGet(stats, metric.key) : undefined;
 }
 
 export function ServiceTile({
@@ -138,7 +158,7 @@ export function ServiceTile({
 
   const secondary = renderer.summary.slice(1, 3);
   const primaryValue = primary
-    ? primary.format(dotGet(statsMetrics, primary.key))
+    ? primary.format(pickSource(primary, statsMetrics, healthRaw))
     : "—";
   const subtitle =
     renderer.subtitle?.({ stats: statsMetrics, health: healthShape, instance }) ??
@@ -320,7 +340,7 @@ export function ServiceTile({
                   <div key={m.key} className="min-w-0">
                     <dt className="truncate text-[var(--text-lo)]">{m.label}</dt>
                     <dd className="truncate font-mono tabular-nums text-[var(--text-hi)]">
-                      {m.format(dotGet(statsMetrics, m.key))}
+                      {m.format(pickSource(m, statsMetrics, healthRaw))}
                     </dd>
                   </div>
                 ))}
