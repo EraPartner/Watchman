@@ -1,0 +1,224 @@
+name: Release
+
+# Triggered when a version tag is pushed, e.g. v1.2.3
+# Workflow:
+#   0. Verify: version tag matches root + apps/desktop package.json + full quality gate
+#   1. Build mac .app + .dmg via electron-builder (arm64 + x64)
+#   2. Create a GitHub Release with all artifacts + SHA256 checksums
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.2.3)"
+        required: true
+
+# Deny all permissions by default; each job opts in to only what it needs.
+permissions: {}
+
+# Serialize releases for the same ref. Do NOT cancel in-progress —
+# tag publishes are not safe to abort mid-upload.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 0. Verify: version tag == package.json versions + full quality gate
+  # ─────────────────────────────────────────────────────────────────────────────
+  verify:
+    name: Verify Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check version tag matches package.json
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG_VERSION="${TAG#v}"
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          DESKTOP_VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          echo "Tag version              : $TAG_VERSION"
+          echo "Root package.json        : $ROOT_VERSION"
+          echo "Desktop package.json     : $DESKTOP_VERSION"
+          if [ "$TAG_VERSION" != "$ROOT_VERSION" ]; then
+            echo "ERROR: git tag ($TAG_VERSION) does not match root package.json version ($ROOT_VERSION)"
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$DESKTOP_VERSION" ]; then
+            echo "ERROR: git tag ($TAG_VERSION) does not match apps/desktop/package.json version ($DESKTOP_VERSION)"
+            exit 1
+          fi
+          if [ "$ROOT_VERSION" != "$DESKTOP_VERSION" ]; then
+            echo "ERROR: root package.json ($ROOT_VERSION) and apps/desktop/package.json ($DESKTOP_VERSION) are out of sync"
+            exit 1
+          fi
+          echo "Version check passed."
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Lint frontend
+        run: npm run lint:frontend
+
+      - name: Lint backend
+        run: npm run lint:backend
+
+      - name: Type-check backend
+        run: npm run typecheck --workspace=apps/backend
+
+      - name: Type-check frontend
+        run: npm run typecheck --workspace=apps/frontend
+
+      - name: Type-check desktop
+        working-directory: apps/desktop
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Build backend
+        run: npm run build:backend
+
+      - name: Build frontend
+        run: npm run build:frontend
+        env:
+          CI: "1"
+
+      - name: Run backend tests
+        working-directory: apps/backend
+        run: npx vitest run
+
+      - name: Run frontend tests
+        working-directory: apps/frontend
+        run: npx vitest run
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 1. Build mac .app + .dmg via electron-builder (arm64 + x64)
+  #    Ad-hoc signed (CSC_IDENTITY_AUTO_DISCOVERY=false) so the binaries load
+  #    on macOS without an Apple Developer ID. Users still see Gatekeeper on
+  #    first run and need right-click → Open once. README explains this.
+  # ─────────────────────────────────────────────────────────────────────────────
+  package-mac:
+    name: Build mac .app + DMG
+    needs: [verify]
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      # electron-builder's extraResources copies apps/backend/node_modules into
+      # the bundled app. npm workspaces hoist deps to the root, so we install
+      # backend deps in-place (production only) to materialize that directory.
+      - name: Install backend runtime deps in-tree (for electron-builder bundling)
+        run: npm install --omit=dev --no-save --workspaces=false
+        working-directory: apps/backend
+
+      - name: Build backend
+        run: npm run build:backend
+
+      - name: Build frontend
+        run: npm run build:frontend
+        env:
+          CI: "1"
+
+      - name: Build Electron app (.dmg, arm64 + x64)
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+          npx tsc -p tsconfig.json
+          npx electron-builder --mac --publish never
+
+      - name: Stage release artifacts
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="${TAG#v}"
+          OUT="$GITHUB_WORKSPACE/dist/release"
+          mkdir -p "$OUT"
+          # electron-builder names dmgs like "Watchman-<ver>-arm64.dmg" /
+          # "Watchman-<ver>.dmg" (x64). Copy every dmg under apps/desktop/out
+          # and let GH Release attach them as-is.
+          shopt -s nullglob
+          for f in apps/desktop/out/*.dmg; do
+            cp "$f" "$OUT/"
+          done
+          ls -la "$OUT"
+
+      - name: Compute SHA256 checksums
+        run: |
+          set -euo pipefail
+          cd dist/release
+          for f in *.dmg; do
+            shasum -a 256 "$f" > "${f}.sha256"
+            echo "--- ${f} ---"
+            cat "${f}.sha256"
+          done
+
+      - name: Upload mac release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: watchman-mac-release
+          path: dist/release/
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 2. Create GitHub Release and attach artifacts
+  # ─────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [package-mac]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write  # required to create releases and upload assets
+    steps:
+      - name: Download mac release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: watchman-mac-release
+          path: dist/mac
+
+      - name: List downloaded artifacts
+        run: find dist/ -type f | sort
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: "Watchman ${{ github.event.inputs.tag || github.ref_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/mac/*.dmg
+            dist/mac/*.sha256

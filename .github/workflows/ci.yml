@@ -1,0 +1,252 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+  pull_request:
+    branches: ["main"]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Deny all permissions by default; each job opts in to only what it needs.
+permissions: {}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Secrets scan — gitleaks on push/PR diff range
+  # ─────────────────────────────────────────────────────────────────────────────
+  secrets-scan:
+    name: Secrets Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Deps audit — npm audit fails on HIGH or CRITICAL vulnerabilities
+  # ─────────────────────────────────────────────────────────────────────────────
+  deps-audit:
+    name: Deps Audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Lint — frontend ESLint + backend ESLint
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint:frontend
+
+      - name: Lint backend
+        run: npm run lint:backend
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Type-check — TypeScript strict check on frontend + backend + desktop
+  # ─────────────────────────────────────────────────────────────────────────────
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check backend
+        run: npm run typecheck --workspace=apps/backend
+
+      - name: Type-check frontend
+        run: npm run typecheck --workspace=apps/frontend
+
+      - name: Type-check desktop (Electron shell)
+        working-directory: apps/desktop
+        run: npx tsc --noEmit -p tsconfig.json
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build — verify both production bundles compile
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build backend
+        run: npm run build:backend
+
+      - name: Build frontend
+        run: npm run build:frontend
+        env:
+          CI: "1"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Test — backend (Vitest) + frontend (Vitest + coverage gate)
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-backend:
+    name: Test (Backend)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backend tests with coverage
+        working-directory: apps/backend
+        run: |
+          npx vitest run --coverage \
+            --coverage.reporter=text \
+            --coverage.reporter=json \
+            --coverage.reporter=json-summary
+
+      - name: Report backend coverage on PR
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c # v2
+        with:
+          name: backend
+          working-directory: apps/backend
+          json-summary-path: apps/backend/coverage/coverage-summary.json
+          json-final-path: apps/backend/coverage/coverage-final.json
+
+  test-frontend:
+    name: Test (Frontend)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests with coverage
+        working-directory: apps/frontend
+        run: |
+          npx vitest run --coverage \
+            --coverage.reporter=text \
+            --coverage.reporter=html \
+            --coverage.reporter=json \
+            --coverage.reporter=json-summary
+
+      - name: Report frontend coverage on PR
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c # v2
+        with:
+          name: frontend
+          working-directory: apps/frontend
+          vite-config-path: apps/frontend/vite.config.ts
+          json-summary-path: apps/frontend/coverage/coverage-summary.json
+          json-final-path: apps/frontend/coverage/coverage-final.json
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # CI Complete — aggregates every gate so branch protection has a single
+  # required status check covering the full pipeline.
+  # Set "CI Complete" as the required check in branch protection settings.
+  # ─────────────────────────────────────────────────────────────────────────────
+  ci-complete:
+    name: CI Complete
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs:
+      - secrets-scan
+      - deps-audit
+      - lint
+      - typecheck
+      - build
+      - test-backend
+      - test-frontend
+    if: always()
+    steps:
+      - name: Check all gates passed
+        run: |
+          results='${{ toJson(needs.*.result) }}'
+          if echo "$results" | grep -qE '"(failure|cancelled)"'; then
+            echo "CI failed. Job results: $results"
+            exit 1
+          fi
+          echo "All CI gates passed."

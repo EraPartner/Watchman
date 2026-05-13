@@ -5,7 +5,21 @@
 
 version: 2
 updates:
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # Root workspace manifest — covers backend/frontend/desktop through npm workspaces.
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      dev-deps:
+        dependency-type: "development"
+      prod-deps:
+        dependency-type: "production"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
