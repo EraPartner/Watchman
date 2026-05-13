@@ -76,10 +76,10 @@ export function createSshExecutor(): SshExecutor {
           host: req.host,
           port: req.port,
           username: req.user,
-          privateKey,
-          passphrase: req.passphrase || undefined,
-          password: req.password || undefined,
           readyTimeout: req.timeoutMs,
+          ...(privateKey ? { privateKey } : {}),
+          ...(req.passphrase ? { passphrase: req.passphrase } : {}),
+          ...(req.password ? { password: req.password } : {}),
         });
       });
     },

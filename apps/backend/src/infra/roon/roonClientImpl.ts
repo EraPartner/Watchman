@@ -3,6 +3,14 @@ import type { RoonConnectFn, RoonConnectOptions, RoonHandle, RoonZone } from './
 
 const _require = createRequire(import.meta.url);
 
+// The Roon SDK's transport-websocket.js polyfills `global.WebSocket = require('ws')`
+// only when WebSocket is undefined. Node 22+ exposes a native WHATWG `WebSocket`
+// (no `.on('pong')`, no `.terminate()`, no `.ping()`), so the polyfill is skipped
+// and the SDK throws `this.ws.on is not a function`. Force the global to `ws` —
+// it's the long-standing Node WS lib and is a superset of the WHATWG API, so
+// other call sites that use `addEventListener` keep working.
+(globalThis as { WebSocket?: unknown }).WebSocket = _require('ws');
+
 // ─── Minimal types for @roonlabs/node-roon-api (no @types package) ───────────
 
 interface RoonApiOptions {

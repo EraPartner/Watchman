@@ -35,6 +35,10 @@ login_response.json
 # Runtime data
 .tor-data/
 
+# Runtime config (contains auth tokens — never commit)
+config.json
+apps/*/config.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

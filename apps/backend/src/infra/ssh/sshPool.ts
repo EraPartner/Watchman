@@ -28,9 +28,9 @@ interface ConnectArgs {
   host: string;
   port: number;
   username: string;
-  privateKeyPath?: string;
-  passphrase?: string;
-  password?: string;
+  privateKeyPath: string | undefined;
+  passphrase: string | undefined;
+  password: string | undefined;
   timeoutMs: number;
 }
 
@@ -114,10 +114,10 @@ export function createSshPool(): SshPool {
       host: connectArgs.host,
       port: connectArgs.port,
       username: connectArgs.username,
-      privateKey,
-      passphrase: connectArgs.passphrase || undefined,
-      password: connectArgs.password || undefined,
       readyTimeout: connectArgs.timeoutMs,
+      ...(privateKey ? { privateKey } : {}),
+      ...(connectArgs.passphrase ? { passphrase: connectArgs.passphrase } : {}),
+      ...(connectArgs.password ? { password: connectArgs.password } : {}),
     });
   }
 

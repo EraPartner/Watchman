@@ -29,8 +29,16 @@ export interface HealthSnapshot {
   service?: ServiceHealth;
 }
 
+export type StatsMetricValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ReadonlyArray<unknown>
+  | { readonly [key: string]: unknown };
+
 export interface StatsSnapshot {
-  metrics: Readonly<Record<string, number | string | boolean | null>>;
+  metrics: Readonly<Record<string, StatsMetricValue>>;
   at: number;
 }
 

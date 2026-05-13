@@ -311,7 +311,7 @@ function parseProcCpuinfo(out: string): CpuInfoResult {
   const hwMatch = out.match(/^Hardware\s*:\s*(.+)$/im);
   const modelMatch = out.match(/^Model\s*:\s*(.+)$/im);
   const processor = hwMatch && hwMatch[1] ? hwMatch[1].trim() : null;
-  const isRpi = modelMatch ? /raspberry pi/i.test(modelMatch[1]) : false;
+  const isRpi = modelMatch && modelMatch[1] ? /raspberry pi/i.test(modelMatch[1]) : false;
   return { processor, isRpi };
 }
 

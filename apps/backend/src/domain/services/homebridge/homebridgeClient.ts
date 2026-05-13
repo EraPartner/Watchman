@@ -91,8 +91,8 @@ export function createHomebridgeClient(deps: HomebridgeClientDeps): HomebridgeCl
   };
 
   const jwtHttp = createJwtClient(innerHttp, {
-    initialToken: deps.config.authToken || undefined,
     refresh: loginFn,
+    ...(deps.config.authToken ? { initialToken: deps.config.authToken } : {}),
   });
 
   const attempt = async <T>(path: string, signal: AbortSignal): Promise<T> => {

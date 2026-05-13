@@ -59,7 +59,7 @@ export class TorService extends BaseService {
   private readonly http: HttpClient;
   private readonly pinger: PingProber;
   private readonly torControl: TorControlClient;
-  private readonly eventSubFactory?: TorEventSubscriptionFactory;
+  private readonly eventSubFactory: TorEventSubscriptionFactory | undefined;
   private readonly relayNickname: string;
   private readonly onionooBaseUrl: string;
   private readonly host: string;
@@ -70,8 +70,8 @@ export class TorService extends BaseService {
   private readonly timeoutMs: number;
   private readonly pingCount: number;
   private readonly now: () => number;
-  private subscription?: TorEventSubscription;
-  private subAbort?: AbortController;
+  private subscription: TorEventSubscription | undefined;
+  private subAbort: AbortController | undefined;
   private bwRead = 0;
   private bwWritten = 0;
   /** Cumulative traffic/read from last poll; -1 = no baseline yet */

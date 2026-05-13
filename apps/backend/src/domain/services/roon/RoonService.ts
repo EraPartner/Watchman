@@ -27,7 +27,7 @@ export class RoonService extends BaseService {
   private readonly pinger: PingProber;
   private readonly tcp: TcpProber;
   private readonly now: () => number;
-  private readonly roonConnect?: RoonConnectFn;
+  private readonly roonConnect: RoonConnectFn | undefined;
   private handle: RoonHandle | null = null;
 
   constructor(deps: RoonDeps) {
