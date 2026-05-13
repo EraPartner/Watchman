@@ -22,6 +22,12 @@ export default defineConfig({
       reportsDirectory: "coverage",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.test.{ts,tsx,js}", "src/main.tsx"],
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        functions: 65,
+        branches: 75,
+      },
     },
     projects: [
       {
@@ -39,6 +45,9 @@ export default defineConfig({
           name: "jsdom",
           include: ["src/**/*.test.tsx"],
           environment: "jsdom",
+          environmentOptions: {
+            jsdom: { url: "http://localhost/" },
+          },
           alias: {
             "@": path.resolve(__dirname, "./src"),
           },

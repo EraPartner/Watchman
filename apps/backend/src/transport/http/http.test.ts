@@ -159,4 +159,36 @@ describe('http routes', () => {
     expect(res.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
     await app.close();
   });
+
+  it('GET /meta/version returns version and node fields', async () => {
+    const app = await makeApp(new ServiceRegistry());
+    const res = await app.inject({ method: 'GET', url: '/meta/version' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { version: string; node: string };
+    expect(body.node).toMatch(/^v\d+/);
+    await app.close();
+  });
+
+  it('GET /kinds returns all registered kinds', async () => {
+    const r = new ServiceRegistry();
+    r.register(new FakeSvc('bitcoin', 'main'));
+    r.register(new FakeSvc('ipfs', 'main'));
+    const app = await makeApp(r);
+    const res = await app.inject({ method: 'GET', url: '/kinds' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { data: string[] };
+    expect(body.data).toContain('bitcoin');
+    expect(body.data).toContain('ipfs');
+    await app.close();
+  });
+
+  it('GET /services/:kind/health with instance query param returns specific instance', async () => {
+    const r = new ServiceRegistry();
+    r.register(new FakeSvc('bitcoin', 'a', true));
+    r.register(new FakeSvc('bitcoin', 'b', false));
+    const app = await makeApp(r);
+    const res = await app.inject({ method: 'GET', url: '/services/bitcoin/health?instance=a' });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
 });

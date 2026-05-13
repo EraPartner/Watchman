@@ -2,9 +2,9 @@
 title: Testing
 type: index
 status: active
-date: 2026-05-07
-tags: [testing, index, coverage, vitest, phase-0b, tcp-server, control-port]
-description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing
+date: 2026-05-13
+tags: [testing, index, coverage, vitest, phase-3, phase-4, e2e, playwright, smoke-tests, renderers, setup-wizard]
+description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing, Phase 3/4 frontend test suite expansion and E2E CI enforcement
 aliases: [testing index, tests, test docs, service testing, protocol testing]
 ---
 
@@ -181,6 +181,55 @@ apps/backend/src/                      # TypeScript tests colocated with source
     └── ws/ws.test.ts                  # WebSocket plugin behavior
 ```
 
+## Phase 3–4 Frontend Test Suite Completion (2026-05-13)
+
+### Phase 3: Component & Hook Coverage
+
+**New test files (9 files, 150+ new tests):**
+
+| File                                                     | Coverage                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `src/services/renderers/renderers.test.ts`              | All 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, etc.)   |
+| `src/pages/setup/kindCategories.test.ts`                | `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` pure unit tests                     |
+| `src/pages/setup/steps/steps.smoke.test.tsx`            | All 5 setup steps + `SetupWizard` integration (jsdom)                                    |
+| `src/components/dashboard/BentoDashboard.smoke.test.tsx` | Empty state, heading, labels, interactive buttons (jsdom)                                |
+| `src/components/detail/detail.smoke.test.tsx`           | ChartsPanel, ConfigPanel (boolean/object configs, test-conn click), RawStatsPanel (jsdom) |
+| `src/providers/WebSocketProvider.test.tsx`              | `WebSocketProvider` and `useWebSocketContext` hook (with/without provider jsdom)         |
+| `src/lib/metricHistory.hook.test.tsx`                   | `useMetricSeries` hook (empty, pre-recorded, re-renders) (jsdom)                         |
+| `src/components/smoke.test.tsx` (expanded)              | Toggle, ToggleGroup, Popover, Sheet (all variants) (jsdom)                               |
+| `src/lib/apiResponse.test.ts` (expanded)                | Nested error objects, v2 envelope cases (node)                                           |
+
+**Frontend coverage targets (vitest.config.ts):**
+```typescript
+thresholds: {
+  lines: 80,
+  statements: 80,
+  functions: 65,
+  branches: 75,
+}
+```
+
+**Frontend coverage results:**
+- **Lines:** 80.07% (threshold: 80%) ✅
+- **Statements:** ~80% (threshold: 80%) ✅
+- **Functions:** 68.12% (threshold: 65%) ✅
+- **Branches:** 79.08% (threshold: 75%) ✅
+- **Test count:** 450 tests across 45 test files (all passing) ✅
+
+### Phase 4: CI/E2E Enforcement
+
+**CI workflow additions (.github/workflows/ci.yml):**
+
+New `test-e2e` job:
+- Install Playwright Chromium + dependencies
+- Run `npm run test:e2e` (Playwright smoke tests)
+- Upload `playwright-report` artifact (14-day retention)
+- Gated on `build` job (production bundle dependency)
+- Required by `ci-complete` aggregate check for branch protection
+
+**Branch protection impact:**
+The `ci-complete` job now includes `test-e2e` in its `needs` array. E2E tests are now **required for all PRs and pushes to main** — ensuring no smoke test regressions merge.
+
 ## Service Testing Pattern (Phase 0b)
 
 **Test Setup** (2026-05-07):
@@ -271,14 +320,16 @@ The branch threshold is set to 75% (not 80%) pragmatically. Remaining untestable
 
 | Area               | Status         | Notes                                                                                                                                                                                                                                                                                                                                                              |
 | ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Utility functions  | ✅ Improved    | Frontend lib aggregate improved materially with expanded `logger.test.ts` and `backendUrl.test.ts`; dashboard helpers now have targeted coverage via [[apps/frontend/src/components/dashboard/dashboardData.test.ts]] and [[apps/frontend/src/components/dashboard/dashboardStatus.test.ts]]; `backendUrl.ts` and `logger.ts` still remain below target thresholds |
-| React components   | ⚠️ Partial     | Route/page coverage expanded with `App.test.tsx`, `NotFound.test.tsx`, `ServiceLink.test.tsx`; service tile components still need tests                                                                                                                                                                                                                          |
-| Custom hooks       | ⚠️ Partial     | [[apps/frontend/src/hooks/useWebSocket.test.tsx]] covers invalidation, alert routing, malformed-message handling, disconnected-send/send-error paths, unmount flush behavior, and reconnect scheduling; additional hooks still need coverage                                                                                                                       |
-| API response utils | ✅ Covered     | New [[apps/frontend/src/lib/apiResponse.test.ts]] covers envelope detection, unwrapping, and error extraction helpers in [[apps/frontend/src/lib/apiResponse.ts]]                                                                                                                                                                                                  |
-| API client         | ⚠️ Partial     | New `ApiClient.test.ts` covers wrapper surface/singleton behavior; `endpoints.test.ts` remains expanded to 11 tests; `endpoints.ts` remains at 86.58% lines, 96.66% branches, 71.79% functions                                                                                                                                                                     |
+| Utility functions  | ✅ Improved    | Frontend lib aggregate improved materially with expanded `logger.test.ts` and `backendUrl.test.ts`; dashboard helpers now have targeted coverage; extended renderers coverage for all 11 service types                                                                                                                                                            |
+| React components   | ✅ Phase 3     | **Phase 3 complete:** BentoDashboard, detail panels (ChartsPanel, ConfigPanel, RawStatsPanel), setup wizard (WelcomeStep, KindPickerStep, ReviewStep, ConfigureStep), UI components (Toggle, ToggleGroup, Popover, Sheet)                                                                                                                                         |
+| Custom hooks       | ✅ Phase 3     | [[apps/frontend/src/hooks/useWebSocket.test.tsx]] full coverage; [[apps/frontend/src/lib/metricHistory.hook.test.tsx]] new; [[apps/frontend/src/providers/WebSocketProvider.test.tsx]] new; comprehensive invalidation, alert routing, message handling                                                                                                            |
+| API response utils | ✅ Covered     | New [[apps/frontend/src/lib/apiResponse.test.ts]] covers envelope detection, unwrapping, error extraction, nested errors, v2 envelope cases                                                                                                                                                                                                                       |
+| API client         | ⚠️ Partial     | `ApiClient.test.ts` covers wrapper surface/singleton; `endpoints.test.ts` expanded to 11 tests; `endpoints.ts` at 86.58% lines, 96.66% branches, 71.79% functions                                                                                                                                                                                                 |
+| Renderers          | ✅ Phase 3     | [[apps/frontend/src/services/renderers/renderers.test.ts]] covers ALL 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + factory and metrics helper                                                                                                                                             |
+| Setup pages        | ✅ Phase 3     | [[apps/frontend/src/pages/setup/kindCategories.test.ts]] kind constants; [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]] all setup steps integration                                                                                                                                                                                                |
 | Backend services   | ✅ Covered     | All 14 service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                                                                                                                                  |
 | Backend core/infra | ✅ Passing     | Phase 8: 96.88% lines, 76.23% branches, 96.2% functions, 96.88% statements. All thresholds passing. I/O adapters intentionally excluded.                                                                                                                                                                                                                        |
-| Backend transport  | ✅ Covered     | HTTP and WebSocket transport layers tested via `http.test.ts` and `ws.test.ts`                                                                                                                                                                                                                                                                                    |
+| E2E / Playwright   | ✅ Phase 4     | **Phase 4 complete:** CI `test-e2e` job runs Playwright smoke tests, gated on `build`, required by `ci-complete` for branch protection                                                                                                                                                                                                                            |
 
 ## Related
 

@@ -609,19 +609,69 @@ it("handles rejected promises", async () => {
 
 ## Current Test Coverage
 
-| Area               | Status               | Notes                                                                                                                                                                                                  |
-| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Utility functions  | ✅ Improved          | Frontend lib aggregate improved materially with expanded `logger.test.ts` and `backendUrl.test.ts`; `logger.ts` and `backendUrl.ts` still remain below targets                                         |
-| API response utils | ✅ Covered           | New `apiResponse.test.ts` covers `isApiResponseEnvelope`, `unwrapApiResponse`, and `extractApiError`                                                                                                   |
-| React components   | ⚠️ Partially covered | Route/page coverage expanded via `App.test.tsx` and `NotFound.test.tsx`; `AuthGuard.tsx` and `Login.tsx` are at 100%, `Index.tsx` ~88%; all 14+ service cards still need tests                         |
-| Custom hooks       | ⚠️ Partially covered | `useAuth.tsx` now at 100% lines/functions and 86.66% branches; `useWebSocket` now has targeted invalidation/message-handling coverage, but broader hook coverage is still incomplete                   |
-| API client         | ⚠️ Partially covered | `ApiClient.test.ts` now covers wrapper surface/singleton behavior and `endpoints.test.ts` includes 11 focused wrapper tests; `endpoints.ts` remains at 86.58% lines, 96.66% branches, 71.79% functions |
-| Backend services   | ❌ Not covered       | All service classes need tests                                                                                                                                                                         |
-| Backend middleware | ✅ Improved          | `auth` and `csrf` middleware are now at 100% line coverage; `requestTimeout` and `responseSizeLimit` are directly tested                                                                               |
-| Backend routes     | ⚠️ Partially covered | Auth route integration includes login compatibility and `/api/auth/me` decoded-token fallback coverage in `apps/backend/tests/authRoutes.integration.test.js`                                        |
-| WebSocket manager  | ❌ Not covered       | Real-time communication needs tests                                                                                                                                                                    |
+| Area               | Status               | Notes                                                                                                                                                                                                                                                                           |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Utility functions  | ✅ Improved          | Frontend lib aggregate improved materially; dashboard helpers now have targeted coverage; expanded formatter and display utilities                                                                                                                                              |
+| API response utils | ✅ Covered           | New `apiResponse.test.ts` covers `isApiResponseEnvelope`, `unwrapApiResponse`, and `extractApiError` including nested error objects and v2 envelope cases                                                                                                                        |
+| React components   | ✅ Phase 3 complete  | **Phase 3 added smoke tests** for `BentoDashboard`, `ChartsPanel`, `ConfigPanel`, `RawStatsPanel`, `WelcomeStep`, `KindPickerStep`, `ReviewStep`, `ConfigureStep`, `SetupWizard`, plus UI component coverage (Toggle, ToggleGroup, Popover, Sheet)                                |
+| Custom hooks       | ✅ Phase 3 complete  | `useMetricSeries` hook tests added; `useWebSocket` has comprehensive invalidation/message-handling coverage; `WebSocketProvider` and context consumption tests                                                                                                                     |
+| Renderers          | ✅ Phase 3 complete  | Extended coverage for ALL renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + `getRenderer()` and `rendererTrackedMetrics()` in [[apps/frontend/src/services/renderers/renderers.test.ts]]                         |
+| Setup pages        | ✅ Phase 3 complete  | Pure tests for `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` in [[apps/frontend/src/pages/setup/kindCategories.test.ts]] + jsdom smoke tests for all setup steps in [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]]                                       |
+| Detail views       | ✅ Phase 3 complete  | jsdom smoke tests for detail panels (`ChartsPanel`, `ConfigPanel`, `RawStatsPanel`) covering all config branches and user interactions in [[apps/frontend/src/components/detail/detail.smoke.test.tsx]]                                                                        |
+| Backend services   | ✅ Covered           | All service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                                                  |
+| Backend middleware | ✅ Improved          | `auth` and `csrf` middleware are now at 100% line coverage; `requestTimeout` and `responseSizeLimit` are directly tested                                                                                                                                                       |
+| Backend routes     | ⚠️ Partially covered | Auth route integration includes login compatibility and `/api/auth/me` decoded-token fallback coverage in `apps/backend/tests/authRoutes.integration.test.js`                                                                                                                |
+| E2E tests          | ✅ Phase 4 complete  | **Phase 4 added CI enforcement**: Playwright E2E smoke tests run in `test-e2e` job, gated on `build` job, required by `ci-complete` branch protection check                                                                                                                      |
 
 Backend test suite status: expanded with additional middleware/auth route coverage in this update cycle.
+
+### Phase 3 Frontend Test Suite Expansion (2026-05-13)
+
+**Test file additions:**
+- `apps/frontend/src/services/renderers/renderers.test.ts` — covers ALL 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + `getRenderer()` factory and `rendererTrackedMetrics()` helper
+- `apps/frontend/src/pages/setup/kindCategories.test.ts` — pure unit tests for `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` helper
+- `apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx` — jsdom smoke tests for `WelcomeStep`, `KindPickerStep`, `ReviewStep`, `ConfigureStep`, and `SetupWizard` integration
+- `apps/frontend/src/components/dashboard/BentoDashboard.smoke.test.tsx` — jsdom smoke tests for `BentoDashboard` (empty-observatory state, heading, labels, interactive buttons)
+- `apps/frontend/src/components/detail/detail.smoke.test.tsx` — jsdom smoke tests for `ChartsPanel`, `ConfigPanel` (all branches including boolean/object config values, test-connection click), `RawStatsPanel`
+- `apps/frontend/src/providers/WebSocketProvider.test.tsx` — jsdom tests for `WebSocketProvider` and `useWebSocketContext` hook (with/without provider)
+- `apps/frontend/src/lib/metricHistory.hook.test.tsx` — jsdom tests for `useMetricSeries` hook (empty, pre-recorded, re-renders on update)
+- `apps/frontend/src/components/smoke.test.tsx` — expanded with new UI component tests (Toggle/ToggleGroup, Popover, Sheet/SheetHeader/SheetBody/SheetFooter)
+- `apps/frontend/src/lib/apiResponse.test.ts` — added nested error object and v2 envelope cases
+
+**Vitest configuration (`apps/frontend/vitest.config.ts`):**
+```typescript
+coverage: {
+  thresholds: {
+    lines: 80,
+    statements: 80,
+    functions: 65,
+    branches: 75,
+  },
+}
+```
+
+**Frontend coverage results (Phase 3 final):**
+- **Lines:** 80.07% (threshold: 80%)
+- **Branches:** 79.08% (threshold: 75%)
+- **Functions:** 68.12% (threshold: 65%)
+- **Test count:** 450 tests across 45 test files (all passing)
+
+### Phase 4 CI/E2E Integration (2026-05-13)
+
+**CI workflow enhancements (.github/workflows/ci.yml):**
+
+New `test-e2e` job:
+- Installs Playwright Chromium + dependencies
+- Runs `npm run test:e2e` (Playwright smoke tests)
+- Uploads playwright-report artifact (14-day retention)
+- Gated on `build` job (ensures production bundle available)
+- Required by `ci-complete` for branch protection
+
+**Branch protection status:**
+The `ci-complete` job now includes `test-e2e` in its needs array, making E2E tests required for all PRs and pushes to `main`. This ensures frontend smoke test regressions are caught before merge.
+
+**E2E test scope:**
+Playwright smoke tests verify critical user flows without requiring backend services. Current E2E suite covers login redirects and dashboard rendering against the production frontend build.
 
 ## Testing Priorities
 

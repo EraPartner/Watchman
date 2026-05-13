@@ -12,9 +12,11 @@ export default defineConfig({
         'src/tests/**',
         'src/core/logger.ts',
         'src/core/container.ts',
+        // These wrap native modules that can't be mocked via vi.mock (createRequire / N-API)
         'src/infra/gpio/pigpioClientImpl.ts',
         'src/infra/snmp/snmpGetterImpl.ts',
         'src/infra/ssh/sshExecutorImpl.ts',
+        'src/infra/roon/roonClientImpl.ts',
         'src/infra/net/pingProbe.ts',
       ],
       thresholds: {

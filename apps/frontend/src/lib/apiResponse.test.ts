@@ -91,4 +91,29 @@ describe("extractApiError", () => {
     );
     expect(extractApiError("unexpected", "fallback")).toBe("fallback");
   });
+
+  it("extracts nested error object with message", () => {
+    expect(
+      extractApiError({ error: { message: "nested error", code: "ERR_001" } }, "fallback")
+    ).toBe("ERR_001: nested error");
+  });
+
+  it("extracts nested error object without code", () => {
+    expect(
+      extractApiError({ error: { message: "just a message" } }, "fallback")
+    ).toBe("just a message");
+  });
+});
+
+describe("unwrapApiResponse (v2 envelope)", () => {
+  it("returns .data when payload is { data: T } with no other keys", () => {
+    expect(unwrapApiResponse({ data: { id: 42 } })).toEqual({ id: 42 });
+  });
+
+  it("does not unwrap when object has additional keys beyond data", () => {
+    expect(unwrapApiResponse({ data: { id: 42 }, extra: true })).toEqual({
+      data: { id: 42 },
+      extra: true,
+    });
+  });
 });

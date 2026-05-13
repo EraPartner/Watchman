@@ -2,9 +2,9 @@
 title: UI-Driven Service Configuration
 type: feature
 status: active
-date: 2026-04-20
-tags: [feature, configuration, ui, setup-wizard, settings, duckdb, encryption, hot-reload, backup, export, import, crud, discoverability]
-description: Runtime service configuration from the UI with encrypted secrets, audit trail, hot-reload without restart, backup/restore, and dashboard CRUD discoverability (add/edit/delete from dashboard detail sheet)
+date: 2026-05-13
+tags: [feature, configuration, ui, setup-wizard, settings, duckdb, encryption, hot-reload, backup, export, import, crud, discoverability, tested]
+description: Runtime service configuration from the UI with encrypted secrets, audit trail, hot-reload without restart, backup/restore, and dashboard CRUD discoverability (add/edit/delete from dashboard detail sheet). Phase 3 testing complete.
 aliases: [ui config, configuration, settings, setup wizard, backup, restore, service management, crud]
 ---
 
@@ -147,6 +147,11 @@ sequenceDiagram
 - Shell has grain background, brand sidebar, progress rail
 - Responsive grid for kind cards (2 cols mobile, 3 cols desktop)
 - Each step fades in; back/next navigate between steps with state preservation
+
+**Testing** (Phase 3 — 2026-05-13):
+- All setup steps now have jsdom smoke tests covering render paths, state transitions, and button behavior in `[[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]]`
+- Kind categories and `getKindMeta()` pure unit tests in `[[apps/frontend/src/pages/setup/kindCategories.test.ts]]`
+- Complete integration test for `SetupWizard` orchestrator in steps test file
 
 ### Services UI (`src/pages/Settings/Services.tsx`)
 
