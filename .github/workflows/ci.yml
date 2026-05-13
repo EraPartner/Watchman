@@ -53,7 +53,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -77,7 +77,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -104,7 +104,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -133,7 +133,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -157,7 +157,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -183,7 +183,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -208,7 +208,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -244,7 +244,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -268,6 +268,49 @@ jobs:
           json-final-path: apps/backend/coverage/coverage-final.json
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Trivy — filesystem vulnerability scan (HIGH/CRITICAL).
+  # Uploads SARIF to GitHub Security tab for tracking.
+  # ─────────────────────────────────────────────────────────────────────────────
+  trivy-scan:
+    name: Trivy Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write  # required to upload SARIF to GitHub Security
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Run Trivy vulnerability scan (table — fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+
+      - name: Run Trivy vulnerability scan (SARIF — upload to GitHub Security)
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Quality Gate — all quality checks must pass here.
   # Prevents wasting time on post-quality work when basic checks are broken.
   # ─────────────────────────────────────────────────────────────────────────────
@@ -285,6 +328,7 @@ jobs:
       - build-backend
       - test-frontend
       - test-backend
+      - trivy-scan
     if: always()
     steps:
       - name: Check all gates passed
