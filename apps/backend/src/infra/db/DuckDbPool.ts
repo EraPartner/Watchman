@@ -35,6 +35,11 @@ export async function createDuckDbPool(opts: DuckDbPoolOptions): Promise<DuckDbP
         }
       }
       connections.length = 0;
+      try {
+        instance.closeSync();
+      } catch {
+        // Releases the DuckDB file lock; ignore double-close.
+      }
     },
   };
 }
