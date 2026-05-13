@@ -2,8 +2,8 @@
 title: Troubleshooting
 type: reference
 status: active
-date: 2026-04-02
-tags: [reference, troubleshooting, debugging]
+date: 2026-05-14
+tags: [reference, troubleshooting, debugging, openapi, typescript-generation]
 description: Common issues and solutions for the Watchman project
 aliases: [troubleshooting, issues, problems, debugging, faq]
 ---
@@ -103,6 +103,24 @@ aliases: [troubleshooting, issues, problems, debugging, faq]
 - Verify Nginx proxy passes WebSocket upgrade headers
 - Check Nginx config has `proxy_set_header Upgrade $http_upgrade`
 - Verify no firewall blocking WebSocket connections
+
+## Development Workflow Issues
+
+### `npm run generate:types` Fails
+
+**Symptom**: `openapi-typescript apps/backend/openapi.yaml` command fails with `$ref` resolution errors.
+
+**Cause**: The `openapi.yaml` spec contains unresolvable `$ref` pointers, most commonly in Philips Bridge pairing endpoints.
+
+**Solution**:
+
+- Fix referenced schema definitions in `apps/backend/openapi.yaml` to ensure all `$ref` paths point to valid `#/components/schemas/` definitions
+- Verify no circular or external references that the generator cannot resolve
+- Once fixed, `npm run generate:types` will generate `apps/frontend/src/types/generated.ts` for frontend TypeScript sync
+
+**Future CI**:
+
+A Vision-style `verify-generated` CI job will be added once the spec is fixed, to ensure generated types remain in sync with the spec on every commit.
 
 ## Performance Issues
 

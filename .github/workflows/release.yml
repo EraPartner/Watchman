@@ -72,7 +72,7 @@ jobs:
           fi
           echo "Version check passed."
 
-      - name: Audit production dependencies
+      - name: Audit JS dependencies
         run: npm audit --omit=dev --audit-level=high
 
       - name: Lint frontend

@@ -42,7 +42,7 @@ jobs:
   # Deps audit — npm audit fails on HIGH or CRITICAL vulnerabilities
   # ─────────────────────────────────────────────────────────────────────────────
   deps-audit:
-    name: Deps Audit
+    name: Deps Audit (JS)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -56,7 +56,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Audit production dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit JS dependencies
         run: npm audit --omit=dev --audit-level=high
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -87,10 +90,39 @@ jobs:
         run: npm run lint:backend
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Type-check — TypeScript strict check on frontend + backend + desktop
+  # Type-check — TypeScript strict check on frontend + desktop
   # ─────────────────────────────────────────────────────────────────────────────
   typecheck:
-    name: Type Check
+    name: Type Check (Frontend)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run typecheck --workspace=apps/frontend
+
+      - name: Type-check desktop (Electron shell)
+        working-directory: apps/desktop
+        run: npx tsc --noEmit -p tsconfig.json
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Type-check backend — tsc strict check over the TypeScript backend.
+  # Required gate: catches type regressions in the backend before reaching main.
+  # ─────────────────────────────────────────────────────────────────────────────
+  typecheck-backend:
+    name: Type Check (Backend)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -110,18 +142,37 @@ jobs:
       - name: Type-check backend
         run: npm run typecheck --workspace=apps/backend
 
-      - name: Type-check frontend
-        run: npm run typecheck --workspace=apps/frontend
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build frontend — verify the frontend production bundle compiles
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-frontend:
+    name: Build (Frontend)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
 
-      - name: Type-check desktop (Electron shell)
-        working-directory: apps/desktop
-        run: npx tsc --noEmit -p tsconfig.json
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build:frontend
+        env:
+          CI: "1"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Build — verify both production bundles compile
+  # Build backend — verify the backend TypeScript compiles to dist/
   # ─────────────────────────────────────────────────────────────────────────────
-  build:
-    name: Build
+  build-backend:
+    name: Build (Backend)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -141,50 +192,9 @@ jobs:
       - name: Build backend
         run: npm run build:backend
 
-      - name: Build frontend
-        run: npm run build:frontend
-        env:
-          CI: "1"
-
   # ─────────────────────────────────────────────────────────────────────────────
-  # Test — backend (Vitest) + frontend (Vitest + coverage gate)
+  # Test — frontend (Vitest + coverage gate) + backend (Vitest + coverage gate)
   # ─────────────────────────────────────────────────────────────────────────────
-  test-backend:
-    name: Test (Backend)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-
-      - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run backend tests with coverage
-        working-directory: apps/backend
-        run: |
-          npx vitest run --coverage \
-            --coverage.reporter=text \
-            --coverage.reporter=json \
-            --coverage.reporter=json-summary
-
-      - name: Report backend coverage on PR
-        if: always()
-        uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c # v2
-        with:
-          name: backend
-          working-directory: apps/backend
-          json-summary-path: apps/backend/coverage/coverage-summary.json
-          json-final-path: apps/backend/coverage/coverage-final.json
-
   test-frontend:
     name: Test (Frontend)
     runs-on: ubuntu-24.04
@@ -217,19 +227,52 @@ jobs:
         if: always()
         uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c # v2
         with:
-          name: frontend
-          working-directory: apps/frontend
           vite-config-path: apps/frontend/vite.config.ts
           json-summary-path: apps/frontend/coverage/coverage-summary.json
           json-final-path: apps/frontend/coverage/coverage-final.json
 
+  test-backend:
+    name: Test (Backend)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backend tests with coverage
+        working-directory: apps/backend
+        run: |
+          npx vitest run --coverage \
+            --coverage.reporter=text \
+            --coverage.reporter=json \
+            --coverage.reporter=json-summary
+
+      - name: Report backend coverage on PR
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c # v2
+        with:
+          name: backend
+          vite-config-path: apps/backend/vitest.config.ts
+          json-summary-path: apps/backend/coverage/coverage-summary.json
+          json-final-path: apps/backend/coverage/coverage-final.json
+
   # ─────────────────────────────────────────────────────────────────────────────
-  # CI Complete — aggregates every gate so branch protection has a single
-  # required status check covering the full pipeline.
-  # Set "CI Complete" as the required check in branch protection settings.
+  # Quality Gate — all quality checks must pass here.
+  # Prevents wasting time on post-quality work when basic checks are broken.
   # ─────────────────────────────────────────────────────────────────────────────
-  ci-complete:
-    name: CI Complete
+  quality-gate:
+    name: Quality Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs:
@@ -237,16 +280,39 @@ jobs:
       - deps-audit
       - lint
       - typecheck
-      - build
-      - test-backend
+      - typecheck-backend
+      - build-frontend
+      - build-backend
       - test-frontend
+      - test-backend
     if: always()
     steps:
       - name: Check all gates passed
         run: |
           results='${{ toJson(needs.*.result) }}'
           if echo "$results" | grep -qE '"(failure|cancelled)"'; then
-            echo "CI failed. Job results: $results"
+            echo "Quality gate failed. Job results: $results"
             exit 1
           fi
-          echo "All CI gates passed."
+          echo "All quality gates passed."
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # CI Complete — aggregates all stages so branch protection has a single
+  # required status check covering the full pipeline.
+  # Set "CI Complete" as the required check in branch protection settings.
+  # ─────────────────────────────────────────────────────────────────────────────
+  ci-complete:
+    name: CI Complete
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: [quality-gate]
+    if: always()
+    steps:
+      - name: Check pipeline passed
+        run: |
+          results='${{ toJson(needs.*.result) }}'
+          if echo "$results" | grep -qE '"(failure|cancelled)"'; then
+            echo "CI pipeline failed. Job results: $results"
+            exit 1
+          fi
+          echo "All CI stages complete."

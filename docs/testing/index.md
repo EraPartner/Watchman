@@ -2,9 +2,9 @@
 title: Testing
 type: index
 status: active
-date: 2026-05-13
-tags: [testing, index, coverage, vitest, phase-3, phase-4, e2e, playwright, smoke-tests, renderers, setup-wizard]
-description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing, Phase 3/4 frontend test suite expansion and E2E CI enforcement
+date: 2026-05-14
+tags: [testing, index, coverage, vitest, phase-3, phase-4, e2e, playwright, smoke-tests, renderers, setup-wizard, ci, coverage-reporting, dependabot]
+description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing, Phase 3/4 frontend test suite expansion and E2E CI enforcement, vitest-coverage-report-action CI integration
 aliases: [testing index, tests, test docs, service testing, protocol testing]
 ---
 
@@ -229,6 +229,25 @@ New `test-e2e` job:
 
 **Branch protection impact:**
 The `ci-complete` job now includes `test-e2e` in its `needs` array. E2E tests are now **required for all PRs and pushes to main** — ensuring no smoke test regressions merge.
+
+### Coverage Reporting Integration (2026-05-14)
+
+**CI configuration fixes:**
+
+Both `test-backend` and `test-frontend` jobs in `.github/workflows/ci.yml` use `davelosert/vitest-coverage-report-action` to post human-readable coverage reports on pull requests:
+
+- **Backend job** — Uses `vite-config-path: apps/backend/vitest.config.ts` to resolve Vitest config for coverage summary parsing
+- **Frontend job** — Uses `vite-config-path: apps/frontend/vite.config.ts` for the same purpose
+
+The action's `working-directory` parameter (previously attempted) is not supported; instead, coverage JSON files are located via direct path: `apps/backend/coverage/coverage-summary.json` and `apps/frontend/coverage/coverage-final.json`.
+
+**Dependency management (.github/dependabot.yml):**
+
+- **Root npm workspace** — Covers `package.json` + workspace dependencies (backend, frontend) on weekly schedule with `dev-deps` and `prod-deps` groups
+- **Desktop app** — Separate `/apps/desktop` npm ecosystem entry on weekly schedule, grouped as `desktop-deps`, enabling isolated version management for Electron packaging
+- **GitHub Actions** — Weekly scheduled updates for CI workflow actions with single `github-actions` group
+
+This structure mirrors Vision's dependency strategy, isolating transitive deps of Electron packaging from main monorepo versioning while keeping critical infra (CI actions) synchronized.
 
 ## Service Testing Pattern (Phase 0b)
 

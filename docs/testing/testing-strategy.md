@@ -2,8 +2,8 @@
 title: Testing Strategy and Patterns
 type: doc
 status: active
-date: 2026-05-07
-tags: [testing, strategy, vitest, patterns, phase-0b, task-b5, task-b6, task-b7, backend, tcp-server, control-port, event-subscription, traffic-deltas, onionoo-enrichment]
+date: 2026-05-14
+tags: [testing, strategy, vitest, patterns, phase-0b, task-b5, task-b6, task-b7, backend, tcp-server, control-port, event-subscription, traffic-deltas, onionoo-enrichment, ci, coverage-reporting, github-actions, dependabot]
 description: Comprehensive testing strategy, patterns, and conventions for the Watchman project — service class testing patterns, health check contract, fake TCP server pattern, Phase 0b updates, Task B5 event subscription lifecycle testing, Task B6 traffic delta computation, Task B7 Onionoo enrichment
 aliases: [testing strategy, test patterns, test conventions, service testing, health check testing, fake tcp server, protocol testing]
 ---
@@ -878,6 +878,64 @@ else Timeout
 end
 @enduml
 ```
+
+## CI/CD Integration
+
+### GitHub Actions Workflow
+
+The `.github/workflows/ci.yml` pipeline enforces all test gates:
+
+| Job                 | Purpose                                   | Required? |
+| ------------------- | ----------------------------------------- | --------- |
+| `secrets-scan`      | Gitleaks secret detection                 | No        |
+| `deps-audit`        | npm audit for HIGH/CRITICAL vulns         | No        |
+| `lint`              | ESLint frontend + backend                 | No        |
+| `typecheck`         | TypeScript strict checks                  | No        |
+| `build`             | Production bundle verification            | No        |
+| `test-backend`      | Backend Vitest + coverage report          | No        |
+| `test-frontend`     | Frontend Vitest + coverage report         | No        |
+| `test-e2e`          | Playwright smoke tests (Phase 4)          | No        |
+| `ci-complete`       | Aggregates all jobs for branch protection | **Yes**   |
+
+**Branch protection:** The `ci-complete` job must pass before merging to `main`. This ensures the full pipeline runs without failures.
+
+### Coverage Reporting
+
+Both `test-backend` and `test-frontend` jobs use `davelosert/vitest-coverage-report-action@v2` to post human-readable coverage summaries on pull requests:
+
+**Backend job** (`apps/backend`):
+```yaml
+- uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c
+  with:
+    name: backend
+    vite-config-path: apps/backend/vitest.config.ts
+    json-summary-path: apps/backend/coverage/coverage-summary.json
+    json-final-path: apps/backend/coverage/coverage-final.json
+```
+
+**Frontend job** (`apps/frontend`):
+```yaml
+- uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c
+  with:
+    name: frontend
+    vite-config-path: apps/frontend/vite.config.ts
+    json-summary-path: apps/frontend/coverage/coverage-summary.json
+    json-final-path: apps/frontend/coverage/coverage-final.json
+```
+
+The action reads `vite-config-path` to resolve Vitest configuration and coverage thresholds. Do not use `working-directory` (unsupported by this action); paths are absolute from repo root.
+
+### Dependency Management
+
+`.github/dependabot.yml` defines three ecosystem groups:
+
+| Ecosystem        | Directory       | Schedule | Groups            | Purpose                             |
+| ---------------- | --------------- | -------- | ----------------- | ----------------------------------- |
+| **npm (root)**   | `/`             | Weekly   | `dev-deps`, `prod-deps` | Root workspace + backend/frontend |
+| **npm (desktop)** | `/apps/desktop` | Weekly   | `desktop-deps`    | Electron app isolated from main    |
+| **GitHub Actions** | `/`            | Weekly   | `github-actions`  | CI workflow action updates         |
+
+This structure mirrors Vision's approach: Electron packaging deps (Node, build tools) are isolated from main monorepo versioning, while CI infrastructure (Actions) stays synchronized globally.
 
 ## Related
 

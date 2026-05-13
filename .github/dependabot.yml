@@ -5,7 +5,7 @@
 
 version: 2
 updates:
-  # Root workspace manifest — covers backend/frontend/desktop through npm workspaces.
+  # Root workspace manifest — covers backend/frontend through npm workspaces.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -15,6 +15,15 @@ updates:
         dependency-type: "development"
       prod-deps:
         dependency-type: "production"
+
+  # Desktop Electron app has its own pinned deps outside the root workspace.
+  - package-ecosystem: "npm"
+    directory: "/apps/desktop"
+    schedule:
+      interval: "weekly"
+    groups:
+      desktop-deps:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
