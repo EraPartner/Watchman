@@ -60,7 +60,8 @@ jobs:
         run: npm ci
 
       - name: Audit JS dependencies
-        run: npm audit --omit=dev --audit-level=high
+        # Allowed advisories documented in .audit-ci.json
+        run: npx audit-ci --config .audit-ci.json
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Lint — frontend ESLint + backend ESLint

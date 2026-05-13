@@ -44,7 +44,11 @@
     "generate:types": "openapi-typescript apps/backend/openapi.yaml -o apps/frontend/src/types/generated.ts",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/out"
   },
+  "overrides": {
+    "fast-uri": "^3.1.2"
+  },
   "devDependencies": {
+    "audit-ci": "^7.1.0",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "openapi-typescript": "^7.4.4",
