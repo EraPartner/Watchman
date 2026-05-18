@@ -2,40 +2,40 @@
 title: Data Flow
 type: architecture
 status: active
-date: 2026-05-07
-tags: [architecture, backend, frontend, data-flow, two-tier, health, websocket-snapshots, phase-0b, task-b5, event-subscription]
-description: Data flow documentation for authentication, service monitoring (two-tier health model), real-time updates with full snapshot payloads, and Tor ControlPort event subscription lifecycle (Task B5)
+date: 2026-05-16
+tags: [architecture, backend, frontend, data-flow, two-tier, health, websocket-snapshots, setup-wizard, no-auth, configstore, electron, phase-0b, task-b5, event-subscription]
+description: Data flow documentation for setup wizard, service monitoring (two-tier health model), real-time updates with full snapshot payloads, encrypted ConfigStore lifecycle, and Tor ControlPort event subscription lifecycle (Task B5)
 aliases: [data flow, request flow, communication patterns]
 ---
 
 # Data Flow
 
 > [!abstract] Overview
-> This document describes the primary data flows in Watchman: authentication, service monitoring with two-tier health model, and real-time updates.
+> This document describes the primary data flows in Watchman: setup, service monitoring with the two-tier health model, real-time WebSocket updates, and the encrypted ConfigStore service lifecycle.
 >
-> **Two-Tier Health Model** (Phase 0a): Each service check now runs ICMP ping and protocol probe in parallel, returning separate `host` and `service` tiers. See [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019]] Phase 0a.
+> **No built-in authentication** — Watchman is a single-user home-lab app; network isolation (firewall / VPN / LAN) is the operator's responsibility. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]].
+>
+> **Two-Tier Health Model** (Phase 0a): Each service check runs ICMP ping and protocol probe in parallel, returning separate `host` and `service` tiers. See [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019]] Phase 0a.
 
-## Authentication Flow
+## Setup Wizard / First-Run Flow
 
 ```
-1. User submits credentials → POST /api/auth/login
-2. Backend validates credentials (bcrypt hash comparison)
-3. JWT access token generated
-4. Token set as HTTP-only cookie with secure flags
-5. CSRF token issued (double-submit cookie pattern)
-6. Frontend stores auth state
-7. Subsequent requests include JWT cookie automatically
-8. CSRF token sent in request header for mutations
-9. Middleware validates JWT on protected routes
-10. CSRF middleware verifies token match
+1. App starts → backend reads dataDir, loads-or-creates the master key
+2. ConfigStore migrations run (DuckDB)
+3. Optional env→DB migration: legacy env services are imported once
+4. ServiceLifecycle.start() loads all stored services, brings up enabled ones,
+   registers them in ServiceRegistry, hands them to BackgroundPoller
+5. Frontend boots → GET /setup/status
+   → { needsSetup: services.length === 0, serviceCount }
+6. If needsSetup, the SetupWizard renders
+7. User picks a kind from GET /config/kinds and submits config
+   → POST /config/services
+   → ConfigStore encrypts secret fields (AES-GCM, per-install master key)
+   → INSERT into DuckDB, bus.emit('config:service.created')
+   → ServiceLifecycle.applyCreate(id) brings up the service and tracks it
+8. Broadcaster sees `config:service.created` and sends `service_config_changed`
+9. Frontend invalidates `/services` query, the tile appears
 ```
-
-### Cookie Configuration
-
-- `httpOnly: true` - Not accessible via JavaScript
-- `secure: true` (production) - HTTPS only
-- `sameSite: strict` (production) - CSRF protection
-- `maxAge: 8 hours` - Session duration
 
 ## Service Monitoring Flow (Two-Tier Health)
 
@@ -76,15 +76,15 @@ aliases: [data flow, request flow, communication patterns]
 - **service** — Protocol probe reachability (HTTP, RPC, SSH, etc.)
 - **reachable** — Composite (semantics vary; HTTP services use `host AND service`, routers use `host OR service`)
 
-### Stats Flow (requires auth)
+### Stats Flow
 
 ```
-1. Frontend requests stats → GET /api/{service}/stats
-2. Auth middleware validates JWT
-3. Cache middleware checks for cached response (60s TTL)
-4. ServiceManager retrieves service instance
-5. Service fetches detailed statistics
-6. Response cached and returned
+1. Frontend requests stats → GET /api/services/{kind}/stats?instance={id}
+2. Fastify request timeout attaches AbortSignal
+3. GetServiceStatus.stats(kind, instance, signal) is invoked
+4. ServiceRegistry resolves `${kind}:${instanceId}` → BaseService
+5. svc.getStats(signal) returns a StatsSnapshot (cached in-process when applicable)
+6. Envelope { data | error } returned to frontend; React Query stores it
 ```
 
 ## Real-Time Updates Flow
@@ -120,100 +120,104 @@ All `service_update` messages now include optional `snapshot` field:
 - **snapshot** — Full `HealthSnapshot` or `StatsSnapshot` included when event is published; eliminates need for REST re-fetch on every WS event
 - **scope** — "health" or "stats" to distinguish event type
 
-## Configuration Flow
+## Configuration Flow (UI-Driven ConfigStore)
 
 ```
-1. Backend starts → validateEnvironment()
-2. Parse ENABLED_SERVICES from env
-3. Parse multi-instance configurations
-4. Initialize ServiceManager
-5. Initialize TorManager (if tor enabled)
-   - TorManager default data dir is `apps/backend/.tor-data`
-   - Tor SOCKS readiness is determined via local TCP probe on `127.0.0.1:{socksPort}`
-6. Initialize each service via factory pattern
-   - Tor service receives TorEventSubscriptionFactory if useControlPort=true (Task B5)
-7. Start background poller
-   - For Tor ControlPort mode: onStart() creates event subscription for BW events (Task B5)
-   - onStop() gracefully closes subscription on shutdown
-8. Frontend requests config → GET /api/config/frontend
-9. FrontendConfigService returns enabled services list
-10. Frontend renders cards for enabled services
+1. Backend starts → loadEnv() validates env with Zod
+2. createDuckDbPool() + runConfigMigrations() prepare the on-disk store
+3. loadOrCreateMasterKey(dataDir, WATCHMAN_MASTER_KEY) ensures key material
+4. createConfigStore(dbPool, encryptor, bus) wires encrypted reads/writes
+5. migrateEnvServicesIfNeeded() one-shot imports legacy ENABLED_SERVICES env
+6. ServiceLifecycle.start() iterates StoredService rows:
+   - bringUp(stored) for each enabled service
+   - svc.onStart() if present (e.g. Tor onStart spins up ControlPort event
+     subscription for BW events — Task B5)
+   - registry.register(svc) keyed by `${kind}:${instanceId}`
+   - poller.track(svc) schedules jittered health + stats polls
+7. Frontend lifecycle:
+   - GET /setup/status renders SetupWizard if needsSetup
+   - GET /config/kinds → field schema + secret-field list for each service type
+   - GET /config/services / POST / PUT / DELETE go through ConfigStore;
+     each write emits a typed bus event and triggers
+     ServiceLifecycle.applyCreate/Update/Delete which re-registers
+     and re-tracks the affected service
+   - GET /services aggregates the live registry into BentoDashboard tiles
+8. Graceful shutdown (SIGTERM/SIGINT): poller.stop → lifecycle.stop
+   → dbPool.close → app.close (each service's onStop runs in turn)
 ```
 
 ## PlantUML Diagrams
 
-### Authentication Flow
+### Setup Wizard Flow
 
 ```plantuml
 @startuml
 !theme plain
 
-actor "User" as User
-participant "Frontend" as FE
-participant "Backend" as BE
-participant "Auth Middleware" as Auth
-database "Environment" as Env
+actor "User (operator)" as User
+participant "Frontend (SetupWizard)" as FE
+participant "Fastify /setup, /config" as API
+participant "ConfigStore (DuckDB)" as Store
+participant "Encryptor (master key)" as Enc
+participant "ServiceLifecycle" as Life
+participant "BackgroundPoller" as Poll
+participant "EventBus" as Bus
+participant "WS Broadcaster" as WS
 
-User -> FE : Enter credentials
-FE -> BE : POST /api/auth/login\n(username, password)
-BE -> Auth : authenticateCredentials()
-Auth -> Env : Read AUTH_USERNAME\nAUTH_PASSWORD_HASH
-Env --> Auth : Return credentials
-Auth -> Auth : bcrypt compare\n(timing attack prevention)
-alt Credentials Valid
-    Auth -> Auth : signToken(payload)
-    Auth --> BE : JWT token
-    BE -> BE : Set HTTP-only cookie\nSet CSRF cookie
-    BE --> FE : 200 OK
-    FE -> FE : Store auth state
-else Credentials Invalid
-    Auth --> BE : null
-    BE --> FE : 401 Unauthorized
-end
+User -> FE : Open Watchman (first run)
+FE -> API : GET /setup/status
+API --> FE : { needsSetup: true, serviceCount: 0 }
+FE -> API : GET /config/kinds
+API --> FE : [{ kind, label, fields, secretFields }]
+User -> FE : Pick kind, fill fields
+FE -> API : POST /config/services { kind, instance, config }
+API -> Enc : encrypt secret fields
+Enc --> API : ciphertext
+API -> Store : INSERT stored_services
+Store --> Bus : config:service.created
+Bus --> Life : applyCreate(id)
+Life -> Poll : pause()
+Life -> Life : bringUp(stored)
+Life -> Poll : resume() + track(svc)
+Bus --> WS : config:service.created
+WS --> FE : { type: 'service_config_changed', action: 'created' }
+FE -> FE : invalidate /services query → tile appears
 @enduml
 ```
 
-### Service Monitoring Flow
+### Service Monitoring Flow (two-tier health)
 
 ```plantuml
 @startuml
 !theme plain
 
-actor "Frontend" as FE
-participant "Backend" as BE
-participant "Rate Limiter" as RateLimit
-participant "Cache" as Cache
-participant "ServiceManager" as SvcMgr
-participant "Circuit Breaker" as CB
-participant "Service Class" as Svc
+actor "Frontend (ApiClient)" as FE
+participant "Fastify route" as API
+participant "GetServiceStatus" as App
+participant "ServiceRegistry" as Reg
+participant "BaseService" as Svc
+participant "PingProber" as Ping
 database "External Service" as ExtSvc
 
-FE -> BE : GET /api/{service}/status
-BE -> RateLimit : Check quota
-alt Rate Limited
-    BE --> FE : 429 Too Many Requests
-else Within Limit
-    BE -> Cache : Check cache (30s TTL)
-    alt Cache Hit
-        Cache --> BE : Cached response
-    else Cache Miss
-        BE -> SvcMgr : getServiceHealth(serviceId)
-        SvcMgr -> CB : Check circuit state
-        alt Circuit Closed
-            CB -> Svc : checkHealth()
-            Svc -> ExtSvc : HTTP/SSH request
-            ExtSvc --> Svc : Response
-            Svc --> CB : Result
-            CB --> SvcMgr : Result
-            SvcMgr -> Cache : Store in cache
-            SvcMgr --> BE : Result
-        else Circuit Open
-            CB --> SvcMgr : Error: Circuit Open
-            SvcMgr --> BE : 503 Service Unavailable
-        end
-    end
-    BE --> FE : JSON Response
-end
+FE -> API : GET /api/services/{kind}/health?instance={id}
+API -> API : log sampling + request timeout (AbortSignal)
+API -> App : health(kind, instance, signal)
+App -> Reg : lookup `${kind}:${instanceId}`
+Reg --> App : BaseService
+App -> Svc : checkHealth(signal)
+
+note over Svc
+  Service runs host + service probes
+  in parallel via Promise.allSettled.
+end note
+
+Svc -> Ping : probe(host)
+Svc -> ExtSvc : HTTP / RPC / SSH / SNMP / ZMQ
+Ping --> Svc : { reachable, pingMs }
+ExtSvc --> Svc : protocol response
+Svc --> App : Result<HealthSnapshot>
+App --> API : envelope { data }
+API --> FE : JSON { data: { host, service, reachable } }
 @enduml
 ```
 
@@ -223,67 +227,59 @@ end
 @startuml
 !theme plain
 
-participant "ServiceManager" as SvcMgr
-participant "WebSocketManager" as WSMgr
-participant "Client 1" as C1
-participant "Client 2" as C2
-participant "Client N" as Cn
-participant "Frontend Hook" as Hook
+participant "BackgroundPoller" as Poll
+participant "BaseService" as Svc
+participant "EventBus" as Bus
+participant "Broadcaster" as WSB
+participant "WS Connection N" as Conn
+participant "useWebSocket / useWebSocketEvent" as Hook
+participant "React Query Cache" as Query
 
-note over SvcMgr : Polls services on interval
+note over Poll : Ticks on jittered healthMs / statsMs
 
-SvcMgr -> SvcMgr : Poll services
-SvcMgr -> SvcMgr : Status change detected
-SvcMgr -> WSMgr : broadcast(statusUpdate)
-WSMgr -> C1 : send(statusUpdate)
-WSMgr -> C2 : send(statusUpdate)
-WSMgr -> Cn : send(statusUpdate)
-
-C1 -> Hook : onMessage()
-C2 -> Hook : onMessage()
-Cn -> Hook : onMessage()
-
-Hook -> Hook : Parse message
-Hook -> Hook : Invalidate React Query cache
-Hook -> Hook : Trigger re-render
+Poll -> Svc : checkHealth(signal) / getStats(signal)
+Svc --> Poll : HealthSnapshot / StatsSnapshot
+Poll --> Bus : service.health.updated / service.stats.updated\n(snapshot included)
+Bus --> WSB : subscriber callback
+WSB -> Conn : ws.send({ type: 'service_update', scope, id, kind, instanceId, snapshot, at })
+Conn --> Hook : onmessage
+Hook -> Query : setQueryData / invalidateQueries
+Query --> Hook : re-render bento tile / detail sheet
 @enduml
 ```
 
-### Configuration Initialization Flow
+### Boot / Lifecycle Initialization Flow
 
 ```plantuml
 @startuml
 !theme plain
 
-participant "Main" as Main
-participant "Config" as Config
-participant "ServiceManager" as SvcMgr
-participant "ServiceFactory" as SvcFactory
-participant "TorManager" as TorMgr
-participant "FrontendConfigService" as FrontendCfg
-database "Environment" as Env
+participant "index.ts (main)" as Main
+participant "Env (Zod)" as Env
+participant "DuckDB ConfigStore" as Store
+participant "Master key" as Key
+participant "ServiceRegistry" as Reg
+participant "ServiceLifecycle" as Life
+participant "BackgroundPoller" as Poll
+participant "Fastify server" as API
+participant "wsPlugin" as WS
 
-Main -> Config : validateEnvironment()
-Config -> Env : Read required vars
-Env --> Config : Validation result
-Config -> Config : getConfig()
+Main -> Env : loadEnv() (validates with Zod)
+Main -> Store : createDuckDbPool() + runConfigMigrations()
+Main -> Key : loadOrCreateMasterKey(dataDir)
+Main -> Store : createConfigStore(pool, encryptor, bus)
+Main -> Store : migrateEnvServicesIfNeeded() (one-shot)
+Main -> Life : createServiceLifecycle({ store, registry, poller, bus, infra })
+Life -> Reg : register every enabled service
+Life -> Poll : track(svc)
+Main -> API : buildServer({ services, listInstances, metrics, config, setup })
+Main -> WS : app.register(wsPlugin)
+Main -> API : app.listen({ BACKEND_V2_HOST, BACKEND_V2_PORT })
 
-Main -> SvcMgr : Initialize
-SvcMgr -> SvcFactory : Get service configs
-SvcFactory --> SvcMgr : Return configs
-
-loop For each service
-    SvcMgr -> SvcFactory : Create service instance
-    SvcFactory --> SvcMgr : Service instance
-end
-
-alt Tor Enabled
-    SvcMgr -> TorMgr : Initialize
-end
-
-Main -> FrontendCfg : Initialize
-
-note over Main : Server ready\non port 3001
+note over Main
+  Graceful shutdown (SIGTERM/SIGINT):
+  poller.stop → lifecycle.stop → dbPool.close → app.close
+end note
 @enduml
 ```
 
@@ -291,4 +287,7 @@ note over Main : Server ready\non port 3001
 
 - [[docs/architecture/backend-architecture|Backend Architecture]]
 - [[docs/architecture/frontend-architecture|Frontend Architecture]]
-- [[docs/security/authentication|Authentication]]
+- [[docs/features/real-time-updates|Real-Time Updates]]
+- [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017 — Single-user, no auth]]
+- [[docs/adr/015-ui-driven-service-configuration|ADR-015 — UI-driven ConfigStore]]
+- [[docs/flow-visualizer.html|Interactive flow visualizer]]

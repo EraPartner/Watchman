@@ -1,0 +1,1677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Watchman · Architecture & Flows</title>
+<meta name="description" content="Interactive map of Watchman packages and end-to-end workflows. Click a flow to trace data across the system." />
+<style>
+  :root {
+    --bg: #0c0e12;
+    --bg-2: #14171c;
+    --panel: rgba(255, 255, 255, 0.035);
+    --panel-strong: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --text: #e7e5dc;
+    --text-dim: #9a958a;
+    --text-faint: #6a665b;
+
+    /* Watchman cold-gold accent (oklch 80% 0.13 85) */
+    --gold: #d4a35e;
+    --gold-soft: rgba(212, 163, 94, 0.18);
+    --gold-glow: 0 0 24px rgba(212, 163, 94, 0.35);
+
+    /* Trail / past colour: muted copper */
+    --copper: #b08363;
+    --copper-soft: rgba(176, 131, 99, 0.22);
+
+    /* Status accents (match watchman tokens) */
+    --ok: #58c489;
+    --warn: #e4b65a;
+    --crit: #d75547;
+
+    --node-bg: #1a1f28;
+    --node-bg-active: rgba(212, 163, 94, 0.12);
+    --node-bg-touched: rgba(176, 131, 99, 0.08);
+    --arrow: rgba(255, 255, 255, 0.08);
+    --arrow-active: var(--gold);
+    --arrow-past: rgba(176, 131, 99, 0.55);
+
+    --mono: 'Geist Mono Variable', ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --ui: 'Geist Variable', "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--ui);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  body {
+    background:
+      radial-gradient(ellipse 70% 50% at 12% 10%, rgba(212, 163, 94, 0.06), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 90% 90%, rgba(88, 196, 137, 0.04), transparent 60%),
+      var(--bg);
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── App shell ─────────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: 280px 1fr 360px;
+    grid-template-rows: 56px 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  header.top {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark {
+    width: 24px; height: 24px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, var(--gold), #8a6432);
+    box-shadow: var(--gold-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    position: relative;
+  }
+  .brand-mark::after {
+    content: "";
+    position: absolute; inset: 4px;
+    border-radius: 4px;
+    background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.4), transparent 50%);
+  }
+  .brand-text { font-weight: 600; letter-spacing: 0.01em; }
+  .brand-text .muted { color: var(--text-dim); font-weight: 400; margin-left: 6px; }
+
+  .header-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-dim); }
+  .stat { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); }
+  .stat strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ── Left rail: flow list ──────────────────────────────────── */
+  aside.left {
+    border-right: 1px solid var(--border);
+    background: var(--bg-2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .search {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .search input {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .search input:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(212, 163, 94, 0.15);
+  }
+  .search input::placeholder { color: var(--text-faint); }
+
+  .flow-list { overflow-y: auto; flex: 1; padding: 8px 8px 16px; }
+  .flow-list::-webkit-scrollbar { width: 8px; }
+  .flow-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 4px; }
+
+  .category {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    padding: 14px 12px 6px;
+    font-weight: 600;
+  }
+  .flow-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 9px 12px;
+    margin: 2px 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .flow-btn:hover {
+    background: var(--panel);
+    border-color: var(--border);
+  }
+  .flow-btn.active {
+    background: var(--gold-soft);
+    border-color: rgba(212, 163, 94, 0.4);
+    color: #f5e3c4;
+  }
+  .flow-btn .badge {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--panel-strong);
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+    margin-left: 8px;
+  }
+  .flow-btn.active .badge {
+    background: rgba(212, 163, 94, 0.25);
+    color: #f5e3c4;
+  }
+
+  /* ── Canvas ────────────────────────────────────────────────── */
+  main.canvas {
+    overflow: auto;
+    position: relative;
+    background:
+      radial-gradient(ellipse 40% 30% at 50% 20%, rgba(212, 163, 94, 0.04), transparent 70%),
+      var(--bg);
+  }
+  main.canvas::-webkit-scrollbar { width: 10px; height: 10px; }
+  main.canvas::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.06); border-radius: 5px; }
+
+  svg.diagram {
+    display: block;
+    margin: 16px auto;
+    user-select: none;
+  }
+
+  /* Components */
+  .node-bg {
+    fill: var(--node-bg);
+    stroke: var(--border-strong);
+    stroke-width: 1;
+    transition: fill 0.18s, stroke 0.18s, filter 0.18s;
+  }
+  .node-label {
+    fill: var(--text);
+    font-family: var(--ui);
+    font-size: 12.5px;
+    font-weight: 500;
+    pointer-events: none;
+    dominant-baseline: middle;
+    text-anchor: middle;
+  }
+  .node-sub {
+    fill: var(--text-faint);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    pointer-events: none;
+    dominant-baseline: middle;
+    text-anchor: middle;
+  }
+  .node {
+    cursor: default;
+    transition: transform 0.18s;
+  }
+  /* Kind variants */
+  .node-bg.kind-client    { fill: #1c1812; stroke: rgba(212, 163, 94, 0.30); }
+  .node-bg.kind-frontend  { fill: #12161e; stroke: rgba(96, 165, 250, 0.22); }
+  .node-bg.kind-fe-edge   { fill: #15191f; stroke: rgba(176, 131, 99, 0.30); }
+  .node-bg.kind-transport { fill: #16171f; stroke: rgba(167, 139, 250, 0.22); }
+  .node-bg.kind-app       { fill: #17191e; stroke: rgba(212, 163, 94, 0.25); }
+  .node-bg.kind-domain    { fill: #181a20; stroke: rgba(88, 196, 137, 0.25); }
+  .node-bg.kind-infra     { fill: #131720; stroke: rgba(88, 196, 137, 0.20); }
+  .node-bg.kind-data      { fill: #14181f; stroke: rgba(167, 139, 250, 0.28); }
+  .node-bg.kind-external  { fill: #1c1612; stroke: rgba(212, 163, 94, 0.30); }
+  .node-bg.kind-build     { fill: #1a1820; stroke: rgba(167, 139, 250, 0.22); }
+
+  /* Touched (any step in flow uses it) */
+  .node.touched .node-bg {
+    fill: var(--node-bg-touched);
+    stroke: rgba(176, 131, 99, 0.55);
+  }
+  /* Active (current step from/to) */
+  .node.active .node-bg {
+    fill: var(--node-bg-active);
+    stroke: var(--gold);
+    filter: drop-shadow(0 0 12px rgba(212, 163, 94, 0.55));
+  }
+  /* Dimmed when a flow is selected but this node isn't touched */
+  .has-flow .node:not(.touched) .node-bg { opacity: 0.32; }
+  .has-flow .node:not(.touched) text { opacity: 0.42; }
+
+  /* Layer labels */
+  .layer-label {
+    fill: var(--text-faint);
+    font-family: var(--ui);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* Arrows */
+  .arrow-base {
+    stroke: var(--arrow);
+    stroke-width: 1.4;
+    fill: none;
+    transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
+  }
+  .arrow {
+    fill: none;
+    stroke-width: 1.8;
+    pointer-events: none;
+    transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
+  }
+  .arrow.past   { stroke: var(--arrow-past); opacity: 0.85; }
+  .arrow.active { stroke: var(--arrow-active); stroke-width: 2.4; filter: drop-shadow(0 0 6px rgba(212, 163, 94, 0.6)); }
+  .arrow.future { stroke: rgba(255, 255, 255, 0.18); stroke-dasharray: 4 4; }
+
+  .step-badge-circle {
+    fill: var(--bg-2);
+    stroke: var(--border-strong);
+    stroke-width: 1;
+    transition: fill 0.2s, stroke 0.2s;
+  }
+  .step-badge-circle.past   { fill: var(--copper-soft); stroke: var(--copper); }
+  .step-badge-circle.active { fill: var(--gold); stroke: var(--gold); filter: drop-shadow(0 0 8px rgba(212, 163, 94, 0.6)); }
+  .step-badge-text {
+    fill: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    pointer-events: none;
+    dominant-baseline: middle;
+    text-anchor: middle;
+  }
+  .step-badge-text.active { fill: #2c1e0c; }
+  .step-badge-text.past   { fill: #f6e0c4; }
+
+  /* Traveling token */
+  .token {
+    fill: var(--gold);
+    stroke: rgba(255, 255, 255, 0.6);
+    stroke-width: 1.2;
+    filter: drop-shadow(0 0 8px rgba(212, 163, 94, 0.9));
+  }
+
+  /* ── Right rail: steps panel ───────────────────────────────── */
+  aside.right {
+    border-left: 1px solid var(--border);
+    background: var(--bg-2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .right-header {
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .right-header .flow-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 4px;
+  }
+  .right-header .flow-summary {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin: 0;
+  }
+  .right-header.empty { color: var(--text-faint); }
+  .right-header .empty-hint {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin: 4px 0 0;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.15);
+  }
+  .controls button {
+    width: 30px; height: 30px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 7px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    font-size: 13px;
+    transition: background 0.12s, border-color 0.12s, transform 0.08s;
+  }
+  .controls button:hover:not(:disabled) {
+    background: var(--panel-strong);
+    border-color: var(--border-strong);
+  }
+  .controls button:active:not(:disabled) { transform: scale(0.96); }
+  .controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .controls .progress {
+    flex: 1;
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+  .controls .play { background: var(--gold-soft); border-color: rgba(212, 163, 94, 0.35); color: #f5e3c4; }
+  .controls .play:hover:not(:disabled) { background: rgba(212, 163, 94, 0.28); }
+
+  .step-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px 14px 16px;
+  }
+  .step-list::-webkit-scrollbar { width: 8px; }
+  .step-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.06); border-radius: 4px; }
+
+  .step {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 12px 12px;
+    margin: 8px 0;
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .step:hover { border-color: var(--border-strong); background: var(--panel-strong); }
+  .step.past {
+    border-color: rgba(176, 131, 99, 0.28);
+    background: rgba(176, 131, 99, 0.05);
+  }
+  .step.active {
+    border-color: var(--gold);
+    background: rgba(212, 163, 94, 0.08);
+    box-shadow: 0 0 0 1px rgba(212, 163, 94, 0.3), 0 4px 14px rgba(0, 0, 0, 0.3);
+  }
+  .step-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    border-radius: 999px;
+    background: var(--panel-strong);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .step.past .step-num   { background: var(--copper-soft); color: var(--copper); }
+  .step.active .step-num { background: var(--gold); color: #2c1e0c; }
+
+  .step-route {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    margin-bottom: 6px;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .step-route .arrow-glyph { color: var(--text-faint); margin: 0 4px; }
+  .step-route .endpoint { color: var(--gold); }
+  .step.past .step-route .endpoint { color: var(--copper); }
+
+  .step-payload {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 9px;
+    margin: 6px 0;
+    word-break: break-word;
+    line-height: 1.45;
+  }
+
+  .step-annotation {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+
+  /* Empty state */
+  .empty-canvas-hint {
+    fill: var(--text-faint);
+    font-family: var(--ui);
+    font-size: 13px;
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  /* Footer / shortcuts */
+  .shortcuts {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    margin: 0 2px 0 0;
+    border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: rgba(20, 24, 32, 0.96);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--text);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    z-index: 99;
+    max-width: 280px;
+    opacity: 0;
+    transform: translate(0, -6px);
+    transition: opacity 0.12s, transform 0.12s;
+  }
+  .tooltip.shown { opacity: 1; transform: translate(0, 0); }
+  .tooltip .tip-title { font-weight: 600; margin: 0 0 2px; color: var(--gold); }
+  .tooltip .tip-path { font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); }
+  .tooltip .tip-desc { color: var(--text-dim); margin-top: 4px; font-size: 11.5px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-text">Watchman <span class="muted">/ Architecture &amp; Flows</span></div>
+    </div>
+    <div class="header-right">
+      <span class="stat"><strong id="stat-components">0</strong> components</span>
+      <span class="stat"><strong id="stat-flows">0</strong> flows</span>
+    </div>
+  </header>
+
+  <aside class="left">
+    <div class="search">
+      <input id="search" type="text" placeholder="Search flows… (e.g. poller, setup, tor, websocket)" autocomplete="off" />
+    </div>
+    <div class="flow-list" id="flow-list"></div>
+  </aside>
+
+  <main class="canvas">
+    <svg class="diagram" id="diagram" xmlns="http://www.w3.org/2000/svg"
+         width="1620" height="1100" viewBox="0 0 1620 1100">
+      <defs>
+        <marker id="arrow-head" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="context-stroke" />
+        </marker>
+        <marker id="arrow-head-dim" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="rgba(255,255,255,0.18)" />
+        </marker>
+      </defs>
+      <g id="layer-labels"></g>
+      <g id="components"></g>
+      <g id="base-edges"></g>
+      <g id="flow-edges"></g>
+      <g id="token-layer"></g>
+      <text id="empty-hint" class="empty-canvas-hint" x="810" y="60">Pick a flow on the left to trace data across the system.</text>
+    </svg>
+  </main>
+
+  <aside class="right">
+    <div class="right-header empty" id="right-header">
+      <h2 class="flow-name">No flow selected</h2>
+      <p class="empty-hint">Choose a flow from the list to see step-by-step annotations.</p>
+    </div>
+    <div class="controls" id="controls" style="display:none">
+      <button id="btn-restart" title="Restart (R)">⟲</button>
+      <button id="btn-prev" title="Previous step (←)">‹</button>
+      <button id="btn-play" class="play" title="Play / pause (Space)">▶</button>
+      <button id="btn-next" title="Next step (→)">›</button>
+      <button id="btn-all" title="Show all steps at once">⤧</button>
+      <span class="progress" id="progress">— / —</span>
+    </div>
+    <div class="step-list" id="step-list"></div>
+    <div class="shortcuts">
+      <span><span class="kbd">←</span><span class="kbd">→</span> step</span>
+      <span><span class="kbd">Space</span> play</span>
+      <span><span class="kbd">R</span> restart</span>
+      <span><span class="kbd">Esc</span> clear</span>
+    </div>
+  </aside>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<!--
+  Flow data. Edit this block to add/modify components and flows.
+
+  Schema:
+    layers[]: { y, label }                                   ← layer band labels (drawn at left margin)
+    components[]: { id, label, sub?, kind, x, y }
+      kind ∈ client | frontend | fe-edge | transport | app | domain | infra | data | external | build
+    baseEdges[]: ["from-id", "to-id"]                        ← faint always-on lines for orientation
+    flows[]: { id, name, category, summary, steps: [ { from, to, payload?, annotation } ] }
+-->
+<script type="application/json" id="flow-data">
+{
+  "layers": [
+    { "y": 28,  "label": "Clients" },
+    { "y": 132, "label": "Frontend  ·  apps/frontend (React 18 + Vite)" },
+    { "y": 244, "label": "Frontend transport  ·  ApiClient + WebSocketProvider" },
+    { "y": 332, "label": "Backend boundary  ·  Fastify routes + wsPlugin (apps/backend/src/transport)" },
+    { "y": 432, "label": "Application use cases  ·  apps/backend/src/application" },
+    { "y": 524, "label": "Domain  ·  registry · poller · bus · broadcaster (apps/backend/src/domain & infra/scheduler & transport/ws)" },
+    { "y": 632, "label": "Infrastructure adapters  ·  apps/backend/src/infra" },
+    { "y": 736, "label": "Data  ·  DuckDB ConfigStore + master key + LRU cache" },
+    { "y": 836, "label": "External services" },
+    { "y": 944, "label": "External (cont.) + Desktop packaging" }
+  ],
+  "components": [
+    { "id": "browser",         "label": "Web Browser",       "sub": "single-user · LAN",                     "kind": "client",    "x": 460,  "y": 44 },
+    { "id": "electron",        "label": "Electron Shell",    "sub": "apps/desktop · v33",                    "kind": "client",    "x": 660,  "y": 44 },
+
+    { "id": "fe.dashboard",    "label": "BentoDashboard",    "sub": "pages/Dashboard",                       "kind": "frontend",  "x": 40,   "y": 148 },
+    { "id": "fe.tile",         "label": "ServiceTile",       "sub": "components/tile + renderers",           "kind": "frontend",  "x": 240,  "y": 148 },
+    { "id": "fe.detail",       "label": "DetailSheet",       "sub": "components/detail",                     "kind": "frontend",  "x": 440,  "y": 148 },
+    { "id": "fe.setup",        "label": "SetupWizard",       "sub": "components + pages",                    "kind": "frontend",  "x": 640,  "y": 148 },
+    { "id": "fe.hooks",        "label": "React Query hooks", "sub": "useAggregatedHealth · useServiceHealth", "kind": "frontend", "x": 840,  "y": 148 },
+    { "id": "fe.renderers",    "label": "Renderer registry", "sub": "services/renderers",                    "kind": "frontend",  "x": 1040, "y": 148 },
+    { "id": "fe.primitives",   "label": "Primitives (14)",   "sub": "components/primitives",                 "kind": "frontend",  "x": 1240, "y": 148 },
+
+    { "id": "fe.api",          "label": "ApiClient",         "sub": "services/ApiClient.ts",                 "kind": "fe-edge",   "x": 640,  "y": 260 },
+    { "id": "fe.ws",           "label": "WebSocketProvider", "sub": "providers/WebSocketProvider + useWebSocket", "kind": "fe-edge", "x": 840,  "y": 260 },
+
+    { "id": "be.cors",         "label": "CORS onRequest",    "sub": "transport/http/server.ts",              "kind": "transport", "x": 40,   "y": 348 },
+    { "id": "be.errors",       "label": "Error handler",     "sub": "plugins/errorHandler",                  "kind": "transport", "x": 240,  "y": 348 },
+    { "id": "be.routes.svc",   "label": "/services routes",  "sub": "routes/services.ts (health/stats/control)", "kind": "transport", "x": 440, "y": 348 },
+    { "id": "be.routes.cfg",   "label": "/config routes",    "sub": "routes/config.ts (CRUD + audit)",       "kind": "transport", "x": 640,  "y": 348 },
+    { "id": "be.routes.setup", "label": "/setup routes",     "sub": "routes/setup.ts (status + Hue pair)",   "kind": "transport", "x": 840,  "y": 348 },
+    { "id": "be.routes.inst",  "label": "/instances + /kinds","sub": "routes/instances.ts",                  "kind": "transport", "x": 1040, "y": 348 },
+    { "id": "be.routes.metrics","label": "/metrics + /meta", "sub": "routes/metrics.ts · routes/meta.ts",    "kind": "transport", "x": 1240, "y": 348 },
+    { "id": "be.wsPlugin",     "label": "wsPlugin /ws",      "sub": "transport/ws/wsPlugin.ts",              "kind": "transport", "x": 1440, "y": 348 },
+
+    { "id": "app.getStatus",   "label": "GetServiceStatus",  "sub": "application/GetServiceStatus.ts",       "kind": "app",       "x": 40,   "y": 448 },
+    { "id": "app.aggregated",  "label": "GetAggregatedHealth","sub": "application/GetAggregatedHealth.ts",   "kind": "app",       "x": 240,  "y": 448 },
+    { "id": "app.control",     "label": "ControlService",    "sub": "application/ControlService.ts",         "kind": "app",       "x": 440,  "y": 448 },
+    { "id": "app.listInst",    "label": "ListInstances",     "sub": "application/ListInstances.ts",          "kind": "app",       "x": 640,  "y": 448 },
+    { "id": "app.lifecycle",   "label": "ServiceLifecycle",  "sub": "application/ServiceLifecycle.ts",       "kind": "app",       "x": 840,  "y": 448 },
+    { "id": "app.bootstrap",   "label": "Backend bootstrap", "sub": "src/index.ts + bootstrap/",             "kind": "app",       "x": 1040, "y": 448 },
+    { "id": "app.metricsReg",  "label": "MetricsRegistry",   "sub": "core/metrics.ts",                       "kind": "app",       "x": 1240, "y": 448 },
+    { "id": "app.shutdown",    "label": "Shutdown handler",  "sub": "bootstrap/shutdown.ts",                 "kind": "app",       "x": 1440, "y": 448 },
+
+    { "id": "dom.registry",    "label": "ServiceRegistry",   "sub": "domain/ServiceRegistry  ·  ${kind}:${instanceId}", "kind": "domain", "x": 40,   "y": 540 },
+    { "id": "dom.base",        "label": "BaseService impls", "sub": "domain/services/* (14 kinds)",          "kind": "domain",    "x": 240,  "y": 540 },
+    { "id": "dom.poller",      "label": "BackgroundPoller",  "sub": "infra/scheduler/poller.ts",             "kind": "domain",    "x": 440,  "y": 540 },
+    { "id": "dom.bus",         "label": "EventBus",          "sub": "core/eventBus.ts",                      "kind": "domain",    "x": 640,  "y": 540 },
+    { "id": "dom.broadcaster", "label": "WS Broadcaster",    "sub": "transport/ws/Broadcaster.ts",           "kind": "domain",    "x": 840,  "y": 540 },
+    { "id": "dom.connmgr",     "label": "ConnectionManager", "sub": "transport/ws/ConnectionManager.ts",     "kind": "domain",    "x": 1040, "y": 540 },
+    { "id": "dom.heartbeat",   "label": "Heartbeat",         "sub": "transport/ws/HeartbeatScheduler.ts",    "kind": "domain",    "x": 1240, "y": 540 },
+    { "id": "dom.authgate",    "label": "WS AuthGate",       "sub": "transport/ws/AuthGate.ts  ·  origin guard", "kind": "domain", "x": 1440, "y": 540 },
+
+    { "id": "inf.http",        "label": "HttpClient",        "sub": "infra/http (Undici · jwt · pinned)",    "kind": "infra",     "x": 40,   "y": 648 },
+    { "id": "inf.ping",        "label": "PingProber",        "sub": "infra/net/pingProbe.ts (ICMP)",         "kind": "infra",     "x": 240,  "y": 648 },
+    { "id": "inf.tcp",         "label": "TcpProber",         "sub": "infra/net/tcpProbe.ts",                 "kind": "infra",     "x": 440,  "y": 648 },
+    { "id": "inf.ssh",         "label": "SshPool",           "sub": "infra/ssh/sshPool.ts (persistent)",     "kind": "infra",     "x": 640,  "y": 648 },
+    { "id": "inf.snmp",        "label": "SnmpGetter",        "sub": "infra/snmp (v2c + v3 walk)",            "kind": "infra",     "x": 840,  "y": 648 },
+    { "id": "inf.zmq",         "label": "ZmqSubscriber",     "sub": "infra/zmq (zeromq v6)",                 "kind": "infra",     "x": 1040, "y": 648 },
+    { "id": "inf.tor",         "label": "Tor ControlClient", "sub": "infra/tor (RFC 5050 + events B5)",      "kind": "infra",     "x": 1240, "y": 648 },
+    { "id": "inf.roon",        "label": "roonConnect",       "sub": "infra/roon (WebSocket)",                "kind": "infra",     "x": 1440, "y": 648 },
+
+    { "id": "data.duckdb",     "label": "DuckDB ConfigStore","sub": "config/store · WAL-backed",             "kind": "data",      "x": 340,  "y": 752 },
+    { "id": "data.masterkey",  "label": "Master key",        "sub": "config/masterKey.ts · per-install",     "kind": "data",      "x": 540,  "y": 752 },
+    { "id": "data.cache",      "label": "LRU + SWR cache",   "sub": "infra/cache (lru-cache)",               "kind": "data",      "x": 740,  "y": 752 },
+    { "id": "data.audit",      "label": "Audit log",         "sub": "config/store · service mutations",      "kind": "data",      "x": 940,  "y": 752 },
+    { "id": "data.envMig",     "label": "Env→DB migrator",   "sub": "config/store/envMigrator.ts (one-shot)","kind": "data",      "x": 1140, "y": 752 },
+
+    { "id": "ext.bitcoin",     "label": "Bitcoin Node",      "sub": "RPC + ZMQ (block/tx)",                  "kind": "external",  "x": 40,   "y": 852 },
+    { "id": "ext.adguard",     "label": "AdGuard Home",      "sub": "HTTP /control/status",                  "kind": "external",  "x": 240,  "y": 852 },
+    { "id": "ext.tor",         "label": "Tor daemon",        "sub": "ControlPort 9051 · SOCKS 9050",         "kind": "external",  "x": 440,  "y": 852 },
+    { "id": "ext.qbit",        "label": "qBittorrent",       "sub": "WebUI v2 API",                          "kind": "external",  "x": 640,  "y": 852 },
+    { "id": "ext.ipfs",        "label": "IPFS Node",         "sub": "Kubo RPC /api/v0",                      "kind": "external",  "x": 840,  "y": 852 },
+    { "id": "ext.synology",    "label": "Synology NAS",      "sub": "DSM /webapi (session)",                 "kind": "external",  "x": 1040, "y": 852 },
+    { "id": "ext.hue",         "label": "Philips Hue Bridge","sub": "v2 API · cert pinning",                 "kind": "external",  "x": 1240, "y": 852 },
+    { "id": "ext.roonsvr",     "label": "Roon Server",       "sub": "WebSocket API · zones",                 "kind": "external",  "x": 1440, "y": 852 },
+
+    { "id": "ext.alby",        "label": "AlbyHub",           "sub": "REST + LNbits",                         "kind": "external",  "x": 40,   "y": 960 },
+    { "id": "ext.macmini",     "label": "Mac Mini host",     "sub": "SSH metrics (top, vm_stat)",            "kind": "external",  "x": 240,  "y": 960 },
+    { "id": "ext.pi",          "label": "Raspberry Pi",      "sub": "SSH · vcgencmd + /proc",                "kind": "external",  "x": 440,  "y": 960 },
+    { "id": "ext.router",      "label": "Router (SNMP)",     "sub": "v2c/v3 walk · ARP + ifTable",           "kind": "external",  "x": 640,  "y": 960 },
+    { "id": "ext.homebridge",  "label": "Homebridge",        "sub": "Homebridge UI · JWT auth",              "kind": "external",  "x": 840,  "y": 960 },
+    { "id": "ext.nostr",       "label": "nostr.check",       "sub": "HTTP probe",                            "kind": "external",  "x": 1040, "y": 960 },
+
+    { "id": "build.electron",  "label": "Electron main",     "sub": "apps/desktop/src/main.ts",              "kind": "build",     "x": 1240, "y": 960 },
+    { "id": "build.builder",   "label": "electron-builder",  "sub": "dmg · NSIS · AppImage · deb",           "kind": "build",     "x": 1440, "y": 960 }
+  ],
+  "baseEdges": [
+    ["browser",        "fe.dashboard"],
+    ["browser",        "fe.api"],
+    ["electron",       "build.electron"],
+    ["build.electron", "app.bootstrap"],
+
+    ["fe.dashboard",   "fe.tile"],
+    ["fe.tile",        "fe.detail"],
+    ["fe.tile",        "fe.renderers"],
+    ["fe.detail",      "fe.hooks"],
+    ["fe.setup",       "fe.hooks"],
+    ["fe.hooks",       "fe.api"],
+    ["fe.hooks",       "fe.ws"],
+    ["fe.primitives",  "fe.tile"],
+
+    ["fe.api",         "be.cors"],
+    ["fe.ws",          "be.wsPlugin"],
+
+    ["be.cors",        "be.errors"],
+    ["be.errors",      "be.routes.svc"],
+    ["be.errors",      "be.routes.cfg"],
+    ["be.errors",      "be.routes.setup"],
+    ["be.errors",      "be.routes.inst"],
+    ["be.errors",      "be.routes.metrics"],
+
+    ["be.routes.svc",  "app.getStatus"],
+    ["be.routes.svc",  "app.aggregated"],
+    ["be.routes.svc",  "app.control"],
+    ["be.routes.cfg",  "app.lifecycle"],
+    ["be.routes.inst", "app.listInst"],
+    ["be.routes.metrics","app.metricsReg"],
+
+    ["app.getStatus",  "dom.registry"],
+    ["app.aggregated", "dom.registry"],
+    ["app.control",    "dom.registry"],
+    ["app.listInst",   "dom.registry"],
+    ["app.lifecycle",  "dom.poller"],
+    ["app.lifecycle",  "dom.registry"],
+    ["app.lifecycle",  "data.duckdb"],
+    ["app.bootstrap",  "app.lifecycle"],
+    ["app.bootstrap",  "data.masterkey"],
+    ["app.bootstrap",  "data.duckdb"],
+    ["app.bootstrap",  "data.envMig"],
+    ["app.shutdown",   "dom.poller"],
+    ["app.shutdown",   "app.lifecycle"],
+
+    ["dom.registry",   "dom.base"],
+    ["dom.poller",     "dom.base"],
+    ["dom.poller",     "dom.bus"],
+    ["dom.bus",        "dom.broadcaster"],
+    ["dom.broadcaster","dom.connmgr"],
+    ["dom.heartbeat",  "dom.connmgr"],
+    ["dom.authgate",   "dom.connmgr"],
+    ["be.wsPlugin",    "dom.authgate"],
+    ["be.wsPlugin",    "dom.connmgr"],
+    ["be.wsPlugin",    "dom.broadcaster"],
+    ["be.wsPlugin",    "dom.heartbeat"],
+
+    ["dom.base",       "inf.http"],
+    ["dom.base",       "inf.ping"],
+    ["dom.base",       "inf.tcp"],
+    ["dom.base",       "inf.ssh"],
+    ["dom.base",       "inf.snmp"],
+    ["dom.base",       "inf.zmq"],
+    ["dom.base",       "inf.tor"],
+    ["dom.base",       "inf.roon"],
+    ["dom.base",       "data.cache"],
+
+    ["data.duckdb",    "data.audit"],
+    ["data.duckdb",    "data.masterkey"],
+
+    ["inf.http",       "ext.adguard"],
+    ["inf.http",       "ext.qbit"],
+    ["inf.http",       "ext.ipfs"],
+    ["inf.http",       "ext.synology"],
+    ["inf.http",       "ext.hue"],
+    ["inf.http",       "ext.alby"],
+    ["inf.http",       "ext.homebridge"],
+    ["inf.http",       "ext.nostr"],
+    ["inf.http",       "ext.bitcoin"],
+    ["inf.ssh",        "ext.macmini"],
+    ["inf.ssh",        "ext.pi"],
+    ["inf.snmp",       "ext.router"],
+    ["inf.zmq",        "ext.bitcoin"],
+    ["inf.tor",        "ext.tor"],
+    ["inf.roon",       "ext.roonsvr"],
+
+    ["build.electron", "browser"],
+    ["build.builder",  "build.electron"]
+  ],
+  "flows": [
+    {
+      "id": "boot-startup",
+      "name": "Backend boot & service registration",
+      "category": "Lifecycle",
+      "summary": "Backend bootstrap: env → DuckDB → master key → ConfigStore → ServiceLifecycle.start → Fastify listen.",
+      "steps": [
+        { "from": "electron",      "to": "build.electron", "payload": "app.whenReady() → freePort → spawn backend subprocess",
+          "annotation": "apps/desktop/src/main.ts acquires a free loopback port and starts the backend as a child process before opening the BrowserWindow." },
+        { "from": "build.electron","to": "app.bootstrap",  "payload": "node dist/index.js  ·  BACKEND_V2_PORT=… BACKEND_V2_HOST=127.0.0.1",
+          "annotation": "Backend process inherits env from Electron main; loadEnv() validates with Zod and refuses to start on missing/invalid vars." },
+        { "from": "app.bootstrap", "to": "data.duckdb",    "payload": "createDuckDbPool({ path: <dataDir>/watchman.duckdb }) + runConfigMigrations()",
+          "annotation": "DuckDB pool opened, migrations applied. Stored services and audit tables ensured." },
+        { "from": "app.bootstrap", "to": "data.masterkey", "payload": "loadOrCreateMasterKey(dataDir, env.WATCHMAN_MASTER_KEY)",
+          "annotation": "Per-install master key file (0600) created on first launch; env override allowed for headless deployments." },
+        { "from": "app.bootstrap", "to": "data.envMig",    "payload": "migrateEnvServicesIfNeeded(store, logger)",
+          "annotation": "One-shot import of legacy ENABLED_SERVICES env vars into the DB. Idempotent — re-running on subsequent boots is a no-op." },
+        { "from": "app.bootstrap", "to": "app.lifecycle",  "payload": "createServiceLifecycle({ store, registry, poller, bus, infra }) → lifecycle.start()",
+          "annotation": "Lifecycle reads every StoredService, brings up the enabled ones (createService → onStart → registry.register → poller.track)." },
+        { "from": "app.lifecycle", "to": "dom.registry",   "payload": "registry.register(svc)  ·  key = `${kind}:${instanceId}`",
+          "annotation": "All enabled services land in the in-memory registry — the single lookup table for the application layer." },
+        { "from": "app.lifecycle", "to": "dom.poller",     "payload": "poller.track(svc)  ·  schedules health + stats with jitter",
+          "annotation": "Each service contributes its own pollPolicy ({ healthMs, statsMs, jitterRatio }). Poller stores Task cancellers per service id." },
+        { "from": "app.bootstrap", "to": "be.cors",        "payload": "buildServer({ services, listInstances, metrics, config, setup })",
+          "annotation": "Fastify created with trustProxy + 1 MiB body limit; CORS hook allow-lists watchman:// + http://localhost:* + http://127.0.0.1:*." },
+        { "from": "app.bootstrap", "to": "be.wsPlugin",    "payload": "app.register(wsPlugin, { bus, logger, serverVersion })",
+          "annotation": "wsPlugin registers @fastify/websocket and starts the Broadcaster + HeartbeatScheduler." },
+        { "from": "app.bootstrap", "to": "app.shutdown",   "payload": "registerShutdown({ close: poller.stop → lifecycle.stop → dbPool.close → app.close })",
+          "annotation": "SIGTERM/SIGINT chain — every service's onStop runs before DuckDB and Fastify close." }
+      ]
+    },
+    {
+      "id": "dashboard-load",
+      "name": "Load the bento dashboard",
+      "category": "Read paths",
+      "summary": "Browser opens the dashboard → aggregated health fan-out → tiles render with the latest snapshot per kind:instance.",
+      "steps": [
+        { "from": "browser",       "to": "fe.dashboard",  "payload": "navigate to /  ·  BentoDashboard mounts",
+          "annotation": "Single-user app — no login wall. WebSocketProvider eagerly connects in parallel." },
+        { "from": "fe.dashboard",  "to": "fe.hooks",      "payload": "useAggregatedHealth() · React Query",
+          "annotation": "One query feeds every tile; React Query caches by key and dedupes concurrent calls." },
+        { "from": "fe.hooks",      "to": "fe.api",        "payload": "apiClient.get('/api/services')",
+          "annotation": "ApiClient is the only network chokepoint on the frontend; centralises base URL, abort, and error envelope decoding." },
+        { "from": "fe.api",        "to": "be.cors",       "payload": "GET /api/services  ·  Origin: watchman:// | localhost",
+          "annotation": "Pre-flight handler short-circuits OPTIONS; real GET continues through the plugin chain." },
+        { "from": "be.cors",       "to": "be.routes.svc", "payload": "logSampling → requestTimeout(15s) → compress → errorHandler → /services",
+          "annotation": "Request timeout attaches an AbortSignal that flows all the way into infra probes." },
+        { "from": "be.routes.svc", "to": "app.aggregated","payload": "aggregated.run(signal)",
+          "annotation": "GetAggregatedHealth walks the registry and returns the latest cached health snapshot per registered service." },
+        { "from": "app.aggregated","to": "dom.registry",  "payload": "registry.all()",
+          "annotation": "Read-only snapshot; the registry is never mutated by read paths." },
+        { "from": "dom.registry",  "to": "dom.base",      "payload": "for each service: latestHealth()",
+          "annotation": "Services keep their own latest snapshot fed by the poller; reads are O(1) per service." },
+        { "from": "be.routes.svc", "to": "fe.api",        "payload": "{ data: [{ id, kind, instanceId, health, stats }, …] }",
+          "annotation": "Standard envelope. ApiClient unwraps `data`; React Query stores the resulting array." },
+        { "from": "fe.api",        "to": "fe.tile",       "payload": "data → renderer registry → bento tiles",
+          "annotation": "ServiceTile picks the right renderer for the kind (e.g. BitcoinRenderer, AdGuardRenderer) and feeds it the snapshot." }
+      ]
+    },
+    {
+      "id": "service-detail",
+      "name": "Open a service detail sheet",
+      "category": "Read paths",
+      "summary": "Click a tile → fetch health + stats for that one kind:instance → render the detail sheet.",
+      "steps": [
+        { "from": "browser",       "to": "fe.tile",       "payload": "click ServiceTile",
+          "annotation": "Tile opens the DetailSheet for `${kind}:${instanceId}`." },
+        { "from": "fe.tile",       "to": "fe.detail",     "payload": "DetailSheet({ kind, instance })",
+          "annotation": "Sheet renders skeletons immediately; data arrives via hooks." },
+        { "from": "fe.detail",     "to": "fe.hooks",      "payload": "useServiceHealth(kind, instance) + useServiceStats(kind, instance)",
+          "annotation": "Two parallel queries; React Query dedupes if the dashboard already has health for this kind." },
+        { "from": "fe.hooks",      "to": "fe.api",        "payload": "GET /api/services/{kind}/health?instance={id} + /stats",
+          "annotation": "ApiClient fires both requests in parallel." },
+        { "from": "fe.api",        "to": "be.routes.svc", "payload": "two GETs through the plugin chain",
+          "annotation": "Each request carries its own AbortSignal from requestTimeoutPlugin." },
+        { "from": "be.routes.svc", "to": "app.getStatus", "payload": "getStatus.health(kind, instance, signal) / .stats(…)",
+          "annotation": "Returns Result<HealthSnapshot | StatsSnapshot, DomainError>; ok=false maps to a typed envelope error." },
+        { "from": "app.getStatus", "to": "dom.registry",  "payload": "registry.get(kind, instance)",
+          "annotation": "If the lookup misses, a NotFound DomainError is returned and the route replies 404." },
+        { "from": "dom.registry",  "to": "dom.base",      "payload": "svc.checkHealth(signal) / svc.getStats(signal)",
+          "annotation": "Live probe — the detail sheet always asks the service afresh, even if the dashboard had a cached aggregate." },
+        { "from": "dom.base",      "to": "inf.http",      "payload": "withHostPing(): Promise.allSettled([ping, http probe])",
+          "annotation": "Two-tier health (ADR-019 Phase 0a): host ping and protocol probe run in parallel; results assembled into { host, service, reachable }." },
+        { "from": "inf.http",      "to": "ext.adguard",   "payload": "GET https://adguard.local/control/status",
+          "annotation": "Example: an AdGuard service probe. Other kinds swap inf.http for inf.ssh / inf.snmp / inf.zmq / inf.tor." },
+        { "from": "be.routes.svc", "to": "fe.api",        "payload": "{ data: { host, service, reachable, latencyMs, message, details } }",
+          "annotation": "Sheet renders two indicator dots (host + service) and a metric grid populated by the kind's renderer." }
+      ]
+    },
+    {
+      "id": "poller-tick",
+      "name": "Background poller tick → WebSocket fan-out",
+      "category": "Real-time",
+      "summary": "Jittered scheduler ticks → service probes → eventBus emits → Broadcaster pushes a snapshot to every connected client.",
+      "steps": [
+        { "from": "dom.poller",    "to": "dom.base",       "payload": "schedule(svc, healthMs).tick() → svc.checkHealth(withTimeout(10s))",
+          "annotation": "Per-service jitter ±10% (configurable). Paused poller skips ticks cleanly — used during applyCreate/Update." },
+        { "from": "dom.base",      "to": "inf.http",       "payload": "probe over chosen transport",
+          "annotation": "infra.http / infra.ssh / infra.snmp / infra.zmq depending on kind; each respects the AbortSignal from withTimeout." },
+        { "from": "inf.http",      "to": "ext.adguard",    "payload": "HTTP GET / RPC call",
+          "annotation": "External service is hit once per tick; failure is captured as a DomainError, not a thrown exception." },
+        { "from": "ext.adguard",   "to": "dom.base",       "payload": "response / error",
+          "annotation": "Service maps the response into a HealthSnapshot ({ host, service, reachable, latencyMs, message, details })." },
+        { "from": "dom.base",      "to": "dom.bus",        "payload": "bus.emit('service.health.updated', { id, kind, instanceId, at, snapshot })",
+          "annotation": "Snapshot is included on the event (Phase 0a+) so subscribers don't need to refetch." },
+        { "from": "dom.bus",       "to": "dom.broadcaster","payload": "broadcaster subscriber callback",
+          "annotation": "Broadcaster also subscribes to service.stats.updated, config:service.created/updated/deleted." },
+        { "from": "dom.broadcaster","to": "dom.connmgr",   "payload": "for ws in manager.openClients(): ws.send(json)",
+          "annotation": "Send errors mark the socket dead → ConnectionManager.remove(ws) → no zombie connections." },
+        { "from": "dom.connmgr",   "to": "fe.ws",          "payload": "{ type: 'service_update', scope: 'health', id, kind, instanceId, snapshot, at }",
+          "annotation": "Frontend WebSocketProvider receives the frame and dispatches to subscribed hooks." },
+        { "from": "fe.ws",         "to": "fe.hooks",       "payload": "useWebSocketEvent('service_update') → queryClient.setQueryData / invalidate",
+          "annotation": "Hooks merge the snapshot directly into the React Query cache — no extra REST round-trip." },
+        { "from": "fe.hooks",      "to": "fe.tile",        "payload": "tile rerenders with new snapshot",
+          "annotation": "Sparklines, status dots and metrics update in place; no full page refresh." }
+      ]
+    },
+    {
+      "id": "ws-handshake",
+      "name": "Browser opens the WebSocket",
+      "category": "Real-time",
+      "summary": "WebSocketProvider connects → AuthGate origin check → ConnectionManager add → welcome frame + heartbeat schedule.",
+      "steps": [
+        { "from": "browser",       "to": "fe.ws",         "payload": "WebSocketProvider mounts (App.tsx)",
+          "annotation": "Single shared WebSocket per browser tab; useWebSocket consumers subscribe to message types." },
+        { "from": "fe.ws",         "to": "be.wsPlugin",   "payload": "new WebSocket(`${apiUrl.replace(/^http/, 'ws')}/ws`)",
+          "annotation": "URL is injected by the Electron preload (--watchman-ws-url) or read from window globals in the browser build." },
+        { "from": "be.wsPlugin",   "to": "dom.authgate",  "payload": "gate.isOriginAllowed(req) + gate.authenticate(req)",
+          "annotation": "Origin allow-list (watchman://, http://localhost:*); default verifyToken returns anonymous because there is no built-in auth." },
+        { "from": "dom.authgate",  "to": "dom.connmgr",   "payload": "manager.add(ws, ip, user)  ·  maxConnectionsPerIp=10",
+          "annotation": "Per-IP cap protects against runaway tabs/scripts; rejection closes with 1013." },
+        { "from": "dom.connmgr",   "to": "dom.broadcaster","payload": "broadcaster.welcome(ws, serverVersion)",
+          "annotation": "Welcome frame: { type: 'connection', message, timestamp, serverVersion }. Frontend logs and shows live status pill." },
+        { "from": "dom.connmgr",   "to": "dom.heartbeat", "payload": "scheduler.start()  ·  setInterval(30s) → ws.ping()",
+          "annotation": "Heartbeat marks the socket alive on pong; dead sockets are pruned by ConnectionManager." },
+        { "from": "be.wsPlugin",   "to": "fe.ws",         "payload": "connection established",
+          "annotation": "From here, every poller tick / config change flows down this socket." }
+      ]
+    },
+    {
+      "id": "setup-create",
+      "name": "Setup wizard adds a service",
+      "category": "Service config",
+      "summary": "First-run wizard collects credentials → POST /config/services → ConfigStore encrypts → ServiceLifecycle brings it up live.",
+      "steps": [
+        { "from": "browser",       "to": "fe.setup",     "payload": "first visit · /setup/status returns needsSetup:true",
+          "annotation": "Wizard takes over whenever no service is configured; user can also reach it later via Settings." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "GET /config/kinds",
+          "annotation": "Returns metadata for every supported kind: label, description, field schema, list of secret fields." },
+        { "from": "fe.api",        "to": "be.routes.cfg","payload": "{ data: [{ kind, label, fields, secretFields }] }",
+          "annotation": "Schema is derived from config/schemas/*; frontend uses it to render the right form widgets." },
+        { "from": "browser",       "to": "fe.setup",     "payload": "user fills fields + clicks Save",
+          "annotation": "Wizard validates client-side; secret fields are marked so they never leak into local storage." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "POST /config/services { kind, instance, config }",
+          "annotation": "ApiClient posts JSON envelope; secrets travel only over the loopback (or LAN) channel." },
+        { "from": "fe.api",        "to": "be.routes.cfg","payload": "validated body → ConfigStore.create",
+          "annotation": "Route validates with Zod, then delegates to ConfigStore (no business logic in routes)." },
+        { "from": "be.routes.cfg", "to": "data.duckdb",  "payload": "ConfigStore.create(...) → encryptor.encrypt(secrets) → INSERT",
+          "annotation": "AES-GCM per-field encryption keyed off the master key. Plaintext never touches disk." },
+        { "from": "data.duckdb",   "to": "dom.bus",      "payload": "bus.emit('config:service.created', { id, kind, instanceId })",
+          "annotation": "Typed bus event; ServiceLifecycle is the sole subscriber that translates events into infra actions." },
+        { "from": "dom.bus",       "to": "app.lifecycle","payload": "applyCreate(id) (serialized chain)",
+          "annotation": "ServiceLifecycle serialises all create/update/delete ops so they never race." },
+        { "from": "app.lifecycle", "to": "dom.poller",   "payload": "poller.pause() → bringUp(stored) → poller.resume() + track(svc)",
+          "annotation": "Poller pauses during structural changes so an in-flight tick can't observe a half-registered service." },
+        { "from": "app.lifecycle", "to": "dom.broadcaster","payload": "(via bus) config:service.created",
+          "annotation": "Broadcaster fans out { type: 'service_config_changed', action: 'created' } so every open tab refreshes its registry view." },
+        { "from": "dom.broadcaster","to": "fe.hooks",    "payload": "WS frame · invalidate ['services'] queries",
+          "annotation": "useAggregatedHealth refetches → new tile pops onto the dashboard within ~1s." }
+      ]
+    },
+    {
+      "id": "config-update",
+      "name": "Update an existing service config",
+      "category": "Service config",
+      "summary": "PUT /config/services/{id} → encrypt new secrets → teardown + bringUp → broadcast.",
+      "steps": [
+        { "from": "browser",       "to": "fe.setup",     "payload": "edit service form → Save", "annotation": "Same form as setup wizard, prefilled from /config/services/:id (secrets are returned as opaque markers)." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "PUT /config/services/{id}", "annotation": "Only changed secret fields carry plaintext; untouched secrets are passed through as the opaque marker." },
+        { "from": "fe.api",        "to": "be.routes.cfg","payload": "validated body", "annotation": "Route delegates to ConfigStore.update which preserves untouched secrets." },
+        { "from": "be.routes.cfg", "to": "data.duckdb",  "payload": "ConfigStore.update → encrypt diff → UPDATE", "annotation": "Audit log row written; old → new diff captured (with secrets masked)." },
+        { "from": "data.duckdb",   "to": "dom.bus",      "payload": "config:service.updated", "annotation": "Subscriber reacts on the bus, not via a direct call." },
+        { "from": "dom.bus",       "to": "app.lifecycle","payload": "applyUpdate(id)", "annotation": "Lifecycle tears down the old instance and brings up a fresh one with the new config." },
+        { "from": "app.lifecycle", "to": "dom.poller",   "payload": "untrack(old) → onStop → register(new) → track(new)", "annotation": "Single serialized op; in-flight tick is allowed to complete." },
+        { "from": "app.lifecycle", "to": "dom.broadcaster","payload": "config:service.updated → WS", "annotation": "Frontend updates form state and dashboard simultaneously." }
+      ]
+    },
+    {
+      "id": "config-delete",
+      "name": "Remove a service",
+      "category": "Service config",
+      "summary": "DELETE /config/services/{id} → tear down → audit → broadcast.",
+      "steps": [
+        { "from": "browser",       "to": "fe.setup",     "payload": "click Remove · confirm dialog", "annotation": "Destructive — frontend requires explicit confirmation." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "DELETE /config/services/{id}", "annotation": "" },
+        { "from": "fe.api",        "to": "be.routes.cfg","payload": "route handler", "annotation": "" },
+        { "from": "be.routes.cfg", "to": "data.duckdb",  "payload": "ConfigStore.delete(id)", "annotation": "Row marked removed + audit entry; encryption keys retained for replay during incident response." },
+        { "from": "data.duckdb",   "to": "dom.bus",      "payload": "config:service.deleted", "annotation": "" },
+        { "from": "dom.bus",       "to": "app.lifecycle","payload": "applyDelete(id)", "annotation": "" },
+        { "from": "app.lifecycle", "to": "dom.poller",   "payload": "poller.untrack(id) + registry.unregister(id) + svc.onStop()", "annotation": "Per-service onStop cleans up sockets, ZMQ subscriptions, Tor event subscriptions, etc." },
+        { "from": "app.lifecycle", "to": "dom.broadcaster","payload": "config:service.deleted → WS", "annotation": "Tile disappears from the dashboard within a second." }
+      ]
+    },
+    {
+      "id": "control-action",
+      "name": "Send a control action to a service",
+      "category": "Write paths",
+      "summary": "Tile → POST /api/services/{kind}/control { action } → ControlService → svc.control().",
+      "steps": [
+        { "from": "browser",       "to": "fe.tile",      "payload": "click 'Pause torrents' / 'Restart Tor' / etc.", "annotation": "Only services implementing the Controllable interface expose action buttons." },
+        { "from": "fe.tile",       "to": "fe.api",       "payload": "POST /api/services/{kind}/control?instance={id} { action }", "annotation": "Action vocabulary is per-kind; ApiClient lets renderers declare them at component-registration time." },
+        { "from": "fe.api",        "to": "be.routes.svc","payload": "route handler", "annotation": "Pass-through to ControlService — routes hold no business logic." },
+        { "from": "be.routes.svc", "to": "app.control",  "payload": "control.run(kind, instance, action, signal)", "annotation": "Returns Result<void, DomainError>; 4xx/5xx is mapped from DomainError codes." },
+        { "from": "app.control",   "to": "dom.registry", "payload": "registry.get(kind, instance)", "annotation": "404 if missing or service not Controllable." },
+        { "from": "dom.registry",  "to": "dom.base",     "payload": "if (isControllable(svc)) svc.control(action, signal)", "annotation": "Controllable services dispatch on the action string (e.g. qBittorrent → pause/resume/recheck)." },
+        { "from": "dom.base",      "to": "inf.http",     "payload": "POST upstream API", "annotation": "Or SSH command, or SNMP set; whatever the kind requires." },
+        { "from": "inf.http",      "to": "ext.qbit",     "payload": "POST /api/v2/torrents/pause", "annotation": "qBittorrent WebUI v2 example." },
+        { "from": "be.routes.svc", "to": "fe.api",       "payload": "{ data: null } or { error: { code, message } }", "annotation": "Tile toasts success / failure. A poller tick shortly after confirms the new state." }
+      ]
+    },
+    {
+      "id": "hue-pair",
+      "name": "Pair a Philips Hue bridge",
+      "category": "Setup wizard",
+      "summary": "User puts bridge in pairing mode → POST /setup/philips-bridge/pair → returns the developer username.",
+      "steps": [
+        { "from": "browser",       "to": "fe.setup",     "payload": "press bridge button · click 'Pair'", "annotation": "Wizard prompts the user to press the physical link button before submitting." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "POST /setup/philips-bridge/pair { host, timeoutMs }", "annotation": "" },
+        { "from": "fe.api",        "to": "be.routes.setup","payload": "validated body", "annotation": "ValidationError if host is missing or malformed." },
+        { "from": "be.routes.setup","to": "inf.http",    "payload": "pairBridge(host, http, timeoutMs)", "annotation": "Hue pairing uses the legacy /api endpoint with `{devicetype: 'watchman#…'}`; loops until the button is pressed or timeout." },
+        { "from": "inf.http",      "to": "ext.hue",      "payload": "POST http://{host}/api {devicetype}", "annotation": "Bridge returns `[{success:{username:…}}]` once the link button has been pressed." },
+        { "from": "ext.hue",       "to": "be.routes.setup","payload": "{ username }", "annotation": "huePairing maps Hue errors into UnavailableError so the wizard can show a friendly retry hint." },
+        { "from": "be.routes.setup","to": "fe.api",      "payload": "{ data: { username } }", "annotation": "Wizard stores the username as the Hue service secret and continues with cert pinning setup." }
+      ]
+    },
+    {
+      "id": "config-export-import",
+      "name": "Export & import the encrypted config",
+      "category": "Service config",
+      "summary": "Move services between machines by exporting the encrypted bundle and re-importing it (master key required to read secrets).",
+      "steps": [
+        { "from": "browser",       "to": "fe.setup",     "payload": "Settings → Export config", "annotation": "Single button download — primarily for backups and machine migrations." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "GET /config/export", "annotation": "" },
+        { "from": "fe.api",        "to": "be.routes.cfg","payload": "stream JSON envelope", "annotation": "" },
+        { "from": "be.routes.cfg", "to": "data.duckdb",  "payload": "ConfigStore.exportAll()", "annotation": "Returns encrypted secret fields and audit metadata; plaintext never re-encoded." },
+        { "from": "be.routes.cfg", "to": "fe.api",       "payload": "watchman-config-export.json", "annotation": "Frontend triggers a browser download via Blob URL." },
+        { "from": "browser",       "to": "fe.setup",     "payload": "(elsewhere) Settings → Import", "annotation": "Operator drops the file on the destination machine — which must hold the same master key to decrypt." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "POST /config/import (JSON body)", "annotation": "" },
+        { "from": "fe.api",        "to": "be.routes.cfg","payload": "ConfigStore.importAll(body)", "annotation": "Inserts missing services; existing ids are updated; conflicts are surfaced as ValidationError." },
+        { "from": "be.routes.cfg", "to": "data.duckdb",  "payload": "INSERT / UPDATE stored_services + audit rows", "annotation": "" },
+        { "from": "data.duckdb",   "to": "dom.bus",      "payload": "config:service.created / .updated per row", "annotation": "Lifecycle picks each row up exactly like a manual create/update — services come online live." }
+      ]
+    },
+    {
+      "id": "audit-log",
+      "name": "Read the service-config audit log",
+      "category": "Service config",
+      "summary": "GET /config/audit returns the latest mutations (create / update / delete) for incident response.",
+      "steps": [
+        { "from": "browser",       "to": "fe.setup",     "payload": "Settings → Audit log",                "annotation": "Read-only operator view." },
+        { "from": "fe.setup",      "to": "fe.api",       "payload": "GET /config/audit?limit=100",        "annotation": "" },
+        { "from": "fe.api",        "to": "be.routes.cfg","payload": "validated limit",                    "annotation": "" },
+        { "from": "be.routes.cfg", "to": "data.audit",   "payload": "ConfigStore.audit(limit)",          "annotation": "Returns the most recent N rows ordered desc; secret diffs are masked." },
+        { "from": "data.audit",    "to": "fe.api",       "payload": "[{ at, action, kind, instance, diff }]", "annotation": "Frontend renders a timeline. Useful when something disappears or behaves unexpectedly." }
+      ]
+    },
+    {
+      "id": "tor-events",
+      "name": "Tor ControlPort event subscription (B5)",
+      "category": "Service-specific",
+      "summary": "TorService onStart opens a persistent ControlPort connection and routes BW events into the bus.",
+      "steps": [
+        { "from": "app.lifecycle", "to": "dom.base",     "payload": "create TorService → svc.onStart()", "annotation": "Only Tor in ControlPort mode (useControlPort=true). SOCKS-only mode skips the subscription." },
+        { "from": "dom.base",      "to": "inf.tor",     "payload": "torControlClient.connect(host, port) → AUTHENTICATE", "annotation": "Async line-buffered TCP reader; supports GETINFO/GETCONF/SIGNAL (B4)." },
+        { "from": "inf.tor",       "to": "ext.tor",     "payload": "TCP 9051  ·  SETEVENTS BW", "annotation": "Persistent connection; event subscription registers handlers for `650 BW` lines." },
+        { "from": "ext.tor",       "to": "inf.tor",     "payload": "650 BW <read> <written>", "annotation": "Tor pushes bandwidth events ~1/s." },
+        { "from": "inf.tor",       "to": "dom.base",    "payload": "handler({ read, written })", "annotation": "TorService updates its in-memory traffic counters." },
+        { "from": "dom.base",      "to": "dom.bus",     "payload": "bus.emit('service.stats.updated', { snapshot })", "annotation": "Stats updates ride the same bus as poller-driven events — uniform downstream handling." },
+        { "from": "dom.bus",       "to": "dom.broadcaster","payload": "subscriber callback", "annotation": "" },
+        { "from": "dom.broadcaster","to": "fe.ws",      "payload": "{ type: 'service_update', scope: 'stats', snapshot }", "annotation": "Tor sparkline updates without a REST refetch." }
+      ]
+    },
+    {
+      "id": "bitcoin-zmq",
+      "name": "Bitcoin ZMQ block/tx stream (BT2)",
+      "category": "Service-specific",
+      "summary": "BitcoinService subscribes to ZMQ block/tx topics; falls back to poll-only if ZMQ is unavailable.",
+      "steps": [
+        { "from": "app.lifecycle", "to": "dom.base",   "payload": "create BitcoinService → svc.onStart()", "annotation": "Dynamic import of `zeromq` (v6 ESM N-API); missing module logs and continues poll-only." },
+        { "from": "dom.base",      "to": "inf.zmq",    "payload": "createZmqSubscriber({ endpoint, topics: ['hashblock','hashtx'] })", "annotation": "ZmqSubscriber wraps a SUB socket with 3-frame parsing (topic, data, sequence)." },
+        { "from": "inf.zmq",       "to": "ext.bitcoin","payload": "tcp://node:28332  ·  SUB hashblock + hashtx", "annotation": "Operator must enable -zmqpubhashblock / -zmqpubhashtx on bitcoind for this to work." },
+        { "from": "ext.bitcoin",   "to": "inf.zmq",    "payload": "[topic, payload, seq]", "annotation": "Sequence numbers detect dropped frames; service decides whether to resync." },
+        { "from": "inf.zmq",       "to": "dom.base",   "payload": "onMessage(topic, payload, seq)", "annotation": "Service updates last-block-seen / mempool counters in memory." },
+        { "from": "dom.base",      "to": "dom.bus",    "payload": "service.stats.updated", "annotation": "Same path as the poller — frontend doesn't care whether the snapshot came from a poll or a push." },
+        { "from": "dom.bus",       "to": "fe.ws",      "payload": "→ Broadcaster → WS frame", "annotation": "Block counter on the tile increments live." }
+      ]
+    },
+    {
+      "id": "roon-zones",
+      "name": "Roon zone & now-playing tracking (RN1/RN2)",
+      "category": "Service-specific",
+      "summary": "RoonService keeps a WebSocket open to the Core; zone state and current track stream in continuously.",
+      "steps": [
+        { "from": "app.lifecycle", "to": "dom.base",   "payload": "create RoonService → svc.onStart()", "annotation": "Roon WebSocket API requires a pairing token (stored as a secret in ConfigStore)." },
+        { "from": "dom.base",      "to": "inf.roon",   "payload": "roonConnect({ host, port, token })", "annotation": "Auto-reconnect on disconnect; pending listeners queued during reconnect." },
+        { "from": "inf.roon",      "to": "ext.roonsvr","payload": "ws://core:9100/api/socket", "annotation": "Subscribes to zone + now-playing change topics." },
+        { "from": "ext.roonsvr",   "to": "inf.roon",   "payload": "zone_changed / now_playing_changed messages", "annotation": "Roon pushes deltas; service merges them into its internal zone map." },
+        { "from": "inf.roon",      "to": "dom.base",   "payload": "service updates its in-memory zones", "annotation": "" },
+        { "from": "dom.base",      "to": "dom.bus",    "payload": "service.stats.updated { zones, nowPlaying }", "annotation": "" },
+        { "from": "dom.bus",       "to": "fe.ws",      "payload": "→ Broadcaster", "annotation": "Roon tile shows live zone state without polling Roon constantly." }
+      ]
+    },
+    {
+      "id": "pi-ssh",
+      "name": "Raspberry Pi metrics over SSH (I4)",
+      "category": "Service-specific",
+      "summary": "RaspberryPiService reuses a persistent SSH connection from the pool to run vcgencmd + /proc reads.",
+      "steps": [
+        { "from": "dom.poller",    "to": "dom.base",   "payload": "tick → svc.checkHealth()", "annotation": "" },
+        { "from": "dom.base",      "to": "inf.ssh",    "payload": "sshPool.acquire(host:port:user:keyPath)", "annotation": "Pool keeps one persistent connection per tuple; auto-reconnect on disconnect (2s delay)." },
+        { "from": "inf.ssh",       "to": "ext.pi",     "payload": "exec: vcgencmd measure_temp + cat /proc/loadavg + …", "annotation": "Commands batched; output parsed into structured metrics." },
+        { "from": "ext.pi",        "to": "inf.ssh",    "payload": "stdout streams", "annotation": "Pool returns to caller; connection is recycled, not closed." },
+        { "from": "inf.ssh",       "to": "dom.base",   "payload": "parsed metrics (cpu temp, throttling, load, uptime)", "annotation": "X3 task adds renderer enhancements for these metrics." },
+        { "from": "dom.base",      "to": "dom.bus",    "payload": "service.health.updated + service.stats.updated", "annotation": "" }
+      ]
+    },
+    {
+      "id": "router-snmp",
+      "name": "Router SNMP walk",
+      "category": "Service-specific",
+      "summary": "RouterService walks ifTable + ipNetToMediaTable via SNMP v2c/v3 for interface stats, ARP table, CPU and uptime.",
+      "steps": [
+        { "from": "dom.poller",    "to": "dom.base",   "payload": "tick → svc.getStats()", "annotation": "Router uses slower statsMs since SNMP walks are expensive." },
+        { "from": "dom.base",      "to": "inf.snmp",   "payload": "snmp.walk({ host, community/user, oid: ifTable })", "annotation": "Walk implementation handles v2c (community) and v3 (user + authKey + privKey) uniformly." },
+        { "from": "inf.snmp",      "to": "ext.router", "payload": "UDP 161  ·  GET-BULK requests", "annotation": "Session cleanup uses both timers and AbortSignal so the socket never leaks." },
+        { "from": "ext.router",    "to": "inf.snmp",   "payload": "ifTable rows", "annotation": "Router also walks ARP table for connected-device counts and sysUpTime for uptime." },
+        { "from": "inf.snmp",      "to": "dom.base",   "payload": "interface stats + ARP + CPU + uptime", "annotation": "" },
+        { "from": "dom.base",      "to": "dom.bus",    "payload": "service.stats.updated", "annotation": "Router tile renders interface bandwidth and a 'connected devices' counter." }
+      ]
+    },
+    {
+      "id": "synology-session",
+      "name": "Synology DSM session login (SY1)",
+      "category": "Service-specific",
+      "summary": "createDsmClient logs in on first call, routes via /webapi/entry.cgi, recovers automatically from session-expired codes.",
+      "steps": [
+        { "from": "dom.base",      "to": "inf.http",   "payload": "createDsmClient({ host, account, passwd })", "annotation": "Client is per-service, not per-request — sessions persist across polls." },
+        { "from": "inf.http",      "to": "ext.synology","payload": "GET /webapi/auth.cgi  ·  SYNO.API.Auth login", "annotation": "Concurrent requests share one pending login promise (thundering-herd prevention)." },
+        { "from": "ext.synology",  "to": "inf.http",   "payload": "{ sid }", "annotation": "Subsequent calls inject `_sid` and target /webapi/entry.cgi." },
+        { "from": "inf.http",      "to": "ext.synology","payload": "GET /webapi/entry.cgi?api=SYNO.Storage.* + _sid", "annotation": "" },
+        { "from": "ext.synology",  "to": "inf.http",   "payload": "data | { error: { code: 105/106/107 } }", "annotation": "On 105/106/107, dsmClient re-logs in once and retries the original call exactly once." },
+        { "from": "inf.http",      "to": "dom.base",   "payload": "parsed payload", "annotation": "Surface metrics: disks, RAID, temperature, services, etc." }
+      ]
+    },
+    {
+      "id": "homebridge-jwt",
+      "name": "Homebridge JWT auth + token refresh (HB1/I3)",
+      "category": "Service-specific",
+      "summary": "HomebridgeService runs on top of jwtClient — auto-inject + single retry on 401.",
+      "steps": [
+        { "from": "dom.base",      "to": "inf.http",   "payload": "jwtClient.request({ url, headers })", "annotation": "jwtClient is a wrapper over HttpClient that injects Authorization: Bearer <token>." },
+        { "from": "inf.http",      "to": "ext.homebridge","payload": "GET /api/status  ·  Authorization: Bearer …", "annotation": "" },
+        { "from": "ext.homebridge","to": "inf.http",   "payload": "200 OK  |  401 Unauthorized", "annotation": "401 triggers exactly one refresh + retry; falsy tokens skip injection entirely." },
+        { "from": "inf.http",      "to": "ext.homebridge","payload": "(on 401) POST /api/auth/login  →  retry GET /api/status", "annotation": "Concurrent 401s share a single pending refresh promise — no token-storm." },
+        { "from": "ext.homebridge","to": "inf.http",   "payload": "fresh token + retried response", "annotation": "Failure to refresh propagates as UnauthorizedError; service surfaces a clear status to the UI." }
+      ]
+    },
+    {
+      "id": "hue-pinned",
+      "name": "Hue cert-pinned probe (I2)",
+      "category": "Service-specific",
+      "summary": "Hue requests go through a pinnedClient that verifies the bridge's SHA-256 cert fingerprint before each request.",
+      "steps": [
+        { "from": "dom.base",      "to": "inf.http",   "payload": "pinnedClient.request({ url, expectedCertHash })", "annotation": "PhilipsBridgeService passes certHash from ConfigStore; pinning is skipped if certHash is unset." },
+        { "from": "inf.http",      "to": "ext.hue",    "payload": "TLS handshake + cert probe", "annotation": "Cert SHA-256 is computed before each request and compared against the stored fingerprint." },
+        { "from": "inf.http",      "to": "inf.http",   "payload": "if mismatch → UnauthorizedError; if probe times out → UnavailableError", "annotation": "Routes map both to typed envelope errors; the UI shows distinct icons/messages." },
+        { "from": "inf.http",      "to": "ext.hue",    "payload": "GET /clip/v2/resource/light  ·  hue-application-key", "annotation": "Bridge returns the light/group state used to render the Hue tile." }
+      ]
+    },
+    {
+      "id": "metrics-scrape",
+      "name": "Metrics endpoint (Prometheus-style)",
+      "category": "Observability",
+      "summary": "GET /metrics returns a snapshot of the in-process MetricsRegistry — useful for scrapes from external dashboards.",
+      "steps": [
+        { "from": "browser",       "to": "fe.api",            "payload": "GET /metrics (or scraper)", "annotation": "Frontend `useBackendMetrics` polls this; external Prom-style scrapers can hit it too." },
+        { "from": "fe.api",        "to": "be.routes.metrics", "payload": "route handler",            "annotation": "" },
+        { "from": "be.routes.metrics","to": "app.metricsReg", "payload": "registry.snapshot()",       "annotation": "Snapshot pulls from registered providers (e.g. poller registers a `tracked` counter)." },
+        { "from": "app.metricsReg","to": "dom.poller",        "payload": "pollerStats.snapshot()",   "annotation": "Each provider returns a small object; the registry composes them into a single payload." },
+        { "from": "app.metricsReg","to": "fe.api",            "payload": "JSON metrics snapshot",    "annotation": "The frontend's backend-status pill reads from this every few seconds." }
+      ]
+    },
+    {
+      "id": "multi-instance",
+      "name": "List multi-instance services",
+      "category": "Read paths",
+      "summary": "GET /instances and /instances/{kind} expose all registered service ids; powers multi-instance widgets.",
+      "steps": [
+        { "from": "browser",       "to": "fe.dashboard","payload": "any multi-instance widget mounts", "annotation": "E.g. multiple qBittorrent boxes." },
+        { "from": "fe.dashboard",  "to": "fe.hooks",   "payload": "useServiceInstances('qbittorrent')", "annotation": "" },
+        { "from": "fe.hooks",      "to": "fe.api",     "payload": "GET /instances/qbittorrent",      "annotation": "" },
+        { "from": "fe.api",        "to": "be.routes.inst","payload": "route handler",                  "annotation": "" },
+        { "from": "be.routes.inst","to": "app.listInst","payload": "listInstances.byKind('qbittorrent')", "annotation": "" },
+        { "from": "app.listInst",  "to": "dom.registry","payload": "registry.byKind(kind)",          "annotation": "Registry stores `${kind}:${instanceId}`; lookups filter by prefix." },
+        { "from": "be.routes.inst","to": "fe.api",     "payload": "[{ id, kind, instanceId, label }]","annotation": "Widget renders one card per instance with its own health + stats subscription." }
+      ]
+    },
+    {
+      "id": "graceful-shutdown",
+      "name": "Graceful shutdown",
+      "category": "Lifecycle",
+      "summary": "SIGTERM/SIGINT chain: poller stops, lifecycle stops every service, DuckDB and Fastify close cleanly.",
+      "steps": [
+        { "from": "electron",      "to": "build.electron", "payload": "app.on('before-quit') → backend.kill('SIGTERM')", "annotation": "Electron requests a clean exit before the renderer closes." },
+        { "from": "build.electron","to": "app.shutdown",   "payload": "process receives SIGTERM",                       "annotation": "registerShutdown wires SIGTERM + SIGINT to the same chain." },
+        { "from": "app.shutdown",  "to": "dom.poller",     "payload": "poller.stop()",                                  "annotation": "Cancels every per-service timer; in-flight ticks are allowed to finish." },
+        { "from": "app.shutdown",  "to": "app.lifecycle",  "payload": "lifecycle.stop()",                               "annotation": "Runs svc.onStop() for every registered service (closes Tor subs, ZMQ sockets, Roon WS, etc.)." },
+        { "from": "app.lifecycle", "to": "dom.base",       "payload": "for each svc: await svc.onStop()",               "annotation": "onStop errors are logged but don't block subsequent stops." },
+        { "from": "app.shutdown",  "to": "data.duckdb",    "payload": "dbPool.close()",                                 "annotation": "DuckDB pool drained before Fastify; ensures audit rows from in-flight writes are flushed." },
+        { "from": "app.shutdown",  "to": "be.cors",        "payload": "app.close()",                                    "annotation": "Fastify drains open connections; wsPlugin onClose hook closes every WS with 1001 server_shutdown." },
+        { "from": "be.cors",       "to": "fe.api",         "payload": "client connections drained",                      "annotation": "Frontend ApiClient sees a clean disconnect — useWebSocket queues a reconnect attempt." }
+      ]
+    },
+    {
+      "id": "todesktop-release",
+      "name": "Build & ship a desktop release",
+      "category": "Build / packaging",
+      "summary": "GitHub Actions builds the backend + frontend bundle and packages it into platform installers with electron-builder.",
+      "steps": [
+        { "from": "build.builder", "to": "build.electron", "payload": "electron-builder · npm run build → dist/", "annotation": "Bundles apps/backend/dist + apps/frontend/dist as resources." },
+        { "from": "build.electron","to": "app.bootstrap",  "payload": "extraResources: backend dist + frontend dist + node_modules", "annotation": "Packaged backend runs from process.resourcesPath; frontend served via watchman:// protocol." },
+        { "from": "build.builder", "to": "electron",       "payload": "watchman-x.y.z.{dmg,nsis,AppImage,deb}", "annotation": "Targets: macOS dmg, Windows NSIS installer, Linux AppImage + deb." },
+        { "from": "electron",      "to": "browser",        "payload": "user launches the app → BrowserWindow opens watchman://app/", "annotation": "Custom protocol streams index.html + assets directly from the packaged dist." }
+      ]
+    }
+  ]
+}
+</script>
+
+<script>
+(() => {
+  "use strict";
+
+  const DATA = JSON.parse(document.getElementById("flow-data").textContent);
+  const NODE_W = 168;
+  const NODE_H = 56;
+
+  const byId = Object.fromEntries(DATA.components.map((c) => [c.id, c]));
+
+  const centerOf = (c) => ({ x: c.x + NODE_W / 2, y: c.y + NODE_H / 2 });
+  function edgePoint(from, to) {
+    const cf = centerOf(from);
+    const ct = centerOf(to);
+    const dx = ct.x - cf.x;
+    const dy = ct.y - cf.y;
+    if (dx === 0 && dy === 0) return cf;
+    const hx = NODE_W / 2;
+    const hy = NODE_H / 2;
+    const sx = dx === 0 ? Infinity : hx / Math.abs(dx);
+    const sy = dy === 0 ? Infinity : hy / Math.abs(dy);
+    const s = Math.min(sx, sy);
+    return { x: cf.x + dx * s, y: cf.y + dy * s };
+  }
+  function edges(from, to) {
+    return { p1: edgePoint(from, to), p2: edgePoint(to, from) };
+  }
+
+  // ── Layer labels ────────────────────────────────────────────
+  const layerLabels = document.getElementById("layer-labels");
+  DATA.layers.forEach((L) => {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("class", "layer-label");
+    t.setAttribute("x", 16);
+    t.setAttribute("y", L.y);
+    t.textContent = L.label;
+    layerLabels.appendChild(t);
+  });
+
+  // ── Components ──────────────────────────────────────────────
+  const componentsLayer = document.getElementById("components");
+  const nodeEls = {};
+  DATA.components.forEach((c) => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "node");
+    g.setAttribute("data-id", c.id);
+    g.setAttribute("transform", `translate(${c.x},${c.y})`);
+
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("class", `node-bg kind-${c.kind}`);
+    rect.setAttribute("width", NODE_W);
+    rect.setAttribute("height", NODE_H);
+    rect.setAttribute("rx", 9);
+    g.appendChild(rect);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("class", "node-label");
+    label.setAttribute("x", NODE_W / 2);
+    label.setAttribute("y", c.sub ? 22 : NODE_H / 2);
+    label.textContent = c.label;
+    g.appendChild(label);
+
+    if (c.sub) {
+      const sub = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      sub.setAttribute("class", "node-sub");
+      sub.setAttribute("x", NODE_W / 2);
+      sub.setAttribute("y", 40);
+      sub.textContent = c.sub;
+      g.appendChild(sub);
+    }
+
+    g.addEventListener("mouseenter", (e) => showTooltip(e, c));
+    g.addEventListener("mousemove", moveTooltip);
+    g.addEventListener("mouseleave", hideTooltip);
+
+    componentsLayer.appendChild(g);
+    nodeEls[c.id] = g;
+  });
+
+  // ── Base edges ──────────────────────────────────────────────
+  const baseEdgesLayer = document.getElementById("base-edges");
+  DATA.baseEdges.forEach(([fromId, toId]) => {
+    const from = byId[fromId];
+    const to = byId[toId];
+    if (!from || !to) return;
+    const { p1, p2 } = edges(from, to);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    path.setAttribute("class", "arrow-base");
+    path.setAttribute("x1", p1.x);
+    path.setAttribute("y1", p1.y);
+    path.setAttribute("x2", p2.x);
+    path.setAttribute("y2", p2.y);
+    path.setAttribute("marker-end", "url(#arrow-head-dim)");
+    baseEdgesLayer.appendChild(path);
+  });
+
+  // ── Tooltip ─────────────────────────────────────────────────
+  const tooltipEl = document.getElementById("tooltip");
+  function showTooltip(e, c) {
+    tooltipEl.innerHTML = `
+      <div class="tip-title">${escapeHtml(c.label)}</div>
+      ${c.sub ? `<div class="tip-path">${escapeHtml(c.sub)}</div>` : ""}
+      <div class="tip-desc">${kindDesc(c.kind)}</div>
+    `;
+    tooltipEl.classList.add("shown");
+    moveTooltip(e);
+  }
+  function moveTooltip(e) {
+    tooltipEl.style.left = (e.clientX + 14) + "px";
+    tooltipEl.style.top  = (e.clientY + 14) + "px";
+  }
+  function hideTooltip() { tooltipEl.classList.remove("shown"); }
+  function kindDesc(k) {
+    return ({
+      client:    "Client surface — Browser or Electron renderer.",
+      frontend:  "React app code (apps/frontend).",
+      "fe-edge": "Frontend transport boundary (ApiClient / WebSocketProvider).",
+      transport: "Fastify route or wsPlugin (apps/backend/src/transport).",
+      app:       "Application layer use-case or lifecycle orchestrator.",
+      domain:    "Domain layer — service registry, poller, event bus.",
+      infra:     "Protocol-agnostic adapter (HTTP / SSH / SNMP / ZMQ / Tor / Roon).",
+      data:      "Persistence — DuckDB ConfigStore, master key, LRU cache.",
+      external:  "Monitored external service.",
+      build:     "Desktop packaging / distribution surface."
+    })[k] || "";
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+
+  // ── Flow list ───────────────────────────────────────────────
+  const flowListEl = document.getElementById("flow-list");
+  function renderFlowList(filter = "") {
+    flowListEl.innerHTML = "";
+    const f = filter.trim().toLowerCase();
+    const grouped = {};
+    DATA.flows.forEach((flow) => {
+      const hay = (flow.name + " " + flow.category + " " + flow.summary + " " +
+        flow.steps.map((s) => (s.payload || "") + " " + (s.annotation || "")).join(" "))
+        .toLowerCase();
+      if (f && !hay.includes(f)) return;
+      (grouped[flow.category] ||= []).push(flow);
+    });
+    Object.entries(grouped).forEach(([cat, flows]) => {
+      const h = document.createElement("div");
+      h.className = "category";
+      h.textContent = cat;
+      flowListEl.appendChild(h);
+      flows.forEach((flow) => {
+        const b = document.createElement("button");
+        b.className = "flow-btn";
+        b.dataset.flow = flow.id;
+        b.innerHTML = `<span>${escapeHtml(flow.name)}</span><span class="badge">${flow.steps.length}</span>`;
+        b.addEventListener("click", () => selectFlow(flow.id));
+        if (activeFlowId === flow.id) b.classList.add("active");
+        flowListEl.appendChild(b);
+      });
+    });
+  }
+  document.getElementById("search").addEventListener("input", (e) => renderFlowList(e.target.value));
+
+  document.getElementById("stat-components").textContent = DATA.components.length;
+  document.getElementById("stat-flows").textContent = DATA.flows.length;
+
+  // ── Flow rendering ──────────────────────────────────────────
+  let activeFlowId = null;
+  let activeFlow = null;
+  let stepIndex = -1;
+  let showAll = false;
+  let playing = false;
+  let playTimer = null;
+  const PLAY_INTERVAL_MS = 1600;
+  const TOKEN_TRAVEL_MS = 900;
+
+  const flowEdgesLayer = document.getElementById("flow-edges");
+  const tokenLayer = document.getElementById("token-layer");
+  const emptyHint = document.getElementById("empty-hint");
+  const diagram = document.getElementById("diagram");
+
+  function selectFlow(id) {
+    activeFlowId = id;
+    activeFlow = DATA.flows.find((f) => f.id === id);
+    stepIndex = 0;
+    showAll = false;
+    stopPlay();
+    diagram.classList.add("has-flow");
+    emptyHint.style.display = "none";
+
+    document.querySelectorAll(".flow-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.flow === id);
+    });
+
+    drawFlowEdges();
+    markTouchedNodes();
+    renderRight();
+    applyStepHighlight();
+  }
+
+  function drawFlowEdges() {
+    flowEdgesLayer.innerHTML = "";
+    if (!activeFlow) return;
+    activeFlow.steps.forEach((step, i) => {
+      const from = byId[step.from];
+      const to = byId[step.to];
+      if (!from || !to) return;
+      const { p1, p2 } = edges(from, to);
+
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const offset = 10;
+      const nx = -dy / len * offset;
+      const ny = dx / len * offset;
+      const cx = (p1.x + p2.x) / 2 + nx;
+      const cy = (p1.y + p2.y) / 2 + ny;
+      const d = `M ${p1.x},${p1.y} Q ${cx},${cy} ${p2.x},${p2.y}`;
+
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("class", "arrow future");
+      path.setAttribute("d", d);
+      path.setAttribute("marker-end", "url(#arrow-head)");
+      path.dataset.step = String(i);
+      flowEdgesLayer.appendChild(path);
+
+      const badge = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      badge.setAttribute("class", "step-badge");
+      badge.dataset.step = String(i);
+      badge.style.cursor = "pointer";
+      badge.addEventListener("click", () => gotoStep(i));
+
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("class", "step-badge-circle");
+      circle.setAttribute("cx", cx);
+      circle.setAttribute("cy", cy);
+      circle.setAttribute("r", 10);
+      badge.appendChild(circle);
+
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("class", "step-badge-text");
+      t.setAttribute("x", cx);
+      t.setAttribute("y", cy + 0.5);
+      t.textContent = String(i + 1);
+      badge.appendChild(t);
+
+      flowEdgesLayer.appendChild(badge);
+    });
+  }
+
+  function markTouchedNodes() {
+    Object.values(nodeEls).forEach((g) => g.classList.remove("touched", "active"));
+    if (!activeFlow) return;
+    const touched = new Set();
+    activeFlow.steps.forEach((s) => { touched.add(s.from); touched.add(s.to); });
+    touched.forEach((id) => nodeEls[id] && nodeEls[id].classList.add("touched"));
+  }
+
+  function applyStepHighlight() {
+    if (!activeFlow) return;
+    Object.values(nodeEls).forEach((g) => g.classList.remove("active"));
+
+    flowEdgesLayer.querySelectorAll(".arrow").forEach((p) => {
+      const i = +p.dataset.step;
+      p.classList.remove("past", "active", "future");
+      if (showAll) {
+        p.classList.add("active");
+      } else if (i < stepIndex) {
+        p.classList.add("past");
+      } else if (i === stepIndex) {
+        p.classList.add("active");
+      } else {
+        p.classList.add("future");
+      }
+    });
+    flowEdgesLayer.querySelectorAll(".step-badge-circle").forEach((c) => {
+      const i = +c.parentNode.dataset.step;
+      c.classList.remove("past", "active");
+      if (showAll || i === stepIndex) c.classList.add("active");
+      else if (i < stepIndex) c.classList.add("past");
+    });
+    flowEdgesLayer.querySelectorAll(".step-badge-text").forEach((t) => {
+      const i = +t.parentNode.dataset.step;
+      t.classList.remove("past", "active");
+      if (showAll || i === stepIndex) t.classList.add("active");
+      else if (i < stepIndex) t.classList.add("past");
+    });
+
+    if (!showAll && stepIndex >= 0 && stepIndex < activeFlow.steps.length) {
+      const s = activeFlow.steps[stepIndex];
+      nodeEls[s.from] && nodeEls[s.from].classList.add("active");
+      nodeEls[s.to] && nodeEls[s.to].classList.add("active");
+      animateToken(s);
+    } else {
+      tokenLayer.innerHTML = "";
+    }
+
+    document.querySelectorAll("#step-list .step").forEach((el, i) => {
+      el.classList.remove("past", "active");
+      if (showAll) el.classList.add("active");
+      else if (i < stepIndex) el.classList.add("past");
+      else if (i === stepIndex) el.classList.add("active");
+    });
+
+    const total = activeFlow.steps.length;
+    document.getElementById("progress").textContent = `${Math.min(stepIndex + 1, total)} / ${total}`;
+    document.getElementById("btn-prev").disabled = stepIndex <= 0;
+    document.getElementById("btn-next").disabled = stepIndex >= total - 1;
+
+    const activeStepEl = document.querySelector("#step-list .step.active");
+    if (activeStepEl) activeStepEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function animateToken(step) {
+    tokenLayer.innerHTML = "";
+    const from = byId[step.from];
+    const to = byId[step.to];
+    if (!from || !to) return;
+    const { p1, p2 } = edges(from, to);
+    const token = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    token.setAttribute("class", "token");
+    token.setAttribute("r", 5);
+    token.setAttribute("cx", p1.x);
+    token.setAttribute("cy", p1.y);
+    tokenLayer.appendChild(token);
+
+    const t0 = performance.now();
+    function frame(t) {
+      const u = Math.min(1, (t - t0) / TOKEN_TRAVEL_MS);
+      const e = easeInOutCubic(u);
+      const x = p1.x + (p2.x - p1.x) * e;
+      const y = p1.y + (p2.y - p1.y) * e;
+      token.setAttribute("cx", x);
+      token.setAttribute("cy", y);
+      if (u < 1 && !showAll && tokenLayer.contains(token)) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
+  // ── Right panel ─────────────────────────────────────────────
+  function renderRight() {
+    const rh = document.getElementById("right-header");
+    const ctrls = document.getElementById("controls");
+    const list = document.getElementById("step-list");
+
+    if (!activeFlow) {
+      rh.classList.add("empty");
+      rh.innerHTML = `<h2 class="flow-name">No flow selected</h2><p class="empty-hint">Choose a flow from the list to see step-by-step annotations.</p>`;
+      ctrls.style.display = "none";
+      list.innerHTML = "";
+      return;
+    }
+    rh.classList.remove("empty");
+    rh.innerHTML = `
+      <h2 class="flow-name">${escapeHtml(activeFlow.name)}</h2>
+      <p class="flow-summary">${escapeHtml(activeFlow.summary)}</p>
+    `;
+    ctrls.style.display = "flex";
+
+    list.innerHTML = "";
+    activeFlow.steps.forEach((s, i) => {
+      const from = byId[s.from];
+      const to = byId[s.to];
+      const fromLabel = from ? from.label : s.from;
+      const toLabel = to ? to.label : s.to;
+      const el = document.createElement("div");
+      el.className = "step";
+      el.innerHTML = `
+        <div class="step-head">
+          <span class="step-num">${i + 1}</span>
+          <span>Step ${i + 1} of ${activeFlow.steps.length}</span>
+        </div>
+        <div class="step-route">
+          <span class="endpoint">${escapeHtml(fromLabel)}</span>
+          <span class="arrow-glyph">→</span>
+          <span class="endpoint">${escapeHtml(toLabel)}</span>
+        </div>
+        ${s.payload ? `<div class="step-payload">${escapeHtml(s.payload)}</div>` : ""}
+        ${s.annotation ? `<div class="step-annotation">${escapeHtml(s.annotation)}</div>` : ""}
+      `;
+      el.addEventListener("click", () => gotoStep(i));
+      list.appendChild(el);
+    });
+  }
+
+  // ── Step controls ───────────────────────────────────────────
+  function gotoStep(i) {
+    if (!activeFlow) return;
+    showAll = false;
+    stepIndex = Math.max(0, Math.min(activeFlow.steps.length - 1, i));
+    applyStepHighlight();
+  }
+  function next() { gotoStep(stepIndex + 1); }
+  function prev() { gotoStep(stepIndex - 1); }
+  function restart() { gotoStep(0); }
+  function toggleAll() {
+    if (!activeFlow) return;
+    showAll = !showAll;
+    stopPlay();
+    applyStepHighlight();
+  }
+  function togglePlay() {
+    if (!activeFlow) return;
+    playing ? stopPlay() : startPlay();
+  }
+  function startPlay() {
+    if (!activeFlow) return;
+    playing = true;
+    document.getElementById("btn-play").textContent = "❚❚";
+    if (stepIndex >= activeFlow.steps.length - 1) stepIndex = -1;
+    playTimer = setInterval(() => {
+      if (stepIndex >= activeFlow.steps.length - 1) { stopPlay(); return; }
+      gotoStep(stepIndex + 1);
+    }, PLAY_INTERVAL_MS);
+    if (stepIndex < 0) gotoStep(0);
+  }
+  function stopPlay() {
+    playing = false;
+    document.getElementById("btn-play").textContent = "▶";
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  }
+  function clearFlow() {
+    activeFlowId = null;
+    activeFlow = null;
+    stepIndex = -1;
+    showAll = false;
+    stopPlay();
+    diagram.classList.remove("has-flow");
+    flowEdgesLayer.innerHTML = "";
+    tokenLayer.innerHTML = "";
+    Object.values(nodeEls).forEach((g) => g.classList.remove("touched", "active"));
+    emptyHint.style.display = "";
+    document.querySelectorAll(".flow-btn").forEach((b) => b.classList.remove("active"));
+    renderRight();
+  }
+
+  document.getElementById("btn-next").addEventListener("click", next);
+  document.getElementById("btn-prev").addEventListener("click", prev);
+  document.getElementById("btn-restart").addEventListener("click", restart);
+  document.getElementById("btn-play").addEventListener("click", togglePlay);
+  document.getElementById("btn-all").addEventListener("click", toggleAll);
+
+  window.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight") { e.preventDefault(); next(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+    else if (e.key === " ") { e.preventDefault(); togglePlay(); }
+    else if (e.key === "r" || e.key === "R") { e.preventDefault(); restart(); }
+    else if (e.key === "Escape") { e.preventDefault(); clearFlow(); }
+    else if (e.key === "a" || e.key === "A") { e.preventDefault(); toggleAll(); }
+  });
+
+  renderFlowList();
+  renderRight();
+
+  // Land on a flow that shows off the bento → poller → WS path
+  selectFlow("poller-tick");
+})();
+</script>
+</body>
+</html>

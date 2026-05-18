@@ -1,11 +1,5 @@
 # TODO
 
-## Bugs
+Format: Obsidian Tasks plugin emoji. Priority 🔺 highest / ⏫ high / 🔼 medium / 🔽 low / ⏬ lowest. Dates 📅 due / 🛫 start / ⏳ scheduled.
 
-- Health check all the services
 
-### General
-
-## Features
-
-- Use Claude to make the UI premium

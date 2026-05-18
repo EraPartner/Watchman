@@ -2,8 +2,8 @@
 title: Getting Started
 type: map-of-content
 status: active
-date: 2026-05-12
-tags: [getting-started, onboarding, moc, new-developer, ai-agent, startup-flows]
+date: 2026-05-16
+tags: [getting-started, onboarding, moc, new-developer, ai-agent, startup-flows, architecture]
 description: Map of Content for new developers and AI agents to quickly navigate the Watchman knowledge base
 aliases: [start here, onboarding, new dev, beginner, setup, how to start]
 ---
@@ -73,6 +73,7 @@ Get a high-level view before diving into code:
 - [[docs/architecture/index|Architecture Overview]] - System diagrams and data flow
 - [[docs/architecture/backend-architecture|Backend Architecture]] - Layered design, services, middleware
 - [[docs/architecture/frontend-architecture|Frontend Architecture]] - Pages, components, hooks, WebSocket
+- [[docs/flow-visualizer.html|Interactive Flow Visualizer]] - Pick a workflow and trace data step-by-step across packages
 
 ### 3. Learn the Code Style & Development Workflow
 

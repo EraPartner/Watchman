@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-05-12
+date: 2026-05-16
 tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -54,7 +54,7 @@ Or jump to:
 | 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 9 endpoints         |
 | 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, Pi deploy, contributing, and wizard  | 7 guides            |
 | ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 5 features          |
-| 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 14 integrations     |
+| 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 15 integrations     |
 | 🔒 [[docs/security/index     | Security]]               | Security policies and practices      | 4 security docs     |
 | 🚀 [[docs/performance/index  | Performance]]            | Performance optimizations            | 2 docs              |
 | 🎨 [[docs/architecture/frontend-design-system | Design System]] | Dark-luxury tokens, primitives, motion | Complete reference |
@@ -223,6 +223,11 @@ Watchman/
 5. Update relevant docs
 6. Run `npm run lint` before committing
 
+## Interactive Flow Visualizer
+
+> [!tip] Click-through architecture map
+> Open [[docs/flow-visualizer.html|flow-visualizer.html]] for an interactive single-page diagram of every component and end-to-end workflow (poller cycle, real-time WebSocket broadcast, dashboard load, service control, setup wizard, Electron startup, …). Pick a flow on the left to watch data move across the system.
+
 ## PlantUML Diagrams
 
 ### System Architecture Overview
@@ -231,52 +236,60 @@ Watchman/
 @startuml
 !theme plain
 
+package "Desktop Shell" as DT {
+    [Electron Main]
+    [watchman:// protocol]
+    [Backend Subprocess]
+}
+
 package "Frontend (React 18)" as FE {
-    [Service Cards]
-    [Hooks]
-    [React Query]
-    [WebSocket]
+    [BentoDashboard]
+    [ServiceTile + Renderers]
+    [DetailSheet]
+    [SetupWizard]
+    [useAggregatedHealth]
+    [useServiceHealth]
+    [WebSocketProvider]
 }
 
 package "Backend (TypeScript/Fastify 4)" as BE {
-    [Config Layer]
-    [Core Layer]
-    [Infrastructure]
-    [Domain Services]
-    [Application]
-    [Transport]
+    [Config Layer (env + ConfigStore)]
+    [Core Layer (logger / bus / clock)]
+    [Infra (HTTP / SSH / SNMP / Ping / ZMQ / Roon)]
+    [Domain (BaseService + ServiceRegistry)]
+    [Application (GetServiceStatus / ControlService / …)]
+    [Transport (Fastify routes + WS)]
 }
 
-package "Security Layer" as SEC {
-    [JWT Auth]
-    [CSRF]
-    [Rate Limiting]
-    [IP Control]
+database "Persistence" as DATA {
+    [DuckDB ConfigStore]
+    [Master key file]
+    [LRU cache]
 }
 
-database "External Services" as Ext {
+cloud "External Services" as Ext {
     [AdGuard]
-    [Bitcoin]
+    [Bitcoin Node]
     [Tor]
     [qBittorrent]
     [Homebridge]
     [Synology]
-    [14+ Services]
+    [Roon]
+    [Philips Hue]
+    [14+ adapters]
 }
 
-FE <--> BE : REST API + WebSocket
-BE --> SEC : Applies security
-BE --> Ext : Health/Stats
-
-note right of FE
-  React 18 + TypeScript
-  Vite + Tailwind + shadcn/ui
-end note
+DT --> BE : spawn subprocess (loopback port)
+DT --> FE : serve via watchman:// protocol
+FE <--> BE : REST + WebSocket (LAN / loopback)
+BE --> DATA : encrypted secrets, audit log, hot cache
+BE --> Ext : poll health + stats (HTTP / SSH / SNMP / ZMQ)
 
 note right of BE
-  TypeScript + Fastify 4
-  Layered architecture
-  In-process LRU cache
+  No built-in auth (ADR-017).
+  Plugin order: compress → errorHandler →
+  log sampling → request timeout →
+  routes → wsPlugin.
 end note
 @enduml
 ```
@@ -288,43 +301,30 @@ end note
 !theme plain
 
 actor "User" as User
-participant "Frontend" as FE
-participant "Express" as Express
-participant "Middleware" as MW
-participant "ServiceManager" as SM
-participant "CircuitBreaker" as CB
-participant "Service" as Svc
+participant "Frontend (ApiClient)" as FE
+participant "Fastify (server.ts)" as Fastify
+participant "Application Layer\n(GetServiceStatus)" as App
+participant "ServiceRegistry" as Reg
+participant "BaseService" as Svc
 database "External" as Ext
 
-User -> FE : View Dashboard
-FE -> Express : GET /api/services/health
+User -> FE : open dashboard / detail sheet
+FE -> Fastify : GET /api/services or /services/{kind}/health
 
-Express -> MW : Apply middleware chain
+Fastify -> Fastify : CORS hook · log sampling
+Fastify -> Fastify : request timeout (AbortSignal)
+Fastify -> App : route handler (no auth — ADR-017)
 
-MW -> MW : Rate limit check
-MW -> MW : IP control check
-MW -> MW : Auth check (if required)
+App -> Reg : lookup `${kind}:${instanceId}`
+Reg -> Svc : checkHealth(signal)
 
-MW -> SM : Route to service
-SM -> CB : Execute with circuit breaker
+Svc -> Ext : HTTP / SSH / SNMP / Ping (parallel: host + service)
+Ext --> Svc : tier results
+Svc --> App : HealthSnapshot { host, service, reachable }
 
-alt Circuit Closed
-    CB -> Svc : call checkHealth()
-    Svc -> Ext : HTTP/SSH request
-    Ext --> Svc : Response
-    Svc --> CB : Result
-    CB --> SM : Result
-    SM --> MW : JSON response
-    MW --> Express : Response
-    Express --> FE : JSON
-    FE --> User : Updated UI
-
-else Circuit Open
-    CB --> SM : Error
-    SM --> Express : 503
-    Express --> FE : Service Unavailable
-    FE --> User : Show offline
-end
+App --> Fastify : envelope { data | error }
+Fastify --> FE : JSON
+FE --> User : tile rerenders (live)
 @enduml
 ```
 
@@ -337,43 +337,49 @@ end
 skinparam backgroundColor #F0F8FF
 
 partition "Frontend" {
-    [Service Card] as Card
-    [useServiceHealth] as Hook
-    [React Query] as Query
-    [useWebSocket] as WS
+    [ServiceTile] as Tile
+    [useAggregatedHealth /\nuseServiceHealth] as Hook
+    [React Query Cache] as Query
+    [WebSocketProvider] as WS
 }
 
 partition "Backend" {
-    [API Endpoint] as API
-    [ServiceManager] as Mgr
-    [Service Class] as Svc
-    [WebSocketManager] as WSM
+    [Fastify Route] as API
+    [Application UseCase] as App
+    [ServiceRegistry] as Reg
+    [BaseService (per kind)] as Svc
+    [BackgroundPoller] as Poll
+    [EventBus] as Bus
+    [WS Broadcaster] as WSB
 }
 
 partition "External" {
     [Monitored Service] as Ext
 }
 
-Card -> Hook : Render
-Hook -> Query : useQuery()
+Tile -> Hook : render
+Hook -> Query : useQuery
 
-Query -> API : Fetch health
-API -> Mgr : getServiceHealth()
-Mgr -> Svc : checkHealth()
-Svc -> Ext : Ping service
-Ext --> Svc : Status
-Svc --> Mgr : Result
-Mgr --> API : JSON
-API --> Query : Response
-Query --> Card : Data
+Query -> API : GET /services / /health
+API -> App : run(signal)
+App -> Reg : lookup
+Reg -> Svc : checkHealth
+Svc -> Ext : probe (host + service)
+Ext --> Svc : tier results
+Svc --> App : HealthSnapshot
+App --> Query : envelope → cache
 
-note over Ext, Card
-  WebSocket Real-Time Updates
+note over Poll, Ext
+  Live updates: BackgroundPoller ticks on healthMs / statsMs.
 end note
 
-Ext --> WSM : Status change
-WSM --> Query : Invalidate
-Query --> Card : Auto-refresh
+Poll -> Svc : tick (jittered)
+Svc -> Ext : probe
+Svc --> Bus : service.health.updated (snapshot)
+Bus --> WSB : subscriber
+WSB --> WS : ws.send({ type: 'service_update', snapshot })
+WS --> Query : invalidate / direct merge
+Query --> Tile : auto-refresh
 @enduml
 ```
 

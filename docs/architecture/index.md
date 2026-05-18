@@ -2,7 +2,7 @@
 title: Architecture
 type: index
 status: active
-date: 2026-05-08
+date: 2026-05-16
 tags: [architecture, index, fastify, typescript, layered, duckdb, configuration, electron, single-user, roon-api, websocket, rn1, rn2]
 description: Index of all architecture documentation for the Watchman project - single-user client-server with TypeScript backend including Roon WebSocket API support
 aliases: [architecture index, system design, system architecture]
@@ -27,13 +27,13 @@ SORT file.name ASC
 
 ## Documents
 
-| Document                                  | Description             |
-| ----------------------------------------- | ----------------------- | ----------------------------------------------- |
-| [[docs/architecture/frontend-design-system | Frontend Design System]] | OKLCH tokens, typography, motion, primitives |
-| [[docs/architecture/backend-architecture  | Backend Architecture]]  | Services, middleware, routes, and orchestration |
-| [[docs/architecture/frontend-architecture | Frontend Architecture]] | Pages, components, hooks, and state management  |
-| [[docs/architecture/core-systems          | Core Systems]]          | Event Bus and Service Lifecycle orchestration  |
-| [[docs/architecture/data-flow             | Data Flow]]             | Authentication, monitoring, and WebSocket flows |
+| Document                                  | Description |
+| ----------------------------------------- | -------------------------------------------------------- |
+| [[docs/architecture/frontend-design-system|Frontend Design System]] | OKLCH tokens, typography, motion, primitives |
+| [[docs/architecture/backend-architecture|Backend Architecture]] | Services, middleware, routes, and orchestration |
+| [[docs/architecture/frontend-architecture|Frontend Architecture]] | Pages, components, hooks, and state management |
+| [[docs/architecture/core-systems|Core Systems]] | Event Bus and Service Lifecycle orchestration |
+| [[docs/architecture/data-flow|Data Flow]] | Setup wizard, monitoring flows, and WebSocket broadcasts |
 
 ## Deployment Topology
 
@@ -81,6 +81,12 @@ Frontend and backend run on the same machine (macOS, Windows, or Linux) as a sta
     └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
+## Interactive Flow Visualizer
+
+Walk every workflow step-by-step in a self-contained page:
+
+- [[docs/flow-visualizer.html|flow-visualizer.html]] — pick a flow (poll cycle, real-time broadcast, dashboard load, control action, setup wizard, Electron startup, …) and watch the data travel across packages with annotated payloads.
+
 ## Related
 
 - [[docs/adr/index|Architecture Decision Records]]
@@ -103,11 +109,12 @@ Frontend and backend run on the same machine (macOS, Windows, or Linux) as a sta
 !theme plain
 
 package "Frontend (React 18)" as FE {
-    [Dashboard]
-    [Service Cards]
-    [Auth UI]
-    [React Query]
-    [WebSocket Hook]
+    [BentoDashboard]
+    [ServiceTile + Renderers]
+    [DetailSheet]
+    [SetupWizard]
+    [React Query Cache]
+    [WebSocketProvider]
 }
 
 package "Backend (TypeScript/Fastify 4)" as BE {
@@ -175,16 +182,17 @@ FE --> BE : WebSocket (ws://)
 BE --> Ext : Health checks\n& stats
 
 note right of FE
-  React 18 + TypeScript
-  Vite + Tailwind + shadcn/ui
-  React Query for state
+  React 18 + TypeScript + Vite
+  Tailwind + OKLCH tokens
+  React Query for cache + WebSocket
+  No auth — single-user (ADR-017)
 end note
 
 note right of BE
   TypeScript + Fastify 4
-  Layered architecture
-  In-process LRU cache
-  Croner-based polling
+  Layered (config → core → infra →
+  domain → application → transport)
+  In-process LRU cache + jittered poller
 end note
 @enduml
 ```

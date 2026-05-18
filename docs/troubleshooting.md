@@ -2,8 +2,8 @@
 title: Troubleshooting
 type: reference
 status: active
-date: 2026-05-14
-tags: [reference, troubleshooting, debugging, openapi, typescript-generation]
+date: 2026-05-16
+tags: [reference, troubleshooting, debugging, openapi, typescript-generation, single-user]
 description: Common issues and solutions for the Watchman project
 aliases: [troubleshooting, issues, problems, debugging, faq]
 ---
@@ -21,10 +21,10 @@ aliases: [troubleshooting, issues, problems, debugging, faq]
 
 **Solutions**:
 
-- Check required environment variables are set: `AUTH_USERNAME`, `AUTH_PASSWORD_HASH`, `JWT_SECRET`, `FRONTEND_URL`
-- Verify `JWT_SECRET` is at least 32 characters
+- Check required environment variables are set: `FRONTEND_URL`
 - Check port 3001 is not in use: `lsof -i :3001`
 - Review logs in `apps/backend/logs/`
+- Verify Node.js version is 18+: `node --version`
 
 ### Service Shows Offline
 
@@ -38,25 +38,16 @@ aliases: [troubleshooting, issues, problems, debugging, faq]
 - Check service is running and accessible
 - Review backend logs for connection errors
 
-### Authentication Fails
+### CORS Misconfiguration
 
-**Symptom**: Login returns "Invalid credentials".
-
-**Solutions**:
-
-- Verify `AUTH_PASSWORD_HASH` is a valid bcrypt hash
-- Generate new hash: `node -e "console.log(require('bcrypt').hashSync('password', 10))"`
-- Check `AUTH_USERNAME` matches your input
-
-### CORS Errors
-
-**Symptom**: Frontend requests blocked by CORS.
+**Symptom**: Frontend requests succeed in development but fail in production.
 
 **Solutions**:
 
-- Verify `FRONTEND_URL` matches the actual frontend origin
-- In production, ensure `FRONTEND_URL` uses HTTPS
-- Check for trailing slashes in URL
+- Verify `FRONTEND_URL` is set correctly and matches browser origin exactly
+- Check for trailing slashes or protocol mismatches
+- Watchman is single-user with no authentication; security relies on network isolation (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]])
+
 
 ## Frontend Issues
 
@@ -90,9 +81,9 @@ aliases: [troubleshooting, issues, problems, debugging, faq]
 **Solutions**:
 
 - Verify `NODE_ENV=production`
-- Ensure `FRONTEND_URL` uses HTTPS
-- Verify `JWT_SECRET` is 32+ characters
-- Check all required env vars are set
+- Ensure `FRONTEND_URL` matches the actual deployment origin
+- Check all required env vars are set (see `.env.example`)
+- Verify data directory is writable: `ls -la ./data`
 
 ### WebSocket Connection Fails
 
@@ -160,11 +151,9 @@ start
 :Encounter Issue;
 
 if (Server Won't Start?) then (yes)
-    :Check required env vars\nAUTH_USERNAME, AUTH_PASSWORD_HASH\nJWT_SECRET, FRONTEND_URL;
-    if (JWT_SECRET >= 32 chars?) then (no)
-        :Fix JWT_SECRET length;
-    endif
+    :Check required env vars\nFRONTEND_URL, NODE_ENV;
     :Check port 3001 availability;
+    :Check data directory writable;
     :Review backend logs;
 else (no)
 endif
@@ -177,15 +166,9 @@ if (Service Shows Offline?) then (yes)
 else (no)
 endif
 
-if (Authentication Fails?) then (yes)
-    :Verify AUTH_PASSWORD_HASH\nis valid bcrypt;
-    :Check AUTH_USERNAME matches;
-else (no)
-endif
-
-if (CORS Errors?) then (yes)
-    :Verify FRONTEND_URL\nmatches origin;
-    :Check for trailing slashes;
+if (WebSocket Fails?) then (yes)
+    :Verify /ws endpoint is accessible;
+    :Check proxy passes Upgrade headers;
 else (no)
 endif
 
@@ -208,7 +191,7 @@ participant "External Service" as Ext
 
 FE -> BE : GET /api/{service}/status
 
-BE -> MW : Apply middleware\n(auth, rate limit, cache)
+BE -> MW : Apply middleware\n(CORS, timeout, compression)
 
 alt Cache Hit
     MW --> BE : Return cached

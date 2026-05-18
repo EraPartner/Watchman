@@ -2,8 +2,8 @@
 title: Common Tasks
 type: reference
 status: active
-date: 2026-05-12
-tags: [reference, tasks, quick-reference, startup-flows]
+date: 2026-05-16
+tags: [reference, tasks, quick-reference, startup-flows, single-user, architecture]
 description: Task-oriented quick reference for common Watchman development operations
 aliases: [common tasks, quick reference, cheat sheet]
 ---
@@ -101,12 +101,14 @@ QBITTORRENT_1_URL=http://192.0.2.10:8080
 QBITTORRENT_2_URL=http://192.0.2.11:8080
 ```
 
-### Clear Backend Cache
+### Explore Architecture Interactively
 
 ```bash
-curl -X POST http://localhost:3001/api/cache/clear \
-  -H "Authorization: Bearer YOUR_TOKEN"
+Open http://localhost:5173 in browser, or view the flow visualizer:
+[[docs/flow-visualizer.html|Interactive Flow Visualizer]]
 ```
+
+Pick a flow (poll cycle, dashboard load, setup wizard, etc.) and trace data across packages with annotated payloads.
 
 ## Code Quality
 
@@ -201,27 +203,24 @@ FE --> Term : Dashboard UI\n(hot reload on changes)
 database "Environment Variables" as Env
 
 package "Required" as Req {
-    [AUTH_USERNAME]
-    [AUTH_PASSWORD_HASH]
-    [JWT_SECRET]
     [FRONTEND_URL]
-}
-
-package "Service Config" as Svc {
-    [ADGUARD_HOST]
-    [BITCOIN_RPC_*]
-    [TOR_*]
-    [QBITTORRENT_*]
-}
-
-package "Optional" as Opt {
-    [ENABLED_SERVICES]
-    [LOG_LEVEL]
+    [BACKEND_V2_PORT]
     [NODE_ENV]
 }
 
+package "Master Key & Security" as Sec {
+    [WATCHMAN_MASTER_KEY]
+    [TRUST_PROXY]
+}
+
+package "Optional" as Opt {
+    [LOG_LEVEL]
+    [DATA_DIR]
+    [BACKEND_V2_HOST]
+}
+
 Env --> Req : Must be set
-Env --> Svc : Service-specific
+Env --> Sec : Encryption & networking
 Env --> Opt : Fine-tuning
 @enduml
 ```

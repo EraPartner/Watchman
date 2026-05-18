@@ -2,8 +2,8 @@
 title: Glossary & Terminology
 type: reference
 status: active
-date: 2026-04-09
-tags: [glossary, terminology, reference, search, aliases, disambiguation]
+date: 2026-05-16
+tags: [glossary, terminology, reference, search, aliases, disambiguation, single-user]
 description: Key terms, aliases, and disambiguation for the Watchman project - helps with search and navigation
 aliases:
   [
@@ -34,10 +34,10 @@ aliases:
 > [!tip] AI Agent Tip
 > When searching the KB, use these common aliases:
 >
-> - "auth" → Authentication, JWT, login
 > - "multi-instance" → Multi-instance services, multiple nodes
-> - "websocket" → Real-time updates, WebSocket
+> - "websocket" → Real-time updates, WebSocket, live updates
 > - "service" → Service integration, monitor
+> - "setup" → Setup wizard, configuration, first-run
 
 ## Core Concepts
 
@@ -74,9 +74,9 @@ aliases:
 | Term                | Also Known As                              | Description                                                          | See Also                                 |
 | ------------------- | ------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------- | ---------------------- |
 | **WebSocket**       | WS, Socket, real-time, live                | Real-time bidirectional communication for status updates             | [[docs/features/real-time-updates        | Real-Time Updates]]    |
-| **JWT**             | JSON Web Token, bearer token, access token | JSON Web Token for authentication                                    | [[docs/security/authentication           | Authentication]]       |
-| **CSRF**            | Cross-Site Request Forgery, XSRF           | Cross-Site Request Forgery protection (double-submit cookie pattern) | [[docs/security/authentication           | Authentication]]       |
-| **Rate Limiting**   | rate limit, throttling, rate cap           | Tiered request throttling per IP                                     | [[docs/security/rate-limiting            | Rate Limiting]]        |
+| **Master Key**      | encryption key, secret key, aes-256        | AES-256-GCM key for encrypting service credentials in DuckDB        | [[docs/reference/environment-variables  | Environment Variables]] |
+| **Setup Wizard**    | first-run, configuration, initial setup    | Interactive UI for configuring services on first boot               | [[docs/features/ui-configuration        | UI Configuration]]     |
+| **Rate Limiting**   | rate limit, throttling, rate cap           | Tiered request throttling per IP (planned future feature)           | [[docs/security/rate-limiting           | Rate Limiting]]        |
 | **IP Control**      | IP whitelist, IP blacklist, IP filtering   | Whitelist/blacklist for IP-based access                              | [[docs/security/ip-control               | IP Control]]           |
 | **OpenAPI**         | Swagger, API specification, OpenAPI spec   | API specification format (Swagger)                                   | [[docs/api/index                         | API Documentation]]    |
 | **Factory Pattern** | factory, service factory                   | Service instantiation pattern via `serviceFactoryConfig.js`          | [[docs/architecture/backend-architecture | Backend Architecture]] |
@@ -99,7 +99,7 @@ aliases:
 | Search Query                             | Finds                             |
 | ---------------------------------------- | --------------------------------- | ------------------------------------------------- | ---------------- |
 | `adguard`                                | [[docs/integrations/adguard       | AdGuard Integration]], [[docs/api/index           | API]]            |
-| `auth`, `login`, `jwt`, `token`          | [[docs/security/authentication    | Authentication]], [[docs/api/index                | Auth Endpoints]] |
+| `setup`, `wizard`, `configuration`       | [[docs/features/ui-configuration  | UI Configuration]], [[docs/guides/setup           | Setup Guide]]    |
 | `multi-instance`, `multiple`, `instance` | [[docs/features/multi-instance    | Multi-Instance]], [[docs/integrations/qbittorrent | qBittorrent]]    |
 | `websocket`, `real-time`, `live`         | [[docs/features/real-time-updates | Real-Time Updates]]                               |
 | `rate limit`, `throttle`                 | [[docs/security/rate-limiting     | Rate Limiting]]                                   |

@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-05-08
+date: 2026-05-16
 tags: [architecture, backend, fastify, typescript, nodejs, services, configuration, duckdb, health-check, two-tier, control-port, phase-0b, task-b4, task-b5, task-b6, task-b7, event-subscription, traffic-deltas, onionoo-enrichment, timeseries-persistence, snmp, snmp-walk, cert-pinning, sha256, i2-task, i4-task, i5-task, i6-task, h1-task, hb1-task, x1-task, x3-task, bt2-task, zmq, zeromq, roon-api, websocket, zones, now-playing, rn1-task, rn2-task]
 description: Backend architecture documentation for the Watchman TypeScript/Fastify server - includes layered architecture, services, routes, in-process state, two-tier health model, time-series persistence (health + stats), Tor ControlPort protocol client with GETCONF/SIGNAL (B4), realtime event subscription (B5), traffic delta tracking (B6), Onionoo enrichment (B7), SNMP walk support for network device metrics (v2c/v3), SHA-256 certificate pinning (I2), persistent SSH connection pool (I4), auto-reconnecting WebSocket client (I5), ZMQ real-time subscriber (I6), JWT token refresh via jwtClient infra primitive (HB1), boolean dual-column rollup fix (X1), Raspberry Pi renderer enhancements (X3), Bitcoin ZMQ integration (BT2), Roon WebSocket API client for zone and now-playing tracking (RN1/RN2)
 aliases:
@@ -12,7 +12,7 @@ aliases:
 # Backend Architecture
 
 > [!abstract] Overview
-> The Watchman backend is a TypeScript + Fastify 4 server with layered architecture (config → core → infra → domain → application → transport). It orchestrates service integrations via BaseService subclasses, handles authentication, and provides REST API + WebSocket with in-process LRU caching and croner-based polling.
+> The Watchman backend is a TypeScript + Fastify 4 server with layered architecture (config → core → infra → domain → application → transport). It orchestrates service integrations via BaseService subclasses and exposes them through a REST API + WebSocket with in-process LRU caching and a jittered background poller. There is no built-in authentication — Watchman is single-user (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]); security relies on network isolation.
 
 ## Layered Architecture
 
@@ -51,22 +51,27 @@ Each layer has clear responsibilities and minimal coupling.
 
 ## Plugin Stack (in order)
 
-Fastify plugins are registered in the following order in [[apps/backend/src/index.ts|index.ts]]:
+Fastify plugins are registered in the following order in [[apps/backend/src/transport/http/server.ts|server.ts]]:
 
-| #   | Plugin                  | Purpose                                                          |
-| --- | ----------------------- | ---------------------------------------------------------------- |
-| 1   | `@fastify/compress`     | gzip/brotli response compression                                 |
-| 2   | Helmet security headers | Security headers (CSP, HSTS, X-Frame-Options, etc.)              |
-| 3   | CORS pre-flight handler | CORS restrictions using normalized frontend origin allowlist     |
-| 4   | Request ID middleware   | Unique request ID attachment for logging correlation             |
-| 5   | Structured logger       | Pino-based JSON logging with automatic request/response tracking |
-| 6   | IP control middleware   | IP whitelist/blacklist enforcement on sensitive routes           |
-| 7   | JWT authentication      | Token validation from cookies or Authorization header            |
-| 8   | CSRF protection         | Double-submit cookie pattern for state-changing requests         |
-| 9   | Rate limiting           | Tiered per-IP throttling (health, auth, control, general)        |
-| 10  | Circuit breaker hooks   | Service availability checks before routing                       |
+| #   | Plugin / hook            | Purpose                                                              |
+| --- | ------------------------ | -------------------------------------------------------------------- |
+| 1   | CORS `onRequest` hook    | Allow-list `watchman://`, `http://localhost:*`, `http://127.0.0.1:*`; sets CORS headers and short-circuits `OPTIONS` |
+| 2   | `logSamplingPlugin`      | Sample `/meta/health` request logs to keep noise down                |
+| 3   | `requestTimeoutPlugin`   | Per-request `AbortSignal` + 15s timeout (configurable)               |
+| 4   | `@fastify/compress`      | Brotli / gzip response compression (≥1 KiB)                          |
+| 5   | `errorHandlerPlugin`     | DomainError → envelope `{ error: { code, message } }` mapping        |
+| 6   | `metaRoutes`             | `/meta/health`, `/meta/version`                                      |
+| 7   | `metricsRoutes`          | `/metrics` snapshot                                                  |
+| 8   | `servicesRoutes`         | `/services`, `/services/:kind/health`, `/services/:kind/stats`, `/services/:kind/control` |
+| 9   | `instancesRoutes`        | `/instances`, `/instances/:kind`, `/kinds`                           |
+| 10  | `setupRoutes`            | `/setup/status`, `/setup/philips-bridge/pair`                        |
+| 11  | `configRoutes`           | UI-driven ConfigStore CRUD + export/import + audit log               |
+| 12  | `wsPlugin`               | `/ws` upgrade — origin gate, connection manager, heartbeat, broadcaster subscribed to the event bus |
 
 Request timeout and cancellation use Fastify's native request lifecycle hooks with AbortSignal propagation through service layers, allowing graceful cancellation on timeout or client disconnect.
+
+> [!note] Removed since the original spec
+> Earlier drafts of this section listed Helmet, JWT, CSRF, and tiered rate limiting. None of them are wired up today — they were removed when Watchman became single-user ([[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]). Use network isolation (firewall, VPN, closed LAN) instead.
 
 ## Core Layer
 
