@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 type: index
 status: active
-date: 2026-05-12
+date: 2026-05-19
 tags: [adr, architecture, index, decision, design, startup-flows]
 description: Index of all Architecture Decision Records for the Watchman project - why design choices were made
 aliases: [adr index, decisions, architecture decisions, design decisions]
@@ -52,11 +52,12 @@ SORT file.name ASC
 | [[docs/adr/021-frontend-dashboard-upgrade.md | Frontend Dashboard Upgrade]] | Aggregated `/services` fan-out for tile health, client-side metric history ring buffer, sparklines on tiles + detail-sheet charts, editorial top-bar nav with global summary chip, quickLink on every renderer, Raw + Config + custom panels in detail sheet |
 | [[docs/adr/022-instance-id-rename.md | Instance ID Rename Support]] | Allow renaming service instances in-place with audit trail and dedicated lifecycle event |
 | [[docs/adr/023-startup-flow-npm-script-overhaul.md | Startup Flow & npm Script Overhaul]] | Three startup modes (Desktop, Production, Development), unified npm script surface, Playwright e2e scaffold, OpenAPI→TypeScript generation |
+| [[docs/adr/024-claude-code-devcontainer.md | Claude Code Devcontainer]] | Hardened Docker devcontainer with iptables default-deny egress, non-root user, Keychain-backed auth, volume-isolated ~/.claude, and host ssh-agent forwarding for `--dangerously-skip-permissions` mode |
 
 ## Creating a New ADR
 
 1. Copy [[docs/adr/template|ADR Template]]
-2. Name it `NNN-short-title.md` (next sequential number after 023)
+2. Name it `NNN-short-title.md` (next sequential number after 024)
 3. Fill in all sections:
    - **Status**: Proposed | Accepted | Deprecated | Superseded
    - **Context**: The problem being solved

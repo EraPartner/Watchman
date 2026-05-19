@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Watchman devcontainer egress firewall.
+#
+# Default-deny outbound; allowlists the domains used by:
+#   - npm / GitHub for package install
+#   - Anthropic API + claude.ai for Claude Code auth
+#   - Debian APT mirrors (rebuilds, ad-hoc tooling)
+#   - PyPI (in case any tooling pulls Python deps)
+#   - VS Code marketplace (for extensions, if you ever attach an editor)
+#
+# Watchman is a LAN-monitoring tool, so in production it reaches local
+# services (Bitcoin node, IPFS, Tor, AdGuard, …) on the home network.
+# The devcontainer firewall blocks LAN access by default so a misbehaving
+# session can't probe your network — the assumption is that Claude only
+# works on code here, and live polling is exercised on the host.
+#
+# To allow LAN access (e.g. to actually exercise the pollers from inside
+# the container), append a CIDR to the ipset:
+#   sudo ipset add watchman-allowed 192.168.1.0/24
+# or set ALLOWED_CIDRS below.
+#
+# Localhost traffic is fully allowed so backend and frontend can talk
+# to each other on 127.0.0.1.
+
+set -euo pipefail
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  exec sudo --preserve-env=PATH bash "$0" "$@"
+fi
+
+ALLOWED_DOMAINS=(
+  # Anthropic
+  "api.anthropic.com"
+  "console.anthropic.com"
+  "claude.ai"
+  "statsig.anthropic.com"
+  "sentry.io"
+  # Claude Code update / auth callbacks
+  "code.claude.com"
+  "docs.claude.com"
+  # npm
+  "registry.npmjs.org"
+  # GitHub (source / releases / API)
+  "github.com"
+  "api.github.com"
+  "objects.githubusercontent.com"
+  "raw.githubusercontent.com"
+  "codeload.github.com"
+  "ghcr.io"
+  "pkg-containers.githubusercontent.com"
+  # PyPI (rare, but some dev tooling reaches for it)
+  "pypi.org"
+  "files.pythonhosted.org"
+  # Debian apt mirrors
+  "deb.debian.org"
+  "security.debian.org"
+  # NodeSource (in case node feature pulls binaries at runtime)
+  "nodejs.org"
+  # VS Code marketplace (for extensions if you ever attach an editor)
+  "marketplace.visualstudio.com"
+  "update.code.visualstudio.com"
+)
+
+# Extra CIDRs to allow (e.g. your home LAN). Empty by default.
+# Example: ALLOWED_CIDRS=("192.168.1.0/24" "10.0.0.0/24")
+ALLOWED_CIDRS=()
+
+# --- Reset existing rules ---
+iptables -F
+iptables -X
+iptables -t nat -F
+iptables -t nat -X
+ipset destroy watchman-allowed 2>/dev/null || true
+
+ipset create watchman-allowed hash:net family inet
+
+# Loopback always allowed (backend ↔ frontend run here)
+iptables -A INPUT  -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+
+# Established / related — replies come back through
+iptables -A INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# DNS — UDP/53 to the resolver only. (Anthropic's reference leaves DNS open;
+# we restrict to the configured resolver to reduce DNS-tunneling surface.)
+RESOLVER="$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf || true)"
+if [[ -n "${RESOLVER:-}" ]]; then
+  iptables -A OUTPUT -p udp --dport 53 -d "$RESOLVER" -j ACCEPT
+  iptables -A OUTPUT -p tcp --dport 53 -d "$RESOLVER" -j ACCEPT
+fi
+
+# Resolve a domain with retry+backoff. NSS/getent inside Docker Desktop's
+# vpnkit network sometimes returns empty on the first try right after the
+# container attaches to the bridge (the embedded DNS forwarder hasn't fully
+# warmed up). Retrying for ~10s with widening backoff catches that without
+# stretching firewall-apply time when DNS is healthy.
+resolve_with_retry() {
+  local domain="$1"
+  local attempt=1
+  local max_attempts=4
+  local ips=""
+  while (( attempt <= max_attempts )); do
+    ips="$(getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1}' | sort -u)"
+    if [[ -n "$ips" ]]; then
+      printf '%s\n' "$ips"
+      return 0
+    fi
+    sleep "$attempt"   # 1s, 2s, 3s, 4s
+    attempt=$(( attempt + 1 ))
+  done
+  return 1
+}
+
+# Resolve each allowed domain to IPs and add them to the ipset. Track per-domain
+# counts so we can warn loudly if a critical domain couldn't be resolved —
+# silently leaving an empty ipset + default-DROP egress produces ECONNREFUSED
+# at runtime (via vpnkit/gVisor) which is hard to diagnose.
+declare -A RESOLVED_DOMAINS=()
+for domain in "${ALLOWED_DOMAINS[@]}"; do
+  count=0
+  while read -r ip; do
+    if [[ -n "$ip" ]] && ipset add watchman-allowed "$ip" 2>/dev/null; then
+      count=$(( count + 1 ))
+    fi
+  done < <(resolve_with_retry "$domain" || true)
+  RESOLVED_DOMAINS["$domain"]=$count
+done
+
+# Add any extra CIDRs the user has configured.
+for cidr in "${ALLOWED_CIDRS[@]}"; do
+  ipset add watchman-allowed "$cidr" 2>/dev/null || true
+done
+
+# Verify the domains Claude actually needs resolved to at least one IP each.
+# If not, the container's DNS path is broken (usually: detached from Docker
+# bridge network). Print a clear recovery hint instead of failing silently.
+CRITICAL_DOMAINS=("api.anthropic.com" "registry.npmjs.org" "github.com")
+missing=()
+for d in "${CRITICAL_DOMAINS[@]}"; do
+  [[ "${RESOLVED_DOMAINS[$d]:-0}" -eq 0 ]] && missing+=("$d")
+done
+if (( ${#missing[@]} > 0 )); then
+  cat >&2 <<EOF
+[firewall] ⚠  Could not resolve critical domain(s): ${missing[*]}
+[firewall]    The container's DNS path is broken — every outbound call will
+[firewall]    fail with ECONNREFUSED until this is fixed.
+[firewall]
+[firewall]    Most common cause: Docker Desktop detached the container from
+[firewall]    its bridge network (host sleep/resume, DD update, reaper).
+[firewall]
+[firewall]    On your HOST shell (not inside the container), run:
+[firewall]      docker network connect bridge $HOSTNAME
+[firewall]
+[firewall]    Then re-apply the firewall from inside the container:
+[firewall]      sudo $0
+EOF
+fi
+
+# Default policies — drop everything not explicitly allowed.
+iptables -P INPUT   DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT  DROP
+
+# Allow outbound to the resolved IPs.
+iptables -A OUTPUT -m set --match-set watchman-allowed dst -j ACCEPT
+
+# Allow incoming traffic from host on forwarded ports (Docker bridge handles
+# this via DNAT, but we keep an explicit accept for clarity).
+iptables -A INPUT -p tcp --dport 5173 -j ACCEPT
+iptables -A INPUT -p tcp --dport 3001 -j ACCEPT
+iptables -A INPUT -p tcp --dport 4173 -j ACCEPT
+
+echo "[firewall] Default-deny egress active. Allowed: ${#ALLOWED_DOMAINS[@]} domains, ${#ALLOWED_CIDRS[@]} extra CIDR(s)."

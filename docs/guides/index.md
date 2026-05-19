@@ -2,7 +2,7 @@
 title: Guides
 type: index
 status: active
-date: 2026-04-19
+date: 2026-05-19
 tags: [guide, index, setup-wizard]
 description: Index of all how-to guides for the Watchman project
 aliases: [guides index, how-to, tutorials]
@@ -33,6 +33,7 @@ SORT file.name ASC
 | [[docs/guides/contributing      | Contributing]]          | Contribution guidelines and workflow |
 | [[docs/guides/ai-agent-workflow | AI Agent Workflow]]     | Comprehensive AI agent instructions  |
 | [[docs/guides/monitoring-upgrade-plan | Monitoring Upgrade Plan]] | Phase-by-phase rollout of ADR-019 (two-tier health + per-service methodology) |
+| [[docs/guides/devcontainer | Devcontainer Guide]] | Hardened Docker devcontainer for running Claude CLI in `--dangerously-skip-permissions` mode |
 
 > [!note] Superseded guides
 > `running-the-setup-wizard` and `deploying-to-raspberry-pi` were removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]] (revert split deploy). The setup wizard Connect step and Pi deployment are no longer part of the architecture.

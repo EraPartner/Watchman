@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-05-16
+date: 2026-05-19
 tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -50,9 +50,9 @@ Or jump to:
 
 | Area                         | Description              | Documents                            |
 | ---------------------------- | ------------------------ | ------------------------------------ | ------------------- |
-| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 23 ADRs             |
+| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 24 ADRs             |
 | 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 9 endpoints         |
-| 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, Pi deploy, contributing, and wizard  | 7 guides            |
+| 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, Pi deploy, contributing, and wizard  | 8 guides            |
 | ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 5 features          |
 | 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 15 integrations     |
 | 🔒 [[docs/security/index     | Security]]               | Security policies and practices      | 4 security docs     |
@@ -190,6 +190,9 @@ Watchman/
 
 > [!info] Single-User Design
 > Watchman is a single-user home-lab monitoring application with no built-in authentication. Network isolation (firewall, VPN, or closed LAN) is the operator's responsibility. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
+
+> [!info] Devcontainer (optional)
+> A hardened Docker devcontainer at `.devcontainer/` lets contributors run Claude CLI in `--dangerously-skip-permissions` mode without exposing the host. It uses iptables default-deny egress, a non-root container user, Keychain-backed auth, and volume-isolated `~/.claude`. See [[docs/guides/devcontainer|Devcontainer Guide]] and [[docs/adr/024-claude-code-devcontainer|ADR-024]].
 
 > [!info] Rate Limiting Tiers
 >
