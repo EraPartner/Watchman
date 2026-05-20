@@ -198,7 +198,7 @@ To change the allowlist or proxy behavior, edit `.devcontainer/squid.conf` and *
 ### Observability: what's blocked and why
 
 > [!note] Blocked egress looks like a TLS/connection error
-> A blocked host surfaces as a TLS handshake / "self-signed certificate" error or a `CONNECT … 403` — that **is** the egress policy denying it (squid terminates disallowed SNIs). For the definitive record, read the egress audit log, which `dev` can read (it's group-`proxy` and `dev` is in that group):
+> A blocked host surfaces as a TLS handshake / "self-signed certificate" error or a `CONNECT … 403` — that **is** the egress policy denying it (squid terminates disallowed SNIs). For the definitive record, read the egress audit log (the entrypoint keeps it world-readable so `dev` can inspect it without being in the `proxy` group; it's bounded by rotation past ~50 MB):
 > ```sh
 > tail -f /var/log/squid/access.log   # TCP_TUNNEL = allowed, TCP_DENIED/NONE = blocked
 > ```

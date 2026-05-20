@@ -26,6 +26,12 @@ if curl -sS -o /dev/null --max-time 6 --noproxy '*' https://api.anthropic.com/ 2
   fail "DIRECT egress (bypassing proxy) succeeded — firewall not enforcing!"
 else pass "direct egress (bypassing proxy) is blocked"; fi
 
+# A non-allowlisted host THROUGH the proxy must be denied (catches an allowlist
+# regression — e.g. a squid misconfig that allowed everything).
+if curl -sS -o /dev/null --max-time 10 https://example.com/ 2>/dev/null; then
+  fail "non-allowlisted host (example.com) was ALLOWED through the proxy — allowlist regression!"
+else pass "non-allowlisted host denied by the proxy allowlist"; fi
+
 # Toolchain.
 command -v node >/dev/null && pass "node $(node -v)" || fail "node missing"
 command -v npm  >/dev/null && pass "npm $(npm -v)"  || fail "npm missing"
