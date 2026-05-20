@@ -52,16 +52,21 @@ COPY init-firewall.sh /usr/local/sbin/watchman-firewall
 COPY perms-fix.sh     /usr/local/sbin/watchman-perms-fix
 COPY entrypoint.sh    /usr/local/sbin/watchman-entrypoint
 COPY squid.conf       /etc/squid/squid.conf
+COPY allowlist.txt    /etc/squid/allowlist.txt
 RUN chmod 0755 /usr/local/sbin/watchman-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint \
   && chown root:root /usr/local/sbin/watchman-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint
 
 # Pre-build the squid TLS-bump cert + cert DB so first start is fast. The
-# entrypoint regenerates either if missing (e.g. tmpfs).
+# entrypoint regenerates either if missing (e.g. tmpfs). The key (and the .pem
+# that contains it) are 0600 — squid reads them at startup as root, so dev never
+# needs to. (This bump CA is in no trust store and allowed traffic is spliced,
+# so it can't MITM anything, but a private key shouldn't be world-readable.)
 RUN mkdir -p /etc/squid/certs /var/lib/squid /var/log/squid /var/spool/squid \
   && openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
        -subj "/CN=watchman-egress-proxy" \
        -keyout /etc/squid/certs/bump.key -out /etc/squid/certs/bump.crt \
   && cat /etc/squid/certs/bump.key /etc/squid/certs/bump.crt > /etc/squid/certs/bump.pem \
+  && chmod 600 /etc/squid/certs/bump.key /etc/squid/certs/bump.pem \
   && /usr/lib/squid/security_file_certgen -c -s /var/lib/squid/ssl_db -M 4MB \
   && chown -R proxy:proxy /etc/squid/certs /var/lib/squid /var/log/squid /var/spool/squid
 

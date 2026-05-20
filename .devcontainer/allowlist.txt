@@ -1,0 +1,34 @@
+# Egress allowlist — single source of truth for squid.conf (both the
+# ssl::server_name SNI ACL and the dstdomain CONNECT-target ACL read this file).
+# One host per line; a leading dot matches the domain and all subdomains.
+# Changes require a container rebuild (squid.conf + this file are baked).
+
+# Anthropic / Claude Code (API, auth, auto-updater, docs)
+api.anthropic.com
+console.anthropic.com
+platform.claude.com
+claude.ai
+code.claude.com
+docs.claude.com
+downloads.claude.ai
+
+# npm
+registry.npmjs.org
+
+# GitHub (source / releases / API / container registry)
+github.com
+api.github.com
+codeload.github.com
+.githubusercontent.com
+ghcr.io
+pkg-containers.githubusercontent.com
+
+# Node (node-gyp headers for native modules at runtime)
+nodejs.org
+
+# safe-chain malware list
+malware-list.aikido.dev
+
+# Playwright browser binary downloads (E2E in apps/frontend)
+cdn.playwright.dev
+playwright.download.prss.microsoft.com
