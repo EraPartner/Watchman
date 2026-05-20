@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Watchman devcontainer readiness check. Run INSIDE the container:
+#   bash .devcontainer/bin/doctor
+# (or:  devcontainer exec --workspace-folder . bash .devcontainer/bin/doctor)
+#
+# The root entrypoint is intentionally best-effort/non-fatal, so failures are
+# silent. This gives a one-shot health signal for the things that matter.
+
+pass() { printf '  \033[32mok\033[0m   %s\n' "$1"; }
+fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; FAILED=1; }
+FAILED=0
+
+echo "Watchman devcontainer doctor"
+echo "----------------------------"
+
+# Egress proxy listening?
+if (exec 3<>/dev/tcp/127.0.0.1/3128) 2>/dev/null; then pass "egress proxy listening on 127.0.0.1:3128"
+else fail "egress proxy NOT listening on 127.0.0.1:3128 (check 'docker logs <id>')"; fi
+
+# Allowed egress through the proxy?
+code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 https://api.anthropic.com/ 2>/dev/null || echo 000)
+[[ "$code" != 000 ]] && pass "egress via proxy reaches api.anthropic.com (HTTP $code)" || fail "cannot reach api.anthropic.com through the proxy"
+
+# Direct egress should be blocked.
+if curl -sS -o /dev/null --max-time 6 --noproxy '*' https://api.anthropic.com/ 2>/dev/null; then
+  fail "DIRECT egress (bypassing proxy) succeeded — firewall not enforcing!"
+else pass "direct egress (bypassing proxy) is blocked"; fi
+
+# Toolchain.
+command -v node >/dev/null && pass "node $(node -v)" || fail "node missing"
+command -v npm  >/dev/null && pass "npm $(npm -v)"  || fail "npm missing"
+command -v claude >/dev/null && pass "claude $(claude --version 2>/dev/null | head -1)" || fail "claude missing"
+
+# Claude auth token forwarded?
+[[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]] && pass "CLAUDE_CODE_OAUTH_TOKEN present" \
+  || echo "  note CLAUDE_CODE_OAUTH_TOKEN not set in this shell (the wrapper forwards it to claude only)"
+
+# gh token forwarded?
+[[ -n "${GH_TOKEN:-}" ]] && pass "GH_TOKEN present" \
+  || echo "  note GH_TOKEN not set — set host Keychain 'watchman-gh-token' for gh/git push"
+
+# Egress audit log readable by dev?
+if [[ -r /var/log/squid/access.log ]]; then pass "egress audit log readable: /var/log/squid/access.log"
+else echo "  note /var/log/squid/access.log not yet created or unreadable (appears after first request)"; fi
+
+# Claude config seeded (no onboarding)?
+[[ -f /home/dev/.claude/settings.json ]] && pass "~/.claude seeded (settings.json present)" \
+  || fail "~/.claude not seeded — claude will show first-run onboarding"
+
+echo "----------------------------"
+(( FAILED )) && { echo "Some checks FAILED."; exit 1; } || { echo "All checks passed."; exit 0; }

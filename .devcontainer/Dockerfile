@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential pkg-config \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --create-home --uid 1000 --shell /bin/bash dev \
+  && usermod -aG proxy dev \
   && echo "C.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
 
 # GitHub CLI from the official cli.github.com apt repo.

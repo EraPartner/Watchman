@@ -34,10 +34,11 @@ Base image: `debian:bookworm-slim`. Container user: `dev` (UID 1000, non-root). 
 
 | Requirement | Notes |
 |---|---|
-| Docker Desktop (or compatible Docker runtime) | Must be running before you start |
+| Docker Desktop (or compatible Docker runtime) | Must be running before you start. The container requests `--memory=4g` — set the Docker Desktop VM to ≥4 GB or lower the limit in `devcontainer.json`. |
 | `@devcontainers/cli` | `npm install -g @devcontainers/cli` |
 | macOS Keychain (recommended) | For credential storage; Linux contributors can use env-var fallback |
 | Host ssh-agent with signing key loaded | For `git commit -S` to work inside the container |
+| `~/.gitconfig` and `~/.ssh/github.pub` must exist on the host | They're bind-mounted read-only; if either is missing, `devcontainer up` fails with an opaque mount error. Create them first (`touch ~/.gitconfig`; generate the signing key) or remove those mounts from `devcontainer.json`. |
 
 ## First-Time Setup
 
@@ -176,12 +177,31 @@ Egress is enforced in two layers, both applied by the root entrypoint on every s
 1. **In-container SNI proxy (`squid`, peek+splice).** All outbound HTTP(S) must go through `squid` on `127.0.0.1:3128`. squid peeks the TLS SNI and *splices* allowed hostnames (tunnels without decrypting — end-to-end TLS preserved, no MITM) and terminates the rest. This is hostname-enforced, so it can't be bypassed by an exfil endpoint sharing an allowed CDN's IP, and it defeats `CONNECT`-host ≠ SNI domain-fronting.
 2. **`iptables` egress lock.** Only the `proxy` UID may originate outbound packets. Any process that bypasses the proxy and connects directly is dropped (its socket UID isn't `proxy`). IPv6 is default-deny; denied egress is rate-limited-logged (`dmesg | grep watchman-deny`).
 
-**Allowed hostnames** (in `.devcontainer/squid.conf`): Anthropic API + `claude.ai` + Claude Code endpoints, `registry.npmjs.org`, GitHub (+ `*.githubusercontent.com`, `ghcr.io`), PyPI, Debian apt mirrors, `nodejs.org`, `*.visualstudio.com`. `statsig`/`sentry` are intentionally excluded.
+**Allowed hostnames** (in `.devcontainer/squid.conf`): Anthropic API + `claude.ai` + Claude Code endpoints, `registry.npmjs.org`, GitHub (+ `*.githubusercontent.com`, `ghcr.io`), PyPI, Debian apt mirrors, `nodejs.org`, `*.visualstudio.com`, `malware-list.aikido.dev` (safe-chain). `statsig`/`sentry` are intentionally excluded; the cloud metadata IP `169.254.169.254` is explicitly denied.
 
 > [!important] Tools must honor `HTTPS_PROXY`
 > `HTTP(S)_PROXY` is set in `containerEnv`. `claude`, `npm`, `git`, `gh`, and `pip` honor it. Node's global `fetch` does **not** — so the Watchman backend's own outbound calls won't work inside the container. The devcontainer is for code editing; run the app on the host for live data. **LAN is also unreachable** (only the allowlisted hostnames resolve through the proxy).
 
-To change the allowlist or proxy behavior, edit `.devcontainer/squid.conf` and **rebuild** (it's baked into the image). To re-apply the firewall manually: `sudo /usr/local/sbin/watchman-firewall` is no longer runnable by `dev` (no sudo) — restart the container instead.
+To change the allowlist or proxy behavior, edit `.devcontainer/squid.conf` and **rebuild** (it's baked into the image). To re-apply the firewall manually: `sudo /usr/local/sbin/watchman-firewall` is no longer runnable by `dev` (no sudo) — restart the container instead. The proxy is supervised: if squid crashes, the entrypoint restarts it (egress stays denied while it's down — fail-closed).
+
+### Supply-chain scanning (safe-chain)
+
+`post-create` installs [Aikido safe-chain](https://github.com/AikidoSec/safe-chain) and `BASH_ENV` sources its wrappers into every bash session, so `npm`/`bun`/`pip`/`python` installs Claude runs mid-session are screened against the malware list at `malware-list.aikido.dev` before executing. The project's own pinned deps are installed plain (already vetted via the lockfile). This is defense-in-depth on top of the sandbox — a malicious package still couldn't escalate or exfiltrate (egress-locked, no host access, no-new-privileges).
+
+### Observability: what's blocked and why
+
+> [!note] Blocked egress looks like a TLS/connection error
+> A blocked host surfaces as a TLS handshake / "self-signed certificate" error or a `CONNECT … 403` — that **is** the egress policy denying it (squid terminates disallowed SNIs). For the definitive record, read the egress audit log, which `dev` can read (it's group-`proxy` and `dev` is in that group):
+> ```sh
+> tail -f /var/log/squid/access.log   # TCP_TUNNEL = allowed, TCP_DENIED/NONE = blocked
+> ```
+> The `iptables` deny-log (`dmesg | grep watchman-deny`) catches direct-egress attempts that bypass the proxy, but `dmesg` needs root — the squid access log is the dev-readable audit path.
+
+> [!note] Not covered by the proxy
+> - **WebSearch / WebFetch** run Anthropic-side, not in the container — the squid allowlist doesn't constrain them. Fetched content only enters the container as text Claude writes; there's no direct exfil path, but the containment boundary stops at the container.
+> - **TLS Encrypted Client Hello (ECH)**: peek+splice relies on a cleartext SNI. If a client uses ECH, squid sees no SNI and `ssl_bump terminate all` denies it (fail-closed) — correct, but it means ECH destinations are simply unreachable rather than allowlist-matched.
+
+Run `.devcontainer/bin/doctor` inside the container for a one-shot readiness check (proxy up, egress allow/deny, tokens, audit log, config seeded).
 
 ## Persistent Volumes
 

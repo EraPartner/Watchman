@@ -96,8 +96,10 @@ if command -v security >/dev/null 2>&1; then
 fi
 
 # Fallback: plain env vars from the host shell (if Keychain entries absent).
+# ${EXEC_ARGS[@]+...} guards against "unbound variable" on an empty array under
+# `set -u` (macOS default bash 3.2) when no token was found.
 have_claude=0
-for a in "${EXEC_ARGS[@]}"; do [[ "$a" == CLAUDE_CODE_OAUTH_TOKEN=* ]] && have_claude=1; done
+for a in ${EXEC_ARGS[@]+"${EXEC_ARGS[@]}"}; do [[ "$a" == CLAUDE_CODE_OAUTH_TOKEN=* ]] && have_claude=1; done
 if (( ! have_claude )); then
   for var in CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN; do
     val="${!var:-}"
@@ -106,4 +108,4 @@ if (( ! have_claude )); then
 fi
 
 # Forward all args. claude is interactive — stdin/tty flow through devcontainer exec.
-exec devcontainer exec --workspace-folder "$PROJECT_ROOT" "${EXEC_ARGS[@]}" claude "$@"
+exec devcontainer exec --workspace-folder "$PROJECT_ROOT" ${EXEC_ARGS[@]+"${EXEC_ARGS[@]}"} claude "$@"
