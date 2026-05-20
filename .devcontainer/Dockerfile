@@ -48,13 +48,17 @@ RUN install -d -m 0755 /etc/apt/keyrings \
 # writable from inside the container). The repo copies under .devcontainer/
 # are source-only — a rewrite there cannot affect the running container, which
 # closes an escalation path (rewrite workspace script -> trigger root re-apply).
-COPY init-firewall.sh /usr/local/sbin/watchman-firewall
+COPY init-firewall.sh /usr/local/sbin/egress-firewall
 COPY perms-fix.sh     /usr/local/sbin/watchman-perms-fix
 COPY entrypoint.sh    /usr/local/sbin/watchman-entrypoint
 COPY squid.conf       /etc/squid/squid.conf
 COPY allowlist.txt    /etc/squid/allowlist.txt
-RUN chmod 0755 /usr/local/sbin/watchman-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint \
-  && chown root:root /usr/local/sbin/watchman-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint
+RUN chmod 0755 /usr/local/sbin/egress-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint \
+  && chown root:root /usr/local/sbin/egress-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint
+
+# Inbound ports this project publishes (read by the canonical egress-firewall for
+# INPUT ACCEPT). Frontend 5173 + backend 3001 + preview 4173.
+RUN mkdir -p /etc/egress && printf '5173\n3001\n4173\n' > /etc/egress/inbound-ports
 
 # Pre-build the squid TLS-bump cert + cert DB so first start is fast. The
 # entrypoint regenerates either if missing (e.g. tmpfs). The key (and the .pem
