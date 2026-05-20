@@ -67,24 +67,14 @@ WATCHMAN_MASTER_KEY=
 EOF
 fi
 
-# Build a writable ~/.gitconfig that:
-#   - includes the read-only bind-mounted host gitconfig (so user.name,
-#     user.email, aliases, etc. carry over without us hardcoding them)
-#   - declares /workspaces/Watchman as a safe.directory (the bind mount
-#     ends up with non-dev ownership, which git would otherwise reject)
+# Minimal ~/.gitconfig: just mark the bind-mounted workspace safe so read-only
+# git ops (log/diff/status) work despite the mount's non-dev ownership. No
+# identity/signing/push config — commits & pushes happen on the HOST, and the
+# in-container .git is read-only.
 if [[ ! -f /home/dev/.gitconfig || ! -s /home/dev/.gitconfig ]]; then
   cat > /home/dev/.gitconfig <<'EOF'
-[include]
-    path = /home/dev/.gitconfig-host
 [safe]
     directory = /workspaces/Watchman
-# Override the host's signingkey path — that path (/Users/.../ssh/github.pub)
-# doesn't resolve inside the container. The public key is bind-mounted to a
-# container-local path, and the corresponding private key stays on the host;
-# ssh-keygen reaches it through SSH_AUTH_SOCK (Docker Desktop forwards the
-# host's ssh-agent into the container).
-[user]
-    signingkey = /home/dev/.ssh/host-signing.pub
 EOF
 fi
 
@@ -108,18 +98,6 @@ if [[ ! -f /home/dev/.claude.json && -f "$STAGE/claude.json" ]]; then
   chmod 0600 /home/dev/.claude.json
 fi
 
-# gh authenticates via GH_TOKEN forwarded from the host Keychain by the wrapper
-# (no persistent token volume). If it's absent, gh read/write still needs auth.
-if ! gh auth status >/dev/null 2>&1; then
-  cat <<'NOTE'
-[post-create] gh is not authenticated. The wrapper forwards GH_TOKEN from your
-              host Keychain entry `watchman-gh-token` if present. To set it up,
-              on the HOST run once:
-                gh auth token | security add-generic-password \
-                  -s watchman-gh-token -a "$USER" -w
-              (or paste a PAT). Then re-run `watchman-claude`.
-NOTE
-fi
 
 echo "[post-create] Done."
 echo "[post-create] Start the stack with:  npm run dev"
