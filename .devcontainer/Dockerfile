@@ -87,4 +87,11 @@ RUN install -d -o dev -g dev -m 0700 /home/dev/.claude \
 # and start the proxy; devcontainer.json sets remoteUser=dev for sessions and
 # --security-opt=no-new-privileges so dev cannot escalate.
 WORKDIR /workspaces/Watchman
+
+# Health: the egress proxy must be listening (egress is useless without it).
+# start-period covers entrypoint setup. Surfaces in `docker ps` automatically;
+# `.devcontainer/bin/doctor` is the fuller manual check.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+  CMD bash -c '(exec 3<>/dev/tcp/127.0.0.1/3128) 2>/dev/null'
+
 ENTRYPOINT ["/usr/local/sbin/watchman-entrypoint"]

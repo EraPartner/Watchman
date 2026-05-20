@@ -33,8 +33,11 @@ else
 fi
 
 # Install JS deps (npm honors HTTPS_PROXY → squid → registry.npmjs.org).
-echo "[post-create] npm install..."
-npm install
+# `npm ci` is the reproducible install: it builds strictly from package-lock.json
+# and fails loudly on a stale lock (the signal we want, matching the pinned
+# base image / devcontainer-lock).
+echo "[post-create] npm ci..."
+npm ci
 
 # Local .env — only generated if missing. The master key is intentionally left
 # unset: fill it in via a container-only mechanism if needed (this file lives on

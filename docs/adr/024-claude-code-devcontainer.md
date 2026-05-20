@@ -51,10 +51,10 @@ Egress is enforced in two layers:
 1. **`squid` (peek+splice) hostname allowlist.** squid peeks the TLS ClientHello SNI and, for allowed names, *splices* (tunnels without decrypting — end-to-end TLS is preserved, no MITM, no CA injection). Disallowed names are terminated. This is stronger than an IP allowlist: it can't be bypassed by an exfil endpoint co-hosted on an allowed CDN IP, and it defeats the `CONNECT`-host ≠ real-SNI domain-fronting trick (both verified in testing).
 2. **`iptables` egress lock.** Outbound is allowed only for the `proxy` UID (squid). Every other process — dev sessions, a malicious npm postinstall — must use the proxy on `127.0.0.1:3128`; a direct connection is dropped because its socket UID isn't `proxy`. IPv6 is default-deny; a rate-limited LOG-then-DROP chain gives egress visibility (`dmesg | grep watchman-deny`). `NET_RAW` is dropped (only `NET_ADMIN` is granted).
 
-Allowlist: Anthropic API + `claude.ai`, npm registry, GitHub, PyPI, Debian apt mirrors, nodejs.org, VS Code marketplace. `statsig`/`sentry` are intentionally excluded (covert-exfil surface, already suppressed by `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`).
+Allowlist: Anthropic API + `claude.ai` + `platform.claude.com` + `downloads.claude.ai` (auto-updater), Claude Code endpoints, npm registry, GitHub, PyPI, Debian apt mirrors, nodejs.org, VS Code marketplace, Playwright CDNs, `malware-list.aikido.dev` (safe-chain). `statsig`/`sentry` are intentionally excluded (covert-exfil surface, suppressed via `DISABLE_TELEMETRY=1` + `DISABLE_ERROR_REPORTING=1`). Auto-update is intentionally left **on** (`downloads.claude.ai` allowlisted), so Claude self-updates to the latest version.
 
 > [!note] Tools must honor `HTTPS_PROXY`
-> `HTTPS_PROXY`/`HTTP_PROXY` are set in `containerEnv`. The `claude` CLI, `npm`, `git`, `gh`, and `pip` all honor it (verified). Node's **global `fetch` does not** — so app code making direct internet calls won't work inside the container. That's consistent with the LAN-block stance below: the devcontainer is for code editing; run the app on the host for live data/polling. LAN is also blocked (only the proxy's allowlisted hostnames are reachable).
+> `HTTPS_PROXY`/`HTTP_PROXY` are set in `containerEnv`, and `NODE_USE_ENV_PROXY=1` makes Node ≥24's global `fetch` honor them too. So `claude`, `npm`, `git`, `gh`, `pip`, **and app `fetch`** all egress via squid (verified). App calls to allowlisted hosts work inside the container; **LAN remains blocked** (not in the allowlist), so Watchman's pollers still can't reach home-lab devices here — intentional.
 
 > [!note] Hardening evolution
 > The first iteration used an `iptables` IP-allowlist (resolve domains → `ipset`) plus a narrow `sudo` allowlist. Two follow-ups hardened it: (1) image-baked scripts + tightened sudoers (removed unrestricted `chown`/`chmod`), then (2) this proxy + `no-new-privileges` model, which removes `sudo` entirely and replaces IP-allowlisting with true hostname enforcement. Other additions: `@sha256` base-image pin, `--memory`/`--pids-limit` caps, `nosuid,nodev` tmpfs on `/tmp` + `noexec` on `/var/tmp`, ssh-agent socket tightened to `0600`, and a sanitized staged `~/.claude` bind (below).
@@ -105,13 +105,13 @@ The host ssh-agent socket (`/run/host-services/ssh-auth.sock`) is bind-mounted i
 - Contributors need `@devcontainers/cli` installed globally and Docker Desktop (or equivalent) running.
 - First-time setup requires manual Keychain steps (`security add-generic-password` for the Claude token, and optionally `watchman-gh-token` for gh).
 - `watchman-claude-sync push` must be run manually to propagate container-side config changes back to the host.
-- App code that calls the internet via Node's global `fetch` won't work inside the container (proxy not honored by undici); run the app on the host for live data.
+- App `fetch` egress works via `NODE_USE_ENV_PROXY=1`, but only to allowlisted hosts; LAN remains unreachable, so live polling still happens on the host.
 - Changing the egress allowlist or any baked script requires an image rebuild (the scripts and `squid.conf` are baked, not read from the workspace).
 - Electron desktop build (`npm run dist`) requires macOS native tools and must be run on the host, not inside the container.
 
 ### Risks
 
-- **LAN + Node-`fetch` egress blocked**: only the proxy's allowlisted hostnames are reachable, and Node's global `fetch` doesn't honor the proxy — so the app's own external/LAN calls don't work inside the container. Intentional (code editing, not live polling), but can surprise first-time users. Run the app on the host for live data.
+- **LAN egress blocked**: only the proxy's allowlisted hostnames are reachable. App `fetch` honors the proxy (`NODE_USE_ENV_PROXY=1`), so calls to allowlisted hosts work — but LAN devices aren't allowlisted, so live polling still happens on the host. Intentional, but can surprise first-time users.
 - **Host Keychain dependency**: macOS-only. Linux contributors must fall back to env-var auth (`CLAUDE_CODE_OAUTH_TOKEN` exported in shell).
 - **Docker Desktop ssh-agent socket**: Docker Desktop on macOS forwards `/run/host-services/ssh-auth.sock`; non-Desktop Docker (Lima, Colima, etc) uses a different socket path. The `post-start.sh` diagnostic helps detect but does not auto-resolve this.
 - **Named volume orphan**: if the devcontainer is rebuilt with a new `devcontainerId`, the old `watchman-claude-<id>` volume is not automatically removed. Over time, orphaned volumes accumulate unless manually pruned with `docker volume prune`.

@@ -84,11 +84,18 @@ The `watchman-claude` wrapper calls `security find-generic-password -s watchman-
 
 ### One-time GitHub auth (host Keychain)
 
-The `gh`/git token is forwarded from the host Keychain at exec time (no token is stored in the container). On the **host**, once:
+The `gh`/git token is forwarded from the host Keychain at exec time (no token is stored in the container). The wrapper reads a **project-specific** entry (`watchman-gh-token`) — never your host's active `gh` account — so each project's container only gets its own token.
+
+> [!important] Use a fine-grained PAT scoped to this repo
+> `GH_TOKEN` is inherited by every subprocess Claude spawns, and `github.com`/`api.github.com` are allowlisted — so a classic PAT with `repo, workflow, gist, read:org` gives a hostile postinstall both a secret and a sanctioned exfil path (e.g. create a gist). Prefer a **fine-grained PAT scoped to just `EraPartner/Watchman`** with only Contents + Pull requests write, no `gist`/`workflow` unless you actually use them.
+
+On the **host**, once:
 
 ```sh
-gh auth token | security add-generic-password -s watchman-gh-token -a "$USER" -w
-# or paste a fine-grained PAT instead of `gh auth token`
+# paste a fine-grained PAT scoped to EraPartner/Watchman (recommended):
+security add-generic-password -s watchman-gh-token -a "$USER" -w
+# or, less ideal, the broad classic token gh already has:
+gh auth token --user EraPartner | security add-generic-password -s watchman-gh-token -a "$USER" -w
 ```
 
 The wrapper forwards it as `GH_TOKEN`/`GITHUB_TOKEN`, so `gh` and `git push` over HTTPS work with no `gh auth login` inside the container.
@@ -179,8 +186,8 @@ Egress is enforced in two layers, both applied by the root entrypoint on every s
 
 **Allowed hostnames** (in `.devcontainer/squid.conf`): Anthropic API + `claude.ai` + Claude Code endpoints, `registry.npmjs.org`, GitHub (+ `*.githubusercontent.com`, `ghcr.io`), PyPI, Debian apt mirrors, `nodejs.org`, `*.visualstudio.com`, `malware-list.aikido.dev` (safe-chain). `statsig`/`sentry` are intentionally excluded; the cloud metadata IP `169.254.169.254` is explicitly denied.
 
-> [!important] Tools must honor `HTTPS_PROXY`
-> `HTTP(S)_PROXY` is set in `containerEnv`. `claude`, `npm`, `git`, `gh`, and `pip` honor it. Node's global `fetch` does **not** — so the Watchman backend's own outbound calls won't work inside the container. The devcontainer is for code editing; run the app on the host for live data. **LAN is also unreachable** (only the allowlisted hostnames resolve through the proxy).
+> [!important] Everything routes through the proxy
+> `HTTP(S)_PROXY` is set in `containerEnv`, and `NODE_USE_ENV_PROXY=1` makes Node ≥24's global `fetch` honor it too — so `claude`, `npm`, `git`, `gh`, `pip`, **and app code using `fetch`** all egress via squid. App calls to **allowlisted** hosts work inside the container. **LAN services remain unreachable** (they're not in the allowlist) — so Watchman's pollers still can't reach home-lab devices here; that's intentional. Add a LAN host to `squid.conf` only if you deliberately want to exercise a poller against it.
 
 To change the allowlist or proxy behavior, edit `.devcontainer/squid.conf` and **rebuild** (it's baked into the image). To re-apply the firewall manually: `sudo /usr/local/sbin/watchman-firewall` is no longer runnable by `dev` (no sudo) — restart the container instead. The proxy is supervised: if squid crashes, the entrypoint restarts it (egress stays denied while it's down — fail-closed).
 
@@ -241,7 +248,8 @@ The Watchman repo itself is bind-mounted at `/workspaces/Watchman` — edits app
 | `VITE_FRONTEND_PORT` | `5173` | Vite dev server port |
 | `VITE_PREVIEW_PORT` | `4173` | Vite preview server port |
 | `SSH_AUTH_SOCK` | `/ssh-agent` | Forwarded host ssh-agent socket |
-| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `1` | Disables Claude telemetry / update checks that would fail behind the firewall |
+| `DISABLE_TELEMETRY` / `DISABLE_ERROR_REPORTING` | `1` | Opt out of telemetry + error reporting (so Claude doesn't call the blocked `statsig`/`sentry` endpoints). **Auto-update stays ON** — `downloads.claude.ai` is allowlisted so Claude self-updates to the latest version. (We deliberately do *not* set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`/`DISABLE_AUTOUPDATER`, which would freeze the version.) |
+| `NODE_USE_ENV_PROXY` | `1` | Makes Node ≥24 global `fetch` honor `HTTP(S)_PROXY` (so app `fetch` egresses via squid) |
 | `HTTP(S)_PROXY` / `http(s)_proxy` | `http://127.0.0.1:3128` | Routes all tool egress through the in-container SNI proxy |
 | `NO_PROXY` / `no_proxy` | `localhost,127.0.0.1,::1` | Loopback bypasses the proxy |
 
@@ -258,12 +266,11 @@ The Watchman repo itself is bind-mounted at `/workspaces/Watchman` — edits app
 
 ## Known Limitations
 
-- **App code using Node global `fetch`** won't reach the internet inside the container (undici doesn't honor `HTTPS_PROXY`). Run the app on the host for live data. `claude`/`npm`/`git`/`gh`/`pip` are unaffected.
+- **Live LAN polling** is blocked — only the proxy's allowlisted hostnames resolve, and LAN hosts aren't in the allowlist. The devcontainer is for code editing, not exercising pollers against home-lab devices. (Node `fetch` *does* now route through the proxy via `NODE_USE_ENV_PROXY=1`, so app calls to allowlisted hosts work — LAN just isn't allowlisted.)
 - **Electron desktop build (`npm run dist`)** requires macOS native tools; run on the host.
-- **Live LAN polling** is blocked — only the proxy's allowlisted hostnames resolve. The devcontainer is for code editing, not exercising pollers against home-lab devices.
 - **Changing the egress allowlist** means editing `.devcontainer/squid.conf` and rebuilding (it's baked into the image).
-- **Linux Keychain**: the macOS Keychain-backed auth path is not available. Export `CLAUDE_CODE_OAUTH_TOKEN`/`GH_TOKEN` in your shell instead.
-- **Docker Desktop ssh-agent socket path** (`/run/host-services/ssh-auth.sock`) is Docker Desktop-specific. Lima / Colima users need to adjust it in `devcontainer.json`.
+- **macOS / Docker Desktop only.** The flow assumes Docker Desktop: the Keychain-backed auth in `bin/claude` and the forwarded ssh-agent socket (`/run/host-services/ssh-auth.sock`) are Docker-Desktop/macOS-specific. On Linux or Colima/OrbStack that socket source doesn't exist (so `devcontainer up` may fail on the mount) and Keychain is unavailable — remove/adjust that mount and export `CLAUDE_CODE_OAUTH_TOKEN`/`GH_TOKEN` in your shell instead.
+- **Reduced Linux capabilities.** The container drops all caps and re-adds only `NET_ADMIN, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, SETPCAP` (what the entrypoint's iptables/perms/privilege-drops need). If you add tooling that needs another cap, add it to `runArgs`.
 
 ## Safety Note
 
