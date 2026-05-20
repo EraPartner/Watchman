@@ -6,8 +6,9 @@
 # container can run with --security-opt=no-new-privileges (dev sessions then
 # have no path to root — no sudo, no setuid).
 #
-# Order: fix volume/socket perms -> start the egress proxy -> apply the
-# iptables egress lock -> hand off to a keep-alive PID 1.
+# Order: fix perms -> LOCK EGRESS (firewall, fail-closed) -> start the proxy ->
+# hand off to a keep-alive PID 1. The firewall goes up BEFORE the proxy so there
+# is no boot window where a racing post-create install could egress unfiltered.
 #
 # Everything is best-effort and non-fatal: the container must always reach the
 # keep-alive so you can exec in and diagnose even if the network is broken.
@@ -19,7 +20,30 @@ log() { echo "[entrypoint] $*"; }
 # 1) Repair ownership of named-volume mountpoints + ssh-agent socket.
 /usr/local/sbin/watchman-perms-fix || log "WARN: perms-fix returned non-zero."
 
-# 2) Ensure the squid TLS-bump cert + cert DB exist, then start squid.
+# Network pre-flight: if Docker Desktop detached us from the bridge (host
+# sleep/resume, DD update/reaper), there's no eth0/route and the proxy can't
+# resolve anything. Warn with the fix; still lock the firewall and keep the
+# container alive so it's diagnosable.
+has_iface=0
+for iface in /sys/class/net/eth*; do [[ -e "$iface" ]] && has_iface=1; done
+default_route=$(awk 'NR>1 && $2=="00000000" {print $1; exit}' /proc/net/route 2>/dev/null)
+if (( ! has_iface )) || [[ -z "$default_route" ]]; then
+  cat >&2 <<EOF
+[entrypoint] ⚠  No external network interface / default route.
+[entrypoint]    The proxy won't resolve upstreams until this is fixed.
+[entrypoint]    On your HOST shell:  docker network connect bridge $HOSTNAME
+[entrypoint]    Then restart the container.
+EOF
+fi
+
+# 2) LOCK EGRESS FIRST. Default-deny + proxy-UID-only, applied before the proxy
+#    (or anything else) can talk to the network. The owner-match rule references
+#    the `proxy` user, which exists from image build, so this is valid even
+#    before squid starts. fail-closed: see init-firewall.sh.
+/usr/local/sbin/watchman-firewall || log "WARN: firewall apply returned non-zero (egress stays default-DROP)."
+
+# 3) Ensure the squid TLS-bump cert + cert DB exist, then start squid (it
+#    egresses as the proxy UID, which the firewall above permits).
 if [[ ! -f /etc/squid/certs/bump.pem ]]; then
   log "Generating squid bump cert..."
   mkdir -p /etc/squid/certs
@@ -39,8 +63,6 @@ chown -R proxy:proxy /etc/squid/certs /var/lib/squid /var/log/squid /var/spool/s
 
 log "Starting egress proxy (squid)..."
 squid -N >/var/log/squid/boot.log 2>&1 &
-# Wait until squid is listening on 3128 before locking the firewall, so the
-# proxy's own UID is established and dev sessions never race an unready proxy.
 for _ in $(seq 1 20); do
   if (exec 3<>/dev/tcp/127.0.0.1/3128) 2>/dev/null; then
     log "Proxy listening on 127.0.0.1:3128."
@@ -48,25 +70,6 @@ for _ in $(seq 1 20); do
   fi
   sleep 1
 done
-
-# Network pre-flight: if Docker Desktop detached us from the bridge (host
-# sleep/resume, DD update/reaper), there's no eth0/route and the proxy can't
-# resolve anything — every request will fail. Warn with the fix; still apply
-# the firewall and keep the container alive so it's diagnosable.
-has_iface=0
-for iface in /sys/class/net/eth*; do [[ -e "$iface" ]] && has_iface=1; done
-default_route=$(awk 'NR>1 && $2=="00000000" {print $1; exit}' /proc/net/route 2>/dev/null)
-if (( ! has_iface )) || [[ -z "$default_route" ]]; then
-  cat >&2 <<EOF
-[entrypoint] ⚠  No external network interface / default route.
-[entrypoint]    The proxy won't resolve upstreams until this is fixed.
-[entrypoint]    On your HOST shell:  docker network connect bridge $HOSTNAME
-[entrypoint]    Then restart the container.
-EOF
-fi
-
-# 3) Apply the egress firewall (locks outbound to the proxy UID only).
-/usr/local/sbin/watchman-firewall || log "WARN: firewall apply returned non-zero."
 
 # Graceful shutdown on `docker stop` (SIGTERM): close squid cleanly so the
 # next start doesn't inherit a half-open state. (With "init": true in

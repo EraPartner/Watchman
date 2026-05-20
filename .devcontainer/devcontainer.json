@@ -27,7 +27,7 @@
     "--memory=4g",
     "--cpus=4",
     "--pids-limit=4096",
-    "--tmpfs=/tmp:rw,nosuid,nodev,size=512m",
+    "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=512m",
     "--tmpfs=/var/tmp:rw,noexec,nosuid,nodev,size=256m",
     "--publish=127.0.0.1:5173:5173",
     "--publish=127.0.0.1:3001:3001",
