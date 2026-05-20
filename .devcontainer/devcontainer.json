@@ -6,10 +6,11 @@
   },
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "lts"
+      "version": "24"
     },
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
   },
+  "init": true,
   "overrideCommand": false,
   "containerUser": "root",
   "remoteUser": "dev",
@@ -24,6 +25,7 @@
     "--cap-add=SETPCAP",
     "--security-opt=no-new-privileges",
     "--memory=4g",
+    "--cpus=4",
     "--pids-limit=4096",
     "--tmpfs=/tmp:rw,nosuid,nodev,size=512m",
     "--tmpfs=/var/tmp:rw,noexec,nosuid,nodev,size=256m",

@@ -301,13 +301,12 @@ so the key auto-loads on first use and survives reboots.
 
 ## Known limitations
 
-- **App code using Node global `fetch`** — won't reach the internet
-  (undici ignores `HTTPS_PROXY`). `claude`/`npm`/`git`/`gh`/`pip` are fine.
-  Run the app on the host for live data.
 - **Electron desktop build (`npm run dist`)** — needs macOS native tools;
   run on the host, not in this container.
 - **Live LAN polling** — unreachable; only the proxy's allowlisted
-  hostnames resolve. The devcontainer is for code editing.
+  hostnames resolve, and LAN hosts aren't allowlisted. App `fetch` *does*
+  route through the proxy (`NODE_USE_ENV_PROXY=1`), so calls to allowlisted
+  hosts work — LAN just isn't one of them. The devcontainer is for code editing.
 - **Changing the egress allowlist** — edit `squid.conf` and rebuild
   (it's baked into the image, not read from the workspace).
 - **Host Ollama via `host.docker.internal`** — blocked; add it to the

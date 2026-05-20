@@ -88,10 +88,12 @@ RUN install -d -o dev -g dev -m 0700 /home/dev/.claude \
 # --security-opt=no-new-privileges so dev cannot escalate.
 WORKDIR /workspaces/Watchman
 
-# Health: the egress proxy must be listening (egress is useless without it).
-# start-period covers entrypoint setup. Surfaces in `docker ps` automatically;
-# `.devcontainer/bin/doctor` is the fuller manual check.
+# Health: the egress proxy must be running AND the firewall must still be
+# enforcing default-deny (the firewall apply is best-effort/non-fatal, so this
+# turns a silent fail-open into a visible `unhealthy`). Uses pgrep, not a socket
+# connect, so it doesn't spam the squid access log with empty-probe errors.
+# start-period covers entrypoint setup; `.devcontainer/bin/doctor` is fuller.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-  CMD bash -c '(exec 3<>/dev/tcp/127.0.0.1/3128) 2>/dev/null'
+  CMD bash -c 'pgrep -x squid >/dev/null && /usr/sbin/iptables -S OUTPUT 2>/dev/null | grep -q "^-P OUTPUT DROP"'
 
 ENTRYPOINT ["/usr/local/sbin/watchman-entrypoint"]

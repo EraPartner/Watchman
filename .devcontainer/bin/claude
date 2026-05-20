@@ -51,26 +51,29 @@ fi
 # The container's devcontainer.json binds ~/.claude-watchman-stage (NOT the raw
 # ~/.claude), so secrets and active code-exec config never enter its view.
 stage_claude_config() {
-  local src dst
+  local src dst item
   src="$(cd "$HOME/.claude" 2>/dev/null && pwd -P || true)"   # resolve symlink
   dst="$HOME/.claude-watchman-stage"
-  mkdir -p "$dst/dot-claude"
+  # Rebuild the stage from scratch each time so a previously-staged file that's
+  # no longer allowlisted (or a removed host file) doesn't linger.
+  rm -rf "$dst/dot-claude"; mkdir -p "$dst/dot-claude"
   if [[ -n "$src" && -d "$src" ]]; then
-    rsync -a --delete \
-      --exclude='.credentials.json' \
-      --exclude='backups' --exclude='daemon.log' \
-      --exclude='cache' --exclude='paste-cache' \
-      --exclude='telemetry' --exclude='debug' \
-      --exclude='session-env' --exclude='shell-snapshots' \
-      "$src/" "$dst/dot-claude/" 2>/dev/null || true
-    # Strip active code-exec config from the staged settings so a compromised
-    # host config can't auto-run hooks/plugins inside the container.
+    # ALLOWLIST (not blocklist): copy only known-safe, non-auto-executing
+    # config. Everything else is excluded by default — including code-exec
+    # surfaces that a "copy all, delete a few" approach would leak:
+    # status-line.sh / statusLine (runs every render), scheduled-tasks/, tasks/,
+    # jobs/, daemon/, plugins/ (code), and host secrets/session state.
+    for item in settings.json keybindings.json CLAUDE.md agents rules commands; do
+      [[ -e "$src/$item" ]] && cp -a "$src/$item" "$dst/dot-claude/" 2>/dev/null || true
+    done
+    # Defense-in-depth: strip any exec-capable keys from staged settings.json.
     if [[ -f "$dst/dot-claude/settings.json" ]] && command -v jq >/dev/null 2>&1; then
       tmp="$(mktemp)"
-      if jq 'del(.hooks) | del(.enabledPlugins)' "$dst/dot-claude/settings.json" > "$tmp" 2>/dev/null; then
+      if jq 'del(.hooks) | del(.enabledPlugins) | del(.statusLine)' "$dst/dot-claude/settings.json" > "$tmp" 2>/dev/null; then
         mv "$tmp" "$dst/dot-claude/settings.json"
       else rm -f "$tmp"; fi
     fi
+    find "$dst/dot-claude" -name '.DS_Store' -delete 2>/dev/null || true
   fi
   # Sanitized ~/.claude.json seed (strip mcpServers/hooks/enabledPlugins).
   if [[ -f "$HOME/.claude.json" ]] && command -v jq >/dev/null 2>&1; then
