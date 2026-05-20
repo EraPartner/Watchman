@@ -81,13 +81,16 @@ The `watchman-claude` wrapper calls `security find-generic-password -s watchman-
 
 **Linux / no-Keychain fallback**: export `CLAUDE_CODE_OAUTH_TOKEN` in your shell. The wrapper picks it up automatically. This is functional but stores the token in your shell config file as plaintext.
 
-### One-time GitHub CLI auth (inside the container)
+### One-time GitHub auth (host Keychain)
+
+The `gh`/git token is forwarded from the host Keychain at exec time (no token is stored in the container). On the **host**, once:
 
 ```sh
-gh auth login --web --hostname github.com --git-protocol https
+gh auth token | security add-generic-password -s watchman-gh-token -a "$USER" -w
+# or paste a fine-grained PAT instead of `gh auth token`
 ```
 
-The token persists in the `watchman-ghconfig-<id>` named volume across container rebuilds.
+The wrapper forwards it as `GH_TOKEN`/`GITHUB_TOKEN`, so `gh` and `git push` over HTTPS work with no `gh auth login` inside the container.
 
 ### SSH signing key (host)
 
@@ -168,59 +171,44 @@ So typing `watchman-claude` at the prompt expands to include `--dangerously-skip
 
 ## Network Policy
 
-`init-firewall.sh` applies iptables default-deny egress on every container start.
+Egress is enforced in two layers, both applied by the root entrypoint on every start:
 
-**Allowed outbound traffic:**
+1. **In-container SNI proxy (`squid`, peek+splice).** All outbound HTTP(S) must go through `squid` on `127.0.0.1:3128`. squid peeks the TLS SNI and *splices* allowed hostnames (tunnels without decrypting — end-to-end TLS preserved, no MITM) and terminates the rest. This is hostname-enforced, so it can't be bypassed by an exfil endpoint sharing an allowed CDN's IP, and it defeats `CONNECT`-host ≠ SNI domain-fronting.
+2. **`iptables` egress lock.** Only the `proxy` UID may originate outbound packets. Any process that bypasses the proxy and connects directly is dropped (its socket UID isn't `proxy`). IPv6 is default-deny; denied egress is rate-limited-logged (`dmesg | grep watchman-deny`).
 
-| Category | Domains |
-|---|---|
-| Anthropic / Claude | `api.anthropic.com`, `console.anthropic.com`, `claude.ai`, `statsig.anthropic.com`, `sentry.io`, `code.claude.com`, `docs.claude.com` |
-| npm | `registry.npmjs.org` |
-| GitHub | `github.com`, `api.github.com`, `objects.githubusercontent.com`, `raw.githubusercontent.com`, `codeload.github.com`, `ghcr.io`, `pkg-containers.githubusercontent.com` |
-| PyPI | `pypi.org`, `files.pythonhosted.org` |
-| Debian apt | `deb.debian.org`, `security.debian.org` |
-| Node.js | `nodejs.org` |
-| VS Code | `marketplace.visualstudio.com`, `update.code.visualstudio.com` |
+**Allowed hostnames** (in `.devcontainer/squid.conf`): Anthropic API + `claude.ai` + Claude Code endpoints, `registry.npmjs.org`, GitHub (+ `*.githubusercontent.com`, `ghcr.io`), PyPI, Debian apt mirrors, `nodejs.org`, `*.visualstudio.com`. `statsig`/`sentry` are intentionally excluded.
 
-DNS is restricted to the resolver in `/etc/resolv.conf` only (prevents DNS tunneling).
+> [!important] Tools must honor `HTTPS_PROXY`
+> `HTTP(S)_PROXY` is set in `containerEnv`. `claude`, `npm`, `git`, `gh`, and `pip` honor it. Node's global `fetch` does **not** — so the Watchman backend's own outbound calls won't work inside the container. The devcontainer is for code editing; run the app on the host for live data. **LAN is also unreachable** (only the allowlisted hostnames resolve through the proxy).
 
-Loopback (`127.0.0.1`) is fully allowed so backend and frontend can communicate inside the container.
-
-**LAN is blocked by default.** Watchman polls home-lab LAN services at runtime, but the devcontainer is for code editing — not live polling. Claude should not reach your network devices during development.
-
-To extend the allowlist to your LAN, edit `ALLOWED_CIDRS` in `.devcontainer/init-firewall.sh`:
-
-```bash
-ALLOWED_CIDRS=("192.168.1.0/24")   # your home LAN subnet
-```
-
-Then re-apply: `sudo .devcontainer/init-firewall.sh`
-
-To add a public domain: edit `ALLOWED_DOMAINS` in the same file.
+To change the allowlist or proxy behavior, edit `.devcontainer/squid.conf` and **rebuild** (it's baked into the image). To re-apply the firewall manually: `sudo /usr/local/sbin/watchman-firewall` is no longer runnable by `dev` (no sudo) — restart the container instead.
 
 ## Persistent Volumes
 
 | Source | Container path | Type | Contents |
 |---|---|---|---|
-| `watchman-claude-<devcontainerId>` | `/home/dev/.claude` | named volume | Container's writable Claude config — seeded from host on first create, owned by container thereafter |
-| `~/.claude` (host) | `/home/dev/.claude-host` | bind **read-only** | Source for sync operations; never written from the container |
-| `~/.claude.json` (host) | `/home/dev/.claude-json-seed` | bind **read-only** | Seed for container's `~/.claude.json` on first create |
-| Container filesystem | `/home/dev/.claude.json` | regular file | Container's writable global config |
-| `watchman-ghconfig-<devcontainerId>` | `/home/dev/.config/gh` | named volume | `gh` auth token — persists across rebuilds |
+| `watchman-claude-<devcontainerId>` | `/home/dev/.claude` | named volume | Container's writable Claude config — seeded from the sanitized stage on first create |
+| `~/.claude-watchman-stage` (host) | `/home/dev/.claude-stage` | bind **read-only** | Sanitized staging copy the wrapper produces (secrets + `hooks`/`mcpServers`/`enabledPlugins` stripped). The raw host `~/.claude` is **never** bind-mounted. |
+| Container filesystem | `/home/dev/.claude.json` | regular file | Container's writable global config (seeded from `…/claude.json` in the stage) |
 
-The Watchman repo itself is bind-mounted at `/workspaces/Watchman` — edits appear on the host immediately.
+The Watchman repo itself is bind-mounted at `/workspaces/Watchman` — edits appear on the host immediately. The `gh` token is **not** persisted to a volume; it's forwarded from the host Keychain (`watchman-gh-token`) at exec time.
 
 > [!tip] Volume orphans
-> If you delete and recreate the devcontainer, old `watchman-claude-<id>` and `watchman-ghconfig-<id>` volumes are not removed automatically. Clean up with `docker volume prune` when disk space is a concern.
+> If you delete and recreate the devcontainer, old `watchman-claude-<id>` volumes are not removed automatically. Clean up with `docker volume prune` when disk space is a concern.
 
 ## Container Permissions Model
 
 | Layer | Detail |
 |---|---|
-| Container user | `dev` (UID 1000) — non-root |
-| sudo allowlist | `iptables`, `iptables-restore`, `iptables-save`, `ip6tables`, `ipset`, `service`, `init-firewall.sh`, `chown`, `chmod` |
-| No blanket root | `dev` cannot `sudo su` or run arbitrary root commands |
-| Capabilities | `--cap-add=NET_ADMIN`, `--cap-add=NET_RAW` (required for iptables) |
+| Session user | `dev` (UID 1000). `containerUser=root` runs the entrypoint; `remoteUser=dev` for all exec/lifecycle sessions. |
+| no-new-privileges | `--security-opt=no-new-privileges` blocks all setuid escalation. **`sudo` is not installed** — `dev` has no path to root. |
+| Privileged setup | Done once by the root `ENTRYPOINT` (`watchman-entrypoint`) before any dev session: perms repair → start proxy → apply firewall → drop to keep-alive. |
+| Capabilities | `--cap-add=NET_ADMIN` only (for iptables). `NET_RAW` intentionally dropped — re-add to `runArgs` only if you need ICMP/raw sockets (e.g. Watchman's pingProber against an allowed LAN). |
+| Resource limits | `--memory=8g`, `--memory-swap=8g`, `--pids-limit=4096` — caps blast radius of a runaway / malicious `npm install`. |
+| tmpfs | `/tmp` (`nosuid,nodev`, 512 MB), `/var/tmp` (`noexec,nosuid,nodev`, 256 MB) — common dropper landing zones become non-persistent and partially non-executable. |
+| Baked scripts | `watchman-entrypoint`, `watchman-firewall`, `watchman-perms-fix`, and `squid.conf` are `COPY`'d into the image (root-owned, not writable from the container). The repo copies are source-only and need a rebuild to take effect — an in-container rewrite (e.g. by Claude) can't affect the running container. |
+| ssh-agent socket | `chmod 0600` + `chown dev:dev` (was world-writable `0666`), so only `dev` processes can drive the forwarded host agent. |
+| IPv6 | Default-deny across all chains (the IPv4 path would otherwise be bypassable via `curl -6`). |
 
 ## Environment Variables Set by the Devcontainer
 
@@ -234,6 +222,8 @@ The Watchman repo itself is bind-mounted at `/workspaces/Watchman` — edits app
 | `VITE_PREVIEW_PORT` | `4173` | Vite preview server port |
 | `SSH_AUTH_SOCK` | `/ssh-agent` | Forwarded host ssh-agent socket |
 | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `1` | Disables Claude telemetry / update checks that would fail behind the firewall |
+| `HTTP(S)_PROXY` / `http(s)_proxy` | `http://127.0.0.1:3128` | Routes all tool egress through the in-container SNI proxy |
+| `NO_PROXY` / `no_proxy` | `localhost,127.0.0.1,::1` | Loopback bypasses the proxy |
 
 ## Git Operations Inside the Container
 
@@ -242,17 +232,18 @@ The Watchman repo itself is bind-mounted at `/workspaces/Watchman` — edits app
 | `git status` / `diff` / `log` | Yes | Bind-mounted repo |
 | `git branch` / `switch` / `checkout` | Yes | Local refs only |
 | `git commit -S` (SSH-signed) | Yes | Private key stays on host; signing goes through forwarded ssh-agent |
-| `git push` over HTTPS | Yes, after `gh auth login` | `github.com` is allowlisted |
-| `gh pr create`, `gh issue …` | Yes, after `gh auth login` | `gh` pre-installed |
-| `git push` over SSH (`git@github.com`) | No | `~/.ssh` not mounted; use HTTPS via `gh` |
+| `git push` over HTTPS | Yes | `GH_TOKEN` forwarded from Keychain (`watchman-gh-token`); `github.com` allowlisted |
+| `gh pr create`, `gh issue …` | Yes | Uses the forwarded `GH_TOKEN`; no `gh auth login` needed |
+| `git push` over SSH (`git@github.com`) | No | `~/.ssh` not mounted; use HTTPS |
 
 ## Known Limitations
 
-- **Electron desktop build (`npm run dist`)** requires macOS native tools; run on the host, not in this container.
-- **Live LAN polling** is blocked by default. Add your LAN CIDR to `ALLOWED_CIDRS` in `init-firewall.sh` if you need the container's Watchman instance to reach real home-lab services.
-- **Host Ollama via `host.docker.internal`** is blocked by the firewall by default; add to `ALLOWED_DOMAINS` in `init-firewall.sh` if needed.
-- **Linux Keychain**: the macOS Keychain-backed auth path is not available. Export `CLAUDE_CODE_OAUTH_TOKEN` in your shell instead.
-- **Docker Desktop ssh-agent socket path** (`/run/host-services/ssh-auth.sock`) is Docker Desktop-specific. Lima / Colima users need to adjust the socket path in `devcontainer.json` and `.devcontainer/post-start.sh`.
+- **App code using Node global `fetch`** won't reach the internet inside the container (undici doesn't honor `HTTPS_PROXY`). Run the app on the host for live data. `claude`/`npm`/`git`/`gh`/`pip` are unaffected.
+- **Electron desktop build (`npm run dist`)** requires macOS native tools; run on the host.
+- **Live LAN polling** is blocked — only the proxy's allowlisted hostnames resolve. The devcontainer is for code editing, not exercising pollers against home-lab devices.
+- **Changing the egress allowlist** means editing `.devcontainer/squid.conf` and rebuilding (it's baked into the image).
+- **Linux Keychain**: the macOS Keychain-backed auth path is not available. Export `CLAUDE_CODE_OAUTH_TOKEN`/`GH_TOKEN` in your shell instead.
+- **Docker Desktop ssh-agent socket path** (`/run/host-services/ssh-auth.sock`) is Docker Desktop-specific. Lima / Colima users need to adjust it in `devcontainer.json`.
 
 ## Safety Note
 

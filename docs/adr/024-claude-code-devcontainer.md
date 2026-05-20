@@ -37,30 +37,37 @@ The devcontainer pattern here follows the same structure as the Vision project's
 
 A `.devcontainer/` directory at the repo root provides a complete hardened dev environment. Key decisions within it:
 
-### Base image and user
+### Base image, user, and privilege model
 
-`debian:bookworm-slim` with a `dev` user at UID 1000. The UID matches the typical macOS host user so bind-mounted workspace files have consistent ownership. No blanket `sudo` — only a narrow sudoers allowlist covering `iptables`, `ipset`, `service`, `init-firewall.sh`, `chown`, and `chmod`.
+`debian:bookworm-slim` (pinned by `@sha256` digest) with a `dev` user at UID 1000. The container runs with **`--security-opt=no-new-privileges`** and **`sudo` is not installed** — `dev` has no path to root at all. All privileged setup happens up-front in a **root `ENTRYPOINT`** (`/usr/local/sbin/watchman-entrypoint`, run via `containerUser=root`), which repairs volume/socket permissions, starts the egress proxy, and applies the firewall, then drops to a keep-alive PID 1. Interactive/`exec`/lifecycle sessions use `remoteUser=dev`.
 
-### Default-deny egress firewall
+> [!important] Why the entrypoint, not sudo
+> `no-new-privileges` blocks setuid escalation, so `sudo` cannot gain root anyway. Rather than keep a neutered (and attack-surface) `sudo`, the privileged work moves to a root entrypoint that runs *before* any dev session. Image-baked scripts (`watchman-firewall`, `watchman-perms-fix`, `watchman-entrypoint`) live in `/usr/local/sbin` (root-owned, not writable from the container), so a rewrite of the repo copies cannot affect the running container — closing a root-escalation path.
 
-`init-firewall.sh` runs via `post-start.sh` on every container start. It uses `iptables` + `ipset` to implement:
+### Egress: in-container SNI proxy + UID-locked firewall
 
-- Loopback fully allowed (backend ↔ frontend communicate on `127.0.0.1`)
-- DNS restricted to the resolver from `/etc/resolv.conf` (prevents DNS tunneling, following the pattern noted in anthropics/claude-code#36907)
-- Outbound to a resolved-IP allowlist only: Anthropic API, claude.ai, npm registry, GitHub, PyPI, Debian apt mirrors, nodejs.org, VS Code marketplace
-- All other egress dropped (including LAN by default)
+Egress is enforced in two layers:
 
-**LAN-block trade-off**: Watchman's production purpose is polling LAN services, but the devcontainer is for code editing, not live polling. LAN access is blocked by default to prevent a misbehaving session from probing home-lab devices. An explicit `ALLOWED_CIDRS` array in `init-firewall.sh` provides a documented escape hatch for contributors who need to exercise pollers against real services.
+1. **`squid` (peek+splice) hostname allowlist.** squid peeks the TLS ClientHello SNI and, for allowed names, *splices* (tunnels without decrypting — end-to-end TLS is preserved, no MITM, no CA injection). Disallowed names are terminated. This is stronger than an IP allowlist: it can't be bypassed by an exfil endpoint co-hosted on an allowed CDN IP, and it defeats the `CONNECT`-host ≠ real-SNI domain-fronting trick (both verified in testing).
+2. **`iptables` egress lock.** Outbound is allowed only for the `proxy` UID (squid). Every other process — dev sessions, a malicious npm postinstall — must use the proxy on `127.0.0.1:3128`; a direct connection is dropped because its socket UID isn't `proxy`. IPv6 is default-deny; a rate-limited LOG-then-DROP chain gives egress visibility (`dmesg | grep watchman-deny`). `NET_RAW` is dropped (only `NET_ADMIN` is granted).
+
+Allowlist: Anthropic API + `claude.ai`, npm registry, GitHub, PyPI, Debian apt mirrors, nodejs.org, VS Code marketplace. `statsig`/`sentry` are intentionally excluded (covert-exfil surface, already suppressed by `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`).
+
+> [!note] Tools must honor `HTTPS_PROXY`
+> `HTTPS_PROXY`/`HTTP_PROXY` are set in `containerEnv`. The `claude` CLI, `npm`, `git`, `gh`, and `pip` all honor it (verified). Node's **global `fetch` does not** — so app code making direct internet calls won't work inside the container. That's consistent with the LAN-block stance below: the devcontainer is for code editing; run the app on the host for live data/polling. LAN is also blocked (only the proxy's allowlisted hostnames are reachable).
+
+> [!note] Hardening evolution
+> The first iteration used an `iptables` IP-allowlist (resolve domains → `ipset`) plus a narrow `sudo` allowlist. Two follow-ups hardened it: (1) image-baked scripts + tightened sudoers (removed unrestricted `chown`/`chmod`), then (2) this proxy + `no-new-privileges` model, which removes `sudo` entirely and replaces IP-allowlisting with true hostname enforcement. Other additions: `@sha256` base-image pin, `--memory`/`--pids-limit` caps, `nosuid,nodev` tmpfs on `/tmp` + `noexec` on `/var/tmp`, ssh-agent socket tightened to `0600`, and a sanitized staged `~/.claude` bind (below).
 
 ### Volume-isolated `~/.claude`
 
-The host `~/.claude` is bind-mounted **read-only** at `/home/dev/.claude-host`. The container manages its own writable `~/.claude` in a named Docker volume (`watchman-claude-<devcontainerId>`).
+The container manages its own writable `~/.claude` in a named Docker volume (`watchman-claude-<devcontainerId>`), seeded from a **sanitized staging copy** of the host config — never from a raw bind of `~/.claude`.
 
-Rationale: a live bind-mount on `~/.claude` causes JSON corruption when host claude and container claude write simultaneously. The volume approach seeds the container once from the host (via `post-create.sh` rsync) and keeps subsequent sync explicit. `post-start.sh` runs an `rsync --update` pull from the read-only host mirror on every container start, so new agents/rules/MCP servers added on the host propagate automatically. The reverse direction (container → host) requires a manual `watchman-claude-sync push`.
+Rationale: a live bind of the full `~/.claude` both (a) corrupts JSON when host and container claude write simultaneously and (b) exposes everything in the host config dir to the container, including `.credentials.json`, MCP server tokens, and pasted secrets in history — the rsync `--exclude`s only apply at copy time, not to a raw bind. So the host wrapper (`bin/claude`) stages a sanitized copy into `~/.claude-watchman-stage` *before* `devcontainer up`: it drops secrets + volatile state and strips active code-exec config (`hooks`, `mcpServers`, `enabledPlugins`) so a compromised host config can't silently auto-run hooks/MCP servers/plugins inside the container. Only that staging dir is bind-mounted (read-only) at `/home/dev/.claude-stage`. `post-start.sh` does an `rsync --update` pull from the stage on every start; the reverse (container → host) is a manual `watchman-claude-sync push`.
 
-### Keychain-backed authentication
+### Keychain-backed authentication (Claude + gh)
 
-The in-container browser OAuth flow has a known upstream bug (redirect URI double-encoded as `oauth%2Fcode/callback`). To avoid writing any long-lived credential to disk, the wrapper at `.devcontainer/bin/claude` retrieves the OAuth token from macOS Keychain (`service=watchman-claude-code-token`) at exec time and forwards it to the container via `devcontainer exec --remote-env CLAUDE_CODE_OAUTH_TOKEN=…`. The credential lives only in Keychain or in container process memory, never in a file.
+The in-container browser OAuth flow has a known upstream bug (redirect URI double-encoded as `oauth%2Fcode/callback`). To avoid writing any long-lived credential to disk, the wrapper at `.devcontainer/bin/claude` retrieves tokens from the macOS Keychain at exec time and forwards them via `devcontainer exec --remote-env`: the Claude OAuth token (`service=watchman-claude-code-token`) and the GitHub token (`service=watchman-gh-token`, forwarded as `GH_TOKEN`/`GITHUB_TOKEN`). Neither token persists in a Docker volume or file — there is no `gh` config volume anymore; the credential lives only in Keychain or container process memory.
 
 ### Host ssh-agent forwarding for commit signing
 
@@ -96,13 +103,15 @@ The host ssh-agent socket (`/run/host-services/ssh-auth.sock`) is bind-mounted i
 ### Negative
 
 - Contributors need `@devcontainers/cli` installed globally and Docker Desktop (or equivalent) running.
-- First-time setup requires one manual Keychain step (`security add-generic-password`) and one manual `gh auth login` inside the container.
+- First-time setup requires manual Keychain steps (`security add-generic-password` for the Claude token, and optionally `watchman-gh-token` for gh).
 - `watchman-claude-sync push` must be run manually to propagate container-side config changes back to the host.
+- App code that calls the internet via Node's global `fetch` won't work inside the container (proxy not honored by undici); run the app on the host for live data.
+- Changing the egress allowlist or any baked script requires an image rebuild (the scripts and `squid.conf` are baked, not read from the workspace).
 - Electron desktop build (`npm run dist`) requires macOS native tools and must be run on the host, not inside the container.
 
 ### Risks
 
-- **LAN polling blocked by default**: contributors testing live poller behavior must extend `ALLOWED_CIDRS`. This is intentional but can surprise first-time users.
+- **LAN + Node-`fetch` egress blocked**: only the proxy's allowlisted hostnames are reachable, and Node's global `fetch` doesn't honor the proxy — so the app's own external/LAN calls don't work inside the container. Intentional (code editing, not live polling), but can surprise first-time users. Run the app on the host for live data.
 - **Host Keychain dependency**: macOS-only. Linux contributors must fall back to env-var auth (`CLAUDE_CODE_OAUTH_TOKEN` exported in shell).
 - **Docker Desktop ssh-agent socket**: Docker Desktop on macOS forwards `/run/host-services/ssh-auth.sock`; non-Desktop Docker (Lima, Colima, etc) uses a different socket path. The `post-start.sh` diagnostic helps detect but does not auto-resolve this.
 - **Named volume orphan**: if the devcontainer is rebuilt with a new `devcontainerId`, the old `watchman-claude-<id>` volume is not automatically removed. Over time, orphaned volumes accumulate unless manually pruned with `docker volume prune`.

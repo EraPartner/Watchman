@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
-# Runs once when the devcontainer is first created.
+# Runs once when the devcontainer is first created, as the `dev` user.
 # Installs JS deps, seeds the Claude config, and prepares git for signed commits.
+#
+# NOTE: all privileged setup (perms repair, egress proxy, firewall) happens in
+# the root ENTRYPOINT (/usr/local/sbin/watchman-entrypoint) BEFORE this runs.
+# The container has no-new-privileges, so there is no sudo here.
 
 set -euo pipefail
 cd /workspaces/Watchman
 
-# Install JS deps (npm workspaces resolves the whole monorepo).
+# Wait for the egress proxy (started by the root entrypoint) before any network
+# install — postCreate can race the entrypoint's proxy startup, and with egress
+# locked to the proxy UID, installs fail until 127.0.0.1:3128 is listening.
+echo "[post-create] Waiting for egress proxy on 127.0.0.1:3128..."
+for _ in $(seq 1 30); do
+  (exec 3<>/dev/tcp/127.0.0.1/3128) 2>/dev/null && break
+  sleep 1
+done
+
+# Install JS deps (npm honors HTTPS_PROXY → squid → registry.npmjs.org).
 echo "[post-create] npm install..."
 npm install
 
-# Local .env — only generated if missing. Devcontainer env vars already point
-# the backend at the right host/port; this file is mainly for tooling that
-# reads .env directly.
+# Local .env — only generated if missing. The master key is intentionally left
+# unset: fill it in via a container-only mechanism if needed (this file lives on
+# the bind-mounted workspace, i.e. on the host disk too).
 if [[ ! -f apps/backend/.env ]]; then
   echo "[post-create] Writing apps/backend/.env (devcontainer defaults)..."
   cat > apps/backend/.env <<'EOF'
@@ -27,9 +40,6 @@ DATA_DIR=./data
 WATCHMAN_MASTER_KEY=
 EOF
 fi
-
-# gh config volume is root-owned on first mount; chown to dev.
-sudo chown -R dev:dev /home/dev/.config/gh 2>/dev/null || true
 
 # Build a writable ~/.gitconfig that:
 #   - includes the read-only bind-mounted host gitconfig (so user.name,
@@ -52,57 +62,36 @@ if [[ ! -f /home/dev/.gitconfig || ! -s /home/dev/.gitconfig ]]; then
 EOF
 fi
 
-# Seed container's ~/.claude (directory) and ~/.claude.json from the host
-# on first creation. Both host paths are bind-mounted read-only:
-#   /home/dev/.claude-host       (host ~/.claude — directory)
-#   /home/dev/.claude-json-seed  (host ~/.claude.json — single file)
-# After seeding, the container manages its own writable copies, and the
-# `watchman-claude-sync` fish function does explicit pull/push between
-# host and container so changes propagate without live-bind corruption.
-# Docker creates the named-volume mountpoint as root:root the first time the
-# volume is fresh, regardless of any dev-owned directory we baked into the
-# image (the bake only matters if the volume inherits, and it does so only on
-# first mount of a brand-new volume — pre-existing volumes don't re-inherit).
-# Take ownership BEFORE seeding so dev can actually write into it. Silent
-# failure here was the cause of the "Let's get started" onboarding loop:
-# chown errored, was swallowed by `2>/dev/null || true`, and the subsequent
-# rsync into a root-owned dir then no-op'd silently too.
-if [[ "$(stat -c %U /home/dev/.claude)" != "dev" ]]; then
-  echo "[post-create] /home/dev/.claude is not dev-owned — chowning..."
-  if ! sudo chown -R dev:dev /home/dev/.claude; then
-    echo "[post-create] ERROR: sudo chown of /home/dev/.claude failed." >&2
-    echo "[post-create]        Check /etc/sudoers.d/dev-watchman includes chown." >&2
-  fi
-fi
-
-if [[ ! -f /home/dev/.claude/settings.json && -d /home/dev/.claude-host ]]; then
-  echo "[post-create] Seeding ~/.claude from host..."
-  # Best-effort copy — host claude may be running and rewriting volatile
-  # state (telemetry, sessions, paste-cache) while we read. Exit 23 from
-  # rsync = "some files vanished mid-copy"; tolerate that, log anything else.
-  if ! rsync -a --ignore-errors \
-        --exclude='.credentials.json' \
-        --exclude='backups' --exclude='daemon.log' \
-        --exclude='cache' --exclude='paste-cache' \
-        --exclude='telemetry' --exclude='debug' \
-        --exclude='session-env' --exclude='shell-snapshots' \
-        /home/dev/.claude-host/ /home/dev/.claude/; then
+# Seed the container's ~/.claude + ~/.claude.json from the SANITIZED staging
+# dir the host wrapper produced at /home/dev/.claude-stage (bind RO):
+#   /home/dev/.claude-stage/dot-claude/   sanitized copy of host ~/.claude
+#   /home/dev/.claude-stage/claude.json   sanitized copy of host ~/.claude.json
+# The host wrapper strips secrets (.credentials.json) and active code-exec
+# config (hooks/mcpServers/enabledPlugins) before staging, so a compromised
+# host config can't silently propagate executable config into the container.
+STAGE=/home/dev/.claude-stage
+if [[ ! -f /home/dev/.claude/settings.json && -d "$STAGE/dot-claude" ]]; then
+  echo "[post-create] Seeding ~/.claude from sanitized stage..."
+  if ! rsync -a --ignore-errors "$STAGE/dot-claude/" /home/dev/.claude/; then
     echo "[post-create] WARN: ~/.claude rsync seed had errors (some files may be missing)." >&2
   fi
   echo "[post-create] Seeded $(find /home/dev/.claude -mindepth 1 -maxdepth 1 | wc -l) entries into ~/.claude."
 fi
-if [[ ! -f /home/dev/.claude.json && -f /home/dev/.claude-json-seed ]]; then
-  cp /home/dev/.claude-json-seed /home/dev/.claude.json
+if [[ ! -f /home/dev/.claude.json && -f "$STAGE/claude.json" ]]; then
+  cp "$STAGE/claude.json" /home/dev/.claude.json
   chmod 0600 /home/dev/.claude.json
 fi
 
+# gh authenticates via GH_TOKEN forwarded from the host Keychain by the wrapper
+# (no persistent token volume). If it's absent, gh read/write still needs auth.
 if ! gh auth status >/dev/null 2>&1; then
   cat <<'NOTE'
-[post-create] gh is installed but not authenticated. To enable
-              `gh pr create`, `gh issue view`, push-via-https, etc.,
-              run ONCE inside the container:
-                  gh auth login --web --hostname github.com --git-protocol https
-              The token persists in the watchman-ghconfig volume across rebuilds.
+[post-create] gh is not authenticated. The wrapper forwards GH_TOKEN from your
+              host Keychain entry `watchman-gh-token` if present. To set it up,
+              on the HOST run once:
+                gh auth token | security add-generic-password \
+                  -s watchman-gh-token -a "$USER" -w
+              (or paste a PAT). Then re-run `watchman-claude`.
 NOTE
 fi
 
