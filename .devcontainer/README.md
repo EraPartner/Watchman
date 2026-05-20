@@ -150,8 +150,8 @@ and the container's `~/.claude`. Use the Vision project's
 container-volume reference.
 
 ```sh
-watchman-claude-sync pull     # refresh container from host (also auto-runs on container start)
-watchman-claude-sync push     # propagate container changes back to host (manual; required)
+watchman-claude-sync pull     # refresh container from host (also auto-runs on launch)
+watchman-claude-sync push     # propagate container changes back to host (also auto-runs on session exit)
 watchman-claude-sync status   # show what differs
 ```
 
@@ -174,12 +174,17 @@ them inside the container if you want them active there.
 Pull-on-start is safe under concurrency: it only reads from the stage, so
 there's no write race against a host-side claude session.
 
-### Push remains explicit
+### Push on session exit (automatic)
 
-The reverse (container → host) is **not** automatic. If Claude inside
-the container modifies its own config — adds an agent, edits a rule,
-registers an MCP — those changes live only in the container volume
-until you run `watchman-claude-sync push`.
+The reverse (container → host) now runs automatically. The `watchman-claude`
+wrapper no longer `exec`s the session — it stays the parent process and, on
+**session exit** (normal or Ctrl-C), runs `watchman-claude-sync push` against
+the exact container it launched. So if Claude inside the container modifies its
+own config — adds an agent, edits a rule, registers an MCP, writes a memory —
+those changes land back on the host with no manual step. Pushing only after the
+session ends keeps a single writer, so it can't race a live host-side claude on
+`~/.claude.json`. Disable with `WATCHMAN_AUTOSYNC=0`; `watchman-claude-sync push`
+remains the manual fallback.
 
 **Files excluded from sync** (volatile runtime state, not portable):
 `.credentials.json`, `backups/`, `cache/`, `paste-cache/`, `daemon.log`,
