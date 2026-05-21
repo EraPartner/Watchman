@@ -1,0 +1,81 @@
+# Docker Compose flow for the Watchman dev sandbox — the devcontainer-free
+# equivalent of .devcontainer/devcontainer.json. Same image hardening, same
+# egress lock, same mounts. Driven by .devcontainer/bin/claude-compose.
+#
+#   build+start : docker compose -f .devcontainer/compose.yaml up -d --build
+#   session     : docker compose -f .devcontainer/compose.yaml exec -u dev app claude
+#
+# Lifecycle (post-create once / post-start every start) and credential
+# forwarding are done by bin/claude-compose, mirroring how the devcontainer CLI
+# ran postCreateCommand / postStartCommand + remoteEnv. The container's PID1
+# entrypoint runs as root (iptables + squid); sessions use `exec -u dev`
+# (mirrors containerUser=root + remoteUser=dev).
+name: watchman
+
+services:
+  app:
+    container_name: watchman-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.compose
+    init: true                       # tini as PID1: reap zombies, forward SIGTERM
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, SETPCAP]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 4g
+    cpus: 4
+    pids_limit: 4096
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m
+      - /var/tmp:rw,noexec,nosuid,nodev,size=256m
+    ports:
+      - "127.0.0.1:5173:5173"
+      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:4173:4173"
+    environment:
+      DEVCONTAINER: "true"
+      NODE_ENV: development
+      BACKEND_V2_HOST: 0.0.0.0
+      BACKEND_V2_PORT: "3001"
+      VITE_FRONTEND_PORT: "5173"
+      VITE_PREVIEW_PORT: "4173"
+      DISABLE_TELEMETRY: "1"
+      DISABLE_ERROR_REPORTING: "1"
+      BASH_ENV: /home/dev/.safe-chain/scripts/init-posix.sh
+      NODE_USE_ENV_PROXY: "1"
+      HTTP_PROXY: http://127.0.0.1:3128
+      HTTPS_PROXY: http://127.0.0.1:3128
+      http_proxy: http://127.0.0.1:3128
+      https_proxy: http://127.0.0.1:3128
+      NO_PROXY: localhost,127.0.0.1,::1
+      no_proxy: localhost,127.0.0.1,::1
+    volumes:
+      # RW workspace bind (repo root -> /workspaces/Watchman).
+      - type: bind
+        source: ..
+        target: /workspaces/Watchman
+      # SECURITY: .git read-only — commits/pushes happen on the HOST only.
+      - type: bind
+        source: ../.git
+        target: /workspaces/Watchman/.git
+        read_only: true
+      # SECURITY: .devcontainer read-only overlay — the agent can't rewrite the
+      # sandbox definition or the host launcher (anti-tamper / escape prevention).
+      - type: bind
+        source: .
+        target: /workspaces/Watchman/.devcontainer
+        read_only: true
+      # Container-private ~/.claude (own writable copy; never the raw host dir).
+      - type: volume
+        source: claude
+        target: /home/dev/.claude
+      # Sanitized host config staging dir, read-only (built by bin/claude-compose).
+      - type: bind
+        source: ${HOME}/.claude-watchman-stage
+        target: /home/dev/.claude-stage
+        read_only: true
+
+volumes:
+  claude:
+    name: watchman-claude
