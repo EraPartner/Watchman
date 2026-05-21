@@ -20,46 +20,31 @@ DuckDB embedded, so there's no separate database service to manage.
 
 ## How to use — CLI only
 
-Prerequisite (one-time): `npm install -g @devcontainers/cli`.
+This sandbox runs on **Docker Compose** (no devcontainer CLI). Prerequisite:
+Docker Desktop with Compose v2 (`docker compose version`).
 
-A wrapper at `.devcontainer/bin/claude` forwards every invocation into
-the container (idempotent `devcontainer up` + `devcontainer exec`).
+A host launcher at `.devcontainer/bin/claude` forwards every invocation into the
+container: it stages a sanitized `~/.claude`, runs an idempotent `docker compose
+up -d --build`, replays the post-create (once) / post-start (every start)
+lifecycle as `dev`, forwards the Claude token from the Keychain, and auto-syncs
+`~/.claude` back to the host on session exit.
 
-**Fish function** (drop into `~/.config/fish/functions/watchman-claude.fish`):
+The fish function `watchman-claude` (in `~/.config/fish/functions/`) walks up
+from `$PWD` to the repo (matching `.devcontainer/compose.yaml`), falls back to
+`$WATCHMAN_HOME`, then runs that launcher. Use it anywhere:
 
-```fish
-function watchman-claude --description 'Run claude inside the Watchman devcontainer'
-    set -l project ""
-    set -l current $PWD
-    while test "$current" != "/" -a "$current" != ""
-        if test -f "$current/.devcontainer/devcontainer.json"
-            set project $current; break
-        end
-        set current (dirname $current)
-    end
-    if test -z "$project"
-        set project (set -q WATCHMAN_HOME; and echo $WATCHMAN_HOME; or echo "/Users/computer/Documents/Personal/Scripts/Projects/Watchman")
-    end
-    if not test -x "$project/.devcontainer/bin/claude"
-        echo "watchman-claude: wrapper missing at $project/.devcontainer/bin/claude" >&2
-        return 1
-    end
-    WATCHMAN_PROJECT_ROOT=$project "$project/.devcontainer/bin/claude" $argv
-end
+```sh
+watchman-claude --dangerously-skip-permissions
 ```
-
-Then anywhere: `watchman-claude --dangerously-skip-permissions`. Works
-from inside the repo (walk-up), from a subdir, and from unrelated dirs
-(fallback to `$WATCHMAN_HOME`).
 
 To drop into a shell instead of Claude:
 ```sh
-devcontainer exec --workspace-folder /Users/computer/Documents/Personal/Scripts/Projects/Watchman bash
+docker compose -f .devcontainer/compose.yaml exec -u dev app bash
 ```
 
 ## Browser access from the host
 
-`devcontainer.json:runArgs` publishes `5173`, `3001`, and `4173` to
+`compose.yaml` publishes `5173`, `3001`, and `4173` to
 `127.0.0.1`. Once Claude (or you) runs `npm run dev` inside the
 container, the host can reach:
 
@@ -219,7 +204,7 @@ security add-generic-password \
 That's it. The `watchman-claude` wrapper now does
 `security find-generic-password -s watchman-claude-code-token -w` on
 every invocation and forwards the result to the container via
-`devcontainer exec --remote-env CLAUDE_CODE_OAUTH_TOKEN=…`. No plaintext
+`docker compose exec -e CLAUDE_CODE_OAUTH_TOKEN=…`. No plaintext
 file, no fish universal var, no `.credentials.json` in `~/.claude`.
 
 **The Keychain "Always Allow" decision.** The first time `security`
@@ -298,15 +283,15 @@ for trusted repositories.
 **Why `.devcontainer` is mounted read-only.** The repo is bind-mounted
 read-write at `/workspaces/Watchman` so the agent can edit source — but that
 same mount would otherwise expose the sandbox's own definition
-(`devcontainer.json` `runArgs`, `Dockerfile`) and the **host-side launcher**
+(`compose.yaml`, `Dockerfile`) and the **host-side launcher**
 (`bin/claude`, `bin/doctor`), which run on your **Mac** with your shell and
-Keychain. A compromised in-container agent could add `--privileged` /
-`-v /:/host` / a `docker.sock` mount to `runArgs`, or just edit `bin/claude`,
-and the next `claude` invocation (which calls `devcontainer up` and re-execs
+Keychain. A compromised in-container agent could add a privileged option or a
+`docker.sock` mount to `compose.yaml`, or just edit `bin/claude`,
+and the next `claude` invocation (which calls `docker compose up` and re-execs
 the launcher) would run it on the host — a trivial full escape. To close that,
 `.devcontainer` is re-mounted **read-only on top of** the read-write workspace,
 so it is immutable from inside. The container cannot lift this: it has
 `cap-drop=ALL` (no `CAP_SYS_ADMIN`, so no remount/unmount), `no-new-privileges`,
 and `.devcontainer` is a busy mountpoint that can't be replaced — the protection
-re-applies on every `devcontainer up`. **Edit `.devcontainer` on the host only,**
+re-applies on every `docker compose up`. **Edit `.devcontainer` on the host only,**
 then rebuild.

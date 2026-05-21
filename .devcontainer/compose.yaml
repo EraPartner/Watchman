@@ -17,7 +17,7 @@ services:
     container_name: watchman-dev
     build:
       context: .
-      dockerfile: Dockerfile.compose
+      dockerfile: Dockerfile
     init: true                       # tini as PID1: reap zombies, forward SIGTERM
     cap_drop: [ALL]
     cap_add: [NET_ADMIN, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, SETPCAP]
