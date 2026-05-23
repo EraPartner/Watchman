@@ -113,7 +113,7 @@ forwarded (see "Git" below), so `~/.ssh` and a `*-gh-token` are no longer needed
 | --- | --- | --- | --- |
 | `.devcontainer` (host) | `/workspaces/Watchman/.devcontainer` | bind **RO** | Overlay on the rw workspace so the sandbox config + host launcher can't be rewritten from inside (see Safety note) |
 | `watchman-claude-<id>` | `/home/dev/.claude` | named volume | Container's writable Claude config — seeded from the sanitized stage on first create |
-| `~/.claude-watchman-stage` (host) | `/home/dev/.claude-stage` | bind **RO** | Sanitized staging copy the wrapper produces (secrets + `hooks`/`mcpServers`/`enabledPlugins` stripped). The raw host `~/.claude` is **never** mounted. |
+| `~/.claude-sandbox/stage/watchman` (host) | `/home/dev/.claude-stage` | bind **RO** | Sanitized staging copy the wrapper produces (secrets + `hooks`/`mcpServers`/`enabledPlugins` stripped). The raw host `~/.claude` is **never** mounted. |
 | (container fs) | `/home/dev/.claude.json` | regular file | Container's writable global config, seeded from `…/claude.json` in the stage |
 
 The Watchman repo is bind-mounted at `/workspaces/Watchman`, so edits
@@ -149,7 +149,7 @@ removed on one side stay on the other until manually cleaned up.
 ### Auto-pull on container start
 
 The `watchman-claude` wrapper re-stages a sanitized copy of host
-`~/.claude` into `~/.claude-watchman-stage` on every invocation, and
+`~/.claude` into `~/.claude-sandbox/stage/watchman` on every invocation, and
 `post-start.sh` runs `rsync --update` from `/home/dev/.claude-stage` into
 `/home/dev/.claude` on every container start. So host-side config changes
 (new agents, edited rules) are picked up automatically. Note: `hooks`,

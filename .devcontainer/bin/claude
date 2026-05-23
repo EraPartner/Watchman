@@ -5,7 +5,7 @@
 # (devcontainer) stays as the fallback during the migration.
 #
 # Responsibilities, all on the HOST before entering the container:
-#   1. Stage a SANITIZED ~/.claude into ~/.claude-watchman-stage (no secrets).
+#   1. Stage a SANITIZED ~/.claude into ~/.claude-sandbox/stage/watchman (no secrets).
 #   2. docker compose up -d --build (idempotent; fast when warm).
 #   3. Replay lifecycle as `dev`: post-create once (sentinel), post-start always.
 #   4. Forward the Claude OAuth token from the macOS Keychain at exec time.
@@ -41,7 +41,7 @@ SVC=app
 stage_claude_config() {
   local src dst item jf f
   src="$(cd "$HOME/.claude" 2>/dev/null && pwd -P || true)"   # resolve symlink
-  dst="$HOME/.claude-watchman-stage"
+  dst="$HOME/.claude-sandbox/stage/watchman"
   rm -rf "$dst/dot-claude"; mkdir -p "$dst/dot-claude"
   if [[ -n "$src" && -d "$src" ]]; then
     for item in settings.json keybindings.json CLAUDE.md agents rules commands statusline status-line.sh plugins; do
