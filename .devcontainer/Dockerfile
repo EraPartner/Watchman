@@ -51,29 +51,39 @@ RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "$arch" in amd64) na=x64 ;; arm64) na=arm64 ;; *) echo "unsupported arch $arch" >&2; exit 1 ;; esac; \
     curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${na}.tar.xz"; \
+    curl -fsSLo /tmp/node-SHASUMS256.txt "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt"; \
+    want="$(grep " node-v${NODE_VERSION}-linux-${na}.tar.xz\$" /tmp/node-SHASUMS256.txt | cut -d' ' -f1)"; \
+    echo "${want}  /tmp/node.tar.xz" | sha256sum -c -; \
+    rm /tmp/node-SHASUMS256.txt; \
     tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner \
       --exclude='*/CHANGELOG.md' --exclude='*/LICENSE' --exclude='*/README.md'; \
     rm /tmp/node.tar.xz; \
     mkdir -p /usr/local/share/npm-global; \
     node --version; npm --version
-# Global npm prefix -> a dev-owned dir so runtime `npm i -g` (safe-chain in
-# post-create) works without root. Use the ENV var, NOT /etc/npmrc: npm's real
-# "global" config is $PREFIX/etc/npmrc (/usr/local/etc/npmrc), so a plain
-# /etc/npmrc is ignored and globals would land in root-owned /usr/local/lib.
+# Build-time global prefix for the agent CLI (claude). Kept ROOT-owned (see the
+# claude install below) so the unprivileged dev user can't overwrite the pinned
+# claude/npm binaries post-launch (the verify-pins gate fingerprints these paths).
+# Use the ENV var, NOT /etc/npmrc: npm's real "global" config is $PREFIX/etc/npmrc,
+# so a plain /etc/npmrc is ignored. Runtime `npm i -g` (safe-chain) uses a SEPARATE
+# dev-owned prefix, /home/dev/.npm-global, set after the install. Root prefix is
+# FIRST on PATH so claude resolves to the pinned copy.
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=/usr/local/share/npm-global/bin:/usr/local/bin:$PATH
+ENV PATH=/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/usr/local/bin:$PATH
 # Login shells (bash -l) reset PATH via /etc/profile, dropping the ENV above;
 # re-add the tool dirs so node/npm/claude/safe-chain resolve in login shells too.
-RUN printf 'export PATH="/usr/local/share/npm-global/bin:/usr/local/bin:$PATH"\n' \
+RUN printf 'export PATH="/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/usr/local/bin:$PATH"\n' \
       > /etc/profile.d/00-npm-global.sh
 
 # --- Claude Code CLI (replaces the `anthropics/claude-code:1.0` feature) -----
-# Installed to the global prefix as root at build; the prefix is chown'd to dev
-# AFTERWARD so the build-time files end up dev-owned and runtime `npm i -g`
-# (safe-chain in post-create) can write the same prefix without EACCES.
-RUN npm install -g @anthropic-ai/claude-code \
-  && claude --version \
-  && chown -R dev:dev /usr/local/share/npm-global
+# Installed as root into the root-owned global prefix and deliberately NOT chown'd
+# to dev — so the pinned claude/npm cannot be replaced by the dev user.
+RUN npm install -g @anthropic-ai/claude-code@latest \
+  && claude --version
+
+# Runtime global installs (safe-chain in post-create) go to a SEPARATE dev-owned
+# prefix, so they never need write access to the pinned root prefix above.
+RUN install -d -o dev -g dev -m 0755 /home/dev/.npm-global
+ENV NPM_CONFIG_PREFIX=/home/dev/.npm-global
 
 # Bake privileged scripts into the image at /usr/local/sbin (root-owned, not
 # writable from inside the container). The .devcontainer copies are source-only.
@@ -84,6 +94,10 @@ COPY squid.conf       /etc/squid/squid.conf
 COPY allowlist.txt    /etc/squid/allowlist.txt
 RUN chmod 0755 /usr/local/sbin/egress-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint \
   && chown root:root /usr/local/sbin/egress-firewall /usr/local/sbin/watchman-perms-fix /usr/local/sbin/watchman-entrypoint
+
+# Launch-integrity check (the binary fingerprint manifest is baked below).
+COPY bin/verify-pins /usr/local/bin/watchman-verify-pins
+RUN chmod 0755 /usr/local/bin/watchman-verify-pins
 
 # Inbound ports this project publishes (read by egress-firewall for INPUT ACCEPT).
 RUN mkdir -p /etc/egress && printf '5173\n3001\n4173\n' > /etc/egress/inbound-ports
@@ -101,6 +115,20 @@ RUN mkdir -p /etc/squid/certs /var/lib/squid /var/log/squid /var/spool/squid \
 # Pre-create dirs backed by named volumes so a fresh volume inherits dev ownership.
 RUN install -d -o dev -g dev -m 0700 /home/dev/.claude \
  && install -d -o dev -g dev -m 0755 /home/dev/.config /home/dev/.config/gh
+
+# Pin the agent's executables: record SHA-256 so watchman-verify-pins can
+# fail-closed on drift at launch. A legit tool upgrade changes these — rebuild.
+RUN set -eux; \
+    pinfile=/usr/local/share/watchman/binary-pins.txt; \
+    mkdir -p /usr/local/share/watchman; \
+    : > "$pinfile"; \
+    for b in node npm claude gh git; do \
+      p="$(command -v "$b")"; \
+      h="$(sha256sum "$p" | awk '{print $1}')"; \
+      printf '%s\t%s\t%s\n' "$b" "$p" "$h" >> "$pinfile"; \
+    done; \
+    chmod 0644 "$pinfile"; \
+    cat "$pinfile"
 
 # Strip ALL setuid/setgid bits image-wide (defense-in-depth; inert under
 # no-new-privileges, but a generic find won't go stale like a hand-list).
