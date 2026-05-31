@@ -45,7 +45,8 @@
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/out"
   },
   "overrides": {
-    "fast-uri": "^3.1.2"
+    "fast-uri": "^3.1.2",
+    "ip": "npm:neoip@^3.1.0"
   },
   "devDependencies": {
     "audit-ci": "^7.1.0",

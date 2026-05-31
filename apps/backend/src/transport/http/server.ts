@@ -26,7 +26,7 @@ export interface BuildServerDeps {
 
 export async function buildServer(deps: BuildServerDeps) {
   const app = Fastify({
-    logger: deps.logger,
+    loggerInstance: deps.logger,
     disableRequestLogging: false,
     trustProxy: true,
     bodyLimit: 1 * 1024 * 1024,
