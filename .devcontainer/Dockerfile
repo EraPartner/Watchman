@@ -60,6 +60,36 @@ RUN set -eux; \
     rm /tmp/node.tar.xz; \
     mkdir -p /usr/local/share/npm-global; \
     node --version; npm --version
+
+# --- Python 3.12 — python-build-standalone (prebuilt relocatable CPython) -----
+# The security-guidance plugin's hooks (SessionStart + PostToolUse/Stop) shell
+# out to python3 via sg-python.sh; with no python3 on PATH every session start
+# errors "no working Python 3 interpreter found." Same pinned-asset approach as
+# the Vision/sandbox images (NOT the GitHub API — its 60-req/hr unauthenticated
+# limit fails parallel builds). python3 + pip + venv + ssl, no compile.
+# The deep SDK/LLM reviewer pip-installs claude-agent-sdk on first start, which
+# needs PyPI egress; if the allowlist doesn't grant it that layer degrades
+# gracefully (exits 0) and the stdlib-only regex pattern checks still run.
+ARG PY_RELEASE=20260510
+ARG PY_VERSION=3.12.13
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in arm64) pa=aarch64 ;; amd64) pa=x86_64 ;; *) exit 1 ;; esac; \
+    url="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_RELEASE}/cpython-${PY_VERSION}+${PY_RELEASE}-${pa}-unknown-linux-gnu-install_only.tar.gz"; \
+    echo "python-build-standalone: $url"; \
+    curl -fsSLo /tmp/py.tar.gz "$url"; \
+    curl -fsSLo /tmp/py-SHA256SUMS "https://github.com/astral-sh/python-build-standalone/releases/download/${PY_RELEASE}/SHA256SUMS"; \
+    want="$(grep " cpython-${PY_VERSION}+${PY_RELEASE}-${pa}-unknown-linux-gnu-install_only.tar.gz\$" /tmp/py-SHA256SUMS | cut -d' ' -f1)"; \
+    echo "${want}  /tmp/py.tar.gz" | sha256sum -c -; \
+    rm /tmp/py-SHA256SUMS; \
+    mkdir -p /opt/python; \
+    tar -xzf /tmp/py.tar.gz --strip-components=1 -C /opt/python; \
+    rm /tmp/py.tar.gz; \
+    [ -x /opt/python/bin/python ] || ln -s python3 /opt/python/bin/python; \
+    /opt/python/bin/python3 --version; /opt/python/bin/python3 -m venv --help >/dev/null
+
+# python-build-standalone bakes CC=clang into sysconfig; this image has gcc (via
+# build-essential), not clang. Pin CC=gcc so any source C-extension build works.
+ENV CC=gcc CXX=g++
 # Build-time global prefix for the agent CLI (claude). Kept ROOT-owned (see the
 # claude install below) so the unprivileged dev user can't overwrite the pinned
 # claude/npm binaries post-launch (the verify-pins gate fingerprints these paths).
@@ -68,10 +98,10 @@ RUN set -eux; \
 # dev-owned prefix, /home/dev/.npm-global, set after the install. Root prefix is
 # FIRST on PATH so claude resolves to the pinned copy.
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/usr/local/bin:$PATH
+ENV PATH=/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/opt/python/bin:/usr/local/bin:$PATH
 # Login shells (bash -l) reset PATH via /etc/profile, dropping the ENV above;
 # re-add the tool dirs so node/npm/claude/safe-chain resolve in login shells too.
-RUN printf 'export PATH="/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/usr/local/bin:$PATH"\n' \
+RUN printf 'export PATH="/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/opt/python/bin:/usr/local/bin:$PATH"\n' \
       > /etc/profile.d/00-npm-global.sh
 
 # --- Claude Code CLI (replaces the `anthropics/claude-code:1.0` feature) -----
@@ -122,7 +152,7 @@ RUN set -eux; \
     pinfile=/usr/local/share/watchman/binary-pins.txt; \
     mkdir -p /usr/local/share/watchman; \
     : > "$pinfile"; \
-    for b in node npm claude gh git; do \
+    for b in node npm claude gh git python3; do \
       p="$(command -v "$b")"; \
       h="$(sha256sum "$p" | awk '{print $1}')"; \
       printf '%s\t%s\t%s\n' "$b" "$p" "$h" >> "$pinfile"; \
