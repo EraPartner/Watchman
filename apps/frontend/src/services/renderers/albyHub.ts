@@ -4,8 +4,18 @@ import { dotGet, fmtBool, fmtNumber, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
 
+const fmtMsatAsSats = (value: unknown): string => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${Math.round(value / 1000).toLocaleString()} sats`;
+};
+
+const fmtSats = (value: unknown): string => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value.toLocaleString()} sats`;
+};
+
 export const albyHubRenderer: ServiceRenderer<Stats> = {
-  kind: "albyhub",
+  kind: "albyHub",
   displayName: "Alby Hub",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {
@@ -31,7 +41,12 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
     {
       title: "Network",
       metrics: [
-        { key: "reachable", label: "Reachable", format: fmtBool("yes", "no"), source: 'health' },
+        {
+          key: "reachable",
+          label: "Reachable",
+          format: fmtBool("yes", "no"),
+          source: "health",
+        },
         { key: "endpoint", label: "Endpoint", format: fmtRaw },
         { key: "url", label: "URL", format: fmtRaw },
       ],
@@ -40,15 +55,52 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
       title: "NWC",
       metrics: [
         { key: "connected", label: "Connected", format: fmtBool("yes", "no") },
-        { key: "setupCompleted", label: "Setup complete", format: fmtBool("yes", "no") },
+        {
+          key: "setupCompleted",
+          label: "Setup complete",
+          format: fmtBool("yes", "no"),
+        },
         { key: "backendType", label: "Backend", format: fmtRaw },
         { key: "appCount", label: "Apps", format: fmtNumber(0) },
+      ],
+    },
+    {
+      title: "Wallet",
+      metrics: [
+        {
+          key: "balanceLightningSpendableMsat",
+          label: "LN spendable",
+          format: fmtMsatAsSats,
+        },
+        {
+          key: "balanceLightningReceivableMsat",
+          label: "LN receivable",
+          format: fmtMsatAsSats,
+        },
+        {
+          key: "balanceOnchainSpendableSat",
+          label: "On-chain spendable",
+          format: fmtSats,
+        },
+        { key: "channelCount", label: "Channels", format: fmtRaw },
+        { key: "channelsActive", label: "Active channels", format: fmtRaw },
+        {
+          key: "channelLocalBalanceMsat",
+          label: "Local balance",
+          format: fmtMsatAsSats,
+        },
       ],
     },
   ],
 
   charts: [
     { metric: "appCount", label: "Apps", kind: "line", format: fmtNumber(0) },
+    {
+      metric: "balanceLightningSpendableMsat",
+      label: "LN spendable (msat)",
+      kind: "area",
+      format: fmtMsatAsSats,
+    },
   ],
 
   tone: ({ stats, health }) => {

@@ -3,11 +3,13 @@ import { sharedCore } from "../services/ApiClient";
 import { queryKeys } from "../lib/queryKeys";
 
 export interface BreakerMetrics {
-  state: "closed" | "open" | "half_open";
+  // mirrors the backend BreakerState enum (infra/circuitBreaker/breaker.ts)
+  state: "closed" | "open" | "half-open";
   successes: number;
   failures: number;
   rejects: number;
   trips: number;
+  openedAt: number | null;
 }
 
 export interface CacheStats {
@@ -26,6 +28,7 @@ export interface BackendMetrics {
   breakers: Record<string, BreakerMetrics>;
   poller: { tracked: number } | null;
   cache: Record<string, CacheStats>;
+  errors?: { total: number; byService: Record<string, number> };
   process: ProcessMetrics;
 }
 
@@ -49,7 +52,7 @@ export function summarizeBreakers(
   const values = Object.values(breakers);
   for (const b of values) {
     if (b.state === "open") open += 1;
-    else if (b.state === "half_open") halfOpen += 1;
+    else if (b.state === "half-open") halfOpen += 1;
     else closed += 1;
   }
   return { open, halfOpen, closed, total: values.length };

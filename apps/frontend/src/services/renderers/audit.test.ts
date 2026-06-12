@@ -60,7 +60,7 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> = 
     "upstreamCount",
     "upstreamMode",
   ],
-  albyhub: [
+  albyHub: [
     "name",
     "version",
     "description",
@@ -125,7 +125,7 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> = 
     "pinnedCount",
     "listenAddrCount",
   ],
-  macmini: [
+  macMini: [
     "host",
     "cpuLoad",
     "cpuTemp",
@@ -148,7 +148,7 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> = 
     "onAC",
     "uptime",
   ],
-  philips: [
+  philipsBridge: [
     "host",
     "configured",
     "lightCount",
@@ -176,7 +176,7 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> = 
     "recentErrors",
     "recentWarnings",
   ],
-  raspi: [
+  raspberryPi: [
     "piModel",
     "processor",
     "memory",
@@ -247,14 +247,14 @@ const HEALTH_KEYS = new Set([
 
 const RENDERERS = {
   adguard: adguardRenderer,
-  albyhub: albyHubRenderer,
+  albyHub: albyHubRenderer,
   bitcoin: bitcoinRenderer,
   homebridge: homebridgeRenderer,
   ipfs: ipfsRenderer,
-  macmini: macMiniRenderer,
-  philips: philipsBridgeRenderer,
+  macMini: macMiniRenderer,
+  philipsBridge: philipsBridgeRenderer,
   qbittorrent: qbittorrentRenderer,
-  raspi: raspberryPiRenderer,
+  raspberryPi: raspberryPiRenderer,
   roon: roonRenderer,
   synology: synologyRenderer,
 } as const satisfies Partial<Record<ServiceKind, { summary: ReadonlyArray<{ key: string; source?: "stats" | "health" }> }>>;

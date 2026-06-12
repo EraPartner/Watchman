@@ -47,6 +47,9 @@ const queryClient = new QueryClient({
   },
 });
 
+// Intentionally only gates the dashboard: /settings/* stays reachable on an
+// unconfigured instance as an alternative to the wizard, and dismissal is a
+// client-side convenience for this single-user, trusted-network tool.
 function SetupGate({ children }: { children: ReactNode }) {
   const { data, isLoading } = useSetupStatus();
   const { dismissed } = useSetupDismissal();
@@ -86,10 +89,7 @@ function App() {
                   path="/settings/services"
                   element={<SettingsServicesPage />}
                 />
-                <Route
-                  path="/settings/audit"
-                  element={<SettingsAuditPage />}
-                />
+                <Route path="/settings/audit" element={<SettingsAuditPage />} />
                 <Route
                   path="/settings/backup"
                   element={<SettingsBackupPage />}

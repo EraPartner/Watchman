@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import type { ServiceHealth } from "@/types/api";
 import type { ServiceInstance } from "@/hooks/useServiceInstances";
 
+// Canonical service kinds — must match the backend's kind strings
+// (apps/backend/src/config/schemas/fieldMetadata.ts) exactly; instances,
+// stats and health are all keyed by these.
 export type ServiceKind =
   | "bitcoin"
   | "synology"
@@ -10,15 +13,12 @@ export type ServiceKind =
   | "qbittorrent"
   | "ipfs"
   | "homebridge"
-  | "albyhub"
+  | "albyHub"
   | "roon"
-  | "philips"
-  | "macmini"
-  | "raspi"
-  | "router"
-  | "beryl"
-  | "telenet"
-  | "nostrcheck";
+  | "philipsBridge"
+  | "macMini"
+  | "raspberryPi"
+  | "router";
 
 export type Tone = "neutral" | "ok" | "warn" | "crit";
 

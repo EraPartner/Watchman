@@ -96,14 +96,14 @@ describe("routerRenderer", () => {
 
 const ALL_RENDERERS = [
   { name: "adguardRenderer", r: adguardRenderer, kind: "adguard" },
-  { name: "albyHubRenderer", r: albyHubRenderer, kind: "albyhub" },
+  { name: "albyHubRenderer", r: albyHubRenderer, kind: "albyHub" },
   { name: "bitcoinRenderer", r: bitcoinRenderer, kind: "bitcoin" },
   { name: "homebridgeRenderer", r: homebridgeRenderer, kind: "homebridge" },
   { name: "ipfsRenderer", r: ipfsRenderer, kind: "ipfs" },
-  { name: "macMiniRenderer", r: macMiniRenderer, kind: "macmini" },
-  { name: "philipsBridgeRenderer", r: philipsBridgeRenderer, kind: "philips" },
+  { name: "macMiniRenderer", r: macMiniRenderer, kind: "macMini" },
+  { name: "philipsBridgeRenderer", r: philipsBridgeRenderer, kind: "philipsBridge" },
   { name: "qbittorrentRenderer", r: qbittorrentRenderer, kind: "qbittorrent" },
-  { name: "raspberryPiRenderer", r: raspberryPiRenderer, kind: "raspi" },
+  { name: "raspberryPiRenderer", r: raspberryPiRenderer, kind: "raspberryPi" },
   { name: "roonRenderer", r: roonRenderer, kind: "roon" },
   { name: "synologyRenderer", r: synologyRenderer, kind: "synology" },
 ] as const;

@@ -147,22 +147,28 @@ describe("useWebSocket", () => {
     const socket = FakeWebSocket.instances[0];
     expect(socket).toBeTruthy();
 
-    socket.emitMessage({ type: "service_update", service: "adguard_main" });
-    socket.emitMessage({ type: "service_update", service: "adguard_main" });
+    socket.emitMessage({
+      type: "service_update",
+      kind: "adguard",
+      instanceId: "main",
+    });
+    socket.emitMessage({
+      type: "service_update",
+      kind: "adguard",
+      instanceId: "main",
+    });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(160);
     });
 
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["adguard", "status", "adguard_main"],
-    });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["adguard", "stats", "adguard_main"],
-    });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["adguard", "full"],
-    });
+    // one prefix invalidation covers status/stats/adguardFull query families
+    expect(
+      invalidateQueries.mock.calls.filter(
+        ([arg]) =>
+          JSON.stringify(arg) === JSON.stringify({ queryKey: ["adguard"] })
+      )
+    ).toHaveLength(1);
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["services", "health"],
     });
@@ -358,21 +364,25 @@ describe("useWebSocket", () => {
     const socket = FakeWebSocket.instances[0];
     expect(socket).toBeTruthy();
 
-    socket.emitMessage({ type: "service_update", service: "adguard_main" });
+    socket.emitMessage({
+      type: "service_update",
+      kind: "adguard",
+      instanceId: "main",
+    });
 
     await act(async () => {
       root.unmount();
     });
 
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["adguard", "status", "adguard_main"],
+      queryKey: ["adguard"],
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["services", "health"],
     });
   });
 
-  it("invalidates tor and router query families for service updates", async () => {
+  it("invalidates per-kind query families for service updates", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -384,22 +394,31 @@ describe("useWebSocket", () => {
     const socket = FakeWebSocket.instances[0];
     expect(socket).toBeTruthy();
 
-    socket.emitMessage({ type: "service_update", service: "tor_main" });
-    socket.emitMessage({ type: "service_update", service: "beryl" });
-    socket.emitMessage({ type: "service_update", service: "telenet" });
+    socket.emitMessage({
+      type: "service_update",
+      kind: "tor",
+      instanceId: "main",
+    });
+    socket.emitMessage({
+      type: "service_update",
+      kind: "router",
+      instanceId: "main",
+    });
+    // legacy frames carrying only `service` still invalidate by that key
+    socket.emitMessage({ type: "service_update", service: "ipfs" });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(160);
     });
 
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["tor", "relay"],
+      queryKey: ["tor"],
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["router", "arp", "beryl"],
+      queryKey: ["router"],
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["router", "arp", "telenet"],
+      queryKey: ["ipfs"],
     });
 
     act(() => {
@@ -407,7 +426,7 @@ describe("useWebSocket", () => {
     });
   });
 
-  it("invalidates metrics key and shows connected toast", async () => {
+  it("invalidates metrics key without toasting on connection", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -433,7 +452,7 @@ describe("useWebSocket", () => {
       await vi.advanceTimersByTimeAsync(160);
     });
 
-    expect(toastSuccess).toHaveBeenCalledWith("WebSocket connected");
+    expect(toastSuccess).not.toHaveBeenCalled();
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["metrics"],
     });

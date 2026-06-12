@@ -31,7 +31,10 @@ export const useAggregatedHealth = (refetchInterval = 10000) => {
       const byKey = new Map<string, AggregatedEntry>();
       for (const entry of entries) {
         if (!entry || typeof entry !== "object") continue;
-        if (typeof entry.kind !== "string" || typeof entry.instanceId !== "string") {
+        if (
+          typeof entry.kind !== "string" ||
+          typeof entry.instanceId !== "string"
+        ) {
           continue;
         }
         byKey.set(aggregatedKey(entry.kind, entry.instanceId), entry);
@@ -62,15 +65,16 @@ export function pickHealth(
   return undefined;
 }
 
-function resultToSnapshot(
-  entry: AggregatedEntry
-): HealthSnapshot | undefined {
+function resultToSnapshot(entry: AggregatedEntry): HealthSnapshot | undefined {
   if (entry.result.ok) return entry.result.value;
-  return {
+  const snapshot: HealthSnapshot = {
     reachable: false,
-    message: entry.result.error?.message,
-    at: String(Date.now()),
-  } as unknown as HealthSnapshot;
+    at: Date.now(),
+  };
+  if (entry.result.error?.message !== undefined) {
+    snapshot.message = entry.result.error.message;
+  }
+  return snapshot;
 }
 
 export function pickError(

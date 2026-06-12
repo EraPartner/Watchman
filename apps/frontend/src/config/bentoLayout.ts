@@ -12,9 +12,6 @@ export interface LayoutEntry {
  * - L:  infra-critical (Synology, Router)
  * - M:  default
  * - S:  status-only (Philips, Roon)
- *
- * During phase 3 only Bitcoin + Synology are wired; other entries are
- * placeholders that will activate when their renderer ships.
  */
 export const BENTO_LAYOUT: ReadonlyArray<LayoutEntry> = [
   { kind: "bitcoin", size: "XL" },
@@ -25,10 +22,9 @@ export const BENTO_LAYOUT: ReadonlyArray<LayoutEntry> = [
   { kind: "ipfs", size: "M" },
   { kind: "tor", size: "M" },
   { kind: "homebridge", size: "M" },
-  { kind: "macmini", size: "M" },
-  { kind: "raspi", size: "M" },
-  { kind: "albyhub", size: "S" },
-  { kind: "philips", size: "S" },
+  { kind: "macMini", size: "M" },
+  { kind: "raspberryPi", size: "M" },
+  { kind: "albyHub", size: "S" },
+  { kind: "philipsBridge", size: "S" },
   { kind: "roon", size: "S" },
-  { kind: "nostrcheck", size: "S" },
 ];

@@ -89,10 +89,9 @@ describe("dashboardData", () => {
   });
 
   it("getTorConnectionInfo prefers frontend config port over tor stats", () => {
-    const result = getTorConnectionInfo(
-      { torIp: "10.0.0.5", torPort: 9050 },
-      { orPort: 9001 } as never
-    );
+    const result = getTorConnectionInfo({ torIp: "10.0.0.5", torPort: 9050 }, {
+      orPort: 9001,
+    } as never);
 
     expect(result).toEqual({
       torIp: "10.0.0.5",
@@ -104,9 +103,10 @@ describe("dashboardData", () => {
     expect(chunkTiles([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
   });
 
-  it("getInstanceNumber returns parsed suffix or undefined", () => {
-    expect(getInstanceNumber("tor_2")).toBe(2);
-    expect(getInstanceNumber("tor_x")).toBeUndefined();
+  it("getInstanceNumber returns trailing digits or undefined", () => {
+    expect(getInstanceNumber("tor-2")).toBe(2);
+    expect(getInstanceNumber("main2")).toBe(2);
+    expect(getInstanceNumber("tor-x")).toBeUndefined();
     expect(getInstanceNumber("tor")).toBeUndefined();
   });
 

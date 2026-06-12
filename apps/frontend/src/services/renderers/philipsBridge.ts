@@ -5,7 +5,7 @@ import { fmtBool, fmtNumber, fmtRaw } from "./formatters";
 type Stats = Record<string, unknown>;
 
 export const philipsBridgeRenderer: ServiceRenderer<Stats> = {
-  kind: "philips",
+  kind: "philipsBridge",
   displayName: "Hue Bridge",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {
@@ -24,20 +24,63 @@ export const philipsBridgeRenderer: ServiceRenderer<Stats> = {
     {
       title: "Bridge",
       metrics: [
-        { key: "reachable", label: "Reachable", format: fmtBool("yes", "no"), source: 'health' },
+        {
+          key: "reachable",
+          label: "Reachable",
+          format: fmtBool("yes", "no"),
+          source: "health",
+        },
         { key: "host", label: "Host", format: fmtRaw },
-        { key: "configured", label: "Configured", format: fmtBool("yes", "no") },
+        {
+          key: "configured",
+          label: "Configured",
+          format: fmtBool("yes", "no"),
+        },
         { key: "lightCount", label: "Total lights", format: fmtNumber(0) },
         { key: "onCount", label: "Lights on", format: fmtNumber(0) },
         { key: "offCount", label: "Lights off", format: fmtNumber(0) },
       ],
     },
+    {
+      title: "Zigbee & devices",
+      metrics: [
+        {
+          key: "sseConnected",
+          label: "Live events",
+          format: fmtBool("connected", "polling"),
+        },
+        {
+          key: "zigbeeUnreachableCount",
+          label: "Unreachable devices",
+          format: fmtRaw,
+        },
+        { key: "batteryLowCount", label: "Low batteries", format: fmtRaw },
+        { key: "minBatteryPercent", label: "Lowest battery %", format: fmtRaw },
+        { key: "deviceCount", label: "Devices", format: fmtRaw },
+        { key: "roomCount", label: "Rooms", format: fmtRaw },
+      ],
+    },
   ],
 
   charts: [
-    { metric: "lightCount", label: "Total lights", kind: "line", format: fmtNumber(0) },
-    { metric: "onCount", label: "Lights on", kind: "area", format: fmtNumber(0) },
-    { metric: "offCount", label: "Lights off", kind: "area", format: fmtNumber(0) },
+    {
+      metric: "lightCount",
+      label: "Total lights",
+      kind: "line",
+      format: fmtNumber(0),
+    },
+    {
+      metric: "onCount",
+      label: "Lights on",
+      kind: "area",
+      format: fmtNumber(0),
+    },
+    {
+      metric: "offCount",
+      label: "Lights off",
+      kind: "area",
+      format: fmtNumber(0),
+    },
   ],
 
   tone: ({ health }) => {

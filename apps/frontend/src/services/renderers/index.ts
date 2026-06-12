@@ -17,25 +17,26 @@ export type { ServiceKind, ServiceRenderer } from "./types";
 export * from "./types";
 export * from "./formatters";
 
-export const RENDERERS: Partial<Record<ServiceKind, ServiceRenderer>> = {
-  adguard: adguardRenderer as unknown as ServiceRenderer,
-  albyhub: albyHubRenderer as unknown as ServiceRenderer,
-  bitcoin: bitcoinRenderer as unknown as ServiceRenderer,
-  homebridge: homebridgeRenderer as unknown as ServiceRenderer,
-  ipfs: ipfsRenderer as unknown as ServiceRenderer,
-  macmini: macMiniRenderer as unknown as ServiceRenderer,
-  philips: philipsBridgeRenderer as unknown as ServiceRenderer,
-  qbittorrent: qbittorrentRenderer as unknown as ServiceRenderer,
-  raspi: raspberryPiRenderer as unknown as ServiceRenderer,
-  roon: roonRenderer as unknown as ServiceRenderer,
-  router: routerRenderer as unknown as ServiceRenderer,
-  synology: synologyRenderer as unknown as ServiceRenderer,
-  tor: torRenderer as unknown as ServiceRenderer,
+// Exhaustively keyed by ServiceKind so a missing or misspelled kind is a
+// compile error rather than a silently empty dashboard tile.
+export const RENDERERS: Record<ServiceKind, ServiceRenderer> = {
+  adguard: adguardRenderer,
+  albyHub: albyHubRenderer,
+  bitcoin: bitcoinRenderer,
+  homebridge: homebridgeRenderer,
+  ipfs: ipfsRenderer,
+  macMini: macMiniRenderer,
+  philipsBridge: philipsBridgeRenderer,
+  qbittorrent: qbittorrentRenderer,
+  raspberryPi: raspberryPiRenderer,
+  roon: roonRenderer,
+  router: routerRenderer,
+  synology: synologyRenderer,
+  tor: torRenderer,
 };
 
-export const getRenderer = (
-  kind: string
-): ServiceRenderer | undefined => RENDERERS[kind as ServiceKind];
+export const getRenderer = (kind: string): ServiceRenderer | undefined =>
+  RENDERERS[kind as ServiceKind];
 
 /** Flatten every metric key surfaced by a renderer (summary + detail
  *  groups + charts), de-duplicated. Used by the tile + sheet to register

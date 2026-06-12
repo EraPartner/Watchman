@@ -68,6 +68,14 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
       ],
     },
     {
+      title: "Fees (sat/vB)",
+      metrics: [
+        { key: "feeSatPerVb1", label: "Next block", format: fmtNumber(1) },
+        { key: "feeSatPerVb6", label: "~1 hour", format: fmtNumber(1) },
+        { key: "feeSatPerVb144", label: "~1 day", format: fmtNumber(1) },
+      ],
+    },
+    {
       title: "Runtime",
       metrics: [
         { key: "uptime", label: "Uptime", format: fmtUptime },
@@ -78,9 +86,24 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
   ],
 
   charts: [
-    { metric: "blocks", label: "Block height", kind: "area", format: fmtNumber(0) },
-    { metric: "connections", label: "Peers", kind: "line", format: fmtNumber(0) },
-    { metric: "mempoolBytes", label: "Mempool size", kind: "area", format: fmtBytes },
+    {
+      metric: "blocks",
+      label: "Block height",
+      kind: "area",
+      format: fmtNumber(0),
+    },
+    {
+      metric: "connections",
+      label: "Peers",
+      kind: "line",
+      format: fmtNumber(0),
+    },
+    {
+      metric: "mempoolBytes",
+      label: "Mempool size",
+      kind: "area",
+      format: fmtBytes,
+    },
   ],
 
   tone: ({ stats, health }) => {

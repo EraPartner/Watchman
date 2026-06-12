@@ -13,7 +13,7 @@ function fmtThrottled(v: unknown): string {
 }
 
 export const raspberryPiRenderer: ServiceRenderer<Stats> = {
-  kind: "raspi",
+  kind: "raspberryPi",
   displayName: "Raspberry Pi",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {

@@ -100,7 +100,10 @@ export const useWebSocket = (url?: string) => {
       queryInvalidations.set(dedupKey, queryKey);
     };
 
-    // Collect affected query families first to avoid duplicate invalidations
+    // Keys are canonical backend service kinds. All per-service query
+    // families ([kind, ...]) are invalidated via prefix matching, which
+    // covers status/stats plus kind-specific families like
+    // ["adguard","full"], ["tor","relay"], ["router","arp",...].
     keys.forEach((key) => {
       try {
         if (key === "metrics") {
@@ -109,25 +112,7 @@ export const useWebSocket = (url?: string) => {
         }
 
         shouldInvalidateServicesHealth = true;
-
-        const keyParts = key.split("_");
-        const baseServiceKey = keyParts.length > 1 ? keyParts[0] : key;
-
-        addInvalidation(queryKeys.serviceStatus(baseServiceKey, key));
-        addInvalidation(queryKeys.serviceStats(baseServiceKey, key));
-
-        if (baseServiceKey === "adguard") {
-          addInvalidation(queryKeys.adguardFull());
-        }
-
-        if (baseServiceKey === "tor") {
-          addInvalidation(queryKeys.torRelay());
-        }
-
-        // Router ARP keys are namespaced under ["router", "arp", serviceKey]
-        if (baseServiceKey === "beryl" || baseServiceKey === "telenet") {
-          addInvalidation(queryKeys.routerArp(baseServiceKey));
-        }
+        addInvalidation(queryKeys.servicePrefix(key));
       } catch (e) {
         logger.warn("Failed to invalidate query", {
           key,
@@ -176,7 +161,7 @@ export const useWebSocket = (url?: string) => {
 
         publishWsEvent({
           type: message.type,
-          service: message.service,
+          service: message.service ?? message.kind,
           level: message.level,
           message: message.message,
           data: message.data,
@@ -188,15 +173,18 @@ export const useWebSocket = (url?: string) => {
             logger.debug("[WEBSOCKET] Server connection message", {
               message: message.message,
             });
-            toast.success("WebSocket connected");
             break;
 
-          case "service_update":
-            // Batch/debounce invalidations to reduce rapid churn
-            if (message.service) {
-              scheduleInvalidationForKey(message.service);
+          case "service_update": {
+            // Batch/debounce invalidations to reduce rapid churn.
+            // The broadcaster identifies services by kind + instanceId;
+            // `service` is kept as a fallback for older frames.
+            const key = message.kind ?? message.service;
+            if (key) {
+              scheduleInvalidationForKey(key);
             }
             break;
+          }
 
           case "alert":
             logger.debug("[WEBSOCKET] Alert message received", {
@@ -261,6 +249,11 @@ export const useWebSocket = (url?: string) => {
       delay,
     });
 
+    // Replace (don't stack) any pending reconnect so a failure that fires
+    // multiple socket events schedules exactly one retry.
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
     reconnectTimeoutRef.current = setTimeout(() => {
       if (globalReconnectFn) {
         globalReconnectFn();
@@ -302,10 +295,15 @@ export const useWebSocket = (url?: string) => {
 
       globalWebSocket.onopen = () => {
         logger.websocket("WebSocket connection established");
+        const wasReconnect = globalConnectionState.reconnectAttempts > 0;
         globalConnectionState.isConnected = true;
         globalConnectionState.isConnecting = false;
         globalConnectionState.reconnectAttempts = 0;
         notifyStateChange();
+        // Only toast on recovery; a toast on every (re)connect is noise.
+        if (wasReconnect) {
+          toast.success("WebSocket reconnected");
+        }
       };
 
       globalWebSocket.onmessage = handleMessage;
@@ -332,16 +330,11 @@ export const useWebSocket = (url?: string) => {
       };
 
       globalWebSocket.onerror = (error) => {
+        // A failed connection fires onerror *and then* onclose; reconnect
+        // accounting lives in onclose so each failure counts exactly once.
         logger.error("WebSocket error", error);
         globalConnectionState.isConnecting = false;
         notifyStateChange();
-
-        if (globalWebSocket?.readyState === WebSocket.CONNECTING) {
-          // Connection failed during setup
-          globalConnectionState.reconnectAttempts++;
-          notifyStateChange();
-          scheduleReconnect();
-        }
       };
     } catch (error) {
       logger.error("Error creating WebSocket", error);

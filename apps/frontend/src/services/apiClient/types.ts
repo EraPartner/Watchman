@@ -17,7 +17,7 @@ export interface HealthSnapshot {
   latencyMs?: number;
   message?: string;
   details?: Record<string, unknown>;
-  at: string;
+  at: number;
   host?: HostHealth;
   service?: ServiceHealth;
 }
@@ -26,7 +26,7 @@ export type StatsMetricValue = number | string | boolean | null;
 
 export interface StatsSnapshot {
   metrics: Record<string, StatsMetricValue>;
-  at: string;
+  at: number;
 }
 
 export interface InstanceInfo {

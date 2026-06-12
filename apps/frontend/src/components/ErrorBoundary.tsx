@@ -54,7 +54,7 @@ export class ErrorBoundary extends Component<Props, State> {
             An unexpected error occurred. Please try refreshing the page or
             contact support if the problem persists.
           </p>
-          {this.state.error && (
+          {this.state.error && import.meta.env.DEV && (
             <details
               open
               className="rounded-r-2 bg-[var(--surface-1)] p-s-3 max-h-[60vh] overflow-auto"

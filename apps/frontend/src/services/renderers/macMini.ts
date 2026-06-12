@@ -17,7 +17,7 @@ const getNum = (s: Stats | undefined, path: string): number | undefined => {
 };
 
 export const macMiniRenderer: ServiceRenderer<Stats> = {
-  kind: "macmini",
+  kind: "macMini",
   displayName: "Mac Mini",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {

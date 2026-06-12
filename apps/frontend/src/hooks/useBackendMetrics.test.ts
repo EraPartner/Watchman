@@ -20,7 +20,7 @@ import { queryKeys } from "../lib/queryKeys";
 // ─── summarizeBreakers ────────────────────────────────────────────────────────
 
 function makeBreaker(state: BreakerMetrics["state"]): BreakerMetrics {
-  return { state, successes: 1, failures: 0, rejects: 0, trips: 0 };
+  return { state, successes: 1, failures: 0, rejects: 0, trips: 0, openedAt: null };
 }
 
 describe("summarizeBreakers", () => {
@@ -52,8 +52,8 @@ describe("summarizeBreakers", () => {
     expect(result).toEqual({ open: 1, halfOpen: 0, closed: 0, total: 1 });
   });
 
-  it("counts a single half_open breaker", () => {
-    const result = summarizeBreakers({ a: makeBreaker("half_open") });
+  it("counts a single half-open breaker", () => {
+    const result = summarizeBreakers({ a: makeBreaker("half-open") });
     expect(result).toEqual({ open: 0, halfOpen: 1, closed: 0, total: 1 });
   });
 
@@ -61,7 +61,7 @@ describe("summarizeBreakers", () => {
     const breakers = {
       a: makeBreaker("closed"),
       b: makeBreaker("open"),
-      c: makeBreaker("half_open"),
+      c: makeBreaker("half-open"),
       d: makeBreaker("closed"),
       e: makeBreaker("open"),
     };

@@ -121,13 +121,16 @@ export function chunkTiles<T>(tiles: T[], size: number): T[][] {
   return rows;
 }
 
+// Instance ids are lowercase alphanumerics with hyphens (see ConfigStore's
+// instance-id rule); a numeric display index is the trailing digit run,
+// e.g. "qbittorrent-2" -> 2, "main2" -> 2, "main" -> undefined.
 export function getInstanceNumber(instanceId: string): number | undefined {
-  const suffix = instanceId.split("_")[1];
-  if (!suffix) {
+  const match = /(\d+)$/.exec(instanceId);
+  if (!match) {
     return undefined;
   }
 
-  const parsed = Number.parseInt(suffix, 10);
+  const parsed = Number.parseInt(match[1], 10);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
