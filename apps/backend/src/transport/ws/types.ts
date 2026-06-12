@@ -6,11 +6,15 @@ export interface WsClient {
   ping(): void;
   terminate(): void;
   close(code?: number, reason?: string): void;
-  on(event: 'pong' | 'message' | 'close' | 'error', cb: (...args: unknown[]) => void): void;
+  on(
+    event: "pong" | "message" | "close" | "error",
+    cb: (...args: unknown[]) => void
+  ): void;
 }
 
 export interface WsUpgradeRequest {
   headers: Record<string, string | string[] | undefined>;
+  url?: string;
   socket?: { remoteAddress?: string };
   connection?: { remoteAddress?: string };
 }

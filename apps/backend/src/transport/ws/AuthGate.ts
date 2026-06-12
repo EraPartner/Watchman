@@ -1,4 +1,4 @@
-import type { AuthUser, WsUpgradeRequest } from './types.js';
+import type { AuthUser, WsUpgradeRequest } from "./types.js";
 
 export type AuthResult =
   | { ok: true; user: AuthUser }
@@ -15,30 +15,29 @@ export interface TokenVerifier {
 export interface AuthGateDeps {
   extractToken: TokenExtractor;
   verifyToken: TokenVerifier;
-  allowedOrigins: ReadonlySet<string>;
-  normalizeOrigin: (origin: string | undefined) => string | null;
+  isOriginAllowed: (origin: string | undefined) => boolean;
+  requireToken?: boolean;
 }
 
 export class AuthGate {
-  private readonly enforceOrigin: boolean;
-
-  constructor(private readonly deps: AuthGateDeps) {
-    this.enforceOrigin = deps.allowedOrigins.size > 0;
-  }
+  constructor(private readonly deps: AuthGateDeps) {}
 
   isOriginAllowed(req: WsUpgradeRequest): boolean {
-    if (!this.enforceOrigin) return true;
-    const raw = req.headers['origin'];
+    const raw = req.headers["origin"];
     const str = Array.isArray(raw) ? raw[0] : raw;
-    const normalized = this.deps.normalizeOrigin(str);
-    return normalized !== null && this.deps.allowedOrigins.has(normalized);
+    return this.deps.isOriginAllowed(str);
   }
 
   authenticate(req: WsUpgradeRequest): AuthResult {
     const token = this.deps.extractToken(req);
-    if (!token) return { ok: false, reason: 'No authentication token provided' };
+    if (!token) {
+      if (this.deps.requireToken) {
+        return { ok: false, reason: "No authentication token provided" };
+      }
+      return { ok: true, user: { username: "anonymous" } };
+    }
     const decoded = this.deps.verifyToken(token);
-    if (!decoded) return { ok: false, reason: 'Invalid or expired token' };
+    if (!decoded) return { ok: false, reason: "Invalid or expired token" };
     const user: AuthUser = { username: decoded.username };
     const id = decoded.sub ?? decoded.id;
     if (id) user.id = id;

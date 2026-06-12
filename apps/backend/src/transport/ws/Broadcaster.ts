@@ -1,6 +1,6 @@
-import type { ConnectionManager } from './ConnectionManager.js';
-import type { EventBus } from '../../core/eventBus.js';
-import type { WsClient } from './types.js';
+import type { ConnectionManager } from "./ConnectionManager.js";
+import type { EventBus } from "../../core/eventBus.js";
+import type { WsClient } from "./types.js";
 
 export interface BroadcasterDeps {
   manager: ConnectionManager;
@@ -9,31 +9,82 @@ export interface BroadcasterDeps {
   onSendError?: (err: unknown, ws: WsClient) => void;
 }
 
-export type AlertLevel = 'info' | 'warning' | 'error';
+export type AlertLevel = "info" | "warning" | "error";
 
 export class Broadcaster {
   private unsubs: Array<() => void> = [];
+  // service ids currently in error state; used to alert only on transitions
+  // (first failure, then recovery) instead of every failed poll.
+  private erroredIds = new Set<string>();
 
   constructor(private readonly deps: BroadcasterDeps) {}
 
   start(): void {
     if (this.unsubs.length > 0) return;
     this.unsubs.push(
-      this.deps.bus.on('service.health.updated', (p) => {
-        this.broadcast({ type: 'service_update', scope: 'health', id: p.id, kind: p.kind, instanceId: p.instanceId, at: p.at, ...(p.snapshot !== undefined ? { snapshot: p.snapshot } : {}) });
+      this.deps.bus.on("service.health.updated", (p) => {
+        this.notifyRecovered(p.id, p.kind, p.instanceId);
+        this.broadcast({
+          type: "service_update",
+          scope: "health",
+          id: p.id,
+          kind: p.kind,
+          instanceId: p.instanceId,
+          at: p.at,
+          ...(p.snapshot !== undefined ? { snapshot: p.snapshot } : {}),
+        });
       }),
-      this.deps.bus.on('service.stats.updated', (p) => {
-        this.broadcast({ type: 'service_update', scope: 'stats', id: p.id, kind: p.kind, instanceId: p.instanceId, at: p.at, ...(p.snapshot !== undefined ? { snapshot: p.snapshot } : {}) });
+      this.deps.bus.on("service.stats.updated", (p) => {
+        this.notifyRecovered(p.id, p.kind, p.instanceId);
+        this.broadcast({
+          type: "service_update",
+          scope: "stats",
+          id: p.id,
+          kind: p.kind,
+          instanceId: p.instanceId,
+          at: p.at,
+          ...(p.snapshot !== undefined ? { snapshot: p.snapshot } : {}),
+        });
       }),
-      this.deps.bus.on('config:service.created', (p) => {
-        this.broadcast({ type: 'service_config_changed', kind: p.kind, instanceId: p.instanceId, action: 'created' });
+      this.deps.bus.on("service.error", (p) => {
+        if (this.erroredIds.has(p.id)) return;
+        this.erroredIds.add(p.id);
+        const detail =
+          p.error instanceof Error ? p.error.message : String(p.error);
+        this.broadcast({
+          type: "alert",
+          level: "error",
+          message: `${p.id}: ${detail}`,
+          service: p.kind,
+          kind: p.kind,
+          instanceId: p.instanceId,
+          id: p.id,
+        });
       }),
-      this.deps.bus.on('config:service.updated', (p) => {
-        this.broadcast({ type: 'service_config_changed', kind: p.kind, instanceId: p.instanceId, action: 'updated' });
+      this.deps.bus.on("config:service.created", (p) => {
+        this.broadcast({
+          type: "service_config_changed",
+          kind: p.kind,
+          instanceId: p.instanceId,
+          action: "created",
+        });
       }),
-      this.deps.bus.on('config:service.deleted', (p) => {
-        this.broadcast({ type: 'service_config_changed', kind: p.kind, instanceId: p.instanceId, action: 'deleted' });
+      this.deps.bus.on("config:service.updated", (p) => {
+        this.broadcast({
+          type: "service_config_changed",
+          kind: p.kind,
+          instanceId: p.instanceId,
+          action: "updated",
+        });
       }),
+      this.deps.bus.on("config:service.deleted", (p) => {
+        this.broadcast({
+          type: "service_config_changed",
+          kind: p.kind,
+          instanceId: p.instanceId,
+          action: "deleted",
+        });
+      })
     );
   }
 
@@ -42,16 +93,34 @@ export class Broadcaster {
     this.unsubs = [];
   }
 
-  alert(level: AlertLevel, message: string, service: string | null = null): number {
-    return this.broadcast({ type: 'alert', level, message, service, timestamp: this.isoNow() });
+  alert(
+    level: AlertLevel,
+    message: string,
+    service: string | null = null
+  ): number {
+    return this.broadcast({
+      type: "alert",
+      level,
+      message,
+      service,
+      timestamp: this.isoNow(),
+    });
   }
 
   welcome(ws: WsClient, serverVersion: string): void {
-    this.sendOne(ws, { type: 'connection', message: 'Connected', timestamp: this.isoNow(), serverVersion });
+    this.sendOne(ws, {
+      type: "connection",
+      message: "Connected",
+      timestamp: this.isoNow(),
+      serverVersion,
+    });
   }
 
   broadcast(payload: Record<string, unknown>): number {
-    const msg = JSON.stringify({ ...payload, timestamp: payload['timestamp'] ?? this.isoNow() });
+    const msg = JSON.stringify({
+      ...payload,
+      timestamp: payload["timestamp"] ?? this.isoNow(),
+    });
     const dead: WsClient[] = [];
     let sent = 0;
     for (const ws of this.deps.manager.openClients()) {
@@ -65,6 +134,19 @@ export class Broadcaster {
     }
     for (const ws of dead) this.deps.manager.remove(ws);
     return sent;
+  }
+
+  private notifyRecovered(id: string, kind: string, instanceId: string): void {
+    if (!this.erroredIds.delete(id)) return;
+    this.broadcast({
+      type: "alert",
+      level: "info",
+      message: `${id}: recovered`,
+      service: kind,
+      kind,
+      instanceId,
+      id,
+    });
   }
 
   private sendOne(ws: WsClient, payload: Record<string, unknown>): void {
