@@ -1,34 +1,34 @@
-import { randomUUID } from 'node:crypto';
-import { DuckDBBlobValue, type DuckDBConnection } from '@duckdb/node-api';
-import type { DuckDbPool } from '../../infra/db/DuckDbPool.js';
-import { toTs } from '../../infra/db/DuckDbPool.js';
-import type { EventBus } from '../../core/eventBus.js';
-import { ValidationError } from '../../core/errors.js';
+import { randomUUID } from "node:crypto";
+import { DuckDBBlobValue, type DuckDBConnection } from "@duckdb/node-api";
+import type { DuckDbPool } from "../../infra/db/DuckDbPool.js";
+import { toTs } from "../../infra/db/DuckDbPool.js";
+import type { EventBus } from "../../core/eventBus.js";
+import { ValidationError } from "../../core/errors.js";
 import {
   KIND_META,
   ServiceInstanceSchema,
   getSecretFields,
   isServiceKind,
   type ServiceKind,
-} from '../schemas/index.js';
-import type { ServiceInstance } from '../services.js';
-import type { Encryptor } from './encryption.js';
+} from "../schemas/index.js";
+import type { ServiceInstance } from "../services.js";
+import type { Encryptor } from "./encryption.js";
 
 const INSTANCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const INSTANCE_ID_MAX_LENGTH = 64;
 
 function assertValidInstanceId(instanceId: string): void {
   if (instanceId.length === 0) {
-    throw new ValidationError('instance id is required');
+    throw new ValidationError("instance id is required");
   }
   if (instanceId.length > INSTANCE_ID_MAX_LENGTH) {
     throw new ValidationError(
-      `instance id '${instanceId}' exceeds max length ${INSTANCE_ID_MAX_LENGTH}`,
+      `instance id '${instanceId}' exceeds max length ${INSTANCE_ID_MAX_LENGTH}`
     );
   }
   if (!INSTANCE_ID_PATTERN.test(instanceId)) {
     throw new ValidationError(
-      `instance id '${instanceId}' must match ${INSTANCE_ID_PATTERN.source}`,
+      `instance id '${instanceId}' must match ${INSTANCE_ID_PATTERN.source}`
     );
   }
 }
@@ -56,14 +56,14 @@ export interface RedactedService {
 export interface AuditEntry {
   id: number;
   ts: Date;
-  action: 'create' | 'update' | 'delete' | 'import' | 'export' | 'rename';
+  action: "create" | "update" | "delete" | "import" | "export" | "rename";
   targetKind: string | null;
   targetId: string | null;
   diff: unknown;
   actor: string | null;
 }
 
-const REDACTED = '***';
+const REDACTED = "***";
 
 export interface ExportBundle {
   version: 1;
@@ -86,15 +86,20 @@ export interface ConfigStore {
   delete(id: string, actor?: string): Promise<void>;
   redact(svc: StoredService): RedactedService;
   listAudit(limit?: number): Promise<ReadonlyArray<AuditEntry>>;
-  writeAudit(entry: Omit<AuditEntry, 'id' | 'ts'> & { ts?: Date }): Promise<void>;
+  writeAudit(
+    entry: Omit<AuditEntry, "id" | "ts"> & { ts?: Date }
+  ): Promise<void>;
   exportAll(actor?: string): Promise<ExportBundle>;
   importBundle(bundle: unknown, actor?: string): Promise<ImportResult>;
 }
 
 function splitSecrets(
   kind: ServiceKind,
-  config: Record<string, unknown>,
-): { publicPart: Record<string, unknown>; secretPart: Record<string, unknown> } {
+  config: Record<string, unknown>
+): {
+  publicPart: Record<string, unknown>;
+  secretPart: Record<string, unknown>;
+} {
   const secretFields = new Set(getSecretFields(kind));
   const publicPart: Record<string, unknown> = {};
   const secretPart: Record<string, unknown> = {};
@@ -107,24 +112,28 @@ function splitSecrets(
 
 function mergeSecrets(
   publicPart: Record<string, unknown>,
-  secretPart: Record<string, unknown>,
+  secretPart: Record<string, unknown>
 ): Record<string, unknown> {
   return { ...publicPart, ...secretPart };
 }
 
-function redactConfig(kind: ServiceKind, config: Record<string, unknown>): Record<string, unknown> {
+function redactConfig(
+  kind: ServiceKind,
+  config: Record<string, unknown>
+): Record<string, unknown> {
   const secretFields = new Set(getSecretFields(kind));
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(config)) {
-    out[k] = secretFields.has(k) && v !== undefined && v !== '' ? REDACTED : v;
+    out[k] = secretFields.has(k) && v !== undefined && v !== "" ? REDACTED : v;
   }
   return out;
 }
 
 function parseJsonColumn(value: unknown): Record<string, unknown> {
   if (value == null) return {};
-  if (typeof value === 'string') return JSON.parse(value) as Record<string, unknown>;
-  if (typeof value === 'object') return value as Record<string, unknown>;
+  if (typeof value === "string")
+    return JSON.parse(value) as Record<string, unknown>;
+  if (typeof value === "object") return value as Record<string, unknown>;
   return {};
 }
 
@@ -133,60 +142,61 @@ function toBuffer(value: unknown): Buffer | null {
   if (Buffer.isBuffer(value)) return value;
   if (value instanceof Uint8Array) return Buffer.from(value);
   if (value instanceof DuckDBBlobValue) return Buffer.from(value.bytes);
-  if (typeof value === 'object' && value !== null && 'bytes' in value) {
+  if (typeof value === "object" && value !== null && "bytes" in value) {
     const bytes = (value as { bytes: unknown }).bytes;
     if (bytes instanceof Uint8Array) return Buffer.from(bytes);
   }
-  if (typeof value === 'string') return Buffer.from(value, 'base64');
+  if (typeof value === "string") return Buffer.from(value, "base64");
   return null;
 }
 
 export function createConfigStore(
   pool: DuckDbPool,
   encryptor: Encryptor,
-  bus: EventBus,
+  bus: EventBus
 ): ConfigStore {
-  async function withConn<T>(fn: (c: DuckDBConnection) => Promise<T>): Promise<T> {
-    const c = await pool.connect();
-    try {
-      return await fn(c);
-    } finally {
-      try {
-        c.closeSync();
-      } catch {
-        // ignore close errors
-      }
-    }
+  async function withConn<T>(
+    fn: (c: DuckDBConnection) => Promise<T>
+  ): Promise<T> {
+    return pool.withConnection(fn);
   }
 
-  async function rowToStored(row: Record<string, unknown>): Promise<StoredService> {
-    const kind = String(row['kind']);
+  async function rowToStored(
+    row: Record<string, unknown>
+  ): Promise<StoredService> {
+    const kind = String(row["kind"]);
     if (!isServiceKind(kind)) {
       throw new Error(`Unknown service kind in DB: ${kind}`);
     }
-    const publicPart = parseJsonColumn(row['config_public']);
-    const secretCipher = toBuffer(row['config_secret']);
+    const publicPart = parseJsonColumn(row["config_public"]);
+    const secretCipher = toBuffer(row["config_secret"]);
     const secretPart: Record<string, unknown> = secretCipher
       ? (encryptor.decryptJson(secretCipher) as Record<string, unknown>)
       : {};
-    const pollPolicy = parseJsonColumn(row['poll_policy']);
+    const pollPolicy = parseJsonColumn(row["poll_policy"]);
     const merged = {
       kind,
-      instanceId: String(row['instance_id']),
-      enabled: Boolean(row['enabled']),
+      instanceId: String(row["instance_id"]),
+      enabled: Boolean(row["enabled"]),
       pollPolicy,
-      cacheTtlMs: Number(row['cache_ttl_ms']),
-      timeoutMs: Number(row['timeout_ms']),
+      cacheTtlMs: Number(row["cache_ttl_ms"]),
+      timeoutMs: Number(row["timeout_ms"]),
       ...mergeSecrets(publicPart, secretPart),
     };
     const config = ServiceInstanceSchema.parse(merged);
-    const createdAt = row['created_at'] instanceof Date ? row['created_at'] : new Date(String(row['created_at']));
-    const updatedAt = row['updated_at'] instanceof Date ? row['updated_at'] : new Date(String(row['updated_at']));
+    const createdAt =
+      row["created_at"] instanceof Date
+        ? row["created_at"]
+        : new Date(String(row["created_at"]));
+    const updatedAt =
+      row["updated_at"] instanceof Date
+        ? row["updated_at"]
+        : new Date(String(row["updated_at"]));
     return {
-      id: String(row['id']),
+      id: String(row["id"]),
       kind,
-      instanceId: String(row['instance_id']),
-      enabled: Boolean(row['enabled']),
+      instanceId: String(row["instance_id"]),
+      enabled: Boolean(row["enabled"]),
       config,
       createdAt,
       updatedAt,
@@ -211,8 +221,19 @@ export function createConfigStore(
     publicPart: Record<string, unknown>;
     secretPart: Record<string, unknown>;
   } {
-    const { kind, instanceId, enabled, pollPolicy, cacheTtlMs, timeoutMs, ...rest } = config as Record<string, unknown> & ServiceInstance;
-    const { publicPart, secretPart } = splitSecrets(config.kind as ServiceKind, rest as Record<string, unknown>);
+    const {
+      kind,
+      instanceId,
+      enabled,
+      pollPolicy,
+      cacheTtlMs,
+      timeoutMs,
+      ...rest
+    } = config as Record<string, unknown> & ServiceInstance;
+    const { publicPart, secretPart } = splitSecrets(
+      config.kind as ServiceKind,
+      rest as Record<string, unknown>
+    );
     return {
       kind: kind as ServiceKind,
       instanceId: instanceId as string,
@@ -227,23 +248,32 @@ export function createConfigStore(
 
   async function insertAudit(
     c: DuckDBConnection,
-    action: AuditEntry['action'],
+    action: AuditEntry["action"],
     kind: string | null,
     targetId: string | null,
     diff: unknown,
-    actor: string | null,
+    actor: string | null
   ): Promise<void> {
     await c.run(
       `INSERT INTO app_config_audit (ts, action, target_kind, target_id, diff, actor)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [toTs(new Date()), action, kind, targetId, JSON.stringify(diff ?? null), actor],
+      [
+        toTs(new Date()),
+        action,
+        kind,
+        targetId,
+        JSON.stringify(diff ?? null),
+        actor,
+      ]
     );
   }
 
   return {
     async loadAll(): Promise<ReadonlyArray<StoredService>> {
       return withConn(async (c) => {
-        const result = await c.runAndReadAll(`SELECT * FROM app_service_instance ORDER BY kind, instance_id`);
+        const result = await c.runAndReadAll(
+          `SELECT * FROM app_service_instance ORDER BY kind, instance_id`
+        );
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
         const out: StoredService[] = [];
         for (const r of rows) out.push(await rowToStored(r));
@@ -253,7 +283,10 @@ export function createConfigStore(
 
     async get(id: string): Promise<StoredService | null> {
       return withConn(async (c) => {
-        const result = await c.runAndReadAll(`SELECT * FROM app_service_instance WHERE id = ?`, [id]);
+        const result = await c.runAndReadAll(
+          `SELECT * FROM app_service_instance WHERE id = ?`,
+          [id]
+        );
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
         if (rows.length === 0) return null;
         return rowToStored(rows[0]!);
@@ -263,23 +296,25 @@ export function createConfigStore(
     async create(input: unknown, actor?: string): Promise<StoredService> {
       const config = validate(input);
       const parts = extractStorable(config);
-      if (!KIND_META[parts.kind]) throw new Error(`Unsupported kind: ${parts.kind}`);
+      if (!KIND_META[parts.kind])
+        throw new Error(`Unsupported kind: ${parts.kind}`);
       assertValidInstanceId(parts.instanceId);
       const stored = await withConn(async (c): Promise<StoredService> => {
         const dup = await c.runAndReadAll(
           `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
-          [parts.kind, parts.instanceId],
+          [parts.kind, parts.instanceId]
         );
         if (dup.getRowObjects().length > 0) {
           throw new ValidationError(
-            `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`,
+            `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`
           );
         }
         const id = randomUUID();
         const now = new Date();
-        const secretCipher = Object.keys(parts.secretPart).length > 0
-          ? new DuckDBBlobValue(encryptor.encryptJson(parts.secretPart))
-          : null;
+        const secretCipher =
+          Object.keys(parts.secretPart).length > 0
+            ? new DuckDBBlobValue(encryptor.encryptJson(parts.secretPart))
+            : null;
         await c.run(
           `INSERT INTO app_service_instance
             (id, kind, instance_id, enabled, config_public, config_secret, poll_policy, cache_ttl_ms, timeout_ms, created_at, updated_at)
@@ -296,9 +331,16 @@ export function createConfigStore(
             parts.timeoutMs,
             toTs(now),
             toTs(now),
-          ],
+          ]
         );
-        await insertAudit(c, 'create', parts.kind, id, { kind: parts.kind, instanceId: parts.instanceId }, actor ?? null);
+        await insertAudit(
+          c,
+          "create",
+          parts.kind,
+          id,
+          { kind: parts.kind, instanceId: parts.instanceId },
+          actor ?? null
+        );
         return {
           id,
           kind: parts.kind,
@@ -309,17 +351,31 @@ export function createConfigStore(
           updatedAt: now,
         };
       });
-      bus.emit('config:service.created', { id: stored.id, kind: stored.kind, instanceId: stored.instanceId });
+      bus.emit("config:service.created", {
+        id: stored.id,
+        kind: stored.kind,
+        instanceId: stored.instanceId,
+      });
       return stored;
     },
 
-    async update(id: string, input: unknown, actor?: string): Promise<StoredService> {
+    async update(
+      id: string,
+      input: unknown,
+      actor?: string
+    ): Promise<StoredService> {
       const existing = await this.get(id);
       if (!existing) throw new Error(`Not found: ${id}`);
-      const mergedInput = mergeSecretsWithExisting(input, existing, getSecretFields(existing.kind));
+      const mergedInput = mergeSecretsWithExisting(
+        input,
+        existing,
+        getSecretFields(existing.kind)
+      );
       const config = validate(mergedInput);
       if (config.kind !== existing.kind) {
-        throw new Error(`Cannot change kind on update (${existing.kind} -> ${config.kind})`);
+        throw new Error(
+          `Cannot change kind on update (${existing.kind} -> ${config.kind})`
+        );
       }
       const parts = extractStorable(config);
       assertValidInstanceId(parts.instanceId);
@@ -329,18 +385,19 @@ export function createConfigStore(
           const dup = await c.runAndReadAll(
             `SELECT id FROM app_service_instance
              WHERE kind = ? AND instance_id = ? AND id <> ?`,
-            [parts.kind, parts.instanceId, id],
+            [parts.kind, parts.instanceId, id]
           );
           if (dup.getRowObjects().length > 0) {
             throw new ValidationError(
-              `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`,
+              `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`
             );
           }
         }
         const now = new Date();
-        const secretCipher = Object.keys(parts.secretPart).length > 0
-          ? new DuckDBBlobValue(encryptor.encryptJson(parts.secretPart))
-          : null;
+        const secretCipher =
+          Object.keys(parts.secretPart).length > 0
+            ? new DuckDBBlobValue(encryptor.encryptJson(parts.secretPart))
+            : null;
         await c.run(
           `UPDATE app_service_instance
              SET instance_id = ?,
@@ -362,18 +419,27 @@ export function createConfigStore(
             parts.timeoutMs,
             toTs(now),
             id,
-          ],
+          ]
         );
-        const diff = { before: redactConfig(existing.kind, existing.config as unknown as Record<string, unknown>), after: redactConfig(parts.kind, config as unknown as Record<string, unknown>) };
-        await insertAudit(c, 'update', parts.kind, id, diff, actor ?? null);
+        const diff = {
+          before: redactConfig(
+            existing.kind,
+            existing.config as unknown as Record<string, unknown>
+          ),
+          after: redactConfig(
+            parts.kind,
+            config as unknown as Record<string, unknown>
+          ),
+        };
+        await insertAudit(c, "update", parts.kind, id, diff, actor ?? null);
         if (isRename) {
           await insertAudit(
             c,
-            'rename',
+            "rename",
             parts.kind,
             id,
             { from: existing.instanceId, to: parts.instanceId },
-            actor ?? null,
+            actor ?? null
           );
         }
         return {
@@ -386,9 +452,13 @@ export function createConfigStore(
           updatedAt: now,
         };
       });
-      bus.emit('config:service.updated', { id, kind: parts.kind, instanceId: parts.instanceId });
+      bus.emit("config:service.updated", {
+        id,
+        kind: parts.kind,
+        instanceId: parts.instanceId,
+      });
       if (isRename) {
-        bus.emit('config:service.renamed', {
+        bus.emit("config:service.renamed", {
           id,
           kind: parts.kind,
           oldInstanceId: existing.instanceId,
@@ -403,9 +473,20 @@ export function createConfigStore(
       if (!existing) return;
       await withConn(async (c) => {
         await c.run(`DELETE FROM app_service_instance WHERE id = ?`, [id]);
-        await insertAudit(c, 'delete', existing.kind, id, { kind: existing.kind, instanceId: existing.instanceId }, actor ?? null);
+        await insertAudit(
+          c,
+          "delete",
+          existing.kind,
+          id,
+          { kind: existing.kind, instanceId: existing.instanceId },
+          actor ?? null
+        );
       });
-      bus.emit('config:service.deleted', { id, kind: existing.kind, instanceId: existing.instanceId });
+      bus.emit("config:service.deleted", {
+        id,
+        kind: existing.kind,
+        instanceId: existing.instanceId,
+      });
     },
 
     redact(svc: StoredService): RedactedService {
@@ -414,7 +495,10 @@ export function createConfigStore(
         kind: svc.kind,
         instanceId: svc.instanceId,
         enabled: svc.enabled,
-        config: redactConfig(svc.kind, svc.config as unknown as Record<string, unknown>),
+        config: redactConfig(
+          svc.kind,
+          svc.config as unknown as Record<string, unknown>
+        ),
         createdAt: svc.createdAt.toISOString(),
         updatedAt: svc.updatedAt.toISOString(),
       };
@@ -423,17 +507,18 @@ export function createConfigStore(
     async listAudit(limit = 100): Promise<ReadonlyArray<AuditEntry>> {
       return withConn(async (c) => {
         const result = await c.runAndReadAll(
-          `SELECT * FROM app_config_audit ORDER BY ts DESC LIMIT ${Math.floor(Math.max(1, Math.min(limit, 1000)))}`,
+          `SELECT * FROM app_config_audit ORDER BY ts DESC LIMIT ${Math.floor(Math.max(1, Math.min(limit, 1000)))}`
         );
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
         return rows.map((r) => ({
-          id: Number(r['id']),
-          ts: r['ts'] instanceof Date ? r['ts'] : new Date(String(r['ts'])),
-          action: String(r['action']) as AuditEntry['action'],
-          targetKind: r['target_kind'] == null ? null : String(r['target_kind']),
-          targetId: r['target_id'] == null ? null : String(r['target_id']),
-          diff: r['diff'] == null ? null : parseJsonColumn(r['diff']),
-          actor: r['actor'] == null ? null : String(r['actor']),
+          id: Number(r["id"]),
+          ts: r["ts"] instanceof Date ? r["ts"] : new Date(String(r["ts"])),
+          action: String(r["action"]) as AuditEntry["action"],
+          targetKind:
+            r["target_kind"] == null ? null : String(r["target_kind"]),
+          targetId: r["target_id"] == null ? null : String(r["target_id"]),
+          diff: r["diff"] == null ? null : parseJsonColumn(r["diff"]),
+          actor: r["actor"] == null ? null : String(r["actor"]),
         }));
       });
     },
@@ -446,8 +531,8 @@ export function createConfigStore(
           entry.targetKind,
           entry.targetId,
           entry.diff,
-          entry.actor ?? null,
-        ),
+          entry.actor ?? null
+        )
       );
     },
 
@@ -463,41 +548,60 @@ export function createConfigStore(
       const bundle: ExportBundle = {
         version: 1,
         exportedAt: new Date().toISOString(),
-        payload: cipher.toString('base64'),
+        payload: cipher.toString("base64"),
       };
       await withConn((c) =>
-        insertAudit(c, 'export', null, null, { count: plaintext.length }, actor ?? null),
+        insertAudit(
+          c,
+          "export",
+          null,
+          null,
+          { count: plaintext.length },
+          actor ?? null
+        )
       );
       return bundle;
     },
 
     async importBundle(bundle: unknown, actor?: string): Promise<ImportResult> {
-      if (typeof bundle !== 'object' || bundle === null) {
-        throw new Error('Invalid bundle: must be object');
+      if (typeof bundle !== "object" || bundle === null) {
+        throw new Error("Invalid bundle: must be object");
       }
       const b = bundle as Record<string, unknown>;
-      if (b['version'] !== 1) throw new Error('Invalid bundle: unsupported version');
-      if (typeof b['payload'] !== 'string') throw new Error('Invalid bundle: payload missing');
-      const cipher = Buffer.from(b['payload'] as string, 'base64');
+      if (b["version"] !== 1)
+        throw new Error("Invalid bundle: unsupported version");
+      if (typeof b["payload"] !== "string")
+        throw new Error("Invalid bundle: payload missing");
+      const cipher = Buffer.from(b["payload"] as string, "base64");
       const plaintext = encryptor.decryptJson(cipher);
-      if (!Array.isArray(plaintext)) throw new Error('Invalid bundle: decoded payload must be array');
+      if (!Array.isArray(plaintext))
+        throw new Error("Invalid bundle: decoded payload must be array");
 
       const existing = await this.loadAll();
       const byKey = new Map<string, StoredService>();
       for (const s of existing) byKey.set(`${s.kind}/${s.instanceId}`, s);
 
-      const result: ImportResult = { imported: 0, updated: 0, skipped: 0, errors: [] };
+      const result: ImportResult = {
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [],
+      };
       for (const raw of plaintext) {
-        if (typeof raw !== 'object' || raw === null) {
+        if (typeof raw !== "object" || raw === null) {
           result.skipped += 1;
           continue;
         }
-        const entry = raw as { kind?: unknown; instanceId?: unknown; config?: unknown };
-        const kind = String(entry.kind ?? '');
-        const instanceId = String(entry.instanceId ?? '');
+        const entry = raw as {
+          kind?: unknown;
+          instanceId?: unknown;
+          config?: unknown;
+        };
+        const kind = String(entry.kind ?? "");
+        const instanceId = String(entry.instanceId ?? "");
         try {
           const cfg = entry.config as Record<string, unknown> | undefined;
-          if (!cfg) throw new Error('missing config');
+          if (!cfg) throw new Error("missing config");
           const match = byKey.get(`${kind}/${instanceId}`);
           if (match) {
             await this.update(match.id, cfg, actor);
@@ -518,34 +622,55 @@ export function createConfigStore(
       await withConn((c) =>
         insertAudit(
           c,
-          'import',
+          "import",
           null,
           null,
-          { imported: result.imported, updated: result.updated, skipped: result.skipped, errors: result.errors.length },
-          actor ?? null,
-        ),
+          {
+            imported: result.imported,
+            updated: result.updated,
+            skipped: result.skipped,
+            errors: result.errors.length,
+          },
+          actor ?? null
+        )
       );
       return result;
     },
   };
 }
 
+// Base fields preserved from the existing record when an update omits them;
+// without this a partial update silently resets them to schema defaults
+// (e.g. a custom pollPolicy reverting to 10s/30s).
+const PRESERVED_BASE_FIELDS = [
+  "instanceId",
+  "enabled",
+  "pollPolicy",
+  "cacheTtlMs",
+  "timeoutMs",
+] as const;
+
 function mergeSecretsWithExisting(
   input: unknown,
   existing: StoredService,
-  secretFields: ReadonlyArray<string>,
+  secretFields: ReadonlyArray<string>
 ): unknown {
-  if (typeof input !== 'object' || input === null) return input;
+  if (typeof input !== "object" || input === null) return input;
   const clone = { ...(input as Record<string, unknown>) };
   const existingConfig = existing.config as unknown as Record<string, unknown>;
   for (const field of secretFields) {
     const incoming = clone[field];
-    if (incoming === undefined || incoming === REDACTED || incoming === '') {
+    if (incoming === undefined || incoming === REDACTED || incoming === "") {
       if (existingConfig[field] !== undefined) {
         clone[field] = existingConfig[field];
       }
     }
   }
-  if (clone['kind'] === undefined) clone['kind'] = existing.kind;
+  for (const field of PRESERVED_BASE_FIELDS) {
+    if (clone[field] === undefined && existingConfig[field] !== undefined) {
+      clone[field] = existingConfig[field];
+    }
+  }
+  if (clone["kind"] === undefined) clone["kind"] = existing.kind;
   return clone;
 }
