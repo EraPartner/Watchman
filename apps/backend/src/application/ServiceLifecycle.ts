@@ -1,10 +1,23 @@
-import type { Logger } from 'pino';
-import type { EventBus } from '../core/eventBus.js';
-import type { BaseService } from '../domain/BaseService.js';
-import type { ServiceRegistry } from '../domain/ServiceRegistry.js';
-import type { Poller } from '../infra/scheduler/poller.js';
-import type { ConfigStore, StoredService } from '../config/store/ConfigStore.js';
-import { createService, type ServiceInfra } from '../bootstrap/registerServices.js';
+import type { Logger } from "pino";
+import type { EventBus } from "../core/eventBus.js";
+import type { BaseService } from "../domain/BaseService.js";
+import type { ServiceRegistry } from "../domain/ServiceRegistry.js";
+import type { Poller } from "../infra/scheduler/poller.js";
+import type {
+  ConfigStore,
+  StoredService,
+} from "../config/store/ConfigStore.js";
+import {
+  createService,
+  type ServiceInfra,
+} from "../bootstrap/registerServices.js";
+
+export interface ServiceInstrumentation {
+  /** Wrap a freshly created service (e.g. circuit breakers, cache registration). */
+  wrap(svc: BaseService, stored: StoredService): BaseService;
+  /** Release any per-service resources registered by wrap(). */
+  release(svcId: string): void;
+}
 
 export interface ServiceLifecycleOptions {
   store: ConfigStore;
@@ -13,6 +26,8 @@ export interface ServiceLifecycleOptions {
   bus: EventBus;
   infra: ServiceInfra;
   logger: Logger;
+  instrument?: ServiceInstrumentation;
+  onStartTimeoutMs?: number;
 }
 
 export interface ServiceLifecycle {
@@ -25,7 +40,9 @@ export interface ServiceLifecycle {
   idByStoredId(storedId: string): string | undefined;
 }
 
-export function createServiceLifecycle(opts: ServiceLifecycleOptions): ServiceLifecycle {
+export function createServiceLifecycle(
+  opts: ServiceLifecycleOptions
+): ServiceLifecycle {
   const { store, registry, poller, bus, infra, logger } = opts;
   const storedIdToSvcId = new Map<string, string>();
   const unsubs: Array<() => void> = [];
@@ -38,10 +55,12 @@ export function createServiceLifecycle(opts: ServiceLifecycleOptions): ServiceLi
     const next = chain.catch(() => undefined).then(fn);
     chain = next.then(
       () => undefined,
-      () => undefined,
+      () => undefined
     );
     return next;
   };
+
+  const onStartTimeoutMs = opts.onStartTimeoutMs ?? 10_000;
 
   async function teardown(svcId: string): Promise<void> {
     poller.untrack(svcId);
@@ -50,19 +69,32 @@ export function createServiceLifecycle(opts: ServiceLifecycleOptions): ServiceLi
       try {
         await svc.onStop();
       } catch (e) {
-        logger.error({ err: e, id: svcId }, 'service onStop failed');
+        logger.error({ err: e, id: svcId }, "service onStop failed");
       }
     }
+    opts.instrument?.release(svcId);
   }
 
   async function bringUp(stored: StoredService): Promise<BaseService | null> {
     if (!stored.enabled) return null;
-    const svc = createService(stored.config, infra);
+    const created = createService(stored.config, infra);
+    const svc = opts.instrument
+      ? opts.instrument.wrap(created, stored)
+      : created;
     if (svc.onStart) {
       try {
-        await svc.onStart();
+        // onStart does real network I/O (Roon pairing, Tor ControlPort, …);
+        // bound it so one hanging service cannot stall bring-up.
+        const startP = svc.onStart();
+        startP.catch((e) =>
+          logger.error(
+            { err: e, id: svc.id },
+            "service onStart failed after timeout"
+          )
+        );
+        await Promise.race([startP, rejectAfter(onStartTimeoutMs)]);
       } catch (e) {
-        logger.error({ err: e, id: svc.id }, 'service onStart failed');
+        logger.error({ err: e, id: svc.id }, "service onStart failed");
       }
     }
     registry.register(svc);
@@ -126,7 +158,15 @@ export function createServiceLifecycle(opts: ServiceLifecycleOptions): ServiceLi
         }
         storedIdToSvcId.clear();
         const all = await store.loadAll();
-        for (const s of all) await bringUp(s);
+        // bring services up concurrently so one slow onStart doesn't delay
+        // the rest; per-service failures are contained
+        await Promise.all(
+          all.map((s) =>
+            bringUp(s).catch((e) =>
+              logger.error({ err: e, id: s.id }, "bringUp failed")
+            )
+          )
+        );
       } finally {
         poller.resume();
       }
@@ -136,25 +176,25 @@ export function createServiceLifecycle(opts: ServiceLifecycleOptions): ServiceLi
   return {
     async start(): Promise<void> {
       unsubs.push(
-        bus.on('config:service.created', (p) => {
+        bus.on("config:service.created", (p) => {
           void applyCreate(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, 'applyCreate failed'),
+            logger.error({ err: e, id: p.id }, "applyCreate failed")
           );
-        }),
+        })
       );
       unsubs.push(
-        bus.on('config:service.updated', (p) => {
+        bus.on("config:service.updated", (p) => {
           void applyUpdate(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, 'applyUpdate failed'),
+            logger.error({ err: e, id: p.id }, "applyUpdate failed")
           );
-        }),
+        })
       );
       unsubs.push(
-        bus.on('config:service.deleted', (p) => {
+        bus.on("config:service.deleted", (p) => {
           void applyDelete(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, 'applyDelete failed'),
+            logger.error({ err: e, id: p.id }, "applyDelete failed")
           );
-        }),
+        })
       );
       await reloadAll();
     },
@@ -176,4 +216,14 @@ export function createServiceLifecycle(opts: ServiceLifecycleOptions): ServiceLi
       return storedIdToSvcId.get(storedId);
     },
   };
+}
+
+function rejectAfter(ms: number): Promise<never> {
+  return new Promise((_, reject) => {
+    const t = setTimeout(
+      () => reject(new Error(`onStart timed out after ${ms}ms`)),
+      ms
+    );
+    t.unref?.();
+  });
 }
