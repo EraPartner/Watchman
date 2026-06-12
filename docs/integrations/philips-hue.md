@@ -2,7 +2,7 @@
 title: Philips Hue Bridge Integration
 type: integration
 status: active
-date: 2026-05-08
+date: 2026-06-12
 last-updated: 2026-05-08
 tags: [integration, services, backend, monitoring, two-tier, icmp, http, api-v2, cert-pinning, sha256, hue-lights, charts, x3-task]
 description: Philips Hue Bridge monitoring with Hue API v2, light metrics, optional SHA-256 certificate pinning, and time-series charts (X3 Task)
@@ -129,7 +129,7 @@ The charts show historical trends of light count and on/off distribution, useful
 ## Certificate Pinning (H1 Task)
 
 > [!info] SHA-256 Certificate Pinning
-> Protects against man-in-the-middle attacks by pinning the Hue Bridge's TLS certificate fingerprint. When `certHash` is configured, every HTTP request probes the server's certificate and verifies its SHA-256 digest before proceeding.
+> Protects against man-in-the-middle attacks by pinning the Hue Bridge's TLS certificate fingerprint. When `certHash` is configured, requests go through a pinned HTTP client whose TLS handshake verifies the peer certificate's SHA-256 digest on the very connection that carries the request (custom undici connector; self-signed bridge certs are accepted because identity is established by the pin). Mismatches destroy the socket before any data is sent and surface as `UnauthorizedError`. `probeCertFingerprint` is used only by the pairing wizard to discover the fingerprint.
 
 ### Configuration
 

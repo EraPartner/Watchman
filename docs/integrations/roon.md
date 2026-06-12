@@ -2,8 +2,23 @@
 title: Roon Integration
 type: integration
 status: active
-date: 2026-05-08
-tags: [integration, services, backend, monitoring, two-tier, icmp, tcp, roon-api, websocket, zones, now-playing, rn1, rn2]
+date: 2026-06-12
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    two-tier,
+    icmp,
+    tcp,
+    roon-api,
+    websocket,
+    zones,
+    now-playing,
+    rn1,
+    rn2,
+  ]
 description: Roon music server integration with two-tier health model (ICMP + TCP probe) + optional WebSocket API support for zone tracking and now-playing status
 aliases: [roon, roon server, music server, roon api, zones]
 ---
@@ -47,12 +62,14 @@ ROON_PING_COUNT=2                  # ICMP count (default 2)
 Located in `[[apps/backend/src/infra/roon/]]`:
 
 **Contract** (`roonClient.ts`):
+
 - `RoonZone` — Zone state: zoneId, displayName, state (playing|paused|loading|stopped), queueItemsRemaining, queueTimeRemaining, nowPlaying (oneLine, seekPosition, length), outputCount
 - `RoonHandle` — Active connection: `getZones()`, `isPaired()`, `close()`
 - `RoonConnectFn` — DI factory: `(opts: RoonConnectOptions) => Promise<RoonHandle>`
 - `RoonConnectOptions` — host, port, extensionId, displayName, onZonesChanged callback
 
 **Implementation** (`roonClientImpl.ts`):
+
 - Uses `@roonlabs/node-roon-api` (CJS via `createRequire`)
 - Wraps `init_services()` + `ws_connect()`
 - Subscribes to `com.roonlabs.transport:2` zones via `core.moo._subscribe_helper()`
@@ -60,6 +77,7 @@ Located in `[[apps/backend/src/infra/roon/]]`:
 - Exposes zone snapshot via `getZones()` and pairing status via `isPaired()`
 
 **Tests** (`roonClient.test.ts`):
+
 - 7 contract tests with `makeFakeRoon()` factory covering connection, pairing, zone updates, cleanup
 
 ### Stats with API
@@ -73,10 +91,20 @@ When API is enabled, `getStats()` includes:
     "portCount": 1,
     "pingEnabled": true,
     "configured": true,
-    "paired": true,                    // Extension pairing status
-    "zoneCount": 2,                    // Total zones
-    "activeZones": 1,                  // Currently playing
-    "nowPlaying": "Album - Track Name" // Optional, if track playing
+    "paired": true, // Extension pairing status
+    "zoneCount": 2, // Total zones
+    "activeZones": 1, // Currently playing
+    "nowPlaying": "Album - Track Name", // Optional, if track playing
+    "zones": [
+      // Per-zone detail (since 2026-06-12)
+      {
+        "name": "Living Room",
+        "state": "playing",
+        "outputs": 1,
+        "nowPlaying": "Album - Track Name"
+      },
+      { "name": "Office", "state": "stopped", "outputs": 1 }
+    ]
   },
   "at": 1714953600000
 }
@@ -98,9 +126,9 @@ When API is disabled (`useRoonApi=false`), only basic metrics returned:
 
 ## Endpoints
 
-| Endpoint               | Description                    | Auth              |
-| ---------------------- | ------------------------------ | ----------------- |
-| `GET /services/roon/health` | Health check (two-tier)        | No (rate limited) |
+| Endpoint                    | Description                     | Auth              |
+| --------------------------- | ------------------------------- | ----------------- |
+| `GET /services/roon/health` | Health check (two-tier)         | No (rate limited) |
 | `GET /services/roon/stats`  | Server info, zones, now-playing | Yes               |
 
 ## Service Implementation

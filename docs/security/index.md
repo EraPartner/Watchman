@@ -2,8 +2,17 @@
 title: Security
 type: index
 status: active
-date: 2026-04-20
-tags: [security, index, single-user, network-isolation]
+date: 2026-06-12
+tags:
+  [
+    security,
+    index,
+    single-user,
+    network-isolation,
+    cors,
+    origin-policy,
+    pino-redact,
+  ]
 description: Index of all security documentation for the Watchman project (single-user, no built-in authentication)
 aliases: [security index, security docs]
 ---
@@ -26,12 +35,12 @@ SORT file.name ASC
 
 ## Security Approach (Single-User, No Built-In Auth)
 
-| Responsibility   | Mechanism                      | Notes |
-| --- | --- | --- |
-| **Network Isolation** | Firewall / VPN / Closed LAN | Operator's responsibility; no port forwarding to internet |
-| Input Validation | Parameter sanitization and Zod validation | All user inputs validated before processing |
-| Headers          | Helmet, CSP, HSTS (via Fastify) | Standard security headers applied |
-| Logging          | Structured Pino logging with sensitive field redaction | Audit trail for configuration changes |
+| Responsibility        | Mechanism                                              | Notes                                                     |
+| --------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| **Network Isolation** | Firewall / VPN / Closed LAN                            | Operator's responsibility; no port forwarding to internet |
+| Input Validation      | Parameter sanitization and Zod validation              | All user inputs validated before processing               |
+| Headers               | Helmet, CSP, HSTS (via Fastify)                        | Standard security headers applied                         |
+| Logging               | Structured Pino logging with sensitive field redaction | Audit trail for configuration changes                     |
 
 > [!warning] No Built-In Authentication
 > Watchman **does not** have authentication, CSRF protection, rate-limiting middleware, or account lockout. Ensure network isolation before running Watchman. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
@@ -40,11 +49,11 @@ SORT file.name ASC
 
 - **Input Validation** - Zod schema validation and type checking on all endpoints
 - **Security Headers** - Helmet, CSP, HSTS, Permissions-Policy (via Fastify)
-- **CORS Restrictions** - Origin-validated CORS configured via `FRONTEND_URL`
-- **Request Timeout** - Global timeout prevents hanging requests
+- **Shared Origin Policy** - Unified allow-list (`watchman://`, loopback, `CORS_ALLOWED_ORIGINS`) enforced by both the HTTP CORS `onRequest` hook and the WebSocket upgrade gate — no split configuration. See [[apps/backend/src/transport/originPolicy.ts|originPolicy.ts]].
+- **Request-Scoped AbortController** - Every HTTP request carries a real `AbortController` created by the `requestTimeoutPlugin`. Aborted on timeout (15 s default) or client disconnect; signal threaded into service calls so network I/O is cancelled promptly.
 - **Response Size Limit** - Prevents large response DoS
 - **Command Injection Prevention** - Strict validation for SSH/SNMP/ARP commands
-- **Structured Logging** - PII redaction in Pino logs, configuration audit trail
+- **Structured Logging with Redaction** - Pino `redact` config strips `req.headers.authorization`, `req.headers.cookie`, and fields named `password`, `passwd`, `token`, `secret`, `apiKey` (and their `*.<field>` nested variants) from all log output. See [[apps/backend/src/core/logger.ts|logger.ts]].
 - **Master Key Protection** - AES-256-GCM encryption of service secrets at rest
 - **No Network Exposure** - Intended for trusted networks only (operator's responsibility)
 
@@ -55,6 +64,7 @@ See [[docs/guides/deployment|Deployment Guide]] for production security checklis
 ## Authentication (Removed as of v2.3)
 
 As of v2.3, all built-in authentication has been removed:
+
 - Deleted `useAuth` hook, AuthGuard component, and Login page
 - Removed JWT token generation, CSRF validation, and rate-limiting middleware
 - Removed `AUTH_USERNAME` and `AUTH_PASSWORD_HASH` environment variables
@@ -97,27 +107,27 @@ package "Incoming Request" as Request {
 
 package "Transport Hardening" {
     [Helmet] as H1
-    [CORS (watchman:// origin)] as C1
+    [Origin Policy (CORS onRequest hook)\nwatchman://, loopback, CORS_ALLOWED_ORIGINS] as C1
+    [Log Sampling (/meta/health)] as Log
+    [requestTimeoutPlugin\n(AbortController, 15s)] as Timeout
 }
 
 package "Request Shaping" {
-    [Request Timeout] as Timeout
-    [Response Size Limit] as SizeLimit
-    [Log Sampling] as Log
+    [Response Compress (brotli/gzip)] as Compress
+    [Error Handler (DomainError→envelope)] as Err
 }
 
 package "Application Layer" {
-    [Zod Input Validation] as Valid
-    [Error Handler] as Err
+    [Route Handler + Zod Validation] as Valid
 }
 
 Req --> H1
 H1 --> C1
-C1 --> Timeout
-Timeout --> SizeLimit
-SizeLimit --> Log
-Log --> Valid
-Valid --> Err
+C1 --> Log
+Log --> Timeout
+Timeout --> Compress
+Compress --> Err
+Err --> Valid
 @enduml
 ```
 

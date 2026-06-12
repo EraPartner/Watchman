@@ -2,7 +2,7 @@
 title: Tor Integration
 type: integration
 status: active
-date: 2026-05-07
+date: 2026-06-12
 tags: [integration, services, backend, monitoring, control-port, phase-0b, task-b3, task-b4, task-b5, task-b6, task-b7, cookie-auth, event-subscription, bandwidth, traffic-deltas, onionoo-enrichment]
 description: Tor relay and proxy integration for Watchman — ControlPort health checks, Onionoo API, two-tier health model (ICMP + protocol), cookie auth (B3), GETCONF/SIGNAL (B4), realtime BW events (B5), traffic deltas (B6), Onionoo enrichment (B7)
 aliases: [tor, tor relay, onion, tor proxy, tor control port]
@@ -161,9 +161,9 @@ To track network activity, the ControlPort path maintains cumulative traffic rea
 
 The ControlPort path is now the primary polling source. To supplement ControlPort metrics with Onionoo geolocation and consensus weight data:
 - `getStatsControlPort()` calls private `enrich(signal)` method
-- `enrich()` asynchronously calls `searchRelay()` to fetch Onionoo relay data
+- `enrich()` calls `searchRelay()` to fetch Onionoo relay data, **cached for 1 hour** — enrichment changes slowly, so the external Onionoo service is hit at most once per hour instead of every stats poll
 - Returns best-effort subset: `{ country?, consensusWeight?, asName?, consensusWeightFraction? }`
-- Errors are swallowed silently (non-fatal); if Onionoo is unavailable, ControlPort metrics are returned without enrichment
+- Errors are swallowed silently (non-fatal); on failure the last cached enrichment (if any) is served, otherwise ControlPort metrics are returned without enrichment
 - Enrichment fields are conditionally spread into the metrics object — only present when Onionoo has them:
   - `country`: Onionoo's country code or country name (optional)
   - `consensusWeight`: Tor consensus weight (optional)

@@ -2,9 +2,25 @@
 title: Homebridge Integration
 type: integration
 status: active
-date: 2026-05-07
-tags: [integration, services, backend, monitoring, two-tier, icmp, http, hb1-jwt-refactor]
-description: Homebridge smart home integration with two-tier health model (ICMP + HTTP probe), JWT token refresh via jwtClient infra primitive
+date: 2026-06-12
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    two-tier,
+    icmp,
+    http,
+    hb1-jwt-refactor,
+    telemetry,
+    cpu,
+    memory,
+    child-bridges,
+    plugins,
+    ttl-memo,
+  ]
+description: Homebridge smart home integration with two-tier health model (ICMP + HTTP probe), JWT token refresh via jwtClient, expanded Config UI X telemetry (CPU, RAM, uptime, child bridges, plugins, accessories, version), and slow-lane ttlMemo for plugin/version checks
 aliases: [homebridge, smart home, accessories, homekit]
 ---
 
@@ -54,6 +70,29 @@ HOMEBRIDGE_TIMEOUT=10000  # optional, default 10s
 - `login()` - Background authentication
 - `checkForUpdates()` - Check for Homebridge updates
 
+## Stats Telemetry (Config UI X API)
+
+`getStats()` now fetches a rich set of system and Homebridge metrics from the Config UI X REST API:
+
+| Endpoint                               | Metrics                                 | Notes                                                                                                       |
+| -------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `/api/status/cpu`                      | `cpuLoad`, `cpuTemp`                    | CPU load average and temperature                                                                            |
+| `/api/status/ram`                      | `memTotalBytes`, `memUsedBytes`         | Host RAM totals                                                                                             |
+| `/api/status/uptime`                   | `hostUptime`, `processUptime`           | Host and Homebridge process uptime (seconds)                                                                |
+| `/api/status/homebridge`               | `status`                                | Bridge status: `up`, `pending`, or `down`                                                                   |
+| `/api/status/homebridge/child-bridges` | `childBridgeCount`, `childBridgesUp`    | Count of child bridges and how many are running                                                             |
+| `/api/plugins`                         | `pluginCount`, `pluginUpdatesAvailable` | **Slow lane (15-min ttlMemo)** — plugin list and update count; slow because the UI server checks npm        |
+| `/api/accessories`                     | `accessoryCount`                        | `null` unless Homebridge is running in insecure mode                                                        |
+| Version endpoint                       | `latestVersion`, `updateAvailable`      | **Slow lane (15-min ttlMemo)** — latest release from npm; `updateAvailable` is `true` when current < latest |
+
+### Status Tone
+
+The frontend renderer warns when `status !== 'up'` or when any child bridges are down (`childBridgesUp < childBridgeCount`). The detail view groups metrics into **Bridge** and **Host** sections.
+
+### Slow-Lane Endpoints (ttlMemo)
+
+Plugin list and version checks are rate-limited to **once per 15 minutes** via `core/ttlMemo.ts` (see [[docs/reference/code-patterns#ttlmemo--slow-lane-memoization|Code Patterns — ttlMemo]]). Cached results are served between TTL refreshes; a real npm check only fires when the cache expires.
+
 ## Special Features
 
 - **Background Login**: Homebridge performs background login on initialization
@@ -97,3 +136,5 @@ Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/api/index|API Documentation]]
 - [[docs/api/services-health|Services Health API]]
+- [[docs/reference/code-patterns#ttlmemo--slow-lane-memoization|Code Patterns — ttlMemo]]
+- [[docs/performance/caching-strategies|Caching Strategies]]

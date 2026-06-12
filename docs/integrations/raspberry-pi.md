@@ -2,8 +2,27 @@
 title: Raspberry Pi Integration
 type: integration
 status: active
-date: 2026-05-08
-tags: [integration, services, backend, monitoring, two-tier, icmp, ssh, ssh-pool, vcgencmd, throttled, pi1, x3-renderer, frontend, bento, charts, voltage, fmtVolt]
+date: 2026-06-12
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    two-tier,
+    icmp,
+    ssh,
+    ssh-pool,
+    vcgencmd,
+    throttled,
+    pi1,
+    x3-renderer,
+    frontend,
+    bento,
+    charts,
+    voltage,
+    fmtVolt,
+  ]
 description: Raspberry Pi device integration with direct SSH via persistent connection pool, vcgencmd metrics, throttling detection, /proc stats. Two-tier health model (ICMP host + service tier). Legacy Mac Mini relay fallback. Frontend bento renderer with voltage chart, throttle-aware status tone, and expanded detail sections.
 aliases: [raspberry pi, rpi, pi device]
 ---
@@ -55,6 +74,7 @@ All commands execute in parallel with `Promise.allSettled`. If all fail, the fir
 ### Throttling Detection
 
 The `throttled` field (from `vcgencmd get_throttled`) is a decimal value where:
+
 - **0** = No throttling or undervoltage
 - **Non-zero** = Throttling or undervoltage event active
 
@@ -105,30 +125,44 @@ When direct SSH is used (PI1):
 }
 ```
 
-| Metric             | Type     | Description |
-| ------------------ | -------- | --- |
-| `piModel`          | string   | Pi model derived from hardware revision |
-| `hwRevision`       | number   | Hardware revision code |
-| `cpuTemp`          | number   | CPU temperature (°C) |
-| `clockRate`        | number   | ARM clock speed (MHz) |
-| `voltage`          | number   | Core voltage (V) |
-| **`throttled`**    | number   | Throttling status (0 = healthy, non-zero = throttling/undervoltage) |
-| `load`             | number   | 1-minute load average |
-| `memory`           | string   | Total memory formatted (e.g., "3.8 GB") |
-| `uptime`           | number   | Uptime in seconds |
-| `prettyName`       | string   | OS name (from /etc/os-release) |
-| `processor`        | string   | CPU hardware ID (from /proc/cpuinfo) |
-| `isRpi`            | boolean  | True if running on Raspberry Pi |
-| `rpiCliAvailable`  | boolean  | True if stats fetched (direct SSH or relay succeeded) |
-| `pigpioVersion`    | number   | pigpio daemon version (if available) |
+| Metric            | Type    | Description                                                         |
+| ----------------- | ------- | ------------------------------------------------------------------- |
+| `piModel`         | string  | Pi model derived from hardware revision                             |
+| `hwRevision`      | number  | Hardware revision code                                              |
+| `cpuTemp`         | number  | CPU temperature (°C)                                                |
+| `clockRate`       | number  | ARM clock speed (MHz)                                               |
+| `voltage`         | number  | Core voltage (V)                                                    |
+| **`throttled`**   | number  | Throttling status (0 = healthy, non-zero = throttling/undervoltage) |
+| `load`            | number  | 1-minute load average                                               |
+| `memory`          | string  | Total memory formatted (e.g., "3.8 GB")                             |
+| `uptime`          | number  | Uptime in seconds                                                   |
+| `prettyName`      | string  | OS name (from /etc/os-release)                                      |
+| `processor`       | string  | CPU hardware ID (from /proc/cpuinfo)                                |
+| `isRpi`           | boolean | True if running on Raspberry Pi                                     |
+| `rpiCliAvailable` | boolean | True if stats fetched (direct SSH or relay succeeded)               |
+| `pigpioVersion`   | number  | pigpio daemon version (if available)                                |
 
 ## Endpoints
 
-| Endpoint                | Description                                | Query Params |
-| ----------------------- | ------------------------------------------ | ------------ |
-| `GET /services/raspberryPi/health` | Health check (two-tier) | `instance` |
-| `GET /services/raspberryPi/stats`  | Stats (vcgencmd, /proc, pigpio)           | `instance` |
-| `GET /services/raspberryPi/history` | Time-series history for any metric        | `instance`, `metric`, `from`, `to`, `resolution`, `agg`, `limit` |
+| Endpoint                             | Description                        | Query Params                                                     |
+| ------------------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
+| `GET /services/raspberryPi/health`   | Health check (two-tier)            | `instance`                                                       |
+| `GET /services/raspberryPi/stats`    | Stats (vcgencmd, /proc, pigpio)    | `instance`                                                       |
+| `POST /services/raspberryPi/control` | GPIO control (see below)           | `instance`; body `{ "action": "gpio:..." }`                      |
+| `GET /services/raspberryPi/history`  | Time-series history for any metric | `instance`, `metric`, `from`, `to`, `resolution`, `agg`, `limit` |
+
+## GPIO Control
+
+`RaspberryPiService` implements the `Controllable` interface via [[apps/backend/src/domain/services/raspberryPi/GpioController.ts|GpioController]]. Action grammar for `POST /services/raspberryPi/control`:
+
+- `gpio:write:<pin>:<0|1>` — set an output pin level (pins 0–53 validated)
+- `gpio:mode:<pin>:<input|output>` — switch a pin's mode
+
+Invalid pins/levels/modes return `400 VALIDATION`; pigpiod connection failures return `503 UNAVAILABLE`.
+
+## Shared pigpiod Connection
+
+Health checks, stats collection and GPIO control share one persistent pigpiod TCP connection per instance ([[apps/backend/src/infra/gpio/sharedPigpioClient.ts|sharedPigpioClient]]) instead of opening/tearing down two connections per poll cycle. Liveness is verified with a `getCurrentTick()` round-trip; a failed command invalidates the connection (next call reconnects), and the connection is closed on service teardown (`onStop`).
 
 ## SSH Connection Pool (I4)
 
@@ -158,6 +192,7 @@ Key helper: [[apps/backend/src/domain/services/raspberryPi/PiStatsCollector.ts|P
 The Raspberry Pi service is rendered in the bento dashboard via `raspberryPiRenderer` in [[apps/frontend/src/services/renderers/raspberryPi.ts|raspberryPi.ts]]:
 
 ### Summary Row
+
 - **Temperature** (fmtTempC) — CPU temperature in °C
 - **Clock** (fmtNumber) — ARM clock rate in MHz
 - **Uptime** (fmtUptime) — System uptime in human-readable format
@@ -165,6 +200,7 @@ The Raspberry Pi service is rendered in the bento dashboard via `raspberryPiRend
 ### Detail Sections
 
 **CPU Section:**
+
 - Temperature (°C)
 - Clock rate (MHz)
 - Core voltage (V, via `fmtVolt` formatter added in X3)
@@ -172,9 +208,11 @@ The Raspberry Pi service is rendered in the bento dashboard via `raspberryPiRend
 - Load avg 1-minute (CPU load)
 
 **Memory Section:**
+
 - Total RAM (raw formatted string, e.g., "3.8 GB")
 
 **Host Section:**
+
 - Model — Pi model derived from hardware revision
 - OS — Operating system name (prettyName from /etc/os-release)
 - Processor — CPU hardware identifier
@@ -187,6 +225,7 @@ The Raspberry Pi service is rendered in the bento dashboard via `raspberryPiRend
 ### Charts (PI1 + X3)
 
 Four time-series charts enabled:
+
 1. **CPU temp** — `cpuTemp` metric (fmtTempC)
 2. **Clock rate** — `clockRate` metric (fmtNumber)
 3. **Core voltage** — `voltage` metric (fmtVolt, new in X3)
@@ -195,6 +234,7 @@ Four time-series charts enabled:
 ### Status Tone (X3)
 
 Health status determined by `tone()` function:
+
 - **`crit`** — Service offline OR CPU temp ≥ 80°C
 - **`warn`** — Health warning state OR CPU temp ≥ 70°C OR throttling active (`throttled !== 0`)
 - **`ok`** — All conditions nominal
@@ -207,10 +247,10 @@ Added in X3 to [[apps/frontend/src/services/renderers/formatters.ts|formatters.t
 
 ```typescript
 export const fmtVolt: MetricFormatter = (v) => {
-  const n = toNumber(v)
-  if (n === undefined) return '—'
-  return `${n.toFixed(4)}V`
-}
+  const n = toNumber(v);
+  if (n === undefined) return "—";
+  return `${n.toFixed(4)}V`;
+};
 ```
 
 Formats voltage values to 4 decimal places with the "V" unit suffix.

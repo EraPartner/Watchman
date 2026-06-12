@@ -2,9 +2,23 @@
 title: Synology Integration
 type: integration
 status: active
-date: 2026-05-08
-tags: [integration, services, backend, monitoring, two-tier, icmp, snmp, dsm-api, extended-stats]
-description: Synology NAS integration with dual SNMP + DSM API, two-tier health model, and multi-instance support
+date: 2026-06-12
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    two-tier,
+    icmp,
+    snmp,
+    dsm-api,
+    extended-stats,
+    utilization,
+    multi-volume,
+    dsm-only-mode,
+  ]
+description: Synology NAS integration with dual SNMP + DSM API, two-tier health model, multi-instance support, DSM SYNO.Core.System.Utilization metrics, multi-volume disk totals, and DSM-only stats mode when SNMP creds are absent
 aliases: [synology, nas, synology nas, dsm, synology dsm]
 ---
 
@@ -20,7 +34,7 @@ aliases: [synology, nas, synology nas, dsm, synology dsm]
 ### Key Behaviours
 
 - **Routing**: `SYNO.API.Auth` calls → `/webapi/auth.cgi`; all other API calls → `/webapi/entry.cgi`
-- **Session injection**: Injects `_sid=<sid>` as query param on every non-auth request
+- **Session injection**: Sends `_sid=<sid>` (and all other params, including `passwd` at login) in a POST form body — never in the URL, which proxies/APM tooling routinely log
 - **Auto-login**: Performs login automatically on first call when no `initialSid` configured
 - **Session recovery**: On DSM error codes 105/106/107 (session expired/not found/user not found):
   - Re-logs in once
@@ -34,16 +48,16 @@ aliases: [synology, nas, synology nas, dsm, synology dsm]
 
 ```typescript
 interface DsmClientConfig {
-  baseUrl: string
-  account: string
-  password: string
-  timeoutMs: number
-  initialSid?: string  // Pre-existing session ID; omit to login on first call
+  baseUrl: string;
+  account: string;
+  password: string;
+  timeoutMs: number;
+  initialSid?: string; // Pre-existing session ID; omit to login on first call
 }
 
 interface DsmClientDeps {
-  http: HttpClient
-  config: DsmClientConfig
+  http: HttpClient;
+  config: DsmClientConfig;
 }
 
 interface DsmClient {
@@ -53,7 +67,7 @@ interface DsmClient {
     method: string,
     params?: Record<string, string>,
     signal?: AbortSignal
-  ): Promise<T>
+  ): Promise<T>;
 }
 ```
 
@@ -72,13 +86,18 @@ interface DsmClient {
 - **Concurrency**: Both SNMP and all DSM calls run in parallel via `Promise.allSettled`
 - **Graceful degradation**: If DSM calls fail, SNMP metrics still returned; missing DSM fields omitted from response
 
+### Network Counters
+
+- `networkRx`/`networkTx` prefer the 64-bit ifXTable HC counters (`1.3.6.1.2.1.31.1.1.1.6.1` / `.10.1`, ifIndex=1) fetched in a separate SNMP get; the 32-bit `1.3.6.1.2.1.2.2.1.10.1`/`.16.1` values are a fallback when ifXTable is unavailable (32-bit counters wrap at 4 GiB).
+- `networkRxBps`/`networkTxBps` are byte rates derived from counter deltas between polls; omitted on the first poll and when a counter decreases (wrap/reboot).
+
 ### DSM API Calls
 
-| API                      | Method     | Field Keys                                        |
-|--------------------------|------------|---------------------------------------------------|
-| `SYNO.DSM.Info`          | `get`      | `dsmModel`, `dsmVersion`, `dsmTemperature`       |
-| `SYNO.Core.System.Status`| `get`      | `cpuFanStatus`, `sysFanStatus`, `powerStatus`    |
-| `SYNO.Storage.CGI.Storage`| `load_info`| `volumeCount`, `volumeDegradedCount`, `diskCount`, `diskDegradedCount` |
+| API                        | Method      | Field Keys                                                             |
+| -------------------------- | ----------- | ---------------------------------------------------------------------- |
+| `SYNO.DSM.Info`            | `get`       | `dsmModel`, `dsmVersion`, `dsmTemperature`                             |
+| `SYNO.Core.System.Status`  | `get`       | `cpuFanStatus`, `sysFanStatus`, `powerStatus`                          |
+| `SYNO.Storage.CGI.Storage` | `load_info` | `volumeCount`, `volumeDegradedCount`, `diskCount`, `diskDegradedCount` |
 
 All new fields are **optional** in the stats response and included only when DSM is configured and calls succeed.
 

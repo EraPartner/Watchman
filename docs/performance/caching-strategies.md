@@ -2,30 +2,36 @@
 title: Caching Strategies
 type: performance
 status: active
-date: 2026-04-19
-tags: [performance, caching, backend]
-description: In-memory response caching strategies with TTL for the Watchman backend
-aliases: [caching, cache, response cache, ttl]
+date: 2026-06-12
+tags: [performance, caching, backend, swr, circuit-breaker]
+description: SWR stats caching, poller-published health snapshots, and circuit breakers in the Watchman backend read path
+aliases: [caching, cache, response cache, ttl, swr cache]
 ---
 
 # Caching Strategies
 
 > [!abstract] Overview
-> Watchman uses in-memory LRU caching with stale-while-revalidate (SWR) semantics to reduce load on external services and improve response times.
+> Watchman serves HTTP reads from poller-published state: a latest-health snapshot map plus per-instance stale-while-revalidate (SWR) stats caches honoring each instance's `cacheTtlMs`. Outbound probes are additionally guarded by per-instance circuit breakers.
 
-## Implementation
+## Read Path (wired 2026-06-12)
 
-[[apps/backend/src/infra/cache/swr.ts|swr.ts]]
+[[apps/backend/src/application/SnapshotCache.ts|SnapshotCache.ts]] sits between the HTTP layer and live services:
 
-Uses `lru-cache` for in-memory caching with SWR pattern: serve stale data immediately while revalidating in the background.
+- **Health** — the latest poller-published health result per service is kept in memory (fed from `service.health.updated` and health-scope `service.error` bus events). `GET /services` and `GET /services/{kind}/health` serve this state; a live probe happens only before the first poll completes (e.g. right after startup or registration). Stats-scope errors do not overwrite health state.
+- **Stats** — each service instance gets its own SWR cache (`createSwrCache`) with `ttlMs = staleMs = cacheTtlMs` (the per-instance "Advanced" setting, default 10 000 ms). The cache is updated from `service.stats.updated` poller publishes and read through by `GET /services/{kind}/stats`, so dashboard reads do not trigger extra probes while fresh.
+- **Lifecycle** — caches are registered on service bring-up and dropped on teardown via the `ServiceLifecycle` `instrument` hook; per-cache stats appear in `GET /metrics` under `cache["{kind}:{instanceId}:stats"]`.
 
-## SWR Cache Policy
+## SWR Cache Implementation
 
-| Parameter   | Default | Description                                      |
-| ----------- | ------- | ------------------------------------------------ |
-| `ttlMs`     | 30000   | Fresh data TTL (milliseconds)                   |
-| `staleMs`   | 30000   | Stale window after TTL expires                  |
-| `max`       | 500     | Max cache entries (LRU eviction when exceeded)  |
+[[apps/backend/src/infra/cache/swr.ts|swr.ts]] — `lru-cache` based, SWR pattern: serve stale data immediately while revalidating in the background.
+
+| Parameter | Default | Description                                    |
+| --------- | ------- | ---------------------------------------------- |
+| `ttlMs`   | 30000   | Fresh data TTL (milliseconds)                  |
+| `staleMs` | 30000   | Stale window after TTL expires                 |
+| `max`     | 500     | Max cache entries (LRU eviction when exceeded) |
+
+(For the wired per-instance stats caches, `ttlMs` and `staleMs` are both set to the instance's `cacheTtlMs`.)
 
 ### SWR Behavior
 
@@ -33,19 +39,20 @@ Uses `lru-cache` for in-memory caching with SWR pattern: serve stale data immedi
 - **Stale**: Return cached value AND revalidate in background; revalidation errors emit `cache:revalidate.failed` event (stale counter)
 - **Expired**: Fetch fresh value; block on result (miss counter)
 
+## Circuit Breakers
+
+[[apps/backend/src/infra/circuitBreaker/guardedService.ts|guardedService.ts]] wraps every service instance's polled calls in two breakers — `{id}:health` and `{id}:stats` (separate, so a stats-only failure such as bad credentials cannot blind the health check). Policy: opens after 5 consecutive failures, half-opens after 60 s, one trial call. While open, calls return a `CIRCUIT_OPEN` (503) result without touching the network, so a hard-down service is probed at the breaker's reset cadence instead of full poll rate. Breaker state is visible in `GET /metrics` `breakers`.
+
 ## EventBus Integration
 
 `createSwrCache` accepts an optional `EventBus` parameter. When provided, revalidation failures (stale-branch fetches) emit the `cache:revalidate.failed` event:
 
 ```typescript
 {
-  key: string;      // Cache key
-  error: string;    // Error message (from Error.message or String(err))
+  key: string; // Cache key
+  error: string; // Error message (from Error.message or String(err))
 }
 ```
-
-> [!note]
-> No call sites currently use this integration, but it is available for future observability or remediation logic.
 
 ## Cache Statistics
 
@@ -53,118 +60,74 @@ Uses `lru-cache` for in-memory caching with SWR pattern: serve stale data immedi
 
 ```typescript
 {
-  hits: number;           // Fresh requests served from cache
-  misses: number;         // Requests that missed and fetched new data
-  stale: number;          // Requests served stale data with background revalidation
-  revalidations: number;  // Background revalidation attempts from stale state
+  hits: number; // Fresh requests served from cache
+  misses: number; // Requests that missed and fetched new data
+  stale: number; // Requests served stale data with background revalidation
+  revalidations: number; // Background revalidation attempts from stale state
 }
 ```
+
+`GET /metrics` exposes `{ size, hits, misses }` per registered cache.
 
 ## Considerations
 
 - In-memory cache is per-process (not shared across instances)
 - LRU eviction is bounded by `max` (default 500 entries)
-- For multi-instance deployments, consider shared cache (e.g., Redis) to avoid stale divergence
 - Stale-branch revalidation failures do not block the caller; the error is emitted to the EventBus
+- A service's cache and breakers are released on config delete/disable (no stale `/metrics` entries)
 
 ## PlantUML Diagrams
 
-### Cache Flow
+### Read Path Flow
 
 ```plantuml
 @startuml
 !theme plain
 
 actor "Frontend" as FE
-participant "Backend" as BE
-participant "Cache Middleware" as Cache
-participant "Service" as Svc
+participant "HTTP Route" as BE
+participant "SnapshotCache" as Cache
+participant "Poller" as Poller
+participant "Service (breaker-guarded)" as Svc
 
-FE -> BE : GET /api/{service}/status
+Poller -> Svc : checkHealth()/getStats() (background, per pollPolicy)
+Svc --> Poller : Result
+Poller -> Cache : bus: service.health.updated / service.stats.updated
 
-BE -> Cache : Check cache key
+FE -> BE : GET /services or /services/{kind}/stats
+BE -> Cache : latestHealth(id) / stats(id)
 
-alt Cache Hit
-    Cache --> BE : Return cached response
-    BE --> FE : JSON Response\n(x-cache: hit)
-else Cache Miss
-    BE -> Svc : Fetch from service
-    Svc --> BE : Service response
-    BE -> Cache : Store in cache (TTL)
-    Cache --> BE : Success
-    BE --> FE : JSON Response\n(x-cache: miss)
+alt Snapshot present / stats fresh
+    Cache --> BE : Cached snapshot
+else No snapshot yet (pre-first-poll) or stats expired
+    Cache -> Svc : live call (through circuit breaker)
+    Svc --> Cache : Result (stored)
+    Cache --> BE : Result
 end
+BE --> FE : { data: ... }
 @enduml
 ```
 
-### Cache TTL Expiration
+### Per-Instance Stats Cache Lifecycle
 
 ```plantuml
 @startuml
 !theme plain
 
-state "Cache Entry Lifecycle" as CLC {
-
-    [*] --> Fresh : Request at t=0
-
-    state Fresh {
-        [*] --> Active : Entry created
-        Active : Serving requests
-    }
-
-    state "TTL Timer" {
-        [*] --> T30s : Health: 30s countdown
-        T30s --> Expired : t > 30s
-
-        [*] --> T60s : Stats: 60s countdown
-        T60s --> Expired : t > 60s
-    }
-
-    Active --> T30s : Health request
-    Active --> T60s : Stats request
-
-    T30s --> Fresh : Request before expiry\n(reset timer)
-    T60s --> Fresh : Request before expiry\n(reset timer)
-
-    Expired --> [*] : Entry evicted
+state "Stats Cache Entry" as E {
+    [*] --> Fresh : poller publish or live fetch
+    Fresh : served on reads (hit)
+    Fresh --> Stale : t > cacheTtlMs
+    Stale : served + background revalidate
+    Stale --> Fresh : revalidation succeeds\nor poller publishes
+    Stale --> Expired : t > 2 × cacheTtlMs
+    Expired --> Fresh : blocking fetch on next read
 }
 
-note right of Expired
-  Next request causes
-  fresh service fetch
+note right of E
+  Cache registered on service bring-up,
+  released on teardown (instrument hook)
 end note
-@enduml
-```
-
-### Cache Invalidation Events
-
-```plantuml
-@startuml
-!theme plain
-
-participant "Control Handler" as Handler
-participant "Cache" as Cache
-participant "Service" as Svc
-
-alt AdGuard Protection Toggle
-    Handler -> Svc : POST /api/adguard/protection
-    Svc --> Handler : Success
-    Handler -> Cache : clearCache('health')
-    Handler -> Cache : clearCache('stats')
-
-else Manual Clear
-    Handler -> BE : POST /api/cache/clear
-    BE -> Handler : Parse type parameter
-    Handler -> Cache : clearCache(type or all)
-
-else Time-Based Expiry
-    note over Cache
-      Entry TTL expires
-    end note
-    Cache -> Cache : Auto-evict
-end
-
-Cache --> Cache : All related\nentries cleared
 @enduml
 ```
 
@@ -172,3 +135,4 @@ Cache --> Cache : All related\nentries cleared
 
 - [[docs/performance/index|Performance]]
 - [[docs/performance/request-optimization|Request Optimization]]
+- [[docs/adr/025-trusted-network-security-model-and-audit-remediation|ADR-025]]

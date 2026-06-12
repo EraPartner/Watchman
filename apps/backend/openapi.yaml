@@ -2,15 +2,29 @@ openapi: 3.1.0
 info:
   title: Watchman Backend API
   description: |
-    Self-hosted service monitoring dashboard backend (TypeScript + Fastify 4).
-    **Single-user design**: No authentication required. Intended for trusted networks only.
-    All endpoints return JSON. Envelope: `{ data: ... }` on success,
-    `{ error: { code, message } }` on failure. Polling is server-owned;
-    HTTP reads serve cached/poller-published state.
+    Self-hosted service monitoring dashboard backend (TypeScript + Fastify 5).
+    **Single-user design**: No authentication required (see ADR-017/ADR-025).
+    Intended for trusted networks only. All endpoints return JSON. Envelope:
+    `{ data: ... }` on success, `{ error: { code, message } }` on failure.
+    Polling is server-owned; HTTP reads serve cached/poller-published state
+    (latest health snapshots plus a per-instance stats cache honoring
+    `cacheTtlMs`).
 
-    **CORS**: Requests from `watchman://` origin (Electron desktop app) receive permissive CORS headers.
-    Web deployments use standard CORS policies configured via `FRONTEND_URL` env var.
-  version: 2.1.0
+    **CORS**: `watchman://` (Electron desktop) and loopback dev origins are
+    always allowed; additional web origins are configured via the
+    `CORS_ALLOWED_ORIGINS` env var (comma-separated). Preflights from
+    disallowed origins are rejected with 403.
+
+    **WebSocket** (`GET /ws`, not expressible in OpenAPI): browser-compatible
+    upgrade gated by the same origin policy; no token is required (an optional
+    `?token=` or `Authorization: Bearer` is accepted for future use). Server
+    frames are JSON objects with a `type` field:
+    `connection` (welcome, carries `serverVersion`),
+    `service_update` (`scope: health|stats`, `kind`, `instanceId`, `snapshot?`),
+    `service_config_changed` (`kind`, `instanceId`, `action: created|updated|deleted`),
+    `alert` (`level: info|warning|error`, `message`, `service`/`kind`/`instanceId`;
+    emitted on a service's first poll failure and on recovery).
+  version: 2.2.0
   license:
     name: AGPL-3.0-only
 servers:
@@ -29,7 +43,7 @@ paths:
       tags: [meta]
       summary: Liveness probe
       responses:
-        '200':
+        "200":
           description: Service is alive
           content:
             application/json:
@@ -39,14 +53,15 @@ paths:
                 properties:
                   ok: { type: boolean }
                   service: { type: string, example: watchman-backend-v2 }
-                  uptime: { type: number, description: Seconds since process start }
+                  uptime:
+                    { type: number, description: Seconds since process start }
                   timestamp: { type: string, format: date-time }
   /meta/version:
     get:
       tags: [meta]
       summary: Version info
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -61,7 +76,7 @@ paths:
       tags: [services]
       summary: Aggregated health for all registered services
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -71,16 +86,16 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/AggregatedEntry' }
+                    items: { $ref: "#/components/schemas/AggregatedEntry" }
   /services/{kind}/health:
     get:
       tags: [services]
       summary: Health snapshot for a specific service instance
       parameters:
-        - $ref: '#/components/parameters/Kind'
-        - $ref: '#/components/parameters/Instance'
+        - $ref: "#/components/parameters/Kind"
+        - $ref: "#/components/parameters/Instance"
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -88,18 +103,18 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/HealthSnapshot' }
-        '404': { $ref: '#/components/responses/DomainError' }
-        '503': { $ref: '#/components/responses/DomainError' }
+                  data: { $ref: "#/components/schemas/HealthSnapshot" }
+        "404": { $ref: "#/components/responses/DomainError" }
+        "503": { $ref: "#/components/responses/DomainError" }
   /services/{kind}/stats:
     get:
       tags: [services]
       summary: Stats snapshot for a specific service instance
       parameters:
-        - $ref: '#/components/parameters/Kind'
-        - $ref: '#/components/parameters/Instance'
+        - $ref: "#/components/parameters/Kind"
+        - $ref: "#/components/parameters/Instance"
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -107,16 +122,16 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/StatsSnapshot' }
-        '404': { $ref: '#/components/responses/DomainError' }
-        '503': { $ref: '#/components/responses/DomainError' }
+                  data: { $ref: "#/components/schemas/StatsSnapshot" }
+        "404": { $ref: "#/components/responses/DomainError" }
+        "503": { $ref: "#/components/responses/DomainError" }
   /services/{kind}/control:
     post:
       tags: [services]
       summary: Issue a control action to a service instance
       parameters:
-        - $ref: '#/components/parameters/Kind'
-        - $ref: '#/components/parameters/Instance'
+        - $ref: "#/components/parameters/Kind"
+        - $ref: "#/components/parameters/Instance"
       requestBody:
         required: true
         content:
@@ -129,7 +144,7 @@ paths:
                   type: string
                   example: restart
       responses:
-        '200':
+        "200":
           description: Action accepted
           content:
             application/json:
@@ -142,15 +157,15 @@ paths:
                     required: [ok]
                     properties:
                       ok: { type: boolean }
-        '400': { $ref: '#/components/responses/DomainError' }
-        '404': { $ref: '#/components/responses/DomainError' }
-        '503': { $ref: '#/components/responses/DomainError' }
+        "400": { $ref: "#/components/responses/DomainError" }
+        "404": { $ref: "#/components/responses/DomainError" }
+        "503": { $ref: "#/components/responses/DomainError" }
   /instances:
     get:
       tags: [instances]
       summary: All registered service instances
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -160,15 +175,15 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/InstanceInfo' }
+                    items: { $ref: "#/components/schemas/InstanceInfo" }
   /instances/{kind}:
     get:
       tags: [instances]
       summary: Instances for a given service kind
       parameters:
-        - $ref: '#/components/parameters/Kind'
+        - $ref: "#/components/parameters/Kind"
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -178,13 +193,13 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/InstanceInfo' }
+                    items: { $ref: "#/components/schemas/InstanceInfo" }
   /kinds:
     get:
       tags: [instances]
       summary: All registered service kinds
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -200,17 +215,17 @@ paths:
       tags: [metrics]
       summary: Operational metrics snapshot (breakers, poller, cache, process)
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MetricsSnapshot' }
+              schema: { $ref: "#/components/schemas/MetricsSnapshot" }
   /setup/status:
     get:
       tags: [setup]
       summary: Setup mode status (needs wizard?)
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -218,7 +233,7 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/SetupStatus' }
+                  data: { $ref: "#/components/schemas/SetupStatus" }
   /setup/philips-bridge/pair:
     post:
       tags: [setup]
@@ -244,7 +259,7 @@ paths:
                   default: 10000
                   description: Request timeout in milliseconds
       responses:
-        '200':
+        "200":
           description: Pairing successful
           content:
             application/json:
@@ -262,24 +277,24 @@ paths:
                       certHash:
                         type: string
                         description: SHA-256 fingerprint of the bridge TLS certificate (hex)
-        '400':
+        "400":
           description: Missing host or link button not pressed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
+                $ref: "#/components/schemas/DomainError"
+        "503":
           description: Bridge unreachable or connection error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: "#/components/schemas/DomainError"
   /config/kinds:
     get:
       tags: [config]
       summary: Registered service kinds with Zod-derived field metadata for form rendering
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -289,13 +304,13 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/KindSchema' }
+                    items: { $ref: "#/components/schemas/KindSchema" }
   /config/services:
     get:
       tags: [config]
       summary: All configured service instances (secrets redacted)
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -305,7 +320,7 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/ServiceInstance' }
+                    items: { $ref: "#/components/schemas/ServiceInstance" }
     post:
       tags: [config]
       summary: Create a service instance
@@ -313,9 +328,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ServiceInstanceInput' }
+            schema: { $ref: "#/components/schemas/ServiceInstanceInput" }
       responses:
-        '201':
+        "201":
           description: Created
           content:
             application/json:
@@ -323,9 +338,9 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/ServiceInstance' }
-        '400': { $ref: '#/components/responses/DomainError' }
-        '409': { $ref: '#/components/responses/DomainError' }
+                  data: { $ref: "#/components/schemas/ServiceInstance" }
+        "400": { $ref: "#/components/responses/DomainError" }
+        "409": { $ref: "#/components/responses/DomainError" }
   /config/services/{id}:
     parameters:
       - name: id
@@ -336,7 +351,7 @@ paths:
       tags: [config]
       summary: Single service instance (secrets redacted)
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -344,8 +359,8 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/ServiceInstance' }
-        '404': { $ref: '#/components/responses/DomainError' }
+                  data: { $ref: "#/components/schemas/ServiceInstance" }
+        "404": { $ref: "#/components/responses/DomainError" }
     put:
       tags: [config]
       summary: |
@@ -359,9 +374,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ServiceInstanceInput' }
+            schema: { $ref: "#/components/schemas/ServiceInstanceInput" }
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -369,15 +384,15 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/ServiceInstance' }
-        '400': { $ref: '#/components/responses/DomainError' }
-        '404': { $ref: '#/components/responses/DomainError' }
+                  data: { $ref: "#/components/schemas/ServiceInstance" }
+        "400": { $ref: "#/components/responses/DomainError" }
+        "404": { $ref: "#/components/responses/DomainError" }
     delete:
       tags: [config]
       summary: Delete a service instance
       responses:
-        '204': { description: Deleted }
-        '404': { $ref: '#/components/responses/DomainError' }
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/DomainError" }
   /config/services/{id}/test:
     post:
       tags: [config]
@@ -388,7 +403,7 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -396,9 +411,9 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/TestConnectionResult' }
-        '404': { $ref: '#/components/responses/DomainError' }
-        '409': { $ref: '#/components/responses/DomainError' }
+                  data: { $ref: "#/components/schemas/TestConnectionResult" }
+        "404": { $ref: "#/components/responses/DomainError" }
+        "409": { $ref: "#/components/responses/DomainError" }
   /config/audit:
     get:
       tags: [config]
@@ -409,7 +424,7 @@ paths:
           required: false
           schema: { type: integer, minimum: 1, maximum: 500 }
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -419,17 +434,17 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/AuditEntry' }
+                    items: { $ref: "#/components/schemas/AuditEntry" }
   /config/export:
     get:
       tags: [config]
       summary: Export all service configurations as encrypted bundle
       responses:
-        '200':
+        "200":
           description: Encrypted bundle (payload is base64 AES-256-GCM of plaintext services)
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ExportBundle' }
+              schema: { $ref: "#/components/schemas/ExportBundle" }
   /config/import:
     post:
       tags: [config]
@@ -438,9 +453,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ExportBundle' }
+            schema: { $ref: "#/components/schemas/ExportBundle" }
       responses:
-        '200':
+        "200":
           description: Import result
           content:
             application/json:
@@ -448,8 +463,8 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/ImportResult' }
-        '400':
+                  data: { $ref: "#/components/schemas/ImportResult" }
+        "400":
           description: Invalid bundle
 components:
   parameters:
@@ -470,7 +485,7 @@ components:
       description: Domain error
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/DomainError' }
+          schema: { $ref: "#/components/schemas/DomainError" }
   schemas:
     DomainError:
       type: object
@@ -500,8 +515,10 @@ components:
       type: object
       required: [reachable]
       properties:
-        reachable: { type: boolean, description: Service protocol probe succeeded }
-        latencyMs: { type: number, description: Protocol probe latency in milliseconds }
+        reachable:
+          { type: boolean, description: Service protocol probe succeeded }
+        latencyMs:
+          { type: number, description: Protocol probe latency in milliseconds }
         message: { type: string, description: Human-readable failure reason }
         details:
           type: object
@@ -511,18 +528,27 @@ components:
       type: object
       required: [reachable, at]
       properties:
-        reachable: { type: boolean, description: 'Composite: host AND service reachable' }
-        latencyMs: { type: number, description: 'Service latency, falls back to ping latency' }
+        reachable:
+          {
+            type: boolean,
+            description: "Composite: host AND service reachable",
+          }
+        latencyMs:
+          {
+            type: number,
+            description: "Service latency, falls back to ping latency",
+          }
         message: { type: string }
         details:
           type: object
           additionalProperties: true
-        at: { type: number, description: Timestamp (ms) when snapshot was taken }
+        at:
+          { type: number, description: Timestamp (ms) when snapshot was taken }
         host:
-          $ref: '#/components/schemas/HostHealth'
+          $ref: "#/components/schemas/HostHealth"
           description: ICMP reachability tier
         service:
-          $ref: '#/components/schemas/ServiceHealth'
+          $ref: "#/components/schemas/ServiceHealth"
           description: Protocol probe tier
     StatsSnapshot:
       type: object
@@ -546,7 +572,7 @@ components:
               - { type: number }
               - { type: string }
               - { type: boolean }
-              - { type: 'null' }
+              - { type: "null" }
         at:
           type: number
           description: Timestamp (milliseconds since epoch) when snapshot was taken
@@ -554,7 +580,7 @@ components:
       type: object
       required: [id, kind, instanceId, result]
       properties:
-        id: { type: string, example: 'bitcoin:main' }
+        id: { type: string, example: "bitcoin:main" }
         kind: { type: string }
         instanceId: { type: string }
         result:
@@ -563,7 +589,7 @@ components:
               required: [ok, value]
               properties:
                 ok: { const: true }
-                value: { $ref: '#/components/schemas/HealthSnapshot' }
+                value: { $ref: "#/components/schemas/HealthSnapshot" }
             - type: object
               required: [ok, error]
               properties:
@@ -606,18 +632,27 @@ components:
         tracked: { type: integer }
     MetricsSnapshot:
       type: object
-      required: [breakers, poller, cache, process]
+      required: [breakers, poller, cache, errors, process]
       properties:
         breakers:
           type: object
-          additionalProperties: { $ref: '#/components/schemas/BreakerMetrics' }
+          additionalProperties: { $ref: "#/components/schemas/BreakerMetrics" }
         poller:
           oneOf:
-            - { $ref: '#/components/schemas/PollerStats' }
-            - { type: 'null' }
+            - { $ref: "#/components/schemas/PollerStats" }
+            - { type: "null" }
         cache:
           type: object
-          additionalProperties: { $ref: '#/components/schemas/CacheStats' }
+          additionalProperties: { $ref: "#/components/schemas/CacheStats" }
+        errors:
+          type: object
+          description: Cumulative service poll errors since process start
+          required: [total, byService]
+          properties:
+            total: { type: integer }
+            byService:
+              type: object
+              additionalProperties: { type: integer }
         process:
           type: object
           required: [uptimeSec, rss, heapUsed]
@@ -656,7 +691,7 @@ components:
         description: { type: string }
         fields:
           type: array
-          items: { $ref: '#/components/schemas/FieldMeta' }
+          items: { $ref: "#/components/schemas/FieldMeta" }
     ServiceInstance:
       type: object
       required: [id, kind, instanceId, enabled, config, createdAt, updatedAt]
@@ -684,8 +719,18 @@ components:
           type: object
           additionalProperties: true
           description: Per-kind polling behavior (optional)
-        cacheTtlMs: { type: integer, example: 10000, description: Cache TTL in milliseconds (optional; default 10000) }
-        timeoutMs: { type: integer, example: 5000, description: Request timeout in milliseconds (optional; default 5000) }
+        cacheTtlMs:
+          {
+            type: integer,
+            example: 10000,
+            description: Cache TTL in milliseconds (optional; default 10000),
+          }
+        timeoutMs:
+          {
+            type: integer,
+            example: 5000,
+            description: Request timeout in milliseconds (optional; default 5000),
+          }
       example:
         kind: bitcoin
         instanceId: main
@@ -749,7 +794,16 @@ components:
       properties:
         hash: { type: string, description: Torrent hash }
         name: { type: string, description: Torrent name }
-        state: { type: string, description: Torrent state (downloading, uploading, pausedDL, pausedUP, error, etc.) }
+        state:
+          {
+            type: string,
+            description: Torrent state (downloading,
+            uploading,
+            pausedDL,
+            pausedUP,
+            error,
+            etc.),
+          }
         progress: { type: number, description: Progress 0..1 }
         dlspeed: { type: number, description: Download speed in bytes/sec }
         upspeed: { type: number, description: Upload speed in bytes/sec }
@@ -761,21 +815,47 @@ components:
     QBittorrentStats:
       type: object
       description: qBittorrent service metrics (QB1 — incremental sync + per-torrent details + logs)
-      required: [torrentsTotal, torrentsDownloading, torrentsSeeding, torrentsPaused, torrentsCompleted, torrentsError, dlSpeed, upSpeed, activeTorrents, recentErrors, recentWarnings]
+      required:
+        [
+          torrentsTotal,
+          torrentsDownloading,
+          torrentsSeeding,
+          torrentsPaused,
+          torrentsCompleted,
+          torrentsError,
+          dlSpeed,
+          upSpeed,
+          activeTorrents,
+          recentErrors,
+          recentWarnings,
+        ]
       properties:
         version: { type: string, description: qBittorrent API version }
         uptime: { type: number, description: Uptime in seconds }
         torrentsTotal: { type: integer, description: Total torrent count }
-        torrentsDownloading: { type: integer, description: Torrents in downloading state }
-        torrentsSeeding: { type: integer, description: Torrents in uploading state }
+        torrentsDownloading:
+          { type: integer, description: Torrents in downloading state }
+        torrentsSeeding:
+          { type: integer, description: Torrents in uploading state }
         torrentsPaused: { type: integer, description: Paused torrents }
         torrentsCompleted: { type: integer, description: Completed torrents }
-        torrentsError: { type: integer, description: Torrents in error or missingFiles state }
-        dlSpeed: { type: number, description: Global download speed in bytes/sec }
+        torrentsError:
+          {
+            type: integer,
+            description: Torrents in error or missingFiles state,
+          }
+        dlSpeed:
+          { type: number, description: Global download speed in bytes/sec }
         upSpeed: { type: number, description: Global upload speed in bytes/sec }
         dlData: { type: number, description: Total downloaded in bytes }
         upData: { type: number, description: Total uploaded in bytes }
-        connectionStatus: { type: string, description: Connection status (connected, disconnected, firewalled) }
+        connectionStatus:
+          {
+            type: string,
+            description: Connection status (connected,
+            disconnected,
+            firewalled),
+          }
         listenPort: { type: integer, description: Listen port }
         dhtNodes: { type: integer, description: DHT node count }
         freeSpaceOnDisk: { type: number, description: Free disk space in bytes }
@@ -783,7 +863,7 @@ components:
           type: array
           maxItems: 20
           description: Top 20 torrents by combined dl+ul speed (per-torrent sync)
-          items: { $ref: '#/components/schemas/QBittorrentTorrentInfo' }
+          items: { $ref: "#/components/schemas/QBittorrentTorrentInfo" }
         recentErrors:
           type: array
           description: Critical log messages from /api/v2/log/main (type=8) since last poll
@@ -798,31 +878,100 @@ components:
       properties:
         version: { type: string, description: AdGuard Home version }
         running: { type: boolean, description: Service running state }
-        protectionEnabled: { type: boolean, description: DNS protection enabled flag }
+        protectionEnabled:
+          { type: boolean, description: DNS protection enabled flag }
         dnsPort: { type: integer, description: DNS server port }
         httpPort: { type: integer, description: HTTP API port }
-        totalQueries: { type: integer, description: Total DNS queries processed }
-        blockedQueries: { type: integer, description: Sum of all blocked queries (filtering + safebrowsing + safesearch + parental) }
-        allowedQueries: { type: integer, description: Allowed queries = totalQueries - blockedQueries }
-        blockingRate: { type: number, description: Percentage of blocked queries (0–100, rounded to 2 decimals) }
-        avgProcessingTime: { type: number, description: Average DNS query processing time (milliseconds) }
-        topBlockedDomain: { type: string, description: Most-blocked domain name (or 'N/A') }
-        topQueriedDomain: { type: string, description: Most-queried domain name (or 'N/A') }
-        topClient: { type: string, description: Most-active client IP (or 'N/A') }
-        safebrowsingBlocked: { type: integer, description: Queries blocked by SafeBrowsing filter }
-        safesearchBlocked: { type: integer, description: Queries blocked by SafeSearch enforcement }
-        parentalBlocked: { type: integer, description: Queries blocked by Parental Control filter }
-        filteringEnabled: { type: [boolean, 'null'], description: Filtering toggle state (null on /control/filtering/status fetch failure) }
-        filterCount: { type: integer, description: Number of configured filter lists }
-        totalRules: { type: integer, description: Sum of rules from enabled filter lists only (filters with enabled !== false) }
-        userRules: { type: integer, description: Count of custom user-defined rules }
+        totalQueries:
+          { type: integer, description: Total DNS queries processed }
+        blockedQueries:
+          {
+            type: integer,
+            description: Sum of all blocked queries (filtering + safebrowsing + safesearch + parental),
+          }
+        allowedQueries:
+          {
+            type: integer,
+            description: Allowed queries = totalQueries - blockedQueries,
+          }
+        blockingRate:
+          {
+            type: number,
+            description: Percentage of blocked queries (0–100,
+            rounded to 2 decimals),
+          }
+        avgProcessingTime:
+          {
+            type: number,
+            description: Average DNS query processing time (milliseconds),
+          }
+        topBlockedDomain:
+          { type: string, description: Most-blocked domain name (or 'N/A') }
+        topQueriedDomain:
+          { type: string, description: Most-queried domain name (or 'N/A') }
+        topClient:
+          { type: string, description: Most-active client IP (or 'N/A') }
+        safebrowsingBlocked:
+          { type: integer, description: Queries blocked by SafeBrowsing filter }
+        safesearchBlocked:
+          {
+            type: integer,
+            description: Queries blocked by SafeSearch enforcement,
+          }
+        parentalBlocked:
+          {
+            type: integer,
+            description: Queries blocked by Parental Control filter,
+          }
+        filteringEnabled:
+          {
+            type: [boolean, "null"],
+            description: Filtering toggle state (null on /control/filtering/status fetch failure),
+          }
+        filterCount:
+          { type: integer, description: Number of configured filter lists }
+        totalRules:
+          {
+            type: integer,
+            description: Sum of rules from enabled filter lists only (filters with enabled !== false),
+          }
+        userRules:
+          { type: integer, description: Count of custom user-defined rules }
         clientCount: { type: integer, description: Number of unique clients }
-        autoClientCount: { type: integer, description: Number of auto-detected clients }
-        dhcpEnabled: { type: [boolean, 'null'], description: DHCP server enabled (null on /control/dhcp/status fetch failure) }
+        autoClientCount:
+          { type: integer, description: Number of auto-detected clients }
+        dhcpEnabled:
+          {
+            type: [boolean, "null"],
+            description: DHCP server enabled (null on /control/dhcp/status fetch failure),
+          }
         dhcpLeases: { type: integer, description: Active DHCP leases }
         dhcpStaticLeases: { type: integer, description: Static DHCP leases }
-        safebrowsingEnabled: { type: [boolean, 'null'], description: SafeBrowsing protection enabled (null on /control/safebrowsing/status fetch failure) }
-        parentalEnabled: { type: [boolean, 'null'], description: Parental Control enabled (null on /control/parental/status fetch failure) }
-        safesearchEnabled: { type: [boolean, 'null'], description: SafeSearch enforcement enabled (null on /control/safesearch/status fetch failure) }
-        upstreamCount: { type: integer, description: Number of configured upstream DNS servers }
-        upstreamMode: { type: [string, 'null'], description: Upstream DNS mode (e.g., 'parallel', 'sequential', or null on /control/dns_info fetch failure) }
+        safebrowsingEnabled:
+          {
+            type: [boolean, "null"],
+            description: SafeBrowsing protection enabled (null on /control/safebrowsing/status fetch failure),
+          }
+        parentalEnabled:
+          {
+            type: [boolean, "null"],
+            description: Parental Control enabled (null on /control/parental/status fetch failure),
+          }
+        safesearchEnabled:
+          {
+            type: [boolean, "null"],
+            description: SafeSearch enforcement enabled (null on /control/safesearch/status fetch failure),
+          }
+        upstreamCount:
+          {
+            type: integer,
+            description: Number of configured upstream DNS servers,
+          }
+        upstreamMode:
+          {
+            type: [string, "null"],
+            description: Upstream DNS mode (e.g.,
+            "parallel",
+            "sequential",
+            or null on /control/dns_info fetch failure),
+          }

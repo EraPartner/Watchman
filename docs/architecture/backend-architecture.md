@@ -2,17 +2,74 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-05-16
-tags: [architecture, backend, fastify, typescript, nodejs, services, configuration, duckdb, health-check, two-tier, control-port, phase-0b, task-b4, task-b5, task-b6, task-b7, event-subscription, traffic-deltas, onionoo-enrichment, timeseries-persistence, snmp, snmp-walk, cert-pinning, sha256, i2-task, i4-task, i5-task, i6-task, h1-task, hb1-task, x1-task, x3-task, bt2-task, zmq, zeromq, roon-api, websocket, zones, now-playing, rn1-task, rn2-task]
-description: Backend architecture documentation for the Watchman TypeScript/Fastify server - includes layered architecture, services, routes, in-process state, two-tier health model, time-series persistence (health + stats), Tor ControlPort protocol client with GETCONF/SIGNAL (B4), realtime event subscription (B5), traffic delta tracking (B6), Onionoo enrichment (B7), SNMP walk support for network device metrics (v2c/v3), SHA-256 certificate pinning (I2), persistent SSH connection pool (I4), auto-reconnecting WebSocket client (I5), ZMQ real-time subscriber (I6), JWT token refresh via jwtClient infra primitive (HB1), boolean dual-column rollup fix (X1), Raspberry Pi renderer enhancements (X3), Bitcoin ZMQ integration (BT2), Roon WebSocket API client for zone and now-playing tracking (RN1/RN2)
+date: 2026-06-12
+tags:
+  [
+    architecture,
+    backend,
+    fastify,
+    typescript,
+    nodejs,
+    services,
+    configuration,
+    duckdb,
+    health-check,
+    two-tier,
+    control-port,
+    phase-0b,
+    task-b4,
+    task-b5,
+    task-b6,
+    task-b7,
+    event-subscription,
+    traffic-deltas,
+    onionoo-enrichment,
+    timeseries-persistence,
+    snmp,
+    snmp-walk,
+    cert-pinning,
+    sha256,
+    i2-task,
+    i4-task,
+    i5-task,
+    i6-task,
+    h1-task,
+    hb1-task,
+    x1-task,
+    x3-task,
+    bt2-task,
+    zmq,
+    zeromq,
+    roon-api,
+    websocket,
+    zones,
+    now-playing,
+    rn1-task,
+    rn2-task,
+    origin-policy,
+    snapshot-cache,
+    circuit-breaker,
+    abort-controller,
+    pino-redact,
+  ]
+description: Backend architecture documentation for the Watchman TypeScript/Fastify server — layered architecture, services, routes, in-process state, two-tier health model, circuit breaker wiring, SnapshotCache, shared origin policy, request-scoped AbortController, pino redaction, concurrent startup with onStartTimeoutMs, ZMQ wiring, shared pigpiod, pinnedClient rewrite, Synology HC counters, Router HC counters + byte rates, qBittorrent maindata-only stats, Tor Onionoo 1-hour cache, AlbyHub legacyProbe default false, ConfigStore partial-update preservation, DuckDbPool bounded pool
 aliases:
-  [backend, server architecture, fastify architecture, backend docs, api server, two-tier health, control-port, roon-api]
+  [
+    backend,
+    server architecture,
+    fastify architecture,
+    backend docs,
+    api server,
+    two-tier health,
+    control-port,
+    roon-api,
+  ]
 ---
 
 # Backend Architecture
 
 > [!abstract] Overview
-> The Watchman backend is a TypeScript + Fastify 4 server with layered architecture (config → core → infra → domain → application → transport). It orchestrates service integrations via BaseService subclasses and exposes them through a REST API + WebSocket with in-process LRU caching and a jittered background poller. There is no built-in authentication — Watchman is single-user (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]); security relies on network isolation.
+> The Watchman backend is a TypeScript + Fastify 5 server with layered architecture (config → core → infra → domain → application → transport). It orchestrates service integrations via BaseService subclasses and exposes them through a REST API + WebSocket with in-process LRU caching, a SnapshotCache for read-through HTTP serving, per-service circuit breakers, and a jittered background poller. There is no built-in authentication — Watchman is single-user (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]); security relies on network isolation.
 
 ## Layered Architecture
 
@@ -43,32 +100,35 @@ Each layer has clear responsibilities and minimal coupling.
 1. Loads and validates environment (Zod schema)
 2. Initializes core layer (logger, errorHandler, eventBus)
 3. Sets up infra layer (cache, circuitBreaker, httpClient, sshClient)
-4. Loads services from [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]]
-5. Registers domain layer (BaseService instances in ServiceRegistry)
-6. Mounts HTTP routes and WebSocket handlers via Fastify
-7. Attaches graceful shutdown handler (SIGTERM, SIGINT)
-8. Starts background poller (croner-based, with AbortSignal for clean shutdown)
+4. Creates SnapshotCache and MetricsRegistry; starts SnapshotCache (subscribes to bus)
+5. Loads services from [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]]
+6. Registers domain layer (BaseService instances wrapped with `withBreakers` + SWR stats caches via `instrument` lifecycle hook)
+7. **Starts HTTP server (`app.listen()`) before `lifecycle.start()`** — port is open and health endpoint responds while services initialise
+8. Brings all services up concurrently (`lifecycle.start()`) with a 10 s per-service `onStart` timeout
+9. Mounts HTTP routes and WebSocket handlers via Fastify
+10. Attaches graceful shutdown handler (SIGTERM, SIGINT)
+11. Starts background poller (croner-based, with AbortSignal for clean shutdown)
 
 ## Plugin Stack (in order)
 
 Fastify plugins are registered in the following order in [[apps/backend/src/transport/http/server.ts|server.ts]]:
 
-| #   | Plugin / hook            | Purpose                                                              |
-| --- | ------------------------ | -------------------------------------------------------------------- |
-| 1   | CORS `onRequest` hook    | Allow-list `watchman://`, `http://localhost:*`, `http://127.0.0.1:*`; sets CORS headers and short-circuits `OPTIONS` |
-| 2   | `logSamplingPlugin`      | Sample `/meta/health` request logs to keep noise down                |
-| 3   | `requestTimeoutPlugin`   | Per-request `AbortSignal` + 15s timeout (configurable)               |
-| 4   | `@fastify/compress`      | Brotli / gzip response compression (≥1 KiB)                          |
-| 5   | `errorHandlerPlugin`     | DomainError → envelope `{ error: { code, message } }` mapping        |
-| 6   | `metaRoutes`             | `/meta/health`, `/meta/version`                                      |
-| 7   | `metricsRoutes`          | `/metrics` snapshot                                                  |
-| 8   | `servicesRoutes`         | `/services`, `/services/:kind/health`, `/services/:kind/stats`, `/services/:kind/control` |
-| 9   | `instancesRoutes`        | `/instances`, `/instances/:kind`, `/kinds`                           |
-| 10  | `setupRoutes`            | `/setup/status`, `/setup/philips-bridge/pair`                        |
-| 11  | `configRoutes`           | UI-driven ConfigStore CRUD + export/import + audit log               |
-| 12  | `wsPlugin`               | `/ws` upgrade — origin gate, connection manager, heartbeat, broadcaster subscribed to the event bus |
+| #   | Plugin / hook          | Purpose                                                                                                                                                                                                                                          |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | CORS `onRequest` hook  | Shared origin allow-list via [[apps/backend/src/transport/originPolicy.ts\|originPolicy.ts]]: always allows `watchman://`, `http://localhost:*`, `http://127.0.0.1:*`, plus `CORS_ALLOWED_ORIGINS`. OPTIONS → 204 when allowed, 403 when denied. |
+| 2   | `logSamplingPlugin`    | Sample `/meta/health` request logs to keep noise down                                                                                                                                                                                            |
+| 3   | `requestTimeoutPlugin` | Per-request `AbortController` decorated on `req.abortController`; aborted on 15 s timeout or client disconnect. Signal threaded into service calls for prompt cancellation.                                                                      |
+| 4   | `@fastify/compress`    | Brotli / gzip response compression (≥1 KiB)                                                                                                                                                                                                      |
+| 5   | `errorHandlerPlugin`   | DomainError → envelope `{ error: { code, message } }` mapping                                                                                                                                                                                    |
+| 6   | `metaRoutes`           | `/meta/health`, `/meta/version`                                                                                                                                                                                                                  |
+| 7   | `metricsRoutes`        | `/metrics` snapshot — includes `breakers`, `caches`, and `errors: { total, byService }` fields                                                                                                                                                   |
+| 8   | `servicesRoutes`       | `/services` (SnapshotCache), `/services/:kind/health` (SnapshotCache), `/services/:kind/stats` (SWR stats cache), `/services/:kind/control`                                                                                                      |
+| 9   | `instancesRoutes`      | `/instances`, `/instances/:kind`, `/kinds`                                                                                                                                                                                                       |
+| 10  | `setupRoutes`          | `/setup/status`, `/setup/philips-bridge/pair`                                                                                                                                                                                                    |
+| 11  | `configRoutes`         | UI-driven ConfigStore CRUD + export/import + audit log                                                                                                                                                                                           |
+| 12  | `wsPlugin`             | `/ws` upgrade — shared origin gate, connection manager, heartbeat, broadcaster subscribed to the event bus; token optional (browser-compatible)                                                                                                  |
 
-Request timeout and cancellation use Fastify's native request lifecycle hooks with AbortSignal propagation through service layers, allowing graceful cancellation on timeout or client disconnect.
+Request timeout and cancellation: `requestTimeoutPlugin` creates a real `AbortController` per request and decorates it onto `req.abortController`. It is aborted on 15 s timeout, client disconnect (`req.raw.once("aborted")`), or reply finish. The signal is threaded through route handlers into service calls, cancelling in-flight network I/O promptly.
 
 > [!note] Removed since the original spec
 > Earlier drafts of this section listed Helmet, JWT, CSRF, and tiered rate limiting. None of them are wired up today — they were removed when Watchman became single-user ([[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]). Use network isolation (firewall, VPN, closed LAN) instead.
@@ -77,36 +137,37 @@ Request timeout and cancellation use Fastify's native request lifecycle hooks wi
 
 The core layer (`[[apps/backend/src/core/]]`) provides shared foundations:
 
-| Module              | Purpose                                                                        |
-| ------------------- | ------------------------------------------------------------------------------ |
-| logger              | Pino-based structured JSON logging with request ID correlation                |
-| errors              | DomainError hierarchy (NotFound, Unavailable, Unauthorized, Timeout, etc.)   |
-| Result              | Result<T, E> type for explicit success/failure semantics (no thrown errors)   |
-| clock               | Clock interface with real and test implementations for time-dependent logic   |
-| eventBus            | Typed pub/sub event emission with handler safety (see [[docs/architecture/core-systems\|Core Systems]]) |
-| container           | Simple service container for dependency injection (no external DI library)   |
+| Module    | Purpose                                                                                                                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| logger    | Pino-based structured JSON logging with request ID correlation; `redact` config strips authorization/cookie headers and `password`/`passwd`/`token`/`secret`/`apiKey` fields from all log output. |
+| errors    | DomainError hierarchy (NotFound, Unavailable, Unauthorized, Timeout, etc.)                                                                                                                        |
+| Result    | Result<T, E> type for explicit success/failure semantics (no thrown errors)                                                                                                                       |
+| clock     | Clock interface with real and test implementations for time-dependent logic                                                                                                                       |
+| eventBus  | Typed pub/sub event emission with handler safety (see [[docs/architecture/core-systems\|Core Systems]]); `service.error` payload now includes `kind`, `instanceId`, `scope: "health"\|"stats"`    |
+| metrics   | MetricsRegistry with `removeBreaker`, `removeCache`, `recordServiceError`; `GET /metrics` snapshot has `errors: { total, byService }` field                                                       |
+| container | Simple service container for dependency injection (no external DI library)                                                                                                                        |
 
 ## Infrastructure Layer
 
 The infra layer (`[[apps/backend/src/infra/]]`) provides protocol-agnostic adapters:
 
-| Module          | Dependencies       | Purpose                                                  |
-| --------------- | ------------------ | -------------------------------------------------------- |
-| http            | Undici             | HTTP client with pooling, timeout, retry semantics      |
-| http/jwtClient  | -                  | **HB1 + I3 Tasks** — JWT token injection and single-retry wrapper for HttpClient. Injects `Authorization: Bearer <token>` on every request; on 401, calls `refresh()` once, retries with new token, returns response as-is. Concurrent 401s share one pending refresh promise (thundering herd prevention). Supports optional initial token; falsy tokens (empty string or undefined) skip Bearer injection. See [[apps/backend/src/infra/http/jwtClient.ts\|jwtClient.ts]]. Tested (8 tests covering token injection, 401 refresh, retry semantics, concurrent refresh sharing, empty-token fallback, failure propagation). Used by [[apps/backend/src/domain/services/homebridge/homebridgeClient.ts\|HomebridgeService]] for automatic JWT and cookie-based auth. |
-| http/pinnedClient | node:tls, crypto   | **I2 Task** — SHA-256 certificate pinning wrapper for HttpClient. Probes TLS cert before each request, computes SHA-256 fingerprint, compares against expected hash (colon-delimited or plain hex, case-insensitive). Throws `UnauthorizedError` on mismatch, `UnavailableError` on probe timeout. Used by PhilipsBridgeService when `certHash` configured. See [[apps/backend/src/infra/http/pinnedClient.ts\|pinnedClient.ts]] |
-| ssh / ssh pool  | ssh2               | SSH client wrapper for remote command execution. **I4 Task** — Persistent [[#ssh-connection-pool|SshPool]] for connection reuse across requests: one per `host:port:user:keyPath` tuple, auto-reconnect on disconnect (2s delay), pending queue during reconnect, no reconnect on auth errors. See [[apps/backend/src/infra/ssh/sshPool.ts\|sshPool.ts]]. Used by [[docs/integrations/raspberry-pi|RaspberryPiService]] for direct vcgencmd + /proc stats. |
-| gpio            | pigpio-client      | GPIO interface for Raspberry Pi monitoring              |
-| snmp            | net-snmp           | SNMP querying for network device monitoring. **Interfaces**: `get()` for single OID fetch (v3 only), `walk(req)` for subtree traversal with v2c/v3 support. **V2c walks** pass community string; **v3 walks** pass user/authKey/privKey with configurable auth/priv protocols. Session cleanup and timeout handling are robust (timers + AbortSignal). **Used by**: RouterService (interface stats, ARP table, CPU load, sysUptime). See [[apps/backend/src/infra/snmp/snmpGetter.ts\|snmpGetter.ts]] and [[apps/backend/src/infra/snmp/snmpGetterImpl.ts\|snmpGetterImpl.ts]]. |
-| synology/dsmClient | node:http, Undici | **SY1 Task** — Synology DSM session client (`createDsmClient`). Routes `SYNO.API.Auth` to `/webapi/auth.cgi`, all other APIs to `/webapi/entry.cgi`. Injects `_sid` on every non-auth request. Auto-login on first call, session recovery on codes 105/106/107 (re-login once, retry original call), concurrent login sharing (thundering herd prevention). Returns `<T>`, throws `UnauthorizedError` (no credentials), `UnavailableError` (DSM errors, failed recovery). 12 tests covering all branches. See [[apps/backend/src/infra/synology/dsmClient.ts\|dsmClient.ts]]. |
-| tor/controlClient | node:net, AbortSignal | Tor Control Protocol client (RFC 5050); TCP socket wrapper with async line-buffered reader, GETINFO/GETCONF/SIGNAL support (Task B4) |
-| tor/eventSubscription | node:net, AbortSignal | Tor Event Subscription (Task B5); persistent TCP connection, `SETEVENTS`, async `650` event routing, handler map, reply FIFO queue |
-| zmq / zmqSubscriber | zeromq v6+         | **I6 Task** — ZMQ SUB socket wrapper for real-time publish-subscribe. Supports dynamic zeromq import (v6+ ESM N-API), 3-frame message parsing (topic, data, sequence), and async event handler pattern via Sets. Non-fatal failures (falls back to poll-only on connection error). See [[apps/backend/src/infra/zmq/zmqSubscriber.ts\|zmqSubscriber.ts]] (interface), [[apps/backend/src/infra/zmq/zmqSubscriberImpl.ts\|zmqSubscriberImpl.ts]] (impl), [[apps/backend/src/infra/zmq/zmqSubscriber.test.ts\|zmqSubscriber.test.ts]] (5 contract tests). Used by [[docs/integrations/bitcoin|BitcoinService]] for block/transaction streaming (BT2 task). |
-| cache           | lru-cache          | In-process LRU cache with stale-while-revalidate (SWR) |
-| scheduler       | croner, AbortSignal | Background poller with configurable interval + jitter   |
-| circuitBreaker  | -                  | Per-service fault tolerance (5 failures, 30s reset)     |
-| metrics         | -                  | Metrics snapshot (circuit state, poller stats, memory)  |
-| timeseries      | DuckDB             | Time-series storage, rollups, and querying (opt-in, TIMESERIES_ENABLED) |
+| Module                | Dependencies          | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| http                  | Undici                | HTTP client with pooling, timeout, retry semantics                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| http/jwtClient        | -                     | **HB1 + I3 Tasks** — JWT token injection and single-retry wrapper for HttpClient. Injects `Authorization: Bearer <token>` on every request; on 401, calls `refresh()` once, retries with new token, returns response as-is. Concurrent 401s share one pending refresh promise (thundering herd prevention). Supports optional initial token; falsy tokens (empty string or undefined) skip Bearer injection. See [[apps/backend/src/infra/http/jwtClient.ts\|jwtClient.ts]]. Tested (8 tests covering token injection, 401 refresh, retry semantics, concurrent refresh sharing, empty-token fallback, failure propagation). Used by [[apps/backend/src/domain/services/homebridge/homebridgeClient.ts\|HomebridgeService]] for automatic JWT and cookie-based auth. |
+| http/pinnedClient     | undici, node:tls      | **I2 Task (rewritten)** — SHA-256 cert pinning via a custom undici connector. The pin is enforced on the actual TLS connection used for the request (no TOCTOU window). `probeCertFingerprint` remains available for the setup pairing flow. `createPinnedClient(expectedSha256)` returns a standalone `HttpClient`. Throws `UnauthorizedError` on mismatch, `UnavailableError` on probe failure. Used by PhilipsBridgeService. See [[apps/backend/src/infra/http/pinnedClient.ts\|pinnedClient.ts]]                                                                                                                                                                                                                                                                 |
+| ssh / ssh pool        | ssh2                  | SSH client wrapper for remote command execution. **I4 Task** — Persistent [[#ssh-connection-pool                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | SshPool]] for connection reuse across requests: one per `host:port:user:keyPath` tuple, auto-reconnect on disconnect (2s delay), pending queue during reconnect, no reconnect on auth errors. See [[apps/backend/src/infra/ssh/sshPool.ts\|sshPool.ts]]. Used by [[docs/integrations/raspberry-pi | RaspberryPiService]] for direct vcgencmd + /proc stats. |
+| gpio                  | pigpio-client         | GPIO interface for Raspberry Pi monitoring. `sharedPigpioClient.ts` — one persistent pigpiod TCP connection shared by health checks, stats collection, and GPIO control (was 2 connects per poll cycle). Closed in `onStop`. `GpioController` — handles `gpio:write:<pin>:<0\|1>` and `gpio:mode:<pin>:<input\|output>` actions for RaspberryPiService `control()`.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| snmp                  | net-snmp              | SNMP querying for network device monitoring. **Interfaces**: `get()` for single OID fetch (v3 only), `walk(req)` for subtree traversal with v2c/v3 support. **V2c walks** pass community string; **v3 walks** pass user/authKey/privKey with configurable auth/priv protocols. Session cleanup and timeout handling are robust (timers + AbortSignal). **Used by**: RouterService (interface stats, ARP table, CPU load, sysUptime). See [[apps/backend/src/infra/snmp/snmpGetter.ts\|snmpGetter.ts]] and [[apps/backend/src/infra/snmp/snmpGetterImpl.ts\|snmpGetterImpl.ts]].                                                                                                                                                                                      |
+| synology/dsmClient    | node:http, Undici     | **SY1 Task** — Synology DSM session client (`createDsmClient`). Routes `SYNO.API.Auth` to `/webapi/auth.cgi`, all other APIs to `/webapi/entry.cgi`. Injects `_sid` on every non-auth request. Auto-login on first call, session recovery on codes 105/106/107 (re-login once, retry original call), concurrent login sharing (thundering herd prevention). Returns `<T>`, throws `UnauthorizedError` (no credentials), `UnavailableError` (DSM errors, failed recovery). 12 tests covering all branches. See [[apps/backend/src/infra/synology/dsmClient.ts\|dsmClient.ts]].                                                                                                                                                                                        |
+| tor/controlClient     | node:net, AbortSignal | Tor Control Protocol client (RFC 5050); TCP socket wrapper with async line-buffered reader, GETINFO/GETCONF/SIGNAL support (Task B4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| tor/eventSubscription | node:net, AbortSignal | Tor Event Subscription (Task B5); persistent TCP connection, `SETEVENTS`, async `650` event routing, handler map, reply FIFO queue                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| zmq / zmqSubscriber   | zeromq v6+            | **I6 Task** — ZMQ SUB socket wrapper for real-time publish-subscribe. Supports dynamic zeromq import (v6+ ESM N-API), 3-frame message parsing (topic, data, sequence), and async event handler pattern via Sets. Non-fatal failures (falls back to poll-only on connection error). See [[apps/backend/src/infra/zmq/zmqSubscriber.ts\|zmqSubscriber.ts]] (interface), [[apps/backend/src/infra/zmq/zmqSubscriberImpl.ts\|zmqSubscriberImpl.ts]] (impl), [[apps/backend/src/infra/zmq/zmqSubscriber.test.ts\|zmqSubscriber.test.ts]] (5 contract tests). Used by [[docs/integrations/bitcoin                                                                                                                                                                          | BitcoinService]] for block/transaction streaming (BT2 task).                                                                                                                                                                                                                                      |
+| cache                 | lru-cache             | In-process LRU cache with stale-while-revalidate (SWR)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| scheduler             | croner, AbortSignal   | Background poller with configurable interval + jitter                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| circuitBreaker        | -                     | Per-service fault tolerance. Two breakers per service instance (`{id}:health`, `{id}:stats`): failureThreshold 5, resetAfterMs 60 000, halfOpenMaxCalls 1. Wired via `withBreakers` in `guardedService.ts`. CIRCUIT_OPEN returns err result, not thrown. See [[docs/architecture/core-systems\|Core Systems — Circuit Breaker Wiring]].                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| metrics               | -                     | MetricsRegistry: breaker state, SWR cache stats, poller stats, memory. `GET /metrics` snapshot includes `errors: { total, byService }` poll-error counters. `removeBreaker`/`removeCache`/`recordServiceError` added.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| timeseries            | DuckDB                | Time-series storage, rollups, and querying (opt-in, TIMESERIES_ENABLED)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ## SNMP Module (I1 — SNMP Walk + v2c Support)
 
@@ -139,12 +200,13 @@ interface SnmpGetter {
 ### Usage: RouterService
 
 RouterService uses `snmp.walk()` with v2c credentials to collect:
+
 - `sysUpTime` (single row expected)
-- `ifDescr`, `ifInOctets`, `ifOutOctets` (bulk walks with optional filtering)
+- `ifDescr`, `ifHCInOctets` (64-bit), `ifHCOutOctets` (64-bit) with 32-bit `ifInOctets`/`ifOutOctets` fallback
 - `arpTable` (count of active MAC addresses)
 - `hrProcessorLoad` (average CPU utilization)
 
-All walks execute in parallel with timeout + AbortSignal propagation.
+Per-poll byte rates (`ifInBps`, `ifOutBps`) are computed from the delta between consecutive cumulative counter reads divided by elapsed seconds. Negative deltas (counter wrap or reboot) are skipped rather than emitting garbage. All walks execute in parallel with timeout + AbortSignal propagation.
 
 ## Certificate Pinning (I2 — SHA-256 TLS Verification)
 
@@ -152,43 +214,33 @@ Located in [[apps/backend/src/infra/http/pinnedClient.ts|pinnedClient.ts]]:
 
 ### Overview
 
-Provides SHA-256 certificate pinning by wrapping any `HttpClient` to verify TLS certificate fingerprints before sending requests. Protects against man-in-the-middle attacks by ensuring the server's certificate matches an expected hash.
+Provides SHA-256 certificate pinning via a **custom undici connector**. The pin is enforced on the actual TLS connection used for the request — there is no probe-then-send TOCTOU window. `probeCertFingerprint` is still exported for the setup/pairing flow (where you need the fingerprint before you have a config).
 
 ### API
 
 ```typescript
-function createPinnedClient(inner: HttpClient, expectedSha256: string): HttpClient
+// Returns a standalone HttpClient with pinning baked in
+function createPinnedClient(expectedSha256: string): HttpClient;
+
+// Used only during pairing — probes cert and returns fingerprint
+function probeCertFingerprint(
+  host: string,
+  port: number,
+  timeoutMs?: number
+): Promise<string>;
 ```
 
-- **Input**: Base `HttpClient` and expected SHA-256 fingerprint (hex or colon-delimited, case-insensitive)
-- **Output**: New `HttpClient` that validates certs before delegating to `inner.send()`
-- **Error on mismatch**: Throws `UnauthorizedError` with mismatch details
-- **Error on probe failure**: Throws `UnavailableError` on timeout or TLS probe error
-
-### Implementation Details
-
-1. **Certificate Probing**: Uses `tls.connect()` with `rejectUnauthorized: false` to probe the server's certificate
-2. **Fingerprint Computation**: Extracts peer certificate (DER-encoded), computes SHA-256 digest
-3. **Hash Normalization**: Accepts both formats:
-   - Plain hex: `ABCDEF123456...` (case-insensitive)
-   - Colon-delimited: `AB:CD:EF:12:34:56:...` (case-insensitive)
-4. **Timeout Handling**: Respects per-request timeout (default 5s); uses AbortSignal if provided
-
-### Usage Example
-
-```typescript
-const http = createHttpClient(); // Base client
-const pinnedHttp = createPinnedClient(http, 'ab:cd:ef:...');
-// Every request now verifies cert before proceeding
-```
+- **`createPinnedClient`** — builds an undici `Agent` with a `buildConnector` wrapper that extracts the peer cert from each new TLS socket and compares against `expectedSha256`. Mismatch → `UnauthorizedError`. Probe failure → `UnavailableError`.
+- **Hash formats**: plain hex `ABCDEF...` or colon-delimited `AB:CD:EF:...`, both case-insensitive.
 
 ### Services Using Cert Pinning
 
-- **PhilipsBridgeService** — When `certHash` configured, wraps HTTP client for secure Hue API v2 connections
+- **PhilipsBridgeService** — When `certHash` configured, `createPinnedClient` is called at construction and all API v2 requests go through the pinned client
 
 ### Test Coverage
 
 [[apps/backend/src/infra/http/pinnedClient.test.ts|pinnedClient.test.ts]] — 8 tests covering:
+
 - Successful verification with matching hash
 - Mismatch detection (throws `UnauthorizedError`)
 - Both plain hex and colon-delimited formats
@@ -211,11 +263,11 @@ Direct SSH to Raspberry Pi for metrics (vcgencmd, /proc) requires running 9 conc
 
 ```typescript
 interface SshPool extends SshExecutor {
-  exec(req: SshExecRequest): Promise<SshExecResult>
-  destroy(): void
+  exec(req: SshExecRequest): Promise<SshExecResult>;
+  destroy(): void;
 }
 
-function createSshPool(): SshPool
+function createSshPool(): SshPool;
 ```
 
 - **`exec(req)`** — Queue or execute a command; reuses existing connection or creates one on first call
@@ -270,6 +322,7 @@ See [[apps/backend/src/domain/services/raspberryPi/PiStatsCollector.ts|PiStatsCo
 ### Test Coverage
 
 [[apps/backend/src/infra/ssh/sshPool.test.ts|sshPool.test.ts]] tests:
+
 - Connection lifecycle (connecting → ready → reconnecting → destroyed)
 - Request queuing during connection
 - Auto-reconnect on disconnect
@@ -280,32 +333,32 @@ See [[apps/backend/src/domain/services/raspberryPi/PiStatsCollector.ts|PiStatsCo
 ### Usage Example
 
 ```typescript
-import { createSshPool } from './infra/ssh/sshPool.js'
+import { createSshPool } from "./infra/ssh/sshPool.js";
 
-const pool = createSshPool()
+const pool = createSshPool();
 
 // Execute on first call — establishes persistent connection
 const result1 = await pool.exec({
-  host: '192.168.1.100',
+  host: "192.168.1.100",
   port: 22,
-  user: 'pi',
-  privateKeyPath: '/home/user/.ssh/id_rsa',
-  command: 'vcgencmd measure_temp',
+  user: "pi",
+  privateKeyPath: "/home/user/.ssh/id_rsa",
+  command: "vcgencmd measure_temp",
   timeoutMs: 5000,
-})
+});
 
 // Reuses connection from result1
 const result2 = await pool.exec({
-  host: '192.168.1.100',
+  host: "192.168.1.100",
   port: 22,
-  user: 'pi',
-  privateKeyPath: '/home/user/.ssh/id_rsa',
-  command: 'cat /proc/loadavg',
+  user: "pi",
+  privateKeyPath: "/home/user/.ssh/id_rsa",
+  command: "cat /proc/loadavg",
   timeoutMs: 5000,
-})
+});
 
 // On shutdown
-pool.destroy()
+pool.destroy();
 ```
 
 ### Services Using SSH Pool
@@ -323,18 +376,18 @@ Provides a lightweight auto-reconnecting WebSocket client for Node.js 22+ enviro
 ### API
 
 ```typescript
-export type WsState = 'connecting' | 'ready' | 'reconnecting' | 'destroyed'
+export type WsState = "connecting" | "ready" | "reconnecting" | "destroyed";
 
 export interface WsClientHandle {
-  send(data: string): void
-  onMessage(handler: (data: string) => void): () => void
-  onOpen(handler: () => void): () => void
-  onClose(handler: (code: number, reason: string) => void): () => void
-  destroy(): void
-  readonly state: WsState
+  send(data: string): void;
+  onMessage(handler: (data: string) => void): () => void;
+  onOpen(handler: () => void): () => void;
+  onClose(handler: (code: number, reason: string) => void): () => void;
+  destroy(): void;
+  readonly state: WsState;
 }
 
-function createWsClient(opts: WsClientOptions): WsClientHandle
+function createWsClient(opts: WsClientOptions): WsClientHandle;
 ```
 
 ### State Machine
@@ -376,10 +429,10 @@ connecting ──(open)──> ready ──(close/error)──> reconnecting ─
 
 ```typescript
 interface WsClientOptions {
-  url: string                    // WebSocket URL (ws:// or wss://)
-  reconnectMs?: number           // Base reconnect delay (default: 2000)
-  maxReconnectMs?: number        // Max reconnect delay (default: 30000)
-  logger?: Logger                // Optional Pino logger
+  url: string; // WebSocket URL (ws:// or wss://)
+  reconnectMs?: number; // Base reconnect delay (default: 2000)
+  maxReconnectMs?: number; // Max reconnect delay (default: 30000)
+  logger?: Logger; // Optional Pino logger
 }
 ```
 
@@ -393,6 +446,7 @@ interface WsClientOptions {
 ### Test Coverage
 
 [[apps/backend/src/infra/ws/wsClient.test.ts|wsClient.test.ts]] — 9 tests covering:
+
 - Initial connection and `onOpen` firing
 - Message delivery via `send()`
 - `onMessage` subscription
@@ -423,9 +477,9 @@ Provides a lightweight ZeroMQ SUB socket wrapper for subscribing to real-time pu
 
 ```typescript
 interface ZmqMessage {
-  topic: string;        // Topic string (e.g., 'hashblock', 'rawtx')
-  data: Buffer;         // Payload bytes
-  sequence: number;     // 4-byte little-endian sequence counter
+  topic: string; // Topic string (e.g., 'hashblock', 'rawtx')
+  data: Buffer; // Payload bytes
+  sequence: number; // 4-byte little-endian sequence counter
 }
 
 interface ZmqSubscriberHandle {
@@ -435,7 +489,7 @@ interface ZmqSubscriberHandle {
 
 type ZmqConnectFn = (
   endpoint: string,
-  topics: string[],
+  topics: string[]
 ) => Promise<ZmqSubscriberHandle>;
 ```
 
@@ -445,11 +499,13 @@ type ZmqConnectFn = (
 ### Interfaces
 
 **[[apps/backend/src/infra/zmq/zmqSubscriber.ts|zmqSubscriber.ts]]** — Defines the public API:
+
 - `ZmqMessage` — 3-part message (topic, data, sequence)
 - `ZmqSubscriberHandle` — Public socket interface
 - `ZmqConnectFn` — Type alias for injectable factory function
 
 **[[apps/backend/src/infra/zmq/zmqSubscriberImpl.ts|zmqSubscriberImpl.ts]]** — Real implementation:
+
 - Dynamic `import('zeromq')` with v6+ ESM guard (no import-time dependency)
 - SUB socket creation, endpoint connection, topic subscription
 - Async iterator loop over 3-frame messages
@@ -468,13 +524,15 @@ type ZmqConnectFn = (
 
 ```typescript
 // Bitcoin Core zeromq endpoints
-const endpoint = 'tcp://127.0.0.1:28332';  // Block notifications
-const topics = ['hashblock', 'rawtx'];      // Subscribe to both
+const endpoint = "tcp://127.0.0.1:28332"; // Block notifications
+const topics = ["hashblock", "rawtx"]; // Subscribe to both
 
 const handle = await zmqConnect(endpoint, topics);
 
 handle.onMessage((msg) => {
-  console.log(`Topic: ${msg.topic}, Data: ${msg.data.toString('hex')}, Seq: ${msg.sequence}`);
+  console.log(
+    `Topic: ${msg.topic}, Data: ${msg.data.toString("hex")}, Seq: ${msg.sequence}`
+  );
 });
 
 // Cleanup
@@ -484,6 +542,7 @@ await handle.close();
 ### Test Coverage
 
 [[apps/backend/src/infra/zmq/zmqSubscriber.test.ts|zmqSubscriber.test.ts]] — 5 contract tests using a fake handle (no real zeromq dependency):
+
 - Handle creation and message dispatch
 - Multiple handler subscriptions and unsubscription
 - Message parsing (topic, data, sequence)
@@ -508,7 +567,7 @@ Provides a lightweight WebSocket client for Roon Core API integration. Establish
 interface RoonZone {
   zoneId: string;
   displayName: string;
-  state: 'playing' | 'paused' | 'loading' | 'stopped';
+  state: "playing" | "paused" | "loading" | "stopped";
   queueItemsRemaining: number;
   queueTimeRemaining: number;
   nowPlaying?: {
@@ -543,12 +602,14 @@ type RoonConnectFn = (opts: RoonConnectOptions) => Promise<RoonHandle>;
 ### Interfaces
 
 **[[apps/backend/src/infra/roon/roonClient.ts|roonClient.ts]]** — Defines the public API:
+
 - `RoonZone` — Zone state (zoneId, displayName, state, queue info, nowPlaying, outputs)
 - `RoonHandle` — Public connection interface
 - `RoonConnectOptions` — Connection parameters
 - `RoonConnectFn` — Type alias for injectable factory function
 
 **[[apps/backend/src/infra/roon/roonClientImpl.ts|roonClientImpl.ts]]** — Real implementation:
+
 - Uses `@roonlabs/node-roon-api` (CJS via `createRequire`)
 - Calls `init_services()` then `ws_connect()`
 - Subscribes to `com.roonlabs.transport:2` zones via `core.moo._subscribe_helper()`
@@ -569,10 +630,10 @@ type RoonConnectFn = (opts: RoonConnectOptions) => Promise<RoonHandle>;
 ```typescript
 // In RoonService config
 const handle = await roonConnect({
-  host: '192.0.2.150',
+  host: "192.0.2.150",
   port: 9100,
-  extensionId: 'com.watchman.roon',
-  displayName: 'Watchman',
+  extensionId: "com.watchman.roon",
+  displayName: "Watchman",
   onZonesChanged: (zones) => {
     // Optional: react to zone updates
   },
@@ -589,6 +650,7 @@ await handle.close();
 ### Test Coverage
 
 [[apps/backend/src/infra/roon/roonClient.test.ts|roonClient.test.ts]] — 7 contract tests using a fake Roon handle (no real API dependency):
+
 - Handle creation and zone initialization
 - Pairing status tracking
 - Zone snapshot after subscription updates (added, changed, removed)
@@ -609,58 +671,62 @@ The domain layer (`[[apps/backend/src/domain/]]`) contains service implementatio
 [[apps/backend/src/domain/BaseService.ts|BaseService.ts]] - Abstract base class:
 
 All service integrations extend BaseService and implement:
+
 - `checkHealth(signal: AbortSignal): Promise<HealthResult>` – Two-tier health check (host + service); **always returns `ok(HealthSnapshot)`, never `err()`** — connection failures and thrown errors yield `reachable: false` snapshots instead
 - `getStats(signal: AbortSignal): Promise<StatsResult>` – Detailed metrics
 
 Health check contract (Phase 0a+):
+
 ```ts
 export interface HealthSnapshot {
-  reachable: boolean;        // composite: host AND service reachable
-  latencyMs?: number;        // protocol probe latency
+  reachable: boolean; // composite: host AND service reachable
+  latencyMs?: number; // protocol probe latency
   message?: string;
   details?: Record<string, unknown>;
-  at: number;                // timestamp
-  host?: HostHealth;         // ICMP ping tier
-  service?: ServiceHealth;   // protocol probe tier
+  at: number; // timestamp
+  host?: HostHealth; // ICMP ping tier
+  service?: ServiceHealth; // protocol probe tier
 }
 ```
 
 Services are keyed by `${kind}:${instanceId}` in [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry.ts]]:
+
 - `adguard:1` – Single instance
 - `qbittorrent:1`, `qbittorrent:2` – Multiple instances
 
 ### Service Classes
 
-| Service          | Location                                          | Description                        | Multi-Instance |
-| ---------------- | ------------------------------------------------- | ---------------------------------- | -------------- |
-| AdGuard Home     | `src/domain/services/adguard/AdGuardService.ts`  | DNS-level ad blocker monitoring    | No             |
-| Bitcoin          | `src/domain/services/bitcoin/BitcoinService.ts`  | Bitcoin full node RPC (BT1: extended stats) | No             |
-| Tor              | `src/domain/services/tor/TorService.ts`          | Tor relay monitoring               | No             |
-| qBittorrent      | `src/domain/services/qbittorrent/...`            | BitTorrent client                  | **Yes**        |
-| IPFS             | `src/domain/services/ipfs/IpfsService.ts`        | IPFS node monitoring               | No             |
-| Synology         | `src/domain/services/synology/...`               | Synology NAS                       | **Yes**        |
-| Roon             | `src/domain/services/roon/...`                   | Music server                       | **Yes**        |
-| Philips Hue      | `src/domain/services/philipsBridge/PhilipsBridgeService.ts` | Smart lighting (Hue API v2, light metrics, cert pinning) | No             |
-| Homebridge       | `src/domain/services/homebridge/...`             | HomeKit bridge                     | No             |
-| Mac Mini         | `src/domain/services/macmini/...`                | macOS server                       | **Yes**        |
-| Alby Hub         | `src/domain/services/albyhub/...`                | Lightning wallet                   | **Yes**        |
-| Raspberry Pi     | `src/domain/services/raspi/...`                  | Raspberry Pi device                | **Yes**        |
-| Router           | `src/domain/services/router/...`                 | Network router                     | No             |
-| Nostrcheck       | Configured in ServiceRegistry                    | Nostr relay checker                | No             |
+| Service      | Location                                                    | Description                                              | Multi-Instance |
+| ------------ | ----------------------------------------------------------- | -------------------------------------------------------- | -------------- |
+| AdGuard Home | `src/domain/services/adguard/AdGuardService.ts`             | DNS-level ad blocker monitoring                          | No             |
+| Bitcoin      | `src/domain/services/bitcoin/BitcoinService.ts`             | Bitcoin full node RPC (BT1: extended stats)              | No             |
+| Tor          | `src/domain/services/tor/TorService.ts`                     | Tor relay monitoring                                     | No             |
+| qBittorrent  | `src/domain/services/qbittorrent/...`                       | BitTorrent client                                        | **Yes**        |
+| IPFS         | `src/domain/services/ipfs/IpfsService.ts`                   | IPFS node monitoring                                     | No             |
+| Synology     | `src/domain/services/synology/...`                          | Synology NAS                                             | **Yes**        |
+| Roon         | `src/domain/services/roon/...`                              | Music server                                             | **Yes**        |
+| Philips Hue  | `src/domain/services/philipsBridge/PhilipsBridgeService.ts` | Smart lighting (Hue API v2, light metrics, cert pinning) | No             |
+| Homebridge   | `src/domain/services/homebridge/...`                        | HomeKit bridge                                           | No             |
+| Mac Mini     | `src/domain/services/macmini/...`                           | macOS server                                             | **Yes**        |
+| Alby Hub     | `src/domain/services/albyhub/...`                           | Lightning wallet                                         | **Yes**        |
+| Raspberry Pi | `src/domain/services/raspi/...`                             | Raspberry Pi device                                      | **Yes**        |
+| Router       | `src/domain/services/router/...`                            | Network router                                           | No             |
+| Nostrcheck   | Configured in ServiceRegistry                               | Nostr relay checker                                      | No             |
 
 ## Application Layer
 
 The application layer (`[[apps/backend/src/application/]]`) contains orchestration logic:
 
-| UseCase                 | Purpose                                                  |
-| ----------------------- | -------------------------------------------------------- |
-| GetServiceStatus        | Fetch current health for one service with circuit check  |
-| GetAggregatedHealth     | Fetch health for all enabled services in parallel        |
-| ControlService          | Execute state-changing action (e.g., toggle protection)  |
-| ListInstances           | Return service instance configuration and metadata       |
-| GetServiceHistory       | Query time-series metrics (optional; requires TIMESERIES_ENABLED) |
+| UseCase             | Purpose                                                           |
+| ------------------- | ----------------------------------------------------------------- |
+| GetServiceStatus    | Fetch current health for one service with circuit check           |
+| GetAggregatedHealth | Fetch health for all enabled services in parallel                 |
+| ControlService      | Execute state-changing action (e.g., toggle protection)           |
+| ListInstances       | Return service instance configuration and metadata                |
+| GetServiceHistory   | Query time-series metrics (optional; requires TIMESERIES_ENABLED) |
 
 Each UseCase:
+
 - Takes domain objects as input
 - Returns Result<T, E> (never throws)
 - Applies circuit breaker, timeout, caching logic
@@ -674,25 +740,30 @@ The transport layer (`[[apps/backend/src/transport/]]`) handles HTTP and WebSock
 
 Fastify routes in `[[apps/backend/src/transport/http/routes/]]`:
 
-1. **Auth**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
-2. **Meta**: `/health`, `/meta/health`, `/metrics`
-3. **Services**: `/api/services`, `/api/services/:kind`, `/api/services/:kind/stats`
-4. **History**: `/services/:kind/history` (time-series metrics; opt-in via TIMESERIES_ENABLED)
-5. **Multi-Instance**: `/api/:kind_:num/status`, `/api/:kind_:num/stats`
-6. **Control**: Service-specific actions (e.g., `/api/adguard/protection`)
-7. **Special**: Homebridge accessories, router ARP, Tor relay info
-8. **WebSocket**: `GET /ws` (upgrade to WebSocket)
+1. **Meta**: `/meta/health`, `/meta/version`, `/metrics` (breakers + caches + errors)
+2. **Services**: `/services` (SnapshotCache), `/services/:kind/health` (SnapshotCache), `/services/:kind/stats` (SWR cache), `/services/:kind/control`
+3. **Instances**: `/instances`, `/instances/:kind`, `/kinds`
+4. **History**: `/services/:kind/history` (time-series; opt-in via TIMESERIES_ENABLED)
+5. **Control**: Service-specific actions (e.g., `/services/raspberryPi/control` for GPIO)
+6. **Setup**: `/setup/status`, `/setup/philips-bridge/pair`
+7. **Config**: `/config/services` CRUD + export/import + audit log
+8. **Special**: Homebridge accessories, router ARP, Tor relay info
+9. **WebSocket**: `GET /ws` (upgrade; shared origin policy; token optional)
+
+> [!note] Route prefix
+> The current route prefix is no longer `/api/*`. Routes are mounted directly (e.g., `/services`, `/instances`). See `apps/backend/openapi.yaml` for the authoritative path list.
 
 ### WebSocket
 
-Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
+Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`, plus shared origin policy in `[[apps/backend/src/transport/originPolicy.ts|originPolicy.ts]]`:
 
-| Class                | Responsibility                              |
-| -------------------- | ------------------------------------------- |
-| AuthGate             | CORS/origin validation on handshake        |
-| ConnectionManager    | Track client connections, IP tracking      |
-| HeartbeatScheduler   | Ping/pong keep-alives (30s interval)       |
-| Broadcaster          | Publish status changes to connected clients |
+| Class              | Responsibility                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| originPolicy.ts    | Shared allow-list factory used by both HTTP CORS hook and WS AuthGate                       |
+| AuthGate           | Origin validation + optional token extraction (`Authorization: Bearer` or `?token=`)        |
+| ConnectionManager  | Track client connections, IP tracking                                                       |
+| HeartbeatScheduler | Ping/pong keep-alives (30s interval)                                                        |
+| Broadcaster        | Publish `service_update`, `alert` (deduped error/recovery), `service_config_changed` frames |
 
 ## Configuration Layer
 
@@ -706,11 +777,11 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 
 ### Service Configuration (UI-Driven, v2.2+)
 
-- `[[apps/backend/src/config/store/ConfigStore.ts]]` – DuckDB-backed CRUD for service instances; **per-operation connection pattern**: each method acquires a pool connection and releases via `closeSync()` in finally block (no persistent singleton connection). This ensures connections are always freed even on error.
+- `[[apps/backend/src/config/store/ConfigStore.ts]]` – DuckDB-backed CRUD for service instances; **partial updates preserve** `pollPolicy`, `cacheTtlMs`, `timeoutMs`, `enabled`, and `instanceId` from the existing record when those fields are omitted from the update payload (previously they reset to schema defaults). Uses `DuckDbPool` (bounded max 4 connections, `withConnection()` helper, `release()` on done).
 - `[[apps/backend/src/config/store/encryption.ts]]` – AES-256-GCM encryption/decryption (keyed by `WATCHMAN_MASTER_KEY`)
 - `[[apps/backend/src/config/store/migrations.ts]]` – DuckDB schema setup (tables: `app_service_instance`, `app_config_audit`)
 - `[[apps/backend/src/config/store/envMigrator.ts]]` – One-shot legacy env var import on first boot
-- `[[apps/backend/src/config/schemas/`* – Per-kind Zod schema + field metadata (one file per service kind)
+- `[[apps/backend/src/config/schemas/`\* – Per-kind Zod schema + field metadata (one file per service kind)
 
 ### Service Instantiation
 
@@ -722,24 +793,35 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 
 ### Circuit Breaker
 
-`[[apps/backend/src/infra/circuitBreaker/breaker.ts]]` – Per-service fault tolerance:
+`[[apps/backend/src/infra/circuitBreaker/breaker.ts]]` and `[[apps/backend/src/infra/circuitBreaker/guardedService.ts]]` – Per-service fault tolerance, now wired:
 
-- Threshold: 5 consecutive failures
-- Reset timeout: 30 seconds
-- Request timeout: 5 seconds (per-request, not circuit-wide)
+- **Two breakers per service instance**: `{id}:health` and `{id}:stats` — independent so a stats-only credential failure does not open the health circuit
+- Threshold: 5 consecutive failures → Open
+- Reset timeout: 60 seconds (was 30 s)
 - States: Closed → Open → Half-Open → Closed
+- **Half-open slot management**: `tryAcquire()` atomically reserves a slot; `halfOpenMaxCalls` defaults to 1
+- CIRCUIT_OPEN → `err(UnavailableError)` returned to callers, not thrown
 - Volatile state (lost on restart, acceptable for self-hosted)
-- **Half-open slot management**: `tryAcquire()` atomically reserves a slot at the start of `exec()`; slot is decremented only on failure in catch-finally. This prevents concurrent callers from slipping through the half-open gate. Max concurrent half-open calls controlled by `halfOpenMaxCalls` policy (default 1).
+- Registered in MetricsRegistry; visible in `GET /metrics` → `snapshot.breakers`
+- See [[docs/architecture/core-systems|Core Systems — Circuit Breaker Wiring]] for full details
 
 ### Response Caching
 
-`[[apps/backend/src/infra/cache.ts]]` – LRU cache with SWR semantics:
+`[[apps/backend/src/infra/cache/swr.ts]]` and `[[apps/backend/src/application/SnapshotCache.ts]]` – Two-layer caching strategy:
 
-- Health checks: 30s TTL (serve stale while refetch in background)
-- Stats endpoints: 60s TTL
-- Bounded max entries (default: 1000, configurable)
-- Memory safe: LRU eviction prevents unbounded growth
-- No persistence (volatile, lost on restart)
+**SnapshotCache** (application layer):
+
+- Keeps the latest poller-published health result per service (keyed by `${kind}:${instanceId}`)
+- `GET /services` and `GET /services/:kind/health` serve from this cache; fall back to live probe only before first poll
+- Error results from `service.error` (scope=health) are also cached so the HTTP layer returns consistent error snapshots
+
+**SWR Stats Caches** (per-instance, infra/cache/swr.ts):
+
+- One `SwrCache<StatsSnapshot>` per service instance, TTL = instance's `cacheTtlMs`
+- Updated from `service.stats.updated` bus events; live probe on miss
+- `GET /services/:kind/stats` reads through this cache
+- Cache stats (hits/misses/stale) appear in `GET /metrics` → `snapshot.caches`
+- Memory safe: LRU eviction, no persistence
 
 ### Background Polling
 
@@ -775,130 +857,102 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`:
 @startuml
 !theme plain
 
-package "Express Server" {
-  [server.js] as Server
+package "Fastify Server" {
+  [index.ts\n(bootstrap)] as Boot
 }
 
-package "Middleware" {
-  [logger.js] as Logger
-  [auth.js] as Auth
-  [csrf.js] as CSRF
-  [ipControl.js] as IPCtrl
-  [rateLimiting.js] as RateLimit
-  [cache.js] as Cache
-  [validation.js] as Valid
-  [performanceMonitor.js] as PerfMon
+package "Transport" {
+  [originPolicy.ts\n(shared allow-list)] as OriginPolicy
+  [HTTP routes] as Routes
+  [wsPlugin\n(AuthGate+Broadcaster)] as WS
+  [requestTimeoutPlugin\n(AbortController)] as Timeout
 }
 
-package "Services" {
-  [ServiceManager] as SvcMgr
-  [serviceFactoryConfig] as SvcFactory
-  [TorManager] as TorMgr
-  [WebSocketManager] as WSMgr
-  [FrontendConfigService] as FrontendCfg
+package "Application" {
+  [SnapshotCache\n(health read-through)] as SnapCache
+  [ServiceLifecycle\n(hot-reload, onStartTimeoutMs)] as Lifecycle
 }
 
-package "Service Classes" {
-  [AdGuardService]
-  [BitcoinService]
-  [TorService]
-  [QBittorrentService]
-  [IpfsService]
-  [SynologyService]
-  [RoonService]
-  [PhilipsBridgeService]
-  [HomebridgeService]
-  [MacMiniService]
-  [AlbyHubService]
-  [RaspberryPiService]
-  [RouterService]
+package "Domain" {
+  [ServiceRegistry\nkind:instanceId] as Registry
+  [BreakerGuardedService\n(withBreakers)] as Guarded
+  [BaseService subclasses] as Services
 }
 
-package "Utils" {
-  [circuitBreaker]
-  [config]
+package "Infra" {
+  [MetricsRegistry\n(breakers+caches+errors)] as Metrics
+  [SwrCache per instance] as SWR
+  [CircuitBreaker\n{id}:health / {id}:stats] as CB
+  [BackgroundPoller\n(croner, 15s+jitter)] as Poller
+  [EventBus] as Bus
 }
 
-Database "<db> ENV" as EnvDB
+database "DuckDB\n(ConfigStore + TimeSeries)" as DB
 
-Server --> Logger : applies
-Server --> Auth : applies
-Server --> CSRF : applies
-Server --> IPCtrl : applies
-Server --> RateLimit : applies
-Server --> Cache : applies
-Server --> Valid : applies
-Server --> PerfMon : applies
+Boot --> SnapCache : start
+Boot --> Lifecycle : start (concurrent)
+Boot --> Routes : register
+Boot --> WS : register
 
-Server --> SvcMgr : routes
-SvcMgr --> SvcFactory : config
-SvcMgr --> TorMgr : manages
-SvcMgr --> WSMgr : broadcasts
-Server --> FrontendCfg : serves config
+OriginPolicy --> Routes : CORS onRequest
+OriginPolicy --> WS : AuthGate
 
-SvcFactory --> AdGuardService : creates
-SvcFactory --> BitcoinService : creates
-SvcFactory --> TorService : creates
-SvcFactory --> QBittorrentService : creates
-SvcFactory --> IpfsService : creates
-SvcFactory --> SynologyService : creates
-SvcFactory --> RoonService : creates
-SvcFactory --> PhilipsBridgeService : creates
-SvcFactory --> HomebridgeService : creates
-SvcFactory --> MacMiniService : creates
-SvcFactory --> AlbyHubService : creates
-SvcFactory --> RaspberryPiService : creates
-SvcFactory --> RouterService : creates
+Lifecycle --> Registry : register services
+Lifecycle --> Guarded : withBreakers + SWR
+Guarded --> Services : delegates
+Guarded --> CB : health/stats breakers
 
-SvcMgr --> circuitBreaker : uses
-Config --> circuitBreaker : configures
+Poller --> Bus : service.health.updated\nservice.stats.updated\nservice.error
+Bus --> SnapCache : update health cache
+Bus --> SWR : update stats cache
+Bus --> WS : Broadcaster frames
 
+Routes --> SnapCache : GET /services health
+Routes --> SWR : GET /services stats
+Routes --> Metrics : GET /metrics
+
+CB --> Metrics : register state
+SWR --> Metrics : register stats
+
+Lifecycle --> DB : ConfigStore
 @enduml
 ```
 
-### Middleware Stack Sequence
+### Request Pipeline Sequence
 
 ```plantuml
 @startuml
 !theme plain
 
 actor "Client" as Client
-participant "Server" as Server
-participant "Middleware Chain" as MW
+participant "Fastify" as Server
+participant "originPolicy\n(CORS hook)" as CORS
+participant "requestTimeoutPlugin" as Timeout
+participant "Route Handler" as Route
+participant "SnapshotCache\nor SwrCache" as Cache
+participant "BaseService" as Svc
 
 Client -> Server : HTTP Request
-Server -> MW[1] : requestIdMiddleware
-MW[1] -> MW[2] : requestLogger
-MW[2] -> MW[3] : performanceMonitor
-MW[3] -> MW[4] : enforceIPControl
-MW[4] -> MW[5] : requestTimeout
-MW[5] -> MW[6] : responseSizeLimit
-MW[6] -> MW[7] : apiResponseStandardizer
-MW[7] -> MW[8] : helmet
-MW[8] -> MW[9] : cors
-MW[9] -> MW[10] : compression
-MW[10] -> Server : Route Handler
-Server -> Client : HTTP Response
+Server -> CORS : onRequest hook\ncheck Origin header
+alt Origin denied
+  CORS --> Client : 403 Forbidden (or OPTIONS 403)
+else Origin allowed (or no Origin)
+  CORS --> Server : set CORS headers
+  Server -> Timeout : create AbortController\nstart 15s timer
+  Timeout --> Server : req.abortController set
+  Server -> Route : dispatch
 
-note right of MW[1]
-  1. requestIdMiddleware
-  Adds unique ID for tracing
-end note
+  alt cache hit (SnapshotCache or SWR fresh)
+    Route -> Cache : get(id)
+    Cache --> Route : cached Result
+  else cache miss / live probe
+    Route -> Svc : checkHealth / getStats\n(req.abortController.signal)
+    Svc --> Route : Result<Snapshot>
+  end
 
-note right of MW[2]
-  2. requestLogger
-  Structured JSON logging
-end note
-
-note right of MW[4]
-  4. enforceIPControl
-  IP whitelist/blacklist
-end note
-
-note right of MW[5]
-  5. requestTimeout
-  30s default timeout
-end note
+  Route --> Client : JSON response
+  Server -> Timeout : reply finish → abort signal
+end
 @enduml
 ```
 

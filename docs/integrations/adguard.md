@@ -2,9 +2,23 @@
 title: AdGuard Home Integration
 type: integration
 status: active
-date: 2026-05-08
-tags: [integration, services, backend, monitoring, two-tier, icmp, ping, extended-stats, dhcp, filtering]
-description: AdGuard Home DNS ad blocker integration with two-tier health model (ICMP + HTTP probe) and extended statistics (filtering, clients, DHCP, security features)
+date: 2026-06-12
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    two-tier,
+    icmp,
+    ping,
+    extended-stats,
+    dhcp,
+    filtering,
+    ttl-memo,
+    top-upstreams,
+  ]
+description: AdGuard Home DNS ad blocker integration with two-tier health model (ICMP + HTTP probe), extended statistics (filtering, clients, DHCP, security features), 10-min memoized config endpoints, and upstream response-time metrics (>=0.107.30)
 aliases: [adguard, adguard home, dns, ad blocker]
 ---
 
@@ -32,6 +46,7 @@ ADGUARD_TIMEOUT=10000  # optional, default 10s
 ```
 
 **Configuration Notes:**
+
 - `ADGUARD_MAIN_URL` — HTTP endpoint (host is extracted from URL for ping)
 - `ADGUARD_TIMEOUT` — Timeout for both host ping and service probe
 
@@ -58,7 +73,7 @@ withHostPing(
     host: urlHost,
     timeoutMs: this.timeoutMs,
     pingCount: 4,
-    prober: this.ping
+    prober: this.ping,
   },
   async (signal) => {
     // HTTP GET /control/status
@@ -67,7 +82,7 @@ withHostPing(
     return {
       reachable: res.ok,
       latencyMs: Date.now() - start,
-      message: res.ok ? 'OK' : `HTTP ${res.status}`
+      message: res.ok ? "OK" : `HTTP ${res.status}`,
     };
   },
   Date.now(),
@@ -79,75 +94,82 @@ Returns `HealthSnapshot` with `host` and `service` tiers.
 
 ### Stats (`getStats()`)
 
-Returns comprehensive service metrics across 9 parallel API endpoints with graceful degradation.
+Per poll cycle only `/control/status` and `/control/stats` are fetched. The 7 config-grade endpoints are **memoized for 10 minutes** via `core/ttlMemo.ts` (see [[docs/reference/code-patterns#ttlmemo--slow-lane-memoization|Code Patterns — ttlMemo]]) and served from cache between TTL refreshes.
 
-#### Core Metrics (Required Endpoints)
+#### Core Metrics (fetched every poll)
 
 These two endpoints must succeed; failure returns an error:
 
-| Endpoint          | Metrics Exposed                                                       |
-| ----------------- | --------------------------------------------------------------------- |
-| `/control/status` | `version`, `running`, `protectionEnabled`, `dnsPort`, `httpPort`      |
-| `/control/stats`  | `totalQueries`, `blockedQueries`, `allowedQueries`, `blockingRate`, `avgProcessingTime`, `topBlockedDomain`, `topQueriedDomain`, `topClient`, `safebrowsingBlocked`, `safesearchBlocked`, `parentalBlocked` |
+| Endpoint          | Metrics Exposed                                                                                                                                                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/control/status` | `version`, `running`, `protectionEnabled`, `dnsPort`, `httpPort`                                                                                                                                                                               |
+| `/control/stats`  | `totalQueries`, `blockedQueries`, `allowedQueries`, `blockingRate`, `avgProcessingTime`, `topBlockedDomain`, `topQueriedDomain`, `topClient`, `safebrowsingBlocked`, `safesearchBlocked`, `parentalBlocked`, `topUpstream`, `topUpstreamAvgMs` |
 
-#### Extended Metrics (Optional Endpoints)
+#### Extended Metrics (10-min slow lane via ttlMemo)
 
-The following 7 endpoints are optional. If any fails, it returns `null` for its metrics; overall `getStats` succeeds:
+The following 7 endpoints are optional and memoized. If any fails, it returns `null` for its metrics; overall `getStats` succeeds:
 
-| Endpoint                      | Graceful Return on Failure | Metrics Exposed                                   |
-| ----------------------------- | -------------------------- | ------------------------------------------------- |
-| `/control/filtering/status`   | `{}`                       | `filteringEnabled`, `filterCount`, `totalRules`, `userRules` |
-| `/control/clients`            | `{}`                       | `clientCount`, `autoClientCount`                  |
-| `/control/dhcp/status`        | `{}`                       | `dhcpEnabled`, `dhcpLeases`, `dhcpStaticLeases`  |
-| `/control/safebrowsing/status`| `{}`                       | `safebrowsingEnabled`                             |
-| `/control/parental/status`    | `{}`                       | `parentalEnabled`                                 |
-| `/control/safesearch/status`  | `{}`                       | `safesearchEnabled`                               |
-| `/control/dns_info`           | `{}`                       | `upstreamCount`, `upstreamMode`                   |
+| Endpoint                       | Graceful Return on Failure | Metrics Exposed                                              |
+| ------------------------------ | -------------------------- | ------------------------------------------------------------ |
+| `/control/filtering/status`    | `{}`                       | `filteringEnabled`, `filterCount`, `totalRules`, `userRules` |
+| `/control/clients`             | `{}`                       | `clientCount`, `autoClientCount`                             |
+| `/control/dhcp/status`         | `{}`                       | `dhcpEnabled`, `dhcpLeases`, `dhcpStaticLeases`              |
+| `/control/safebrowsing/status` | `{}`                       | `safebrowsingEnabled`                                        |
+| `/control/parental/status`     | `{}`                       | `parentalEnabled`                                            |
+| `/control/safesearch/status`   | `{}`                       | `safesearchEnabled`                                          |
+| `/control/dns_info`            | `{}`                       | `upstreamCount`, `upstreamMode`                              |
 
 #### Metric Details
 
-**All Metrics (27 total):**
+**All Metrics (29 total):**
 
-| Metric                   | Type    | Description                                              |
-| ------------------------ | ------- | -------------------------------------------------------- |
-| `version`                | string  | AdGuard Home version (e.g., "v0.107.30")                |
-| `running`                | boolean | Service running state                                   |
-| `protectionEnabled`      | boolean | DNS protection enabled flag                              |
-| `dnsPort`                | number  | DNS server port                                         |
-| `httpPort`               | number  | HTTP API port                                           |
-| `totalQueries`           | number  | Total DNS queries processed                              |
-| `blockedQueries`         | number  | Sum of all blocked queries (filtering + safebrowsing + safesearch + parental) |
-| `allowedQueries`         | number  | Allowed queries = totalQueries - blockedQueries         |
-| `blockingRate`           | number  | Percentage of blocked queries (0–100, rounded to 2 decimals) |
-| `avgProcessingTime`      | number  | Average DNS query processing time (milliseconds)        |
-| `topBlockedDomain`       | string  | Most-blocked domain name (or "N/A")                     |
-| `topQueriedDomain`       | string  | Most-queried domain name (or "N/A")                     |
-| `topClient`              | string  | Most-active client IP (or "N/A")                        |
-| `safebrowsingBlocked`    | number  | Queries blocked by SafeBrowsing filter                  |
-| `safesearchBlocked`      | number  | Queries blocked by SafeSearch enforcement               |
-| `parentalBlocked`        | number  | Queries blocked by Parental Control filter              |
-| `filteringEnabled`       | boolean | Filtering toggle state (or `null` on fetch failure)    |
-| `filterCount`            | number  | Number of configured filter lists                       |
-| `totalRules`             | number  | **Only counts enabled filter lists** (filters with `enabled !== false`) |
-| `userRules`              | number  | Count of custom user-defined rules                      |
-| `clientCount`            | number  | Number of unique clients                                |
-| `autoClientCount`        | number  | Number of auto-detected clients                         |
-| `dhcpEnabled`            | boolean | DHCP server enabled (or `null` on fetch failure)       |
-| `dhcpLeases`             | number  | Active DHCP leases                                      |
-| `dhcpStaticLeases`       | number  | Static DHCP leases                                      |
-| `safebrowsingEnabled`    | boolean | SafeBrowsing protection enabled (or `null` on fetch failure) |
-| `parentalEnabled`        | boolean | Parental Control enabled (or `null` on fetch failure)  |
-| `safesearchEnabled`      | boolean | SafeSearch enforcement enabled (or `null` on fetch failure) |
-| `upstreamCount`          | number  | Number of configured upstream DNS servers               |
-| `upstreamMode`           | string  | Upstream DNS mode (e.g., "parallel", "sequential", or `null`) |
+| Metric                | Type           | Description                                                                                                   |
+| --------------------- | -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `version`             | string         | AdGuard Home version (e.g., "v0.107.30")                                                                      |
+| `running`             | boolean        | Service running state                                                                                         |
+| `protectionEnabled`   | boolean        | DNS protection enabled flag                                                                                   |
+| `dnsPort`             | number         | DNS server port                                                                                               |
+| `httpPort`            | number         | HTTP API port                                                                                                 |
+| `totalQueries`        | number         | Total DNS queries processed                                                                                   |
+| `blockedQueries`      | number         | Sum of all blocked queries (filtering + safebrowsing + safesearch + parental)                                 |
+| `allowedQueries`      | number         | Allowed queries = totalQueries - blockedQueries                                                               |
+| `blockingRate`        | number         | Percentage of blocked queries (0–100, rounded to 2 decimals)                                                  |
+| `avgProcessingTime`   | number         | Average DNS query processing time (milliseconds)                                                              |
+| `topBlockedDomain`    | string         | Most-blocked domain name (or "N/A")                                                                           |
+| `topQueriedDomain`    | string         | Most-queried domain name (or "N/A")                                                                           |
+| `topClient`           | string         | Most-active client IP (or "N/A")                                                                              |
+| `safebrowsingBlocked` | number         | Queries blocked by SafeBrowsing filter                                                                        |
+| `safesearchBlocked`   | number         | Queries blocked by SafeSearch enforcement                                                                     |
+| `parentalBlocked`     | number         | Queries blocked by Parental Control filter                                                                    |
+| `topUpstream`         | string \| null | Most-used upstream DNS server address (from `top_upstreams_responses`; AdGuard ≥ 0.107.30)                    |
+| `topUpstreamAvgMs`    | number \| null | Average response time of the top upstream in milliseconds (from `top_upstreams_avg_time`; AdGuard ≥ 0.107.30) |
+| `filteringEnabled`    | boolean        | Filtering toggle state (or `null` on fetch failure)                                                           |
+| `filterCount`         | number         | Number of configured filter lists                                                                             |
+| `totalRules`          | number         | **Only counts enabled filter lists** (filters with `enabled !== false`)                                       |
+| `userRules`           | number         | Count of custom user-defined rules                                                                            |
+| `clientCount`         | number         | Number of unique clients                                                                                      |
+| `autoClientCount`     | number         | Number of auto-detected clients                                                                               |
+| `dhcpEnabled`         | boolean        | DHCP server enabled (or `null` on fetch failure)                                                              |
+| `dhcpLeases`          | number         | Active DHCP leases                                                                                            |
+| `dhcpStaticLeases`    | number         | Static DHCP leases                                                                                            |
+| `safebrowsingEnabled` | boolean        | SafeBrowsing protection enabled (or `null` on fetch failure)                                                  |
+| `parentalEnabled`     | boolean        | Parental Control enabled (or `null` on fetch failure)                                                         |
+| `safesearchEnabled`   | boolean        | SafeSearch enforcement enabled (or `null` on fetch failure)                                                   |
+| `upstreamCount`       | number         | Number of configured upstream DNS servers                                                                     |
+| `upstreamMode`        | string         | Upstream DNS mode (e.g., "parallel", "sequential", or `null`)                                                 |
+
+> [!info] `topUpstream` / `topUpstreamAvgMs`
+> These fields are sourced from `top_upstreams_responses` and `top_upstreams_avg_time` in the `/control/stats` response. They are `null` on AdGuard Home versions older than 0.107.30 that do not include these keys.
 
 #### Graceful Degradation
 
-All 7 optional endpoints use `.catch(() => null)` to suppress errors:
+All 7 slow-lane endpoints use `.catch(() => null)` to suppress errors:
 
 ```ts
-const filtering = await this.get<FilteringStatus>('/control/filtering/status', signal)
-  .catch((): FilteringStatus | null => null);
+const filtering = await this.get<FilteringStatus>(
+  "/control/filtering/status",
+  signal
+).catch((): FilteringStatus | null => null);
 // ... (repeated for 6 other optional endpoints)
 ```
 
@@ -163,3 +185,5 @@ Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/api/services-health|Services Health API]]
 - [[docs/features/service-monitoring|Service Monitoring]]
+- [[docs/reference/code-patterns#ttlmemo--slow-lane-memoization|Code Patterns — ttlMemo]]
+- [[docs/performance/caching-strategies|Caching Strategies]]

@@ -2,8 +2,24 @@
 title: Router Integration
 type: integration
 status: active
-date: 2026-05-07
-tags: [integration, services, backend, monitoring, two-tier, icmp, tcp, snmp, snmp-walk, snmp-v2c, snmp-v3, interface-stats, cpu-load, connected-clients]
+date: 2026-06-12
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    two-tier,
+    icmp,
+    tcp,
+    snmp,
+    snmp-walk,
+    snmp-v2c,
+    snmp-v3,
+    interface-stats,
+    cpu-load,
+    connected-clients,
+  ]
 description: Network router integration with two-tier health model (ICMP + TCP probe), SNMP metrics (v2c/v3), and interface statistics collection
 aliases: [router, beryl, telenet, arp, network, snmp-router]
 ---
@@ -48,6 +64,7 @@ TELENET_INTERFACE_FILTER=eth0,wlan0  # optional; restricts interface stats to th
 When `snmpCommunity` is set, the router service polls SNMP metrics using SNMPv2c (or v3 if configured). This provides additional visibility into router device health and network interface statistics. The SNMP walk implementation (see [[docs/architecture/backend-architecture#infrastructure-layer|Infrastructure Layer]]) supports both v2c and v3 credentials.
 
 Configuration fields:
+
 - **snmpVersion** — SNMP protocol version (default: `v2c`; `v3` also supported via schema but requires additional v3 credentials fields — see [[docs/integrations/synology|Synology Integration]] for v3 example)
 - **snmpCommunity** — SNMPv2c community string (e.g., `public`). When present, enables SNMP polling. Marked as a secret field in config store (encrypted with master key)
 - **interfaceFilter** — Array of interface names to include in stats (e.g., `["eth0", "wlan0"]`). If empty, all interfaces are collected and summed
@@ -56,16 +73,17 @@ Configuration fields:
 
 When SNMP is enabled, `getStats()` returns additional metrics alongside base metrics. The service uses [[apps/backend/src/infra/snmp/snmpGetterImpl.ts|SNMP walk]] to collect subtree data in parallel:
 
-| Metric               | OID                      | Type      | Description                                                  |
-| -------------------- | ------------------------ | --------- | ------------------------------------------------------------ |
-| `sysUptime`          | `1.3.6.1.2.1.1.3`        | number    | System uptime in ticks (centiseconds since reboot)           |
-| `connectedClients`   | `1.3.6.1.2.1.4.22.1.2`   | number    | ARP table row count (active MAC addresses on LAN)            |
-| `cpuLoad`            | `1.3.6.1.2.1.25.3.3.1.2` | number    | Average processor load across CPU cores (percent, 0–100)     |
-| `ifInOctets`         | `1.3.6.1.2.1.2.2.1.10`   | number    | Inbound octets summed across filtered interfaces (bytes)      |
-| `ifOutOctets`        | `1.3.6.1.2.1.2.2.1.16`   | number    | Outbound octets summed across filtered interfaces (bytes)     |
-| `ifDescr`            | `1.3.6.1.2.1.2.2.1.2`    | array     | Network interface names (collected to build active filter set) |
+| Metric                 | OID                                                             | Type   | Description                                                                                                                                                |
+| ---------------------- | --------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sysUptime`            | `1.3.6.1.2.1.1.3`                                               | number | System uptime in ticks (centiseconds since reboot)                                                                                                         |
+| `connectedClients`     | `1.3.6.1.2.1.4.22.1.2`                                          | number | ARP table row count (active MAC addresses on LAN)                                                                                                          |
+| `cpuLoad`              | `1.3.6.1.2.1.25.3.3.1.2`                                        | number | Average processor load across CPU cores (percent, 0–100)                                                                                                   |
+| `ifInOctets`           | `1.3.6.1.2.1.31.1.1.1.6` (HC), fallback `1.3.6.1.2.1.2.2.1.10`  | number | Inbound octets summed across filtered interfaces (bytes). Prefers 64-bit `ifHCInOctets` (no 4 GiB wrap); falls back to 32-bit when ifXTable is unavailable |
+| `ifOutOctets`          | `1.3.6.1.2.1.31.1.1.1.10` (HC), fallback `1.3.6.1.2.1.2.2.1.16` | number | Outbound octets summed across filtered interfaces (bytes), same HC-first strategy                                                                          |
+| `ifInBps` / `ifOutBps` | derived                                                         | number | Byte rates computed from counter deltas between polls; omitted on the first poll and when a counter decreases (wrap/reboot)                                |
+| `ifDescr`              | `1.3.6.1.2.1.2.2.1.2`                                           | array  | Network interface names (collected to build active filter set)                                                                                             |
 
-**Graceful degradation**: If SNMP queries fail or timeout, the service returns base metrics (host, portCount, configured) without SNMP data. No error is raised. All SNMP walks use parallel Promise.all() with a per-request timeout and AbortSignal propagation for clean cancellation.
+**Graceful degradation**: If SNMP queries fail or timeout, the service returns base metrics (host, portCount, configured) without SNMP data. No error is raised. HC-counter walks degrade independently to the 32-bit fallback. All SNMP walks use parallel Promise.all() with a per-request timeout and AbortSignal propagation for clean cancellation.
 
 ### Interface Filtering
 
@@ -94,11 +112,11 @@ If `interfaceFilter` is empty, all interfaces are summed. Example: `interfaceFil
 
 ```typescript
 interface RouterDeps {
-  ping: PingProber;      // ICMP ping probe (host tier)
-  tcp: TcpProber;        // TCP port probe (service tier)
-  snmp?: SnmpGetter;     // Optional SNMP walker (v2c/v3)
+  ping: PingProber; // ICMP ping probe (host tier)
+  tcp: TcpProber; // TCP port probe (service tier)
+  snmp?: SnmpGetter; // Optional SNMP walker (v2c/v3)
   config: RouterInstance; // Runtime configuration
-  now: () => number;     // Clock function
+  now: () => number; // Clock function
 }
 ```
 

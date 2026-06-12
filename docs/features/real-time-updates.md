@@ -2,16 +2,28 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-05-08
-tags: [feature, websocket, frontend, backend, real-time, fastify, snapshots, phase-0a]
-description: WebSocket-based real-time status broadcasting with full snapshot payloads (HealthSnapshot, StatsSnapshot) for live dashboard updates using split architecture
+date: 2026-06-12
+tags:
+  [
+    feature,
+    websocket,
+    frontend,
+    backend,
+    real-time,
+    fastify,
+    snapshots,
+    phase-0a,
+    alert-frames,
+    origin-policy,
+  ]
+description: WebSocket-based real-time status broadcasting with full snapshot payloads (HealthSnapshot, StatsSnapshot), alert frames for error/recovery transitions, and shared origin policy
 aliases: [websocket, real-time, live updates, status broadcasting]
 ---
 
 # Real-Time Updates
 
 > [!abstract] Overview
-> Watchman uses WebSocket connections to broadcast service status changes to the frontend in real-time. The backend emits service status updates via EventBus; the frontend maintains a singleton WebSocket connection wrapped in a `<WebSocketProvider>` that invalidates React Query when messages arrive.
+> Watchman uses WebSocket connections to broadcast service status changes to the frontend in real-time. The backend emits service status updates via EventBus; the frontend maintains a singleton WebSocket connection wrapped in a `<WebSocketProvider>` that invalidates React Query when messages arrive. The WebSocket layer is browser-compatible: the auth token is optional (browsers cannot set handshake headers), accepted from `Authorization: Bearer` or `?token=` query param.
 
 ## Architecture
 
@@ -21,11 +33,12 @@ The WebSocket layer is split into 4 classes in `[[apps/backend/src/transport/ws/
 
 ### AuthGate
 
-Handles CORS and origin validation on WebSocket handshake upgrade. Rejects disallowed origins with code `1008`.
+Validates the WebSocket upgrade request. Uses the **shared origin allow-list** from [[apps/backend/src/transport/originPolicy.ts|originPolicy.ts]] (same policy as HTTP CORS). Rejects disallowed origins with close code `1008`. Auth token is **optional** — browsers cannot set handshake headers, so an unauthenticated upgrade is accepted as `anonymous`. Token is extracted from `Authorization: Bearer <token>` or `?token=<token>` query param when present.
 
 ### ConnectionManager
 
 Manages active client connections:
+
 - Track each connection with unique ID
 - Track IP address per connection (for rate limiting, security alerts)
 - Clean up disconnected clients (idempotent handling)
@@ -34,6 +47,7 @@ Manages active client connections:
 ### HeartbeatScheduler
 
 Maintains connection liveness:
+
 - Sends ping messages every 30 seconds
 - Tracks pong responses
 - Closes stale connections (no pong after 2 pings)
@@ -42,12 +56,13 @@ Maintains connection liveness:
 
 ### Broadcaster
 
-Publishes status changes to connected clients:
-- Receives `service.stats.updated` and `service.health.updated` events from domain layer via eventBus
-- Includes full `snapshot` (HealthSnapshot or StatsSnapshot) in payload when present (Phase 0a+)
-- Serializes events to JSON message format
-- Sends to all connected clients (or filtered by service type if needed)
-- Handles send errors gracefully (disconnected clients don't crash broadcaster)
+Publishes status changes and alert transitions to connected clients:
+
+- Subscribes to `service.health.updated`, `service.stats.updated`, `service.error`, and `config:service.*` events from the EventBus
+- Includes full `snapshot` (HealthSnapshot or StatsSnapshot) in `service_update` payload when present (Phase 0a+)
+- **Alert frames** — deduped on state transitions: emits `{ type: "alert", level: "error" }` on a service's **first** poll failure (`service.error`); emits `{ type: "alert", level: "info", message: "…recovered" }` on the next successful poll. Subsequent failures while already errored are suppressed until recovery clears the set.
+- Serializes all events to JSON before sending
+- Handles send errors gracefully (dead clients are removed, not crashed on)
 
 ### Data Flow
 
@@ -76,11 +91,11 @@ The [[apps/frontend/src/providers/WebSocketProvider.tsx|WebSocketProvider]] wrap
 The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 
 1. WebSocket connection establishment (upgrade to `/ws` endpoint)
-2. Message parsing and dispatch (recognizes `service_update`, `metrics`, `connection` message types)
-3. Reconnection logic with exponential backoff (max 30 seconds)
-4. Connection state tracking (connected/disconnecting/reconnecting)
-5. Debounced React Query invalidation on service.stats.updated events (prevents thundering herd)
-6. Error handling and recovery
+2. Message parsing and dispatch — recognizes `service_update`, `alert`, `metrics`, `connection`, `service_config_changed` message types
+3. `service_update` cache invalidation: keyed by `kind` using prefix invalidation (`[kind, ...]`), so all query families for that kind are invalidated in a single debounced batch
+4. `alert` frames: routed to toast notifications (`error` → `toast.error`, `warning` → `toast.warning`, `info` → `toast.info`)
+5. Reconnection logic with exponential backoff (max 30 seconds); reconnect attempts counted **once per failure** via `onclose` only (not double-counted from `onerror`)
+6. Connection toast only on **recovery** (`toast.success("WebSocket reconnected")`), not on every initial connect
 7. Hook-level observability via frontend logger (`logger.warn`/`logger.debug`)
 
 ## Benefits
@@ -127,29 +142,41 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 @startuml
 !theme plain
 
-package "HTTP Server" as HTTPServer {
-    [Express Server] as Express
+package "Fastify Server" as HTTPServer {
+    [wsPlugin (/ws upgrade)] as WsPlugin
 }
 
-package "WebSocketManager" as WSMgr {
-    [Server] as WS
-    [Connection Tracker] as Tracker
-    [Broadcast] as Broadcast
+package "Transport WS" as WSLayer {
+    [AuthGate\n(origin policy + optional token)] as Gate
+    [ConnectionManager\n(client registry)] as Tracker
+    [HeartbeatScheduler\n(ping/pong 30s)] as HB
+    [Broadcaster\n(event → frame)] as Broadcast
+}
+
+package "EventBus" as Bus {
+    [service.health.updated] as HE
+    [service.stats.updated] as SE
+    [service.error] as ERR
+    [config:service.*] as CFG
 }
 
 package "Clients" {
-    [Client 1] as C1
-    [Client 2] as C2
-    [Client N] as Cn
+    [Browser / Desktop] as C1
+    [CLI / script\n(no Origin header)] as C2
 }
 
-Express --> WSMgr : Initialize
-WSMgr --> Tracker : Track connections
-WSMgr --> Broadcast : Broadcast messages
+WsPlugin --> Gate : upgrade request
+Gate --> Tracker : accepted connection
+Tracker --> HB : register
+HB --> Broadcast : liveness
 
-Tracker --> C1 : Store connection
-Tracker --> C2 : Store connection
-Tracker --> Cn : Store connection
+HE --> Broadcast : health frame
+SE --> Broadcast : stats frame
+ERR --> Broadcast : alert frame\n(first failure only)
+CFG --> Broadcast : config_changed frame
+
+Broadcast --> C1 : JSON frames
+Broadcast --> C2 : JSON frames
 @enduml
 ```
 
@@ -159,33 +186,37 @@ Tracker --> Cn : Store connection
 @startuml
 !theme plain
 
-participant "ServiceManager" as SvcMgr
-participant "WebSocketManager" as WSMgr
+participant "BackgroundPoller" as Poller
+participant "EventBus" as Bus
+participant "Broadcaster" as Bcast
 participant "useWebSocket" as Hook
 participant "React Query" as Query
+participant "Toast" as Toast
 
-note over SvcMgr : Poll interval: 15 seconds
+note over Poller : 15-second interval
 
 loop Every 15 seconds
-    SvcMgr -> SvcMgr : Poll all services
-    SvcMgr -> SvcMgr : Compare with previous state
+    Poller -> Poller : Poll service
 
-    alt Status Changed
-        SvcMgr -> WSMgr : broadcast(statusUpdate)
-
-        WSMgr -> Hook : WebSocket message
-        Hook -> Hook : Parse update
-
-        alt Service Health Update
-            Hook -> Query : invalidateQueries\n(['service-health'])
-        else Instance Config Update
-            Hook -> Query : invalidateQueries\n(['service-instances'])
-        end
-
+    alt Poll succeeds
+        Poller -> Bus : service.health.updated\nor service.stats.updated
+        Bus -> Bcast : event payload
+        Bcast -> Bcast : clear erroredIds\n(recovery check)
+        Bcast -> Hook : service_update frame\n{type,scope,id,kind,snapshot}
+        Hook -> Query : invalidateQueries\n([kind, ...]) prefix match
         Query -> Query : Refetch affected queries
-        Query --> Hook : Updated data
-    else No Change
-        SvcMgr -> SvcMgr : No action
+
+        note over Bcast : if id was in erroredIds\nemit alert "recovered" first
+    else Poll fails (first failure)
+        Poller -> Bus : service.error {id,kind,scope,error}
+        Bus -> Bcast : error payload
+        Bcast -> Bcast : add id to erroredIds
+        Bcast -> Hook : alert frame\n{type:"alert",level:"error"}
+        Hook -> Toast : toast.error(message)
+    else Poll fails (repeat failure)
+        Poller -> Bus : service.error
+        Bus -> Bcast : error payload
+        note over Bcast : id already in erroredIds\nsuppressed
     end
 end
 @enduml
@@ -200,27 +231,36 @@ end
 participant "useWebSocket Hook" as Hook
 participant "WebSocket" as WS
 participant "React Query" as Query
-participant "UI Components" as UI
+participant "Toast" as Toast
 
-Hook -> WS : Connect to ws://host:port
-WS --> Hook : onOpen()
-Hook -> Hook : Set connected state
+Hook -> WS : Connect to ws://host/ws
+WS --> Hook : onopen()
+Hook -> Hook : reconnectAttempts > 0?\nyes → toast.success("WebSocket reconnected")
+Hook -> Hook : reset reconnectAttempts
 
 alt Normal Operation
-    WS -> Hook : onMessage(update)
-    Hook -> Query : Invalidate relevant queries
-    Query -> UI : Update state
-else Connection Lost
-    WS -> Hook : onClose()
-    Hook -> Hook : Start reconnection\nwith exponential backoff
+    WS -> Hook : onmessage(frame)
+    Hook -> Hook : parse JSON
 
-    loop Until Connected
-        Hook -> WS : Attempt reconnect
+    alt service_update
+        Hook -> Query : debounced prefix invalidate\n[kind, ...]
+    else alert
+        Hook -> Toast : toast.error/warning/info
+    else connection / metrics / config_changed
+        Hook -> Query : invalidate specific keys
+    end
+else Connection Lost
+    WS -> Hook : onclose()
+    Hook -> Hook : increment reconnectAttempts\n(counted once per close, not per error)
+    Hook -> Hook : schedule reconnect\n(exponential backoff, max 30s)
+
+    loop Until connected or max attempts
+        Hook -> WS : new WebSocket(url)
         alt Success
-            WS --> Hook : onOpen()
-            Hook -> Hook : Reset backoff
+            WS --> Hook : onopen()
+            Hook -> Toast : toast.success("WebSocket reconnected")
         else Failed
-            Hook -> Hook : Increase backoff\n(max 30 seconds)
+            Hook -> Hook : increase backoff
         end
     end
 end
@@ -232,6 +272,9 @@ end
 - [[docs/features/service-monitoring|Service Monitoring]]
 - [[docs/architecture/data-flow|Data Flow]]
 - [[docs/architecture/backend-architecture|Backend Architecture]]
+- [[docs/architecture/core-systems|Core Systems — EventBus]]
+- [[docs/security/index|Security — Origin Policy]]
+- [[apps/backend/src/transport/originPolicy.ts|originPolicy.ts]] — shared origin allow-list
 - [[apps/backend/src/transport/ws/AuthGate.ts|AuthGate]]
 - [[apps/backend/src/transport/ws/ConnectionManager.ts|ConnectionManager]]
 - [[apps/backend/src/transport/ws/HeartbeatScheduler.ts|HeartbeatScheduler]]
