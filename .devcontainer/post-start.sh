@@ -17,7 +17,7 @@ fi
 # key conflict, so host adds new keys without clobbering container edits).
 if [[ -f "$STAGE/claude.json" && -f /home/dev/.claude.json ]]; then
   tmp=$(mktemp)
-  if jq -s '.[1] * .[0]' /home/dev/.claude.json "$STAGE/claude.json" > "$tmp" 2>/dev/null \
+  if jq -s '.[1] * .[0] | del(.installMethod, .autoUpdatesProtectedForNative)' /home/dev/.claude.json "$STAGE/claude.json" > "$tmp" 2>/dev/null \
      && [[ -s "$tmp" ]]; then
     mv "$tmp" /home/dev/.claude.json
   else
@@ -36,6 +36,19 @@ for p in scheduled-tasks tasks jobs daemon; do
   rm -rf "/home/dev/.claude/$p" 2>/dev/null || true
 done
 
+# --- Project memory: seed from the host (RO) into the writable volume ----------
+# The host copy is bind-mounted RO at ~/.claude-memory-seed. Mirror it (--delete)
+# into the real per-project memory path on every start so Claude reads CURRENT host
+# memory and anything a prior headless / prompt-injected run wrote is wiped. Only an
+# interactive operator session's NEW edits (layered on this clean seed) are pushed
+# back to the host by bin/claude on exit. Matches Brain's pattern. (F10/F27)
+MEM_SEED=/home/dev/.claude-memory-seed
+MEM_DIR=/home/dev/.claude/projects/-workspaces-Watchman/memory
+if [[ -d "$MEM_SEED" ]]; then
+  mkdir -p "$MEM_DIR"
+  rsync -a --delete --ignore-errors "$MEM_SEED/" "$MEM_DIR/" 2>/dev/null || true
+fi
+
 # Refuse to proceed if the egress firewall didn't verify. The entrypoint writes
 # this sentinel only after confirming default-deny is active; its absence means
 # the lock may be open. Egress is fail-closed regardless (init-firewall.sh sets
@@ -43,7 +56,7 @@ done
 if [[ ! -f /run/egress-firewall-ok ]]; then
   cat >&2 <<'EOF'
 [post-start] ✖✖ EGRESS FIREWALL NOT VERIFIED (/run/egress-firewall-ok missing).
-[post-start]     The egress lock did not confirm. Check `docker logs` for the
+[post-start]     The egress lock did not confirm. Check `container logs` for the
 [post-start]     [firewall] error, then restart the container. Do NOT run
 [post-start]     --dangerously-skip-permissions until this is resolved.
 EOF
