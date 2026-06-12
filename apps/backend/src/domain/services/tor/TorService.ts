@@ -1,14 +1,24 @@
-import { BaseService, type HealthResult, type HostHealth, type PollPolicy, type StatsResult } from '../../BaseService.js';
-import type { HttpClient, HttpResponse } from '../../../infra/http/client.js';
-import { ok, err } from '../../../core/result.js';
-import { UnavailableError, NotFoundError, isDomainError } from '../../../core/errors.js';
-import type { TorInstance } from '../../../config/services.js';
-import type { PingProber } from '../../../infra/net/pingProbe.js';
-import type { TorControlClient } from '../../../infra/tor/controlClient.js';
+import {
+  BaseService,
+  type HealthResult,
+  type HostHealth,
+  type PollPolicy,
+  type StatsResult,
+} from "../../BaseService.js";
+import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
+import { ok, err } from "../../../core/result.js";
+import {
+  UnavailableError,
+  NotFoundError,
+  isDomainError,
+} from "../../../core/errors.js";
+import type { TorInstance } from "../../../config/services.js";
+import type { PingProber } from "../../../infra/net/pingProbe.js";
+import type { TorControlClient } from "../../../infra/tor/controlClient.js";
 import type {
   TorEventSubscription,
   TorEventSubscriptionFactory,
-} from '../../../infra/tor/eventSubscription.js';
+} from "../../../infra/tor/eventSubscription.js";
 
 /**
  * After both ICMP and ControlPort fail (signals "off-LAN"), skip the ControlPort
@@ -53,7 +63,7 @@ interface OnionooResponse {
 }
 
 export class TorService extends BaseService {
-  readonly kind = 'tor';
+  readonly kind = "tor";
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy;
   private readonly http: HttpClient;
@@ -90,7 +100,7 @@ export class TorService extends BaseService {
     this.torControl = deps.torControl;
     this.eventSubFactory = deps.eventSubscriptionFactory;
     this.relayNickname = deps.config.relayNickname;
-    this.onionooBaseUrl = deps.config.onionooBaseUrl.replace(/\/+$/, '');
+    this.onionooBaseUrl = deps.config.onionooBaseUrl.replace(/\/+$/, "");
     this.host = deps.config.host;
     this.controlPort = deps.config.controlPort;
     this.controlPassword = deps.config.controlPassword;
@@ -112,13 +122,13 @@ export class TorService extends BaseService {
         cookieAuthFile: this.cookieAuthFile,
         timeoutMs: this.timeoutMs,
       },
-      this.subAbort.signal,
+      this.subAbort.signal
     );
-    sub.on('BW', (_event, args) => {
-      this.bwRead = parseInt(args[0] ?? '0', 10);
-      this.bwWritten = parseInt(args[1] ?? '0', 10);
+    sub.on("BW", (_event, args) => {
+      this.bwRead = parseInt(args[0] ?? "0", 10);
+      this.bwWritten = parseInt(args[1] ?? "0", 10);
     });
-    await sub.setevents(['BW'], this.subAbort.signal);
+    await sub.setevents(["BW"], this.subAbort.signal);
     this.subscription = sub;
   }
 
@@ -148,21 +158,24 @@ export class TorService extends BaseService {
   }
 
   private markControlPortUnreachable(): void {
-    this.controlPortUnreachableUntil = this.now() + CONTROL_PORT_FALLBACK_COOLDOWN_MS;
+    this.controlPortUnreachableUntil =
+      this.now() + CONTROL_PORT_FALLBACK_COOLDOWN_MS;
   }
 
   private clearControlPortCooldown(): void {
     this.controlPortUnreachableUntil = 0;
   }
 
-  private async fallbackCheckHealth(signal: AbortSignal): Promise<HealthResult> {
+  private async fallbackCheckHealth(
+    signal: AbortSignal
+  ): Promise<HealthResult> {
     const result = await this.checkHealthOnionoo(signal);
     if (!result.ok) return result;
     return ok({
       ...result.value,
       details: {
         ...(result.value.details ?? {}),
-        source: 'onionoo',
+        source: "onionoo",
         controlPortReachable: false,
       },
     });
@@ -173,22 +186,31 @@ export class TorService extends BaseService {
     if (!result.ok) return result;
     return ok({
       ...result.value,
-      metrics: { ...result.value.metrics, source: 'onionoo' },
+      metrics: { ...result.value.metrics, source: "onionoo" },
     });
   }
 
   // ─── ControlPort path ──────────────────────────────────────────────────────
 
-  private async checkHealthControlPort(signal: AbortSignal): Promise<HealthResult> {
+  private async checkHealthControlPort(
+    signal: AbortSignal
+  ): Promise<HealthResult> {
     const started = this.now();
     const [pingSettled, controlSettled] = await Promise.allSettled([
-      this.pinger.probe({ host: this.host, timeoutMs: this.timeoutMs, count: this.pingCount, signal }),
+      this.pinger.probe({
+        host: this.host,
+        timeoutMs: this.timeoutMs,
+        count: this.pingCount,
+        signal,
+      }),
       this.probeCircuit(signal),
     ]);
 
-    const icmpAlive = pingSettled.status === 'fulfilled' && pingSettled.value.success;
-    const pingMs = pingSettled.status === 'fulfilled' ? pingSettled.value.avgMs : undefined;
-    const controlPortReachable = controlSettled.status === 'fulfilled';
+    const icmpAlive =
+      pingSettled.status === "fulfilled" && pingSettled.value.success;
+    const pingMs =
+      pingSettled.status === "fulfilled" ? pingSettled.value.avgMs : undefined;
+    const controlPortReachable = controlSettled.status === "fulfilled";
 
     // Off-LAN heuristic: if both ICMP and ControlPort fail, we likely can't
     // reach the relay's network at all. Mark cooldown and serve Onionoo so
@@ -199,9 +221,16 @@ export class TorService extends BaseService {
     }
     this.clearControlPortCooldown();
 
-    const host: HostHealth = { reachable: icmpAlive, ...(pingMs !== undefined ? { pingMs } : {}) };
-    const circuitEstablished = controlSettled.status === 'fulfilled' && controlSettled.value;
-    const service = { reachable: circuitEstablished, details: { controlPort: this.controlPort } };
+    const host: HostHealth = {
+      reachable: icmpAlive,
+      ...(pingMs !== undefined ? { pingMs } : {}),
+    };
+    const circuitEstablished =
+      controlSettled.status === "fulfilled" && controlSettled.value;
+    const service = {
+      reachable: circuitEstablished,
+      details: { controlPort: this.controlPort },
+    };
     const reachable = host.reachable || service.reachable;
     const latencyMs = pingMs ?? this.now() - started;
 
@@ -216,7 +245,7 @@ export class TorService extends BaseService {
         icmpAlive,
         circuitEstablished,
         controlPort: this.controlPort,
-        source: 'control-port',
+        source: "control-port",
         controlPortReachable,
       },
     });
@@ -224,12 +253,18 @@ export class TorService extends BaseService {
 
   private async probeCircuit(signal: AbortSignal): Promise<boolean> {
     const handle = await this.torControl.connect(
-      { host: this.host, port: this.controlPort, password: this.controlPassword, cookieAuthFile: this.cookieAuthFile, timeoutMs: this.timeoutMs },
-      signal,
+      {
+        host: this.host,
+        port: this.controlPort,
+        password: this.controlPassword,
+        cookieAuthFile: this.cookieAuthFile,
+        timeoutMs: this.timeoutMs,
+      },
+      signal
     );
     try {
-      const info = await handle.getinfo(['status/circuit-established'], signal);
-      return info.get('status/circuit-established') === '1';
+      const info = await handle.getinfo(["status/circuit-established"], signal);
+      return info.get("status/circuit-established") === "1";
     } finally {
       await handle.close().catch(() => undefined);
     }
@@ -238,32 +273,88 @@ export class TorService extends BaseService {
   private async getStatsControlPort(signal: AbortSignal): Promise<StatsResult> {
     try {
       const handle = await this.torControl.connect(
-        { host: this.host, port: this.controlPort, password: this.controlPassword, cookieAuthFile: this.cookieAuthFile, timeoutMs: this.timeoutMs },
-        signal,
+        {
+          host: this.host,
+          port: this.controlPort,
+          password: this.controlPassword,
+          cookieAuthFile: this.cookieAuthFile,
+          timeoutMs: this.timeoutMs,
+        },
+        signal
       );
       try {
         const coreInfo = await handle.getinfo(
-          ['traffic/read', 'traffic/written', 'version/current', 'dormant', 'process/descriptor-limit'],
-          signal,
+          [
+            "traffic/read",
+            "traffic/written",
+            "version/current",
+            "dormant",
+            "process/descriptor-limit",
+          ],
+          signal
         );
-        const acctInfo = await handle.getinfo(
-          ['accounting/bytes', 'accounting/bytes-left'],
-          signal,
-        ).catch(() => new Map<string, string>());
+        const acctInfo = await handle
+          .getinfo(["accounting/bytes", "accounting/bytes-left"], signal)
+          .catch(() => new Map<string, string>());
 
-        const trafficRead = parseIntMetric(coreInfo.get('traffic/read'));
-        const trafficWritten = parseIntMetric(coreInfo.get('traffic/written'));
-        const trafficDeltaRead = this.lastTrafficRead >= 0 ? trafficRead - this.lastTrafficRead : 0;
-        const trafficDeltaWritten = this.lastTrafficWritten >= 0 ? trafficWritten - this.lastTrafficWritten : 0;
+        // connection/circuit listings are standard; relay identity keys
+        // (fingerprint/address) fail on client-only nodes — each group is
+        // fetched separately so one missing key can't blank the others
+        const connInfo = await handle
+          .getinfo(["orconn-status", "circuit-status"], signal)
+          .catch(() => new Map<string, string>());
+        const identityInfo = await handle
+          .getinfo(["fingerprint", "address"], signal)
+          .catch(() => new Map<string, string>());
+
+        // own consensus entry (flags + bandwidth weight) and GeoIP country
+        // come from the local node — no external Onionoo round-trip needed
+        const fingerprint = identityInfo.get("fingerprint") ?? "";
+        const address = identityInfo.get("address") ?? "";
+        const nsInfo = fingerprint
+          ? await handle
+              .getinfo([`ns/id/${fingerprint}`], signal)
+              .catch(() => new Map<string, string>())
+          : new Map<string, string>();
+        const countryInfo = address
+          ? await handle
+              .getinfo([`ip-to-country/${address}`], signal)
+              .catch(() => new Map<string, string>())
+          : new Map<string, string>();
+
+        const trafficRead = parseIntMetric(coreInfo.get("traffic/read"));
+        const trafficWritten = parseIntMetric(coreInfo.get("traffic/written"));
+        const trafficDeltaRead =
+          this.lastTrafficRead >= 0 ? trafficRead - this.lastTrafficRead : 0;
+        const trafficDeltaWritten =
+          this.lastTrafficWritten >= 0
+            ? trafficWritten - this.lastTrafficWritten
+            : 0;
         this.lastTrafficRead = trafficRead;
         this.lastTrafficWritten = trafficWritten;
 
+        const orconnLines = statusLines(connInfo.get("orconn-status"));
+        const circuitLines = statusLines(connInfo.get("circuit-status"));
+        const connectionsTotal = orconnLines.length;
+        const connectionsCurrent = orconnLines.filter((l) =>
+          l.includes("CONNECTED")
+        ).length;
+        const circuitsTotal = circuitLines.length;
+        const circuitsActive = circuitLines.filter((l) =>
+          / BUILT /.test(` ${l} `)
+        ).length;
+
+        const nsEntry = parseNsEntry(nsInfo.get(`ns/id/${fingerprint}`));
+        const localCountry = countryInfo.get(`ip-to-country/${address}`) ?? "";
+
         const enriched = await this.enrich(signal);
+        const country = localCountry !== "" ? localCountry : enriched.country;
+        const consensusWeight = nsEntry.bandwidth ?? enriched.consensusWeight;
 
         return ok({
           at: this.now(),
           metrics: {
-            source: 'control-port',
+            source: "control-port",
             host: this.host,
             controlPort: this.controlPort,
             trafficRead,
@@ -272,14 +363,27 @@ export class TorService extends BaseService {
             trafficDeltaWritten,
             bwRead: this.bwRead,
             bwWritten: this.bwWritten,
-            version: coreInfo.get('version/current') ?? '',
-            dormant: coreInfo.get('dormant') === '1',
-            descriptorLimit: parseIntMetric(coreInfo.get('process/descriptor-limit')),
-            accountingBytes: acctInfo.get('accounting/bytes') ?? '',
-            accountingBytesLeft: acctInfo.get('accounting/bytes-left') ?? '',
-            ...(enriched.country !== undefined ? { country: enriched.country } : {}),
-            ...(enriched.consensusWeight !== undefined ? { consensusWeight: enriched.consensusWeight } : {}),
-            ...(enriched.asName !== undefined ? { asName: enriched.asName } : {}),
+            version: coreInfo.get("version/current") ?? "",
+            dormant: coreInfo.get("dormant") === "1",
+            descriptorLimit: parseIntMetric(
+              coreInfo.get("process/descriptor-limit")
+            ),
+            accountingBytes: acctInfo.get("accounting/bytes") ?? "",
+            accountingBytesLeft: acctInfo.get("accounting/bytes-left") ?? "",
+            connections: {
+              current: connectionsCurrent,
+              total: connectionsTotal,
+            },
+            circuits: { active: circuitsActive, total: circuitsTotal },
+            ...(fingerprint ? { fingerprint } : {}),
+            ...(nsEntry.flags.length > 0
+              ? { flags: nsEntry.flags.join(",") }
+              : {}),
+            ...(country !== undefined ? { country } : {}),
+            ...(consensusWeight !== undefined ? { consensusWeight } : {}),
+            ...(enriched.asName !== undefined
+              ? { asName: enriched.asName }
+              : {}),
             ...(enriched.consensusWeightFraction !== undefined
               ? { consensusWeightFraction: enriched.consensusWeightFraction }
               : {}),
@@ -303,12 +407,17 @@ export class TorService extends BaseService {
       const relay = await this.searchRelay(signal);
       const latencyMs = this.now() - started;
       if (!relay) {
-        return err(new NotFoundError(`tor relay "${this.relayNickname}" not found`));
+        return err(
+          new NotFoundError(`tor relay "${this.relayNickname}" not found`)
+        );
       }
-      const version = relay.version ?? relay.platform ?? 'unknown';
-      const details: Record<string, unknown> = { version, running: relay.running };
-      if (!relay.running) details['warning'] = 'relay is not running';
-      else if (relay.hibernating) details['warning'] = 'relay is hibernating';
+      const version = relay.version ?? relay.platform ?? "unknown";
+      const details: Record<string, unknown> = {
+        version,
+        running: relay.running,
+      };
+      if (!relay.running) details["warning"] = "relay is not running";
+      else if (relay.hibernating) details["warning"] = "relay is hibernating";
       return ok({
         reachable: Boolean(relay.running) && !relay.hibernating,
         latencyMs,
@@ -326,26 +435,28 @@ export class TorService extends BaseService {
     try {
       const relay = await this.searchRelay(signal);
       if (!relay) {
-        return err(new NotFoundError(`tor relay "${this.relayNickname}" not found`));
+        return err(
+          new NotFoundError(`tor relay "${this.relayNickname}" not found`)
+        );
       }
       return ok({
         at: this.now(),
         metrics: {
           nickname: relay.nickname,
-          fingerprint: relay.fingerprint.slice(0, 8) + '...',
+          fingerprint: relay.fingerprint.slice(0, 8) + "...",
           running: Boolean(relay.running),
           hibernating: Boolean(relay.hibernating),
-          flags: (relay.flags ?? []).join(','),
-          country: relay.country_name ?? relay.country ?? 'Unknown',
-          city: relay.city_name ?? 'Unknown',
-          firstSeen: relay.first_seen ?? '',
-          lastSeen: relay.last_seen ?? '',
+          flags: (relay.flags ?? []).join(","),
+          country: relay.country_name ?? relay.country ?? "Unknown",
+          city: relay.city_name ?? "Unknown",
+          firstSeen: relay.first_seen ?? "",
+          lastSeen: relay.last_seen ?? "",
           consensusWeight: relay.consensus_weight ?? 0,
-          platform: relay.platform ?? 'Unknown',
-          contact: relay.contact ?? '',
+          platform: relay.platform ?? "Unknown",
+          contact: relay.contact ?? "",
           orPort: extractORPort(relay.or_addresses),
           relayType: determineRelayType(relay.flags ?? []),
-          version: relay.version ?? relay.platform ?? 'Unknown',
+          version: relay.version ?? relay.platform ?? "Unknown",
           bandwidthCurrent: relay.observed_bandwidth ?? 0,
           bandwidthBurst: relay.bandwidth_burst ?? 0,
         },
@@ -361,10 +472,10 @@ export class TorService extends BaseService {
     const url = `${this.onionooBaseUrl}/details?search=${encodeURIComponent(this.relayNickname)}`;
     const res = await this.http.send({
       url,
-      method: 'GET',
+      method: "GET",
       headers: {
-        accept: 'application/json',
-        'user-agent': 'Watchman-Dashboard/1.0',
+        accept: "application/json",
+        "user-agent": "Watchman-Dashboard/1.0",
       },
       signal,
       timeoutMs: this.timeoutMs,
@@ -373,38 +484,62 @@ export class TorService extends BaseService {
     const relays = data.relays ?? [];
     if (relays.length === 0) return null;
     const nick = this.relayNickname.toLowerCase();
-    return relays.find((r) => r.nickname.toLowerCase() === nick) ?? relays[0] ?? null;
+    return (
+      relays.find((r) => r.nickname.toLowerCase() === nick) ?? relays[0] ?? null
+    );
   }
 
   private async parseOnionoo(res: HttpResponse): Promise<OnionooResponse> {
     if (res.status < 200 || res.status >= 300) {
-      const text = await res.text().catch(() => '');
-      throw new UnavailableError(`onionoo returned ${res.status}: ${text.slice(0, 200)}`);
+      const text = await res.text().catch(() => "");
+      throw new UnavailableError(
+        `onionoo returned ${res.status}: ${text.slice(0, 200)}`
+      );
     }
     return res.json<OnionooResponse>();
   }
 
-  private async enrich(signal: AbortSignal): Promise<{
-    country?: string;
-    consensusWeight?: number;
-    asName?: string;
-    consensusWeightFraction?: number;
-  }> {
+  // Onionoo enrichment (country/AS/consensus weight) changes on the order of
+  // hours; cache it so ControlPort stats polls don't hit the external service
+  // every cycle. Failures fall back to the last known value.
+  private static readonly ENRICH_TTL_MS = 60 * 60 * 1000;
+  private enrichCache: { at: number; value: TorEnrichment } | null = null;
+
+  private async enrich(signal: AbortSignal): Promise<TorEnrichment> {
+    if (
+      this.enrichCache &&
+      this.now() - this.enrichCache.at < TorService.ENRICH_TTL_MS
+    ) {
+      return this.enrichCache.value;
+    }
     try {
       const relay = await this.searchRelay(signal);
-      if (!relay) return {};
-      return {
-        ...(relay.country_name ?? relay.country ? { country: relay.country_name ?? relay.country } : {}),
-        ...(relay.consensus_weight !== undefined ? { consensusWeight: relay.consensus_weight } : {}),
+      if (!relay) return this.enrichCache?.value ?? {};
+      const value: TorEnrichment = {
+        ...((relay.country_name ?? relay.country)
+          ? { country: relay.country_name ?? relay.country }
+          : {}),
+        ...(relay.consensus_weight !== undefined
+          ? { consensusWeight: relay.consensus_weight }
+          : {}),
         ...(relay.as_name !== undefined ? { asName: relay.as_name } : {}),
         ...(relay.consensus_weight_fraction !== undefined
           ? { consensusWeightFraction: relay.consensus_weight_fraction }
           : {}),
       };
+      this.enrichCache = { at: this.now(), value };
+      return value;
     } catch {
-      return {};
+      return this.enrichCache?.value ?? {};
     }
   }
+}
+
+interface TorEnrichment {
+  country?: string;
+  consensusWeight?: number;
+  asName?: string;
+  consensusWeightFraction?: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -419,14 +554,43 @@ function extractORPort(addresses: string[] | undefined): number {
 }
 
 function determineRelayType(flags: string[]): string {
-  if (flags.includes('Exit')) return 'exit';
-  if (flags.includes('Guard')) return 'guard';
-  if (flags.includes('Bridge')) return 'bridge';
-  return 'relay';
+  if (flags.includes("Exit")) return "exit";
+  if (flags.includes("Guard")) return "guard";
+  if (flags.includes("Bridge")) return "bridge";
+  return "relay";
 }
 
 function parseIntMetric(value: string | undefined): number {
   if (value === undefined) return 0;
   const n = parseInt(value, 10);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Split a multiline GETINFO listing (orconn-status / circuit-status) into
+ *  trimmed non-empty entry lines. */
+function statusLines(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+/** Parse the node's own router-status entry (GETINFO ns/id/<fp>):
+ *  the `s` line carries consensus flags, `w Bandwidth=` the weight. */
+function parseNsEntry(raw: string | undefined): {
+  flags: string[];
+  bandwidth: number | null;
+} {
+  const flags: string[] = [];
+  let bandwidth: number | null = null;
+  for (const line of statusLines(raw)) {
+    if (line.startsWith("s ")) {
+      flags.push(...line.slice(2).split(/\s+/).filter(Boolean));
+    } else if (line.startsWith("w ")) {
+      const m = line.match(/Bandwidth=(\d+)/);
+      if (m?.[1]) bandwidth = parseInt(m[1], 10);
+    }
+  }
+  return { flags, bandwidth };
 }

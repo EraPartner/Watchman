@@ -1,10 +1,19 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
-import { BitcoinService } from './BitcoinService.js';
-import { createHttpClient } from '../../../infra/http/client.js';
-import type { BitcoinInstance } from '../../../config/services.js';
-import type { PingProber } from '../../../infra/net/pingProbe.js';
-import type { ZmqConnectFn, ZmqMessage, ZmqSubscriberHandle } from '../../../infra/zmq/zmqSubscriber.js';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import {
+  createServer,
+  type Server,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
+import { BitcoinService } from "./BitcoinService.js";
+import { createHttpClient } from "../../../infra/http/client.js";
+import type { BitcoinInstance } from "../../../config/services.js";
+import type { PingProber } from "../../../infra/net/pingProbe.js";
+import type {
+  ZmqConnectFn,
+  ZmqMessage,
+  ZmqSubscriberHandle,
+} from "../../../infra/zmq/zmqSubscriber.js";
 
 function fakePing(): PingProber {
   return { probe: async () => ({ success: true, avgMs: 5 }) };
@@ -20,38 +29,81 @@ let state: {
   httpStatus: number;
   lastAuth: string | undefined;
   calls: string[];
+  requests: number;
 };
 
 function handler(req: IncomingMessage, res: ServerResponse) {
-  state.lastAuth = req.headers['authorization'] as string | undefined;
-  if (state.requireAuth && state.lastAuth !== 'Basic ' + Buffer.from('user:pw').toString('base64')) {
+  state.requests += 1;
+  state.lastAuth = req.headers["authorization"] as string | undefined;
+  if (
+    state.requireAuth &&
+    state.lastAuth !== "Basic " + Buffer.from("user:pw").toString("base64")
+  ) {
     res.writeHead(401);
-    res.end('unauthorized');
+    res.end("unauthorized");
     return;
   }
-  let body = '';
-  req.on('data', (c) => (body += c));
-  req.on('end', () => {
-    let method = '';
+  let body = "";
+  req.on("data", (c) => (body += c));
+  req.on("end", () => {
+    let parsed: unknown = null;
     try {
-      const parsed = JSON.parse(body) as { method?: string };
-      method = parsed.method ?? '';
+      parsed = JSON.parse(body);
     } catch {
       /* ignore */
     }
-    state.calls.push(method);
+
     if (state.httpStatus !== 200) {
+      const calls = Array.isArray(parsed) ? parsed : [parsed];
+      for (const c of calls) {
+        const m = (c as { method?: string } | null)?.method ?? "";
+        state.calls.push(
+          responseKey(m, (c as { params?: unknown[] } | null)?.params)
+        );
+      }
       res.writeHead(state.httpStatus);
-      res.end('server error');
+      res.end("server error");
       return;
     }
-    const methodError = state.methodErrors[method] ?? state.rpcError ?? null;
-    const envelope = methodError
-      ? { result: null, error: methodError, id: 'watchman' }
-      : { result: state.responses[method] ?? null, error: null, id: 'watchman' };
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(envelope));
+
+    const envelopeFor = (call: {
+      method?: string;
+      params?: unknown[];
+      id?: unknown;
+    }) => {
+      const method = call.method ?? "";
+      const key = responseKey(method, call.params);
+      state.calls.push(key);
+      const methodError = state.methodErrors[method] ?? state.rpcError ?? null;
+      return methodError
+        ? { result: null, error: methodError, id: call.id ?? "watchman" }
+        : {
+            result: state.responses[key] ?? state.responses[method] ?? null,
+            error: null,
+            id: call.id ?? "watchman",
+          };
+    };
+
+    res.writeHead(200, { "content-type": "application/json" });
+    if (Array.isArray(parsed)) {
+      res.end(
+        JSON.stringify(parsed.map((c) => envelopeFor(c as { method?: string })))
+      );
+    } else {
+      res.end(
+        JSON.stringify(envelopeFor((parsed ?? {}) as { method?: string }))
+      );
+    }
   });
+}
+
+// estimatesmartfee is called with different targets; key those responses by
+// method:target so the fixture can differentiate
+function responseKey(method: string, params?: unknown[]): string {
+  if (method === "estimatesmartfee" && Array.isArray(params)) {
+    return `${method}:${String(params[0])}`;
+  }
+  return method;
 }
 
 beforeAll(
@@ -60,17 +112,17 @@ beforeAll(
       server = createServer(handler);
       server.listen(0, () => {
         const addr = server.address();
-        port = typeof addr === 'object' && addr ? addr.port : 0;
+        port = typeof addr === "object" && addr ? addr.port : 0;
         resolve();
       });
-    }),
+    })
 );
 
 afterAll(
   () =>
     new Promise<void>((resolve) => {
       server.close(() => resolve());
-    }),
+    })
 );
 
 beforeEach(() => {
@@ -80,7 +132,7 @@ beforeEach(() => {
     rpcError: null,
     responses: {
       getblockchaininfo: {
-        chain: 'main',
+        chain: "main",
         blocks: 850000,
         headers: 850000,
         difficulty: 123.45,
@@ -91,38 +143,52 @@ beforeEach(() => {
       },
       getnetworkinfo: {
         version: 270000,
-        subversion: '/Satoshi:27.0.0/',
+        subversion: "/Satoshi:27.0.0/",
         protocolversion: 70016,
         connections: 10,
         connections_in: 3,
         connections_out: 7,
       },
-      getmempoolinfo: { size: 50, bytes: 10_000, usage: 20_000, maxmempool: 300_000_000, mempoolminfee: 0.00001 },
+      getmempoolinfo: {
+        size: 50,
+        bytes: 10_000,
+        usage: 20_000,
+        maxmempool: 300_000_000,
+        mempoolminfee: 0.00001,
+      },
       uptime: 12345,
-      getpeerinfo: [{ addr: '1.2.3.4:8333' }, { addr: '5.6.7.8:8333' }],
       getnettotals: { totalbytesrecv: 100_000_000, totalbytessent: 50_000_000 },
       getmininginfo: { networkhashps: 0, pooledtx: 50 },
       getindexinfo: { txindex: { synced: true, best_block_height: 850000 } },
+      // BTC/kvB → 10 sat/vB, 2 sat/vB, 1 sat/vB
+      "estimatesmartfee:1": { feerate: 0.0001, blocks: 1 },
+      "estimatesmartfee:6": { feerate: 0.00002, blocks: 6 },
+      "estimatesmartfee:144": { feerate: 0.00001, blocks: 144 },
+      getzmqnotifications: [
+        { type: "pubhashblock", address: "tcp://0.0.0.0:28332" },
+        { type: "pubrawtx", address: "tcp://0.0.0.0:28333" },
+      ],
     },
     methodErrors: {},
     lastAuth: undefined,
     calls: [],
+    requests: 0,
   };
 });
 
 function makeConfig(overrides: Partial<BitcoinInstance> = {}): BitcoinInstance {
   return {
-    kind: 'bitcoin',
-    instanceId: 'main',
+    kind: "bitcoin",
+    instanceId: "main",
     enabled: true,
     pollPolicy: { healthMs: 10_000, statsMs: 30_000, jitterRatio: 0.1 },
     cacheTtlMs: 10_000,
     timeoutMs: 2_000,
     rpcUrl: `http://127.0.0.1:${port}`,
-    rpcUser: 'user',
-    rpcPassword: 'pw',
-    zmqHashblockEndpoint: '',
-    zmqRawtxEndpoint: '',
+    rpcUser: "user",
+    rpcPassword: "pw",
+    zmqHashblockEndpoint: "",
+    zmqRawtxEndpoint: "",
     ...overrides,
   };
 }
@@ -163,37 +229,58 @@ function makeFakeZmq(): {
 }
 
 function hashblockMsg(hexHash: string, seq = 0): ZmqMessage {
-  return { topic: 'hashblock', data: Buffer.from(hexHash, 'hex'), sequence: seq };
+  return {
+    topic: "hashblock",
+    data: Buffer.from(hexHash, "hex"),
+    sequence: seq,
+  };
 }
 
-describe('BitcoinService', () => {
-  it('id is bitcoin:main', () => {
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
-    expect(svc.id).toBe('bitcoin:main');
+describe("BitcoinService", () => {
+  it("id is bitcoin:main", () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    expect(svc.id).toBe("bitcoin:main");
   });
 
-  it('checkHealth reachable when getblockchaininfo returns chain', async () => {
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 1 });
+  it("checkHealth reachable when getblockchaininfo returns chain", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.reachable).toBe(true);
-      expect(res.value.details?.chain).toBe('main');
-      expect(res.value.details?.version).toBe('27.0.0');
+      expect(res.value.details?.chain).toBe("main");
+      expect(res.value.details?.version).toBe("27.0.0");
     }
   });
 
-  it('sends basic auth header', async () => {
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
+  it("sends basic auth header", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
     await svc.checkHealth(new AbortController().signal);
-    expect(state.lastAuth).toBe('Basic ' + Buffer.from('user:pw').toString('base64'));
+    expect(state.lastAuth).toBe(
+      "Basic " + Buffer.from("user:pw").toString("base64")
+    );
   });
 
-  it('401 yields unreachable snapshot', async () => {
+  it("401 yields unreachable snapshot", async () => {
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ rpcPassword: 'wrong' }),
+      config: makeConfig({ rpcPassword: "wrong" }),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
@@ -201,11 +288,11 @@ describe('BitcoinService', () => {
     if (res.ok) expect(res.value.reachable).toBe(false);
   });
 
-  it('missing credentials yields unreachable snapshot', async () => {
+  it("missing credentials yields unreachable snapshot", async () => {
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ rpcUser: '', rpcPassword: '' }),
+      config: makeConfig({ rpcUser: "", rpcPassword: "" }),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
@@ -213,56 +300,81 @@ describe('BitcoinService', () => {
     if (res.ok) expect(res.value.reachable).toBe(false);
   });
 
-  it('rpc error envelope yields unreachable snapshot', async () => {
-    state.rpcError = { message: 'Method not found' };
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
+  it("rpc error envelope yields unreachable snapshot", async () => {
+    state.rpcError = { message: "Method not found" };
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.reachable).toBe(false);
   });
 
-  it('500 response yields unreachable snapshot', async () => {
+  it("500 response yields unreachable snapshot", async () => {
     state.httpStatus = 500;
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.reachable).toBe(false);
   });
 
-  it('getStats exposes node metrics', async () => {
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 42 });
+  it("getStats exposes node metrics", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 42,
+    });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.metrics).toMatchObject({
-        chain: 'main',
+        chain: "main",
         blocks: 850000,
         connections: 10,
         inbound: 3,
         outbound: 7,
-        version: '27.0.0',
+        version: "27.0.0",
         mempoolSize: 50,
         uptime: 12345,
       });
     }
     expect(state.calls).toEqual(
-      expect.arrayContaining(['getblockchaininfo', 'getnetworkinfo', 'getmempoolinfo', 'uptime']),
+      expect.arrayContaining([
+        "getblockchaininfo",
+        "getnetworkinfo",
+        "getmempoolinfo",
+        "uptime",
+      ])
     );
   });
 
-  it('parses numeric-only version', async () => {
-    state.responses['getnetworkinfo'] = { version: 270100 };
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
-    const res = await svc.checkHealth(new AbortController().signal);
-    expect(res.ok).toBe(true);
-    if (res.ok) expect(res.value.details?.version).toBe('27.1.0');
-  });
-
-  it('connection failure yields unreachable snapshot', async () => {
+  it("parses numeric-only version", async () => {
+    state.responses["getnetworkinfo"] = { version: 270100 };
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ rpcUrl: 'http://127.0.0.1:1' }),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.details?.version).toBe("27.1.0");
+  });
+
+  it("connection failure yields unreachable snapshot", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ rpcUrl: "http://127.0.0.1:1" }),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
@@ -272,13 +384,19 @@ describe('BitcoinService', () => {
 
   // ── BT1: extended stats ────────────────────────────────────────────────────
 
-  it('BT1 — getStats includes peer count, net totals, mining, and tx index', async () => {
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
+  it("BT1 — getStats includes peer count, net totals, mining, and tx index", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.metrics).toMatchObject({
-        peerCount: 2,
+        // peer count comes from getnetworkinfo.connections (getpeerinfo dropped)
+        peerCount: 10,
         totalBytesRecv: 100_000_000,
         totalBytesSent: 50_000_000,
         hashesPerSec: 0,
@@ -287,65 +405,163 @@ describe('BitcoinService', () => {
       });
     }
     expect(state.calls).toEqual(
-      expect.arrayContaining(['getpeerinfo', 'getnettotals', 'getmininginfo', 'getindexinfo']),
+      expect.arrayContaining(["getnettotals", "getmininginfo", "getindexinfo"])
     );
+    expect(state.calls).not.toContain("getpeerinfo");
   });
 
-  it('BT1 — getStats gracefully handles failures in extended RPC calls', async () => {
-    state.methodErrors = {
-      getpeerinfo: { message: 'Method not found' },
-      getnettotals: { message: 'Method not found' },
-      getmininginfo: { message: 'Method not found' },
-      getindexinfo: { message: 'Method not found' },
-    };
-    const svc = new BitcoinService({ http: createHttpClient(), ping: fakePing(), config: makeConfig(), now: () => 0 });
+  it("BT1 — getStats issues a single batched HTTP request", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    expect(state.requests).toBe(1);
+  });
+
+  it("BT1 — getStats converts estimatesmartfee to sat/vB", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.metrics).toMatchObject({
-        peerCount: 0,
+        feeSatPerVb1: 10,
+        feeSatPerVb6: 2,
+        feeSatPerVb144: 1,
+      });
+    }
+  });
+
+  it("BT1 — fee estimates are null when the node has none", async () => {
+    state.responses["estimatesmartfee:1"] = { errors: ["Insufficient data"] };
+    state.responses["estimatesmartfee:6"] = { errors: ["Insufficient data"] };
+    state.responses["estimatesmartfee:144"] = { errors: ["Insufficient data"] };
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.feeSatPerVb1).toBeNull();
+      expect(res.value.metrics.feeSatPerVb144).toBeNull();
+    }
+  });
+
+  it("BT1 — getStats gracefully handles failures in extended RPC calls", async () => {
+    state.methodErrors = {
+      getnettotals: { message: "Method not found" },
+      getmininginfo: { message: "Method not found" },
+      getindexinfo: { message: "Method not found" },
+      estimatesmartfee: { message: "Method not found" },
+    };
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics).toMatchObject({
+        peerCount: 10,
         totalBytesRecv: 0,
         totalBytesSent: 0,
         hashesPerSec: 0,
         txIndexSynced: false,
         txIndexHeight: 0,
+        feeSatPerVb1: null,
       });
       // base metrics still intact
-      expect(res.value.metrics.chain).toBe('main');
+      expect(res.value.metrics.chain).toBe("main");
     }
   });
 });
 
 // ── BT2: ZMQ subscription ─────────────────────────────────────────────────────
 
-describe('BitcoinService — ZMQ (BT2)', () => {
-  it('onStart connects to configured zmqHashblockEndpoint', async () => {
+describe("BitcoinService — ZMQ (BT2)", () => {
+  it("onStart connects to configured zmqHashblockEndpoint", async () => {
     const zmq = makeFakeZmq();
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ zmqHashblockEndpoint: 'tcp://127.0.0.1:28332' }),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => 0,
       zmqConnect: zmq.connect,
     });
     await svc.onStart();
     expect(zmq.connectCalls).toHaveLength(1);
-    expect(zmq.connectCalls[0]).toEqual({ endpoint: 'tcp://127.0.0.1:28332', topics: ['hashblock'] });
+    expect(zmq.connectCalls[0]).toEqual({
+      endpoint: "tcp://127.0.0.1:28332",
+      topics: ["hashblock"],
+    });
   });
 
-  it('hashblock message updates zmqLastBlockHash, zmqLastBlockAt, and increments zmqBlockCount', async () => {
+  it("onStart verifies the node's getzmqnotifications against the configured endpoint", async () => {
+    const zmq = makeFakeZmq();
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
+      now: () => 0,
+      zmqConnect: zmq.connect,
+    });
+    await svc.onStart();
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // node binds 0.0.0.0:28332, client connects 127.0.0.1:28332 — port match
+      expect(res.value.metrics.zmqEndpointMatch).toBe(true);
+      expect(res.value.metrics.zmqServerHashblockEndpoint).toBe(
+        "tcp://0.0.0.0:28332"
+      );
+    }
+    await svc.onStop();
+  });
+
+  it("onStart flags a ZMQ port mismatch", async () => {
+    const zmq = makeFakeZmq();
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:9999" }),
+      now: () => 0,
+      zmqConnect: zmq.connect,
+    });
+    await svc.onStart();
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.zmqEndpointMatch).toBe(false);
+    }
+    await svc.onStop();
+  });
+
+  it("hashblock message updates zmqLastBlockHash, zmqLastBlockAt, and increments zmqBlockCount", async () => {
     let tick = 1000;
     const zmq = makeFakeZmq();
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ zmqHashblockEndpoint: 'tcp://127.0.0.1:28332' }),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => tick,
       zmqConnect: zmq.connect,
     });
     await svc.onStart();
 
-    const hash1 = 'deadbeef'.repeat(8);
+    const hash1 = "deadbeef".repeat(8);
     tick = 2000;
     zmq.emit(hashblockMsg(hash1, 1));
 
@@ -357,7 +573,7 @@ describe('BitcoinService — ZMQ (BT2)', () => {
       expect(res1.value.metrics.zmqBlockCount).toBe(1);
     }
 
-    const hash2 = 'cafebabe'.repeat(8);
+    const hash2 = "cafebabe".repeat(8);
     tick = 3000;
     zmq.emit(hashblockMsg(hash2, 2));
 
@@ -372,12 +588,12 @@ describe('BitcoinService — ZMQ (BT2)', () => {
     await svc.onStop();
   });
 
-  it('getStats includes ZMQ metrics when zmqHashblockEndpoint configured', async () => {
+  it("getStats includes ZMQ metrics when zmqHashblockEndpoint configured", async () => {
     const zmq = makeFakeZmq();
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ zmqHashblockEndpoint: 'tcp://127.0.0.1:28332' }),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => 0,
       zmqConnect: zmq.connect,
     });
@@ -386,10 +602,10 @@ describe('BitcoinService — ZMQ (BT2)', () => {
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value.metrics).toHaveProperty('zmqLastBlockHash');
-      expect(res.value.metrics).toHaveProperty('zmqLastBlockAt');
-      expect(res.value.metrics).toHaveProperty('zmqBlockCount');
-      expect(res.value.metrics.zmqLastBlockHash).toBe('');
+      expect(res.value.metrics).toHaveProperty("zmqLastBlockHash");
+      expect(res.value.metrics).toHaveProperty("zmqLastBlockAt");
+      expect(res.value.metrics).toHaveProperty("zmqBlockCount");
+      expect(res.value.metrics.zmqLastBlockHash).toBe("");
       expect(res.value.metrics.zmqLastBlockAt).toBe(0);
       expect(res.value.metrics.zmqBlockCount).toBe(0);
     }
@@ -397,7 +613,7 @@ describe('BitcoinService — ZMQ (BT2)', () => {
     await svc.onStop();
   });
 
-  it('getStats omits ZMQ metrics when no zmqHashblockEndpoint configured', async () => {
+  it("getStats omits ZMQ metrics when no zmqHashblockEndpoint configured", async () => {
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
@@ -408,18 +624,18 @@ describe('BitcoinService — ZMQ (BT2)', () => {
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value.metrics).not.toHaveProperty('zmqLastBlockHash');
-      expect(res.value.metrics).not.toHaveProperty('zmqLastBlockAt');
-      expect(res.value.metrics).not.toHaveProperty('zmqBlockCount');
+      expect(res.value.metrics).not.toHaveProperty("zmqLastBlockHash");
+      expect(res.value.metrics).not.toHaveProperty("zmqLastBlockAt");
+      expect(res.value.metrics).not.toHaveProperty("zmqBlockCount");
     }
   });
 
-  it('onStop closes the ZMQ handle', async () => {
+  it("onStop closes the ZMQ handle", async () => {
     const zmq = makeFakeZmq();
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ zmqHashblockEndpoint: 'tcp://127.0.0.1:28332' }),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => 0,
       zmqConnect: zmq.connect,
     });
@@ -429,7 +645,7 @@ describe('BitcoinService — ZMQ (BT2)', () => {
     expect(zmq.isClosed()).toBe(true);
   });
 
-  it('onStop after no ZMQ start is a no-op', async () => {
+  it("onStop after no ZMQ start is a no-op", async () => {
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
@@ -439,14 +655,14 @@ describe('BitcoinService — ZMQ (BT2)', () => {
     await expect(svc.onStop()).resolves.toBeUndefined();
   });
 
-  it('ZMQ connect failure is non-fatal — service continues without ZMQ metrics', async () => {
+  it("ZMQ connect failure is non-fatal — service continues without ZMQ metrics", async () => {
     const failingConnect: ZmqConnectFn = async () => {
-      throw new Error('zeromq not installed');
+      throw new Error("zeromq not installed");
     };
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ zmqHashblockEndpoint: 'tcp://127.0.0.1:28332' }),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => 0,
       zmqConnect: failingConnect,
     });
@@ -457,24 +673,24 @@ describe('BitcoinService — ZMQ (BT2)', () => {
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value.metrics.chain).toBe('main');
+      expect(res.value.metrics.chain).toBe("main");
       expect(res.value.metrics.zmqBlockCount).toBe(0);
     }
   });
 
-  it('messages after onStop are not delivered', async () => {
+  it("messages after onStop are not delivered", async () => {
     const zmq = makeFakeZmq();
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ zmqHashblockEndpoint: 'tcp://127.0.0.1:28332' }),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => 0,
       zmqConnect: zmq.connect,
     });
     await svc.onStart();
     await svc.onStop();
 
-    zmq.emit(hashblockMsg('deadbeef'.repeat(8), 1));
+    zmq.emit(hashblockMsg("deadbeef".repeat(8), 1));
 
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);

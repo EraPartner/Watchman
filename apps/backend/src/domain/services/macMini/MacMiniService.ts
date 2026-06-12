@@ -1,9 +1,23 @@
-import { BaseService, type HealthResult, type HostHealth, type PollPolicy, type StatsResult } from '../../BaseService.js';
-import { ok, err } from '../../../core/result.js';
-import { UnavailableError, UnauthorizedError, isDomainError } from '../../../core/errors.js';
-import type { MacMiniInstance } from '../../../config/services.js';
-import type { PingProber } from '../../../infra/net/pingProbe.js';
-import type { SshExecutor, SshExecRequest } from '../../../infra/ssh/sshExecutor.js';
+import {
+  BaseService,
+  type HealthResult,
+  type HostHealth,
+  type PollPolicy,
+  type StatsResult,
+} from "../../BaseService.js";
+import { ok, err } from "../../../core/result.js";
+import {
+  UnavailableError,
+  UnauthorizedError,
+  isDomainError,
+} from "../../../core/errors.js";
+import type { MacMiniInstance } from "../../../config/services.js";
+import type { PingProber } from "../../../infra/net/pingProbe.js";
+import type {
+  SshExecutor,
+  SshExecRequest,
+} from "../../../infra/ssh/sshExecutor.js";
+import { compoundCommand, splitSegments } from "../../../infra/ssh/compound.js";
 
 export interface MacMiniDeps {
   ping: PingProber;
@@ -12,11 +26,27 @@ export interface MacMiniDeps {
   now: () => number;
 }
 
-const TEMP_CMD = 'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; which osx-cpu-temp >/dev/null && osx-cpu-temp';
-const SMART_CMD = 'which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true';
+// smctemp works on Apple Silicon where the unmaintained osx-cpu-temp reads 0.0
+export const TEMP_CMD =
+  'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; if which smctemp >/dev/null 2>&1; then smctemp -c; elif which osx-cpu-temp >/dev/null 2>&1; then osx-cpu-temp; fi';
+export const SMART_CMD =
+  "which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true";
+
+/** All stats commands, executed as ONE compound SSH exec per cycle
+ *  (order matters — outputs are split positionally). */
+export const MAC_STATS_COMMANDS: readonly string[] = [
+  "uptime",
+  "df -k /",
+  TEMP_CMD,
+  "vm_stat",
+  "pmset -g batt",
+  "top -l 1 -n 0 -s 0",
+  "ifconfig en0",
+  SMART_CMD,
+];
 
 export class MacMiniService extends BaseService {
-  readonly kind = 'macMini';
+  readonly kind = "macMini";
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy;
   private readonly host: string;
@@ -58,7 +88,10 @@ export class MacMiniService extends BaseService {
       count: this.pingCount,
       signal,
     });
-    const host: HostHealth = { reachable: res.success, ...(res.avgMs !== undefined ? { pingMs: res.avgMs } : {}) };
+    const host: HostHealth = {
+      reachable: res.success,
+      ...(res.avgMs !== undefined ? { pingMs: res.avgMs } : {}),
+    };
     return ok({
       reachable: res.success,
       latencyMs: res.avgMs ?? this.now() - started,
@@ -70,29 +103,37 @@ export class MacMiniService extends BaseService {
 
   async getStats(signal: AbortSignal): Promise<StatsResult> {
     if (!this.sshReady) {
-      return err(new UnauthorizedError('macMini ssh not configured'));
+      return err(new UnauthorizedError("macMini ssh not configured"));
     }
     try {
-      const [uptimeOut, dfOut, tempOut, vmStatOut, pmsetOut, topOut, ifconfigOut, smartOut] = await Promise.all([
-        this.exec('uptime', signal),
-        this.exec('df -k /', signal),
-        this.exec(TEMP_CMD, signal).catch(() => ''),
-        this.exec('vm_stat', signal).catch(() => ''),
-        this.exec('pmset -g batt', signal).catch(() => ''),
-        this.exec('top -l 1 -n 0 -s 0', signal).catch(() => ''),
-        this.exec('ifconfig en0', signal).catch(() => ''),
-        this.exec(SMART_CMD, signal).catch(() => ''),
-      ]);
+      // one SSH exec per cycle; segments are positional and failure-tolerant
+      const out = await this.exec(compoundCommand(MAC_STATS_COMMANDS), signal);
+      const [
+        uptimeOut,
+        dfOut,
+        tempOut,
+        vmStatOut,
+        pmsetOut,
+        topOut,
+        ifconfigOut,
+        smartOut,
+      ] = splitSegments(out, MAC_STATS_COMMANDS.length);
 
-      const cpuLoad = parseCpuLoad(uptimeOut);
-      const cpuTemp = parseTemp(tempOut);
-      const disk = parseDiskBytes(dfOut);
-      const uptime = parseUptimeSeconds(uptimeOut);
-      const mem = parseVmStat(vmStatOut);
-      const power = parsePmset(pmsetOut);
-      const topCpu = parseTopCpu(topOut);
-      const netInfo = parseIfconfig(ifconfigOut);
-      const smart = parseSmartctl(smartOut);
+      if (!uptimeOut && !dfOut) {
+        throw new UnavailableError(
+          "macMini ssh produced no output for core commands"
+        );
+      }
+
+      const cpuLoad = parseCpuLoad(uptimeOut ?? "");
+      const cpuTemp = parseTemp(tempOut ?? "");
+      const disk = parseDiskBytes(dfOut ?? "");
+      const uptime = parseUptimeSeconds(uptimeOut ?? "");
+      const mem = parseVmStat(vmStatOut ?? "");
+      const power = parsePmset(pmsetOut ?? "");
+      const topCpu = parseTopCpu(topOut ?? "");
+      const netInfo = parseIfconfig(ifconfigOut ?? "");
+      const smart = parseSmartctl(smartOut ?? "");
 
       return ok({
         at: this.now(),
@@ -144,7 +185,9 @@ export class MacMiniService extends BaseService {
     };
     const res = await this.ssh.exec(req);
     if (res.code !== 0) {
-      throw new UnavailableError(`macMini ssh ${command} exit ${res.code}: ${res.stderr.slice(0, 200)}`);
+      throw new UnavailableError(
+        `macMini ssh ${command} exit ${res.code}: ${res.stderr.slice(0, 200)}`
+      );
     }
     return res.stdout;
   }
@@ -153,7 +196,10 @@ export class MacMiniService extends BaseService {
 function parseCpuLoad(uptime: string): number | null {
   const m = uptime.match(/load averages?:?\s*([0-9.,\s]+)/i);
   if (!m || !m[1]) return null;
-  const first = m[1].split(/[ ,]+/).map((p) => p.trim()).filter(Boolean)[0];
+  const first = m[1]
+    .split(/[ ,]+/)
+    .map((p) => p.trim())
+    .filter(Boolean)[0];
   if (!first) return null;
   const n = parseFloat(first);
   return Number.isFinite(n) ? Number(n.toFixed(2)) : null;
@@ -162,7 +208,7 @@ function parseCpuLoad(uptime: string): number | null {
 function parseTemp(out: string): number | null {
   const last = out.trim().split(/\s+/).pop();
   if (!last) return null;
-  const cleaned = last.replace(/[^0-9.]/g, '');
+  const cleaned = last.replace(/[^0-9.]/g, "");
   const n = parseFloat(cleaned);
   return Number.isFinite(n) ? n : null;
 }
@@ -175,13 +221,19 @@ interface Disk {
 }
 
 function parseDiskBytes(dfOut: string): Disk {
-  const lines = dfOut.trim().split('\n').map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2 || !lines[1]) return { total: 0, used: 0, free: 0, usagePercent: 0 };
+  const lines = dfOut
+    .trim()
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2 || !lines[1])
+    return { total: 0, used: 0, free: 0, usagePercent: 0 };
   const cols = lines[1].split(/\s+/);
-  const totalK = parseInt(cols[1] ?? '0', 10);
-  const usedK = parseInt(cols[2] ?? '0', 10);
-  const availK = parseInt(cols[3] ?? '0', 10);
-  if (!Number.isFinite(totalK) || totalK <= 0) return { total: 0, used: 0, free: 0, usagePercent: 0 };
+  const totalK = parseInt(cols[1] ?? "0", 10);
+  const usedK = parseInt(cols[2] ?? "0", 10);
+  const availK = parseInt(cols[3] ?? "0", 10);
+  if (!Number.isFinite(totalK) || totalK <= 0)
+    return { total: 0, used: 0, free: 0, usagePercent: 0 };
   const total = totalK * 1024;
   const used = (Number.isFinite(usedK) ? usedK : 0) * 1024;
   const free = (Number.isFinite(availK) ? availK : 0) * 1024;
@@ -195,7 +247,8 @@ function parseUptimeSeconds(uptime: string): number | null {
   const days = uptime.match(/up\s+(\d+)\s+day/i);
   if (days && days[1]) seconds += parseInt(days[1], 10) * 86400;
   const hm = uptime.match(/up\s+(?:\d+\s+day[s,]?\s*)?(\d+):(\d+)/i);
-  if (hm && hm[1] && hm[2]) seconds += parseInt(hm[1], 10) * 3600 + parseInt(hm[2], 10) * 60;
+  if (hm && hm[1] && hm[2])
+    seconds += parseInt(hm[1], 10) * 3600 + parseInt(hm[2], 10) * 60;
   const hoursText = uptime.match(/up\s+(\d+)\s+hours?/i);
   if (hoursText && hoursText[1]) seconds += parseInt(hoursText[1], 10) * 3600;
   const mins = uptime.match(/up\s+(\d+)\s+minutes?/i);
@@ -216,20 +269,21 @@ interface VmStatResult {
 function parseVmStat(out: string): VmStatResult | null {
   if (!out.trim()) return null;
   const pageSizeMatch = out.match(/page size of (\d+) bytes/i);
-  const pageSize = pageSizeMatch && pageSizeMatch[1] ? parseInt(pageSizeMatch[1], 10) : 4096;
+  const pageSize =
+    pageSizeMatch && pageSizeMatch[1] ? parseInt(pageSizeMatch[1], 10) : 4096;
 
   const getPages = (label: string): number => {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const m = out.match(new RegExp(`${escaped}:\\s*(\\d+)\\.?`, 'i'));
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = out.match(new RegExp(`${escaped}:\\s*(\\d+)\\.?`, "i"));
     return m && m[1] ? parseInt(m[1], 10) : 0;
   };
 
-  const free = getPages('Pages free');
-  const active = getPages('Pages active');
-  const inactive = getPages('Pages inactive');
-  const wired = getPages('Pages wired down');
-  const speculative = getPages('Pages speculative');
-  const compressor = getPages('Pages occupied by compressor');
+  const free = getPages("Pages free");
+  const active = getPages("Pages active");
+  const inactive = getPages("Pages inactive");
+  const wired = getPages("Pages wired down");
+  const speculative = getPages("Pages speculative");
+  const compressor = getPages("Pages occupied by compressor");
 
   const used = active + inactive + wired + compressor;
   const total = used + free + speculative;
@@ -253,12 +307,14 @@ function parsePmset(out: string): PmsetResult | null {
   if (!out.trim()) return null;
   const onAC = /AC Power/i.test(out);
   const battMatch = out.match(/(\d+)%/);
-  const batteryPercent = battMatch && battMatch[1] ? parseInt(battMatch[1], 10) : null;
-  const batteryCharging = /\bcharging\b/i.test(out) && !/\bcharged\b/i.test(out)
-    ? true
-    : /\b(?:discharging|charged)\b/i.test(out)
-    ? false
-    : null;
+  const batteryPercent =
+    battMatch && battMatch[1] ? parseInt(battMatch[1], 10) : null;
+  const batteryCharging =
+    /\bcharging\b/i.test(out) && !/\bcharged\b/i.test(out)
+      ? true
+      : /\b(?:discharging|charged)\b/i.test(out)
+        ? false
+        : null;
   return { onAC, batteryPercent, batteryCharging };
 }
 
@@ -271,13 +327,16 @@ interface TopCpuResult {
 
 function parseTopCpu(out: string): TopCpuResult | null {
   if (!out.trim()) return null;
-  const cpuMatch = out.match(/CPU usage:\s*([\d.]+)%\s*user,\s*([\d.]+)%\s*sys,\s*([\d.]+)%\s*idle/i);
+  const cpuMatch = out.match(
+    /CPU usage:\s*([\d.]+)%\s*user,\s*([\d.]+)%\s*sys,\s*([\d.]+)%\s*idle/i
+  );
   if (!cpuMatch) return null;
-  const cpuUser = parseFloat(cpuMatch[1] ?? '0');
-  const cpuSys = parseFloat(cpuMatch[2] ?? '0');
-  const cpuIdle = parseFloat(cpuMatch[3] ?? '0');
+  const cpuUser = parseFloat(cpuMatch[1] ?? "0");
+  const cpuSys = parseFloat(cpuMatch[2] ?? "0");
+  const cpuIdle = parseFloat(cpuMatch[3] ?? "0");
   const procMatch = out.match(/Processes:\s*(\d+)\s*total/i);
-  const processCount = procMatch && procMatch[1] ? parseInt(procMatch[1], 10) : null;
+  const processCount =
+    procMatch && procMatch[1] ? parseInt(procMatch[1], 10) : null;
   return {
     cpuUser: Number.isFinite(cpuUser) ? Number(cpuUser.toFixed(2)) : null,
     cpuSys: Number.isFinite(cpuSys) ? Number(cpuSys.toFixed(2)) : null,

@@ -1,9 +1,18 @@
-import { BaseService, type HealthResult, type HostHealth, type PollPolicy, type StatsResult } from '../../BaseService.js';
-import { ok } from '../../../core/result.js';
-import type { RoonInstance } from '../../../config/services.js';
-import type { PingProber } from '../../../infra/net/pingProbe.js';
-import type { TcpProber } from '../../../infra/net/tcpProbe.js';
-import type { RoonConnectFn, RoonHandle } from '../../../infra/roon/roonClient.js';
+import {
+  BaseService,
+  type HealthResult,
+  type HostHealth,
+  type PollPolicy,
+  type StatsResult,
+} from "../../BaseService.js";
+import { ok } from "../../../core/result.js";
+import type { RoonInstance } from "../../../config/services.js";
+import type { PingProber } from "../../../infra/net/pingProbe.js";
+import type { TcpProber } from "../../../infra/net/tcpProbe.js";
+import type {
+  RoonConnectFn,
+  RoonHandle,
+} from "../../../infra/roon/roonClient.js";
 
 export interface RoonDeps {
   ping: PingProber;
@@ -14,7 +23,7 @@ export interface RoonDeps {
 }
 
 export class RoonService extends BaseService {
-  readonly kind = 'roon';
+  readonly kind = "roon";
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy;
   private readonly host: string;
@@ -52,8 +61,8 @@ export class RoonService extends BaseService {
     this.handle = await this.roonConnect({
       host: this.host,
       port: this.apiPort,
-      extensionId: 'com.watchman.roon',
-      displayName: 'Watchman',
+      extensionId: "com.watchman.roon",
+      displayName: "Watchman",
     });
   }
 
@@ -66,13 +75,27 @@ export class RoonService extends BaseService {
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
     const started = this.now();
-    const pingPromise: Promise<{ success: boolean; avgMs?: number }> = this.usePing
-      ? this.pinger.probe({ host: this.host, timeoutMs: this.timeoutMs, count: this.pingCount, signal })
+    const pingPromise: Promise<{ success: boolean; avgMs?: number }> = this
+      .usePing
+      ? this.pinger.probe({
+          host: this.host,
+          timeoutMs: this.timeoutMs,
+          count: this.pingCount,
+          signal,
+        })
       : Promise.resolve({ success: false });
     const portPromises = this.ports.map((port) =>
-      this.tcp.probe({ host: this.host, port, timeoutMs: this.timeoutMs, signal }),
+      this.tcp.probe({
+        host: this.host,
+        port,
+        timeoutMs: this.timeoutMs,
+        signal,
+      })
     );
-    const [pingRes, ...portResults] = await Promise.all([pingPromise, ...portPromises]);
+    const [pingRes, ...portResults] = await Promise.all([
+      pingPromise,
+      ...portPromises,
+    ]);
 
     const ports: Record<string, boolean> = {};
     this.ports.forEach((port, i) => {
@@ -82,7 +105,10 @@ export class RoonService extends BaseService {
     const anyPortOpen = Object.values(ports).some((v) => v);
     const icmpAlive = this.usePing && pingRes.success;
     const pingMs = this.usePing ? pingRes.avgMs : undefined;
-    const host: HostHealth = { reachable: icmpAlive, ...(pingMs !== undefined ? { pingMs } : {}) };
+    const host: HostHealth = {
+      reachable: icmpAlive,
+      ...(pingMs !== undefined ? { pingMs } : {}),
+    };
     const service = { reachable: anyPortOpen, details: { ports } };
     const reachable = host.reachable || service.reachable;
     const latencyMs = pingRes.avgMs ?? this.now() - started;
@@ -106,8 +132,9 @@ export class RoonService extends BaseService {
   async getStats(_signal: AbortSignal): Promise<StatsResult> {
     const zones = this.handle?.getZones() ?? [];
     const paired = this.handle?.isPaired() ?? false;
-    const activeZones = zones.filter((z) => z.state === 'playing').length;
-    const nowPlaying = zones.find((z) => z.state === 'playing')?.nowPlaying?.oneLine;
+    const activeZones = zones.filter((z) => z.state === "playing").length;
+    const nowPlaying = zones.find((z) => z.state === "playing")?.nowPlaying
+      ?.oneLine;
 
     return ok({
       at: this.now(),
@@ -122,6 +149,15 @@ export class RoonService extends BaseService {
               zoneCount: zones.length,
               activeZones,
               ...(nowPlaying !== undefined ? { nowPlaying } : {}),
+              // per-zone detail is already in memory from the subscription
+              zones: zones.map((z) => ({
+                name: z.displayName,
+                state: z.state,
+                outputs: z.outputCount,
+                ...(z.nowPlaying?.oneLine !== undefined
+                  ? { nowPlaying: z.nowPlaying.oneLine }
+                  : {}),
+              })),
             }
           : {}),
       },

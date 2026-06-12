@@ -1,9 +1,30 @@
-import type { PigpioClient } from '../../../infra/gpio/pigpioClient.js';
-import type { SshExecutor, SshExecRequest, SshExecResult } from '../../../infra/ssh/sshExecutor.js';
-import type { RaspberryPiInstance } from '../../../config/services.js';
-import { UnavailableError } from '../../../core/errors.js';
-import { getPiModel } from './piModel.js';
-import { parseRpiInfo, type RpiInfo } from './parseRpiInfo.js';
+import type { PigpioClient } from "../../../infra/gpio/pigpioClient.js";
+import type {
+  SshExecutor,
+  SshExecRequest,
+} from "../../../infra/ssh/sshExecutor.js";
+import type { RaspberryPiInstance } from "../../../config/services.js";
+import { UnavailableError } from "../../../core/errors.js";
+import { compoundCommand, splitSegments } from "../../../infra/ssh/compound.js";
+import { getPiModel } from "./piModel.js";
+import { parseRpiInfo, type RpiInfo } from "./parseRpiInfo.js";
+
+/** Per-poll measurements (one compound SSH exec; positional outputs). */
+const DYNAMIC_COMMANDS: readonly string[] = [
+  "vcgencmd measure_temp",
+  "vcgencmd measure_clock arm",
+  "vcgencmd measure_volts core",
+  "vcgencmd get_throttled",
+  "cat /proc/loadavg",
+  "cat /proc/meminfo",
+  "cat /proc/uptime",
+];
+
+/** Immutable per boot — fetched once per service lifetime, then cached. */
+const STATIC_COMMANDS: readonly string[] = [
+  "cat /proc/cpuinfo",
+  "cat /etc/os-release",
+];
 
 export interface PiStatsSnapshot {
   host: string;
@@ -48,6 +69,13 @@ interface DirectPiInfo {
 }
 
 export class PiStatsCollector {
+  // os-release/cpuinfo results, cached after the first successful direct fetch
+  private staticInfo: {
+    prettyName: string | null;
+    processor: string | null;
+    isRpi: boolean;
+  } | null = null;
+
   constructor(private readonly deps: PiStatsDeps) {}
 
   async collect(signal: AbortSignal): Promise<PiStatsSnapshot> {
@@ -55,7 +83,7 @@ export class PiStatsCollector {
     const snapshot: PiStatsSnapshot = {
       host: cfg.host,
       port: cfg.port,
-      piModel: 'Unknown',
+      piModel: "Unknown",
       hwRevision: null,
       pigpioVersion: null,
       uptime: null,
@@ -90,12 +118,13 @@ export class PiStatsCollector {
         handle.getPigpioVersion(),
         handle.getCurrentTick(),
       ]);
-      if (revRes.status === 'fulfilled') {
+      if (revRes.status === "fulfilled") {
         snapshot.hwRevision = revRes.value;
         snapshot.piModel = getPiModel(revRes.value);
       }
-      if (verRes.status === 'fulfilled') snapshot.pigpioVersion = verRes.value;
-      if (tickRes.status === 'fulfilled') snapshot.uptime = Math.floor(tickRes.value / 1_000_000);
+      if (verRes.status === "fulfilled") snapshot.pigpioVersion = verRes.value;
+      if (tickRes.status === "fulfilled")
+        snapshot.uptime = Math.floor(tickRes.value / 1_000_000);
     } finally {
       await handle.end().catch(() => undefined);
     }
@@ -104,7 +133,10 @@ export class PiStatsCollector {
     let directError: string | null = null;
     if (this.directSshReady()) {
       try {
-        this.applyDirectSshInfo(snapshot, await this.fetchDirectSshInfo(signal));
+        this.applyDirectSshInfo(
+          snapshot,
+          await this.fetchDirectSshInfo(signal)
+        );
       } catch (e) {
         directError = e instanceof Error ? e.message : String(e);
       }
@@ -127,7 +159,10 @@ export class PiStatsCollector {
     return snapshot;
   }
 
-  private applyDirectSshInfo(snapshot: PiStatsSnapshot, info: DirectPiInfo): void {
+  private applyDirectSshInfo(
+    snapshot: PiStatsSnapshot,
+    info: DirectPiInfo
+  ): void {
     snapshot.rpiCliAvailable = true;
     if (info.cpuTemp !== null) snapshot.cpuTemp = info.cpuTemp;
     if (info.clockRate !== null) snapshot.clockRate = info.clockRate;
@@ -165,7 +200,9 @@ export class PiStatsCollector {
 
   private macMiniReady(): boolean {
     const c = this.deps.config;
-    return Boolean(c.macMiniHost && c.macMiniSshUser && c.macMiniSshKeyPath && c.rpiCliPath);
+    return Boolean(
+      c.macMiniHost && c.macMiniSshUser && c.macMiniSshKeyPath && c.rpiCliPath
+    );
   }
 
   private async fetchDirectSshInfo(signal: AbortSignal): Promise<DirectPiInfo> {
@@ -181,43 +218,50 @@ export class PiStatsCollector {
       ...(c.sshPassphrase ? { passphrase: c.sshPassphrase } : {}),
     });
 
-    const settled = await Promise.allSettled([
-      this.deps.ssh.exec(req('vcgencmd measure_temp')),
-      this.deps.ssh.exec(req('vcgencmd measure_clock arm')),
-      this.deps.ssh.exec(req('vcgencmd measure_volts core')),
-      this.deps.ssh.exec(req('vcgencmd get_throttled')),
-      this.deps.ssh.exec(req('cat /proc/loadavg')),
-      this.deps.ssh.exec(req('cat /proc/meminfo')),
-      this.deps.ssh.exec(req('cat /proc/uptime')),
-      this.deps.ssh.exec(req('cat /proc/cpuinfo')),
-      this.deps.ssh.exec(req('cat /etc/os-release')),
-    ]);
+    // One compound exec per cycle; static files only until cached
+    const wantStatic = this.staticInfo === null;
+    const commands = wantStatic
+      ? [...DYNAMIC_COMMANDS, ...STATIC_COMMANDS]
+      : DYNAMIC_COMMANDS;
+    const res = await this.deps.ssh.exec(req(compoundCommand(commands)));
+    const segments = splitSegments(res.stdout, commands.length);
 
-    // If every command failed, SSH is unreachable — re-throw the first error.
-    const allFailed = settled.every((r) => r.status === 'rejected');
-    if (allFailed) {
-      const first = settled[0] as PromiseRejectedResult;
-      throw first.reason instanceof Error ? first.reason : new UnavailableError(String(first.reason));
+    if (segments.every((s) => s === "")) {
+      throw new UnavailableError("pi direct ssh produced no output");
     }
 
-    const [tempRes, clockRes, voltsRes, throttledRes, loadRes, memRes, uptimeRes, cpuinfoRes, osRes] = settled;
+    const [
+      tempOut,
+      clockOut,
+      voltsOut,
+      throttledOut,
+      loadOut,
+      memOut,
+      uptimeOut,
+      cpuinfoOut,
+      osOut,
+    ] = segments;
 
-    const stdout = (r: PromiseSettledResult<SshExecResult>): string =>
-      r.status === 'fulfilled' ? r.value.stdout : '';
-
-    const cpuInfo = parseProcCpuinfo(stdout(cpuinfoRes));
+    if (wantStatic) {
+      const cpuInfo = parseProcCpuinfo(cpuinfoOut ?? "");
+      this.staticInfo = {
+        prettyName: parseOsRelease(osOut ?? ""),
+        processor: cpuInfo.processor,
+        isRpi: cpuInfo.isRpi,
+      };
+    }
 
     return {
-      cpuTemp: parseVcgencmdTemp(stdout(tempRes)),
-      clockRate: parseVcgencmdClock(stdout(clockRes)),
-      voltage: parseVcgencmdVolts(stdout(voltsRes)),
-      throttled: parseVcgencmdThrottled(stdout(throttledRes)),
-      load: parseProcLoadAvg(stdout(loadRes)),
-      memory: parseProcMeminfoFormatted(stdout(memRes)),
-      uptime: parseProcUptime(stdout(uptimeRes)),
-      prettyName: parseOsRelease(stdout(osRes)),
-      processor: cpuInfo.processor,
-      isRpi: cpuInfo.isRpi,
+      cpuTemp: parseVcgencmdTemp(tempOut ?? ""),
+      clockRate: parseVcgencmdClock(clockOut ?? ""),
+      voltage: parseVcgencmdVolts(voltsOut ?? ""),
+      throttled: parseVcgencmdThrottled(throttledOut ?? ""),
+      load: parseProcLoadAvg(loadOut ?? ""),
+      memory: parseProcMeminfoFormatted(memOut ?? ""),
+      uptime: parseProcUptime(uptimeOut ?? ""),
+      prettyName: this.staticInfo?.prettyName ?? null,
+      processor: this.staticInfo?.processor ?? null,
+      isRpi: this.staticInfo?.isRpi ?? false,
     };
   }
 
@@ -236,7 +280,9 @@ export class PiStatsCollector {
     };
     const res = await this.deps.ssh.exec(req);
     if (res.code !== 0) {
-      throw new UnavailableError(`rpi cli exit ${res.code}: ${res.stderr.slice(0, 200)}`);
+      throw new UnavailableError(
+        `rpi cli exit ${res.code}: ${res.stderr.slice(0, 200)}`
+      );
     }
     const parsed: unknown = JSON.parse(res.stdout);
     return parseRpiInfo(parsed, this.deps.now);
@@ -274,7 +320,7 @@ function parseVcgencmdThrottled(out: string): number | null {
   const m = out.match(/throttled=(0x[0-9a-fA-F]+|\d+)/);
   if (!m || !m[1]) return null;
   const str = m[1];
-  const n = str.startsWith('0x') ? parseInt(str, 16) : parseInt(str, 10);
+  const n = str.startsWith("0x") ? parseInt(str, 16) : parseInt(str, 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -311,7 +357,8 @@ function parseProcCpuinfo(out: string): CpuInfoResult {
   const hwMatch = out.match(/^Hardware\s*:\s*(.+)$/im);
   const modelMatch = out.match(/^Model\s*:\s*(.+)$/im);
   const processor = hwMatch && hwMatch[1] ? hwMatch[1].trim() : null;
-  const isRpi = modelMatch && modelMatch[1] ? /raspberry pi/i.test(modelMatch[1]) : false;
+  const isRpi =
+    modelMatch && modelMatch[1] ? /raspberry pi/i.test(modelMatch[1]) : false;
   return { processor, isRpi };
 }
 
