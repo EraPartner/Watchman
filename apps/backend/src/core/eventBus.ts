@@ -1,33 +1,40 @@
-import type { HealthSnapshot, StatsSnapshot } from '../domain/BaseService.js';
+import type { HealthSnapshot, StatsSnapshot } from "../domain/BaseService.js";
 
 export type Handler<T> = (payload: T) => void | Promise<void>;
 
 export interface EventMap {
-  'service.health.updated': {
+  "service.health.updated": {
     id: string;
     kind: string;
     instanceId: string;
     at: number;
     snapshot?: HealthSnapshot;
   };
-  'service.stats.updated': {
+  "service.stats.updated": {
     id: string;
     kind: string;
     instanceId: string;
     at: number;
     snapshot?: StatsSnapshot;
   };
-  'service.error': { id: string; error: unknown; at: number };
-  'config:service.created': { id: string; kind: string; instanceId: string };
-  'config:service.updated': { id: string; kind: string; instanceId: string };
-  'config:service.deleted': { id: string; kind: string; instanceId: string };
-  'config:service.renamed': {
+  "service.error": {
+    id: string;
+    kind: string;
+    instanceId: string;
+    scope: "health" | "stats";
+    error: unknown;
+    at: number;
+  };
+  "config:service.created": { id: string; kind: string; instanceId: string };
+  "config:service.updated": { id: string; kind: string; instanceId: string };
+  "config:service.deleted": { id: string; kind: string; instanceId: string };
+  "config:service.renamed": {
     id: string;
     kind: string;
     oldInstanceId: string;
     newInstanceId: string;
   };
-  'cache:revalidate.failed': { key: string; error: string };
+  "cache:revalidate.failed": { key: string; error: string };
 }
 
 type EventKey = keyof EventMap;
@@ -50,7 +57,7 @@ export function createEventBus(onError?: (err: unknown) => void): EventBus {
           onError(err);
         } catch (e2) {
           // last-resort: a throwing onError would escape as unhandled rejection.
-          console.error('eventBus onError threw', e2);
+          console.error("eventBus onError threw", e2);
         }
       };
       for (const h of set) {

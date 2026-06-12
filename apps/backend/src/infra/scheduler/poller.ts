@@ -1,8 +1,8 @@
-import type { Logger } from 'pino';
-import type { Clock } from '../../core/clock.js';
-import type { EventBus } from '../../core/eventBus.js';
-import type { BaseService } from '../../domain/BaseService.js';
-import { withTimeout } from '../../core/abort.js';
+import type { Logger } from "pino";
+import type { Clock } from "../../core/clock.js";
+import type { EventBus } from "../../core/eventBus.js";
+import type { BaseService } from "../../domain/BaseService.js";
+import { withTimeout } from "../../core/abort.js";
 
 export interface PollerOptions {
   clock: Clock;
@@ -38,7 +38,7 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
   const schedule = (
     svc: BaseService,
     intervalMs: number,
-    runner: () => Promise<void>,
+    runner: () => Promise<void>
   ): Task => {
     let cancelled = false;
     let cancelTimer: (() => void) | null = null;
@@ -50,18 +50,24 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
         try {
           await runner();
         } catch (e) {
-          logger.error({ err: e, id: svc.id }, 'poller tick failed');
+          logger.error({ err: e, id: svc.id }, "poller tick failed");
         }
       }
       if (cancelled) return;
-      cancelTimer = clock.setTimeout(() => {
-        void tick();
-      }, jitter(intervalMs, ratio));
+      cancelTimer = clock.setTimeout(
+        () => {
+          void tick();
+        },
+        jitter(intervalMs, ratio)
+      );
     };
 
-    cancelTimer = clock.setTimeout(() => {
-      void tick();
-    }, jitter(intervalMs, ratio));
+    cancelTimer = clock.setTimeout(
+      () => {
+        void tick();
+      },
+      jitter(intervalMs, ratio)
+    );
 
     return {
       cancel: () => {
@@ -79,7 +85,7 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
         const signal = withTimeout(timeoutMs);
         const res = await svc.checkHealth(signal);
         if (res.ok) {
-          bus.emit('service.health.updated', {
+          bus.emit("service.health.updated", {
             id: svc.id,
             kind: svc.kind,
             instanceId: svc.instanceId,
@@ -87,14 +93,21 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
             snapshot: res.value,
           });
         } else {
-          bus.emit('service.error', { id: svc.id, error: res.error, at: clock.now() });
+          bus.emit("service.error", {
+            id: svc.id,
+            kind: svc.kind,
+            instanceId: svc.instanceId,
+            scope: "health",
+            error: res.error,
+            at: clock.now(),
+          });
         }
       });
       const statsTask = schedule(svc, svc.pollPolicy.statsMs, async () => {
         const signal = withTimeout(timeoutMs);
         const res = await svc.getStats(signal);
         if (res.ok) {
-          bus.emit('service.stats.updated', {
+          bus.emit("service.stats.updated", {
             id: svc.id,
             kind: svc.kind,
             instanceId: svc.instanceId,
@@ -102,7 +115,14 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
             snapshot: res.value,
           });
         } else {
-          bus.emit('service.error', { id: svc.id, error: res.error, at: clock.now() });
+          bus.emit("service.error", {
+            id: svc.id,
+            kind: svc.kind,
+            instanceId: svc.instanceId,
+            scope: "stats",
+            error: res.error,
+            at: clock.now(),
+          });
         }
       });
       tasks.set(svc.id, [healthTask, statsTask]);

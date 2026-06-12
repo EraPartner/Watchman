@@ -1,5 +1,5 @@
-import type { HttpClient } from '../http/client.js';
-import { UnauthorizedError, UnavailableError } from '../../core/errors.js';
+import type { HttpClient } from "../http/client.js";
+import { UnauthorizedError, UnavailableError } from "../../core/errors.js";
 
 export interface DsmClientConfig {
   baseUrl: string;
@@ -21,7 +21,7 @@ export interface DsmClient {
     version: number,
     method: string,
     params?: Record<string, string>,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<T>;
 }
 
@@ -38,31 +38,38 @@ const AUTH_RETRY_CODES = new Set([105, 106, 107]);
  * Minimal Synology DSM HTTP client.
  *
  * - Routes `SYNO.API.Auth` → `/webapi/auth.cgi`; all other APIs → `/webapi/entry.cgi`
- * - Injects `_sid=<sid>` as a query parameter on every non-auth request
+ * - Sends all parameters (including credentials and `_sid`) in a POST form
+ *   body — never in the URL, which proxies/APM tooling routinely log
  * - On auth error codes 105/106/107: re-logs in once, retries the original call
  * - Concurrent calls share a single pending login — no thundering herd
  */
 export function createDsmClient(deps: DsmClientDeps): DsmClient {
   const { http, config } = deps;
-  const base = config.baseUrl.replace(/\/+$/, '');
+  const base = config.baseUrl.replace(/\/+$/, "");
   let currentSid: string | undefined = config.initialSid;
   let pendingLogin: Promise<string> | null = null;
 
   async function performLogin(signal?: AbortSignal): Promise<string> {
-    const params = new URLSearchParams({
-      api: 'SYNO.API.Auth',
-      version: '3',
-      method: 'login',
+    const body = new URLSearchParams({
+      api: "SYNO.API.Auth",
+      version: "3",
+      method: "login",
       account: config.account,
       passwd: config.password,
-      format: 'sid',
+      format: "sid",
+    }).toString();
+    const res = await http.send({
+      url: `${base}/webapi/auth.cgi`,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+      timeoutMs: config.timeoutMs,
+      ...(signal ? { signal } : {}),
     });
-    const url = `${base}/webapi/auth.cgi?${params}`;
-    const res = await http.send({ url, method: 'GET', timeoutMs: config.timeoutMs, ...(signal ? { signal } : {}) });
     const env = await res.json<DsmEnvelope<{ sid: string }>>();
     if (!env.success || !env.data?.sid) {
       throw new UnauthorizedError(
-        `synology dsm login failed: code ${env.error?.code ?? 'unknown'}`,
+        `synology dsm login failed: code ${env.error?.code ?? "unknown"}`
       );
     }
     return env.data.sid;
@@ -70,7 +77,7 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
 
   async function doLogin(signal?: AbortSignal): Promise<string> {
     if (!config.account || !config.password) {
-      throw new UnauthorizedError('synology dsm credentials not configured');
+      throw new UnauthorizedError("synology dsm credentials not configured");
     }
     if (!pendingLogin) {
       pendingLogin = performLogin(signal).then(
@@ -82,7 +89,7 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
         (err: unknown) => {
           pendingLogin = null;
           throw err;
-        },
+        }
       );
     }
     return pendingLogin;
@@ -94,11 +101,23 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
     method: string,
     params: Record<string, string>,
     sid: string,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<DsmEnvelope<T>> {
-    const qp = new URLSearchParams({ api, version: String(version), method, _sid: sid, ...params });
-    const url = `${base}/webapi/entry.cgi?${qp}`;
-    const res = await http.send({ url, method: 'GET', timeoutMs: config.timeoutMs, ...(signal ? { signal } : {}) });
+    const body = new URLSearchParams({
+      api,
+      version: String(version),
+      method,
+      _sid: sid,
+      ...params,
+    }).toString();
+    const res = await http.send({
+      url: `${base}/webapi/entry.cgi`,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+      timeoutMs: config.timeoutMs,
+      ...(signal ? { signal } : {}),
+    });
     return res.json<DsmEnvelope<T>>();
   }
 
@@ -108,13 +127,20 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       version: number,
       method: string,
       params: Record<string, string> = {},
-      signal?: AbortSignal,
+      signal?: AbortSignal
     ): Promise<T> {
       if (!currentSid) {
         await doLogin(signal);
       }
 
-      const env = await callOnce<T>(api, version, method, params, currentSid!, signal);
+      const env = await callOnce<T>(
+        api,
+        version,
+        method,
+        params,
+        currentSid!,
+        signal
+      );
       if (env.success) return env.data as T;
 
       const code = env.error?.code ?? 0;
@@ -122,14 +148,23 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       if (AUTH_RETRY_CODES.has(code)) {
         currentSid = undefined;
         await doLogin(signal);
-        const retried = await callOnce<T>(api, version, method, params, currentSid!, signal);
+        const retried = await callOnce<T>(
+          api,
+          version,
+          method,
+          params,
+          currentSid!,
+          signal
+        );
         if (retried.success) return retried.data as T;
         throw new UnavailableError(
-          `synology dsm ${api}.${method} failed after re-login: code ${retried.error?.code ?? 'unknown'}`,
+          `synology dsm ${api}.${method} failed after re-login: code ${retried.error?.code ?? "unknown"}`
         );
       }
 
-      throw new UnavailableError(`synology dsm ${api}.${method} error: code ${code}`);
+      throw new UnavailableError(
+        `synology dsm ${api}.${method} error: code ${code}`
+      );
     },
   };
 }

@@ -15,13 +15,13 @@ describe('EventBus', () => {
     const h = vi.fn();
     const off = bus.on('service.error', h);
     off();
-    bus.emit('service.error', { id: 'a:1', error: new Error('x'), at: 0 });
+    bus.emit('service.error', { id: 'a:1', kind: 'a', instanceId: '1', scope: 'health', error: new Error('x'), at: 0 });
     expect(h).not.toHaveBeenCalled();
   });
 
   it('no-op when event has no handlers', () => {
     const bus = createEventBus();
-    expect(() => bus.emit('service.error', { id: 'x', error: null, at: 0 })).not.toThrow();
+    expect(() => bus.emit('service.error', { id: 'x:1', kind: 'x', instanceId: '1', scope: 'health', error: null, at: 0 })).not.toThrow();
   });
 
   it('catches sync handler errors via onError', () => {
@@ -30,7 +30,7 @@ describe('EventBus', () => {
     bus.on('service.error', () => {
       throw new Error('boom');
     });
-    bus.emit('service.error', { id: 'x', error: null, at: 0 });
+    bus.emit('service.error', { id: 'x:1', kind: 'x', instanceId: '1', scope: 'health', error: null, at: 0 });
     expect(onError).toHaveBeenCalledOnce();
   });
 
@@ -40,7 +40,7 @@ describe('EventBus', () => {
     bus.on('service.error', async () => {
       throw new Error('async boom');
     });
-    bus.emit('service.error', { id: 'x', error: null, at: 0 });
+    bus.emit('service.error', { id: 'x:1', kind: 'x', instanceId: '1', scope: 'health', error: null, at: 0 });
     await new Promise((r) => setImmediate(r));
     expect(onError).toHaveBeenCalledOnce();
   });
