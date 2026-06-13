@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:staged": "eslint --fix --no-warn-ignored",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest",

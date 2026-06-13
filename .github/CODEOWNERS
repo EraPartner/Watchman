@@ -1,0 +1,5 @@
+# Code owners — auto-requested for review on matching paths.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Solo-maintained: everything is owned by the maintainer.
+*       @EraPartner

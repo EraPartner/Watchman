@@ -17,6 +17,7 @@
     "health-check": "curl -f http://localhost:3001/meta/health || exit 1",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:staged": "eslint --fix --no-warn-ignored",
     "format": "prettier --write '**/*.{ts,js,json}'",
     "format:check": "prettier --check '**/*.{ts,js,json}'",
     "security:check": "npm audit --audit-level moderate && npm run security:secrets",

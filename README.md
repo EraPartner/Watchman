@@ -1,15 +1,15 @@
 # Watchman
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](./LICENSE)
-![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=nodedotjs&logoColor=white)
+![Node.js](https://img.shields.io/badge/node-%3E%3D22-339933?logo=nodedotjs&logoColor=white)
 ![Monorepo](https://img.shields.io/badge/monorepo-npm%20workspaces-CB3837?logo=npm&logoColor=white)
-![API](https://img.shields.io/badge/API-OpenAPI%203.0-6BA539)
+![API](https://img.shields.io/badge/API-OpenAPI%203.1-6BA539)
 [![GitHub Issues](https://img.shields.io/github/issues/EraPartner/Watchman)](https://github.com/EraPartner/Watchman/issues)
 [![GitHub Last Commit](https://img.shields.io/github/last-commit/EraPartner/Watchman)](https://github.com/EraPartner/Watchman/commits/main)
 [![GitHub Stars](https://img.shields.io/github/stars/EraPartner/Watchman?style=social)](https://github.com/EraPartner/Watchman/stargazers)
 
 Watchman is a full-stack dashboard for **monitoring self-hosted services** from one place.
-It combines a React + TypeScript frontend with a Node.js + Express backend and supports real-time status visibility across your stack.
+It combines a React + TypeScript frontend with a Node.js + Fastify backend and supports real-time status visibility across your stack.
 
 > [!IMPORTANT]
 > **Monitoring-only by design**
@@ -20,13 +20,13 @@ It combines a React + TypeScript frontend with a Node.js + Express backend and s
 
 If you run multiple services, Watchman gives you one dashboard instead of 10+ browser tabs.
 
-| You need...                                 | Watchman gives you...                                                                    |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Fast visibility across services             | Unified health + stats endpoints and cards in a single UI                                |
-| Support for multiple instances of a service | Numbered env-based multi-instance support (e.g. multiple qBittorrent/Synology instances) |
-| Live status updates                         | WebSocket-based real-time updates                                                        |
-| Secure defaults                             | JWT auth (HTTP-only cookies), CSRF protection, rate limiting, security headers           |
-| Extensibility                               | Factory-driven service integration architecture                                          |
+| You need...                                 | Watchman gives you...                                                                                                                           |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fast visibility across services             | Unified health + stats endpoints and cards in a single UI                                                                                       |
+| Support for multiple instances of a service | Numbered env-based multi-instance support (e.g. multiple qBittorrent/Synology instances)                                                        |
+| Live status updates                         | WebSocket-based real-time updates                                                                                                               |
+| A trusted-network security model            | Origin allow-list (CORS + WebSocket), service secrets encrypted at rest, PII-redacted logs — no auth/CSRF/rate-limiting by design (single-user) |
+| Extensibility                               | Factory-driven service integration architecture                                                                                                 |
 
 ## Feature Highlights
 
@@ -34,9 +34,9 @@ If you run multiple services, Watchman gives you one dashboard instead of 10+ br
 - ✅ Monitoring-only architecture (no service control plane)
 - ✅ Multi-instance support for selected integrations
 - ✅ Real-time updates via WebSockets
-- ✅ OpenAPI/Swagger API docs (`/api/docs`)
+- ✅ OpenAPI 3.1 spec (`apps/backend/openapi.yaml`) — no Swagger UI is served
 - ✅ Circuit breaker + caching patterns for resilient service polling
-- ✅ Security-focused middleware stack (JWT, CSRF, rate limits, IP control)
+- ✅ Trusted-network security model — origin allow-list, encrypted secrets at rest, PII-redacted logging
 
 ## Supported Integrations (Examples)
 
@@ -55,11 +55,11 @@ See full docs: [`docs/integrations/index.md`](./docs/integrations/index.md)
 
 ## Architecture at a Glance
 
-| Layer    | Stack                                                    | Responsibility                                   |
-| -------- | -------------------------------------------------------- | ------------------------------------------------ |
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Query | Dashboard UI, auth/session state, live updates   |
-| Backend  | Node.js, Express, WebSocket (`ws`), OpenAPI              | Service polling, API endpoints, auth, security   |
-| Monorepo | npm workspaces                                           | Shared development workflow for frontend/backend |
+| Layer    | Stack                                                    | Responsibility                                         |
+| -------- | -------------------------------------------------------- | ------------------------------------------------------ |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Query | Dashboard UI, server state (React Query), live updates |
+| Backend  | Node.js, Fastify 5, WebSocket (`ws`), DuckDB, OpenAPI    | Service polling, REST + WebSocket API, config store    |
+| Monorepo | npm workspaces                                           | Shared development workflow for frontend/backend       |
 
 ## Quick Start
 
@@ -87,17 +87,16 @@ npm run electron:prod
 git clone https://github.com/EraPartner/Watchman.git
 cd Watchman
 npm install
-cp apps/backend/.env.example apps/backend/.env.local   # edit auth + JWT secret
+cp apps/backend/.env.example apps/backend/.env.local   # set WATCHMAN_MASTER_KEY
 
 npm run build
 npm run start
 ```
 
-| Service | URL |
-|---------|-----|
+| Service            | URL                     |
+| ------------------ | ----------------------- |
 | Frontend (preview) | `http://localhost:4173` |
-| Backend API | `http://localhost:3001` |
-| API Docs (Swagger) | `http://localhost:3001/api/docs` |
+| Backend API        | `http://localhost:3001` |
 
 ### Option C — Development mode
 
@@ -110,19 +109,22 @@ cp apps/backend/.env.example apps/backend/.env.local
 npm run dev
 ```
 
-| Service | URL |
-|---------|-----|
-| Frontend | `http://localhost:5173` |
+| Service     | URL                     |
+| ----------- | ----------------------- |
+| Frontend    | `http://localhost:5173` |
 | Backend API | `http://localhost:3001` |
 
-### Required backend env vars
+### Backend environment
 
-| Variable             | Why it is required                                     |
-| -------------------- | ------------------------------------------------------ |
-| `AUTH_USERNAME`      | Login username for dashboard auth                      |
-| `AUTH_PASSWORD_HASH` | bcrypt hash of your password                           |
-| `JWT_SECRET`         | Token signing secret (minimum 32 chars)                |
-| `FRONTEND_URL`       | Allowed frontend origin (e.g. `http://localhost:5173`) |
+| Variable                              | Why it matters                                                      |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| `WATCHMAN_MASTER_KEY`                 | Encrypts stored service secrets at rest — required in practice      |
+| `CORS_ALLOWED_ORIGINS`                | Extra browser origins to allow (needed for non-loopback web access) |
+| `BACKEND_V2_PORT` / `BACKEND_V2_HOST` | Bind address — optional (defaults `3001` / `0.0.0.0`)               |
+
+Service connection details (hosts, tokens, etc.) are **not** env vars — they live
+in the DuckDB config store, managed via the `/config` API or the UI. Full surface:
+[`docs/reference/environment-variables.md`](./docs/reference/environment-variables.md).
 
 ## All Scripts
 
@@ -180,7 +182,7 @@ npm run generate:types       # regenerate TypeScript types from openapi.yaml
 Watchman/
 ├── apps/
 │   ├── frontend/        # React + TypeScript + Vite app
-│   └── backend/         # Node.js + Express API + WebSocket
+│   └── backend/         # Node.js + Fastify API + WebSocket
 ├── docs/                # Knowledge base and project documentation
 ├── packages/            # Shared packages (workspace-ready)
 ├── tests/               # Additional integration/e2e tests
@@ -189,17 +191,17 @@ Watchman/
 
 ## API and Security
 
-- OpenAPI spec: [`apps/backend/openapi.yaml`](./apps/backend/openapi.yaml)
-- Interactive docs: `GET /api/docs` (when backend is running)
-- Auth model: JWT in HTTP-only cookies (+ optional Authorization header support)
-- CSRF: double-submit cookie pattern for state-changing routes
-- Rate limiting: tiered by endpoint category
+- OpenAPI 3.1 spec: [`apps/backend/openapi.yaml`](./apps/backend/openapi.yaml) — documentation only; no Swagger UI is served.
+- **Security model:** single user on a trusted network — **no authentication, CSRF, or rate limiting, by design** (ADR-017 / ADR-025). Anyone who can reach the port can read and reconfigure, so do **not** expose the backend beyond your trusted network.
+- Browser cross-origin access is gated by an origin allow-list shared by CORS and the WebSocket upgrade: desktop `watchman://`, loopback, and anything in `CORS_ALLOWED_ORIGINS`.
+- Service secrets are encrypted at rest in the DuckDB config store (`WATCHMAN_MASTER_KEY`); secrets and PII are never logged.
+
+See [`SECURITY.md`](./SECURITY.md) for the full threat model and how to report a vulnerability.
 
 Read more:
 
 - [`docs/api/index.md`](./docs/api/index.md)
 - [`docs/security/index.md`](./docs/security/index.md)
-- [`docs/security/authentication.md`](./docs/security/authentication.md)
 
 ## Docs for Users and Developers
 
@@ -224,7 +226,7 @@ Contributions are welcome.
 4. Run lint/build/test locally
 5. Open a pull request with clear context
 
-Contribution guide: [`docs/guides/contributing.md`](./docs/guides/contributing.md)
+Contribution guide: [`CONTRIBUTING.md`](./CONTRIBUTING.md) · Security policy: [`SECURITY.md`](./SECURITY.md)
 
 ## License
 

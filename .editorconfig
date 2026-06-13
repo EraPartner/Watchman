@@ -1,0 +1,25 @@
+# EditorConfig — https://editorconfig.org
+# Mirrors .prettierrc (2-space, LF, UTF-8) so non-Prettier-aware editors agree.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 80
+
+# Markdown: two trailing spaces are a hard line break — don't strip them.
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefiles require real tabs.
+[Makefile]
+indent_style = tab
+
+# Lockfiles and generated output: leave formatting to the generator.
+[{package-lock.json,*.min.*}]
+indent_size = unset
+insert_final_newline = unset

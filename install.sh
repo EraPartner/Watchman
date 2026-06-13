@@ -81,8 +81,8 @@ if ! command -v node &>/dev/null; then
 fi
 
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  echo "ERROR: Node.js 18+ required (found $(node --version 2>/dev/null || echo 'none'))."
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  echo "ERROR: Node.js 22+ required (found $(node --version 2>/dev/null || echo 'none'))."
   echo "       Upgrade via: brew upgrade node"
   exit 1
 fi

@@ -1,0 +1,3 @@
+# Full type-check before pushing — mirrors the CI gate, catches what
+# staged-file linting can't (cross-file type errors). Skip with `git push --no-verify`.
+npm run typecheck

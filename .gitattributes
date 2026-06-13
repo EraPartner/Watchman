@@ -1,0 +1,40 @@
+# Normalize line endings: store LF in the repo, check out native on Windows.
+* text=auto eol=lf
+
+# Explicit text types (kept LF everywhere to match .editorconfig / Prettier).
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.js      text eol=lf
+*.jsx     text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+
+# Shell / launcher scripts must stay LF and be diffable.
+*.sh       text eol=lf
+*.command  text eol=lf
+
+# Generated / vendored: collapse diffs and exclude from language stats.
+package-lock.json                       linguist-generated -diff
+apps/frontend/src/types/generated.ts    linguist-generated -diff
+
+# Docs vault is documentation, not code (cleaner language breakdown).
+docs/**          linguist-documentation
+
+# Binary assets — never line-ending-munged, never text-diffed.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.icns  binary
+*.dmg   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.pdf   binary

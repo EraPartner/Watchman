@@ -1,0 +1,32 @@
+# Prettier ignores node_modules by default; everything below is additional.
+
+# Build outputs
+dist
+dist-ssr
+apps/*/dist
+apps/*/out
+apps/backend/.bundle
+
+# Dependencies / lockfiles
+package-lock.json
+apps/*/package-lock.json
+
+# Generated code (owned by the generator, not by Prettier)
+apps/frontend/src/types/generated.ts
+
+# Test artifacts
+coverage
+apps/*/coverage
+.nyc_output
+apps/frontend/test-results
+apps/frontend/playwright-report
+
+# Vendored / runtime data
+.tor-data
+logs
+*.min.*
+
+# Editor / tooling state (local only)
+.obsidian
+.idea
+.vscode
