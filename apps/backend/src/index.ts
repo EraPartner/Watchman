@@ -12,6 +12,7 @@ import { createEventBus } from "./core/eventBus.js";
 import { systemClock } from "./core/clock.js";
 import { createBackgroundPoller } from "./infra/scheduler/poller.js";
 import { createHttpClient } from "./infra/http/client.js";
+import { createInsecureHttpClient } from "./infra/http/insecureClient.js";
 import { createPingProber } from "./infra/net/pingProbe.js";
 import { createTcpProber } from "./infra/net/tcpProbe.js";
 import { createSshPool } from "./infra/ssh/sshPool.js";
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
   const sshPool = createSshPool();
   const infra = {
     http: createHttpClient(),
+    insecureHttp: createInsecureHttpClient(),
     ping: createPingProber(),
     tcp: createTcpProber(),
     ssh: sshPool,

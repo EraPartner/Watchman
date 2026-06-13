@@ -85,6 +85,7 @@ export const HomebridgeInstanceSchema = BaseInstanceSchema.extend({
   statusPath: z.string().default("/api/status/server-information"),
   versionPath: z.string().default("/api/status/homebridge-version"),
   loginPath: z.string().default("/api/auth/login"),
+  allowSelfSigned: z.boolean().default(false),
 });
 
 export const SynologyInstanceSchema = BaseInstanceSchema.extend({

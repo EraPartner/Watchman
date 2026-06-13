@@ -438,6 +438,13 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
         type: "text",
         default: "/api/auth/login",
       },
+      {
+        name: "allowSelfSigned",
+        label: "Allow self-signed TLS",
+        type: "boolean",
+        default: false,
+        help: "Accept a self-signed HTTPS cert from the Config UI X server. Trusted-network only — disables TLS verification (no MITM protection).",
+      },
     ]),
     secretFields: ["password", "authToken"],
   },

@@ -41,19 +41,20 @@ Two-tier health via `withHostPing` helper:
 
 Configuration is managed via the Settings UI or the `/config` API (DuckDB config store). Environment variables (`HOMEBRIDGE_*`) are **legacy** — they are imported once on first boot and then ignored (see ADR-015 / ADR-008).
 
-| Field         | Type     | Required | Default                          | Secret  | Notes                                                                                |
-| ------------- | -------- | -------- | -------------------------------- | ------- | ------------------------------------------------------------------------------------ |
-| `baseUrl`     | URL      | yes      | —                                | no      | Base URL of the Homebridge Config UI X server (e.g. `http://192.168.1.10:8581`)      |
-| `username`    | text     | no       | `""`                             | no      | Homebridge UI username for login                                                     |
-| `password`    | password | no       | `""`                             | **yes** | Homebridge UI password for login                                                     |
-| `authToken`   | password | no       | `""`                             | **yes** | Pre-issued JWT bearer token; used if set, otherwise login is performed automatically |
-| `statusPath`  | text     | no       | `/api/status/server-information` | no      | Path for the server-information health probe                                         |
-| `versionPath` | text     | no       | `/api/status/homebridge-version` | no      | Path for the version check (slow lane)                                               |
-| `loginPath`   | text     | no       | `/api/auth/login`                | no      | Path used by jwtClient to obtain a token on 401                                      |
-| `instanceId`  | text     | no       | `main`                           | no      | Unique ID when running multiple instances                                            |
-| `enabled`     | boolean  | no       | `true`                           | no      | Disable without removing the config                                                  |
-| `cacheTtlMs`  | number   | no       | `10000`                          | no      | Stats cache TTL in milliseconds                                                      |
-| `timeoutMs`   | number   | no       | `5000`                           | no      | HTTP request timeout in milliseconds                                                 |
+| Field             | Type     | Required | Default                          | Secret  | Notes                                                                                                                                                                                                      |
+| ----------------- | -------- | -------- | -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`         | URL      | yes      | —                                | no      | Base URL of the Homebridge Config UI X server (e.g. `http://192.168.1.10:8581`)                                                                                                                            |
+| `username`        | text     | no       | `""`                             | no      | Homebridge UI username for login                                                                                                                                                                           |
+| `password`        | password | no       | `""`                             | **yes** | Homebridge UI password for login                                                                                                                                                                           |
+| `authToken`       | password | no       | `""`                             | **yes** | Pre-issued JWT bearer token; used if set, otherwise login is performed automatically                                                                                                                       |
+| `statusPath`      | text     | no       | `/api/status/server-information` | no      | Path for the server-information health probe                                                                                                                                                               |
+| `versionPath`     | text     | no       | `/api/status/homebridge-version` | no      | Path for the version check (slow lane)                                                                                                                                                                     |
+| `loginPath`       | text     | no       | `/api/auth/login`                | no      | Path used by jwtClient to obtain a token on 401                                                                                                                                                            |
+| `allowSelfSigned` | boolean  | no       | `false`                          | no      | Accept a self-signed TLS cert from the Config UI X server. **Disables TLS verification for this instance (no MITM protection)** — trusted-network only. Default verifies the cert and rejects self-signed. |
+| `instanceId`      | text     | no       | `main`                           | no      | Unique ID when running multiple instances                                                                                                                                                                  |
+| `enabled`         | boolean  | no       | `true`                           | no      | Disable without removing the config                                                                                                                                                                        |
+| `cacheTtlMs`      | number   | no       | `10000`                          | no      | Stats cache TTL in milliseconds                                                                                                                                                                            |
+| `timeoutMs`       | number   | no       | `5000`                           | no      | HTTP request timeout in milliseconds                                                                                                                                                                       |
 
 ## Endpoints
 
@@ -108,7 +109,7 @@ Plugin list and version checks are rate-limited to **once per 15 minutes** via `
 - **Normalized Accessories Shape**: `GET /api/accessories` normalizes upstream Homebridge accessories payloads via route-level helper `extractHomebridgeAccessories()` before pagination.
 - **Cached Accessories Fallback**: If a fresh fetch fails but prior accessories data exists, `GET /api/accessories` serves the last known list from `lastData` and still responds with HTTP `200`.
 - **Warning passthrough semantics preserved**: If Homebridge accessories fetch fails and no accessory list is available, endpoint still returns HTTP `200` with empty paginated `data` plus `warning`/`message` fields so UI can degrade gracefully without hard request failures.
-- **Self-Signed HTTPS Support**: Homebridge HTTPS requests use a permissive TLS agent to support common self-hosted setups with self-signed certificates.
+- **Self-Signed HTTPS (opt-in)**: TLS certificates are **verified by default**, so an `https://` base URL backed by a self-signed cert is rejected (the request surfaces as a generic `http request failed`). Set `allowSelfSigned: true` to route that instance through a permissive-TLS client (`infra/http/insecureClient.ts`, `rejectUnauthorized: false`). This **disables verification and forfeits MITM protection**, so it is intended for the single-user trusted-network model only ([[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] / [[docs/adr/025-trusted-network-security-model-and-audit-remediation|ADR-025]]). For identity-preserving self-signed support, certificate pinning — as the Philips Hue bridge uses via `certHash` (`createPinnedClient`) — is the stronger pattern, but it is not currently wired for Homebridge.
 
 ## HB1 Phase — JWT Token Refresh (Complete)
 

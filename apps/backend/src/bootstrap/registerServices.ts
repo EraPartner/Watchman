@@ -29,6 +29,9 @@ import { createTorEventSubscriptionFactory } from "../infra/tor/eventSubscriptio
 
 export interface ServiceInfra {
   http: HttpClient;
+  /** TLS-permissive client for instances that opt into `allowSelfSigned`.
+   *  Falls back to `http` (strict) when not provided. */
+  insecureHttp?: HttpClient;
   ping: PingProber;
   tcp: TcpProber;
   ssh: SshExecutor;
@@ -53,6 +56,7 @@ function buildService(
 ): BaseService {
   const {
     http,
+    insecureHttp,
     ping,
     tcp,
     ssh,
@@ -125,8 +129,11 @@ function buildService(
       });
     }
     case "homebridge": {
+      // Opt-in: a self-signed Config UI X cert is accepted only when the
+      // operator sets allowSelfSigned (trusted-network model, ADR-017/ADR-025).
+      // Default path stays strict (the shared `http`).
       const client = createHomebridgeClient({
-        http,
+        http: instance.allowSelfSigned ? (insecureHttp ?? http) : http,
         config: {
           baseUrl: instance.baseUrl,
           username: instance.username,
