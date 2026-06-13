@@ -50,14 +50,17 @@ aliases:
 
 ## Core Concepts
 
-| Term                 | Also Known As                                | Description                                                                                           | See Also                                  |
-| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------- |
-| **Service**          | integration, monitor, addon, plugin          | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay). | [[docs/features/service-monitoring        | Service Monitoring]] |
-| **Service Instance** | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.           | [[docs/features/multi-instance            | Multi-Instance]]     |
-| **Health Check**     | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.               | [[docs/api/index                          | API]]                |
-| **Stats**            | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                    | [[docs/api/index                          | API]]                |
-| **ServiceManager**   | orchestrator, service manager                | Central backend class that manages all service instances and routes requests.                         | `apps/backend/services/ServiceManager.js` |
-| **Circuit Breaker**  | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                             | [[docs/performance/index                  | Performance]]        |
+| Term                  | Also Known As                                | Description                                                                                                                           | See Also                                  |
+| --------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------- |
+| **Service**           | integration, monitor, addon, plugin          | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay).                                 | [[docs/features/service-monitoring        | Service Monitoring]] |
+| **Service Instance**  | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.                                           | [[docs/features/multi-instance            | Multi-Instance]]     |
+| **Health Check**      | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.                                               | [[docs/api/index                          | API]]                |
+| **Stats**             | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                                                    | [[docs/api/index                          | API]]                |
+| **ServiceManager**    | orchestrator, service manager                | Central backend class that manages all service instances and routes requests.                                                         | `apps/backend/services/ServiceManager.js` |
+| **Circuit Breaker**   | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                                                             | [[docs/performance/index                  | Performance]]        |
+| **Profile**           | location, environment, network profile       | A named set of service instances for one location (e.g. Home, Office). One profile per service; only the active profile is monitored. | [[docs/features/profiles                  | Profiles]]           |
+| **Active Profile**    | current profile, selected profile            | The single profile whose services are currently monitored (server-authoritative). Chosen by network auto-switch or manual override.   | [[docs/features/profiles                  | Profiles]]           |
+| **Network Signature** | LAN fingerprint, gateway MAC                 | The default-gateway MAC (plus ip/subnet) used to identify a LAN and auto-switch to its profile.                                       | [[docs/features/profiles                  | Profiles]]           |
 
 ## Services
 

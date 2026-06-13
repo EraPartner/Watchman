@@ -11,10 +11,12 @@ import ServiceEditor from "./ServiceEditor";
 import { SettingsLayout } from "./SettingsLayout";
 import {
   useServices,
+  useServiceLoadErrors,
   useCreateService,
   useUpdateService,
   useDeleteService,
 } from "./useConfigQueries";
+import { useProfiles, useMoveServiceProfile } from "./useProfileQueries";
 import type { ServiceInstance } from "../../services/configApi";
 
 type EditorState =
@@ -22,15 +24,19 @@ type EditorState =
   | { mode: "create" }
   | { mode: "edit"; service: ServiceInstance };
 
+// Both a live service and a failed-to-load row carry these — enough to confirm a delete.
+type DeleteTarget = { id: string; kind: string; instanceId: string };
+
 export default function Services() {
   const { data: services, isLoading, error } = useServices();
+  const { data: loadErrors } = useServiceLoadErrors();
+  const { data: profiles } = useProfiles();
   const createMut = useCreateService();
   const updateMut = useUpdateService();
   const deleteMut = useDeleteService();
+  const moveMut = useMoveServiceProfile();
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
-  const [pendingDelete, setPendingDelete] = useState<ServiceInstance | null>(
-    null,
-  );
+  const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
 
   return (
     <SettingsLayout
@@ -43,11 +49,53 @@ export default function Services() {
         </Button>
       }
     >
-      {isLoading && <p className="text-fs-body text-[var(--text-md)]">Loading…</p>}
+      {isLoading && (
+        <p className="text-fs-body text-[var(--text-md)]">Loading…</p>
+      )}
       {error && (
         <p className="text-fs-label text-[var(--crit)]">
           {(error as Error).message ?? "Failed to load"}
         </p>
+      )}
+
+      {loadErrors && loadErrors.length > 0 && (
+        <div className="flex flex-col gap-s-3 rounded-r-3 border border-[var(--crit)] bg-[var(--surface-1)] p-s-4">
+          <div className="text-fs-label font-medium text-[var(--crit)]">
+            {loadErrors.length} service
+            {loadErrors.length === 1 ? "" : "s"} could not be loaded
+          </div>
+          <p className="text-fs-label text-[var(--text-lo)]">
+            These rows were skipped so the other services keep running. Common
+            causes: the server master key changed (secrets no longer decrypt),
+            the stored config drifted from the current schema, or an unknown
+            service kind. Remove and re-add to fix.
+          </p>
+          <div className="flex flex-col divide-y divide-[var(--hairline)]">
+            {loadErrors.map((err) => (
+              <div
+                key={err.id}
+                className="flex items-center justify-between gap-s-4 py-s-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-mono text-fs-body text-[var(--text-hi)]">
+                    {err.kind} / {err.instanceId}
+                  </div>
+                  <div className="truncate text-fs-label text-[var(--text-lo)]">
+                    {err.message}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-[var(--crit)] hover:text-[var(--crit)] hover:brightness-110"
+                  onClick={() => setPendingDelete(err)}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className="rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] divide-y divide-[var(--hairline)]">
@@ -73,6 +121,24 @@ export default function Services() {
               </div>
             </div>
             <div className="flex items-center gap-s-2">
+              {profiles && profiles.length > 0 ? (
+                <select
+                  aria-label="Profile"
+                  value={svc.profileId}
+                  disabled={moveMut.isPending}
+                  onChange={(e) =>
+                    moveMut.mutate({ id: svc.id, profileId: e.target.value })
+                  }
+                  className="rounded-r-2 border border-[var(--hairline)] bg-[var(--surface-0)] px-s-2 py-s-1 text-fs-label text-[var(--text-md)]"
+                  title="Owning profile"
+                >
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <Button
                 variant="ghost"
                 size="sm"

@@ -9,6 +9,7 @@ import {
   type TestConnectionResult,
   type ExportBundle,
   type ImportResult,
+  type LoadError,
 } from "../../services/configApi";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -16,6 +17,7 @@ const KEYS = {
   setup: ["config", "setup"] as const,
   kinds: ["config", "kinds"] as const,
   services: ["config", "services"] as const,
+  loadErrors: ["config", "load-errors"] as const,
   service: (id: string) => ["config", "services", id] as const,
   audit: (limit: number) => ["config", "audit", limit] as const,
 };
@@ -23,7 +25,9 @@ const KEYS = {
 // Settings mutations live under ["config", ...] keys, but the dashboard reads
 // from ["services","instances"] and ["services","health"] — invalidate both
 // families so tiles appear/update/disappear without a manual refresh.
-function invalidateDashboardQueries(qc: ReturnType<typeof useQueryClient>): void {
+function invalidateDashboardQueries(
+  qc: ReturnType<typeof useQueryClient>
+): void {
   qc.invalidateQueries({ queryKey: queryKeys.servicesInstances() });
   qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
 }
@@ -48,6 +52,15 @@ export function useServices() {
   return useQuery<ServiceInstance[]>({
     queryKey: KEYS.services,
     queryFn: () => configApi.listServices(),
+  });
+}
+
+// Stored rows that failed to load (skipped by listServices so the rest still come
+// up). Surfaced so the operator can see and delete a broken instance.
+export function useServiceLoadErrors() {
+  return useQuery<LoadError[]>({
+    queryKey: KEYS.loadErrors,
+    queryFn: () => configApi.listLoadErrors(),
   });
 }
 
@@ -103,6 +116,7 @@ export function useDeleteService() {
     mutationFn: (id: string) => configApi.deleteService(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.services });
+      qc.invalidateQueries({ queryKey: KEYS.loadErrors });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
     },

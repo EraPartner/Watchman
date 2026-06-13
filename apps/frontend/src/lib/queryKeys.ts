@@ -4,6 +4,10 @@ export const queryKeys = {
   servicesInstances: () => ["services", "instances"] as const,
   metrics: () => ["metrics"] as const,
 
+  profiles: () => ["profiles"] as const,
+  activeProfile: () => ["profiles", "active"] as const,
+  currentNetwork: () => ["profiles", "current-network"] as const,
+
   servicePrefix: (serviceKey: string) => [serviceKey] as const,
 
   serviceStatus: (serviceKey: string, instanceId = serviceKey) =>

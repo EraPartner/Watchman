@@ -33,6 +33,14 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
       return { data: all.map((s) => store.redact(s)) };
     });
 
+    // Rows that failed to load (undecryptable secrets, schema drift, unknown kind).
+    // loadAll() skips these so the rest of the services still come up; this surfaces
+    // them so the UI can show and offer to delete the broken instance.
+    app.get("/config/load-errors", async () => {
+      const errors = await store.loadErrors();
+      return { data: errors };
+    });
+
     app.get<{ Params: { id: string } }>(
       "/config/services/:id",
       async (req, reply) => {
@@ -48,7 +56,18 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
     app.post<{ Body: unknown }>("/config/services", async (req, reply) => {
       try {
         const actor = (req.headers["x-actor"] as string) ?? null;
-        const created = await store.create(req.body, actor ?? undefined);
+        // Optional profileId travels alongside the config; the store strips it
+        // from schema validation and defaults to the active profile when absent.
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const profileId =
+          typeof body["profileId"] === "string"
+            ? (body["profileId"] as string)
+            : undefined;
+        const created = await store.create(
+          req.body,
+          actor ?? undefined,
+          profileId
+        );
         return reply.status(201).send({ data: store.redact(created) });
       } catch (e) {
         return reply.status(400).send({
@@ -90,6 +109,31 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
         const actor = (req.headers["x-actor"] as string) ?? null;
         await store.delete(req.params.id, actor ?? undefined);
         return reply.status(204).send();
+      }
+    );
+
+    // Move a service to a different profile (ADR-027). Emits config:service.updated
+    // so the lifecycle reconciles whether it runs under the active profile.
+    app.put<{ Params: { id: string }; Body: { profileId?: unknown } }>(
+      "/config/services/:id/profile",
+      async (req, reply) => {
+        const profileId =
+          typeof req.body?.profileId === "string" ? req.body.profileId : "";
+        if (!profileId) {
+          return reply.status(400).send({
+            error: { code: "VALIDATION", message: "profileId is required" },
+          });
+        }
+        const existing = await store.get(req.params.id);
+        if (!existing) {
+          return reply
+            .status(404)
+            .send({ error: { code: "NOT_FOUND", message: "not found" } });
+        }
+        const actor = (req.headers["x-actor"] as string) ?? null;
+        await store.setProfile(req.params.id, profileId, actor ?? undefined);
+        const updated = await store.get(req.params.id);
+        return { data: updated ? store.redact(updated) : null };
       }
     );
 

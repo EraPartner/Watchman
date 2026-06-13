@@ -84,6 +84,19 @@ export class Broadcaster {
           instanceId: p.instanceId,
           action: "deleted",
         });
+      }),
+      this.deps.bus.on("profile.switched", (p) => {
+        this.broadcast({
+          type: "profile_switched",
+          profileId: p.profileId,
+          reason: p.reason,
+        });
+      }),
+      this.deps.bus.on("profile.network.unrecognized", (p) => {
+        this.broadcast({
+          type: "profile_network_unrecognized",
+          signature: p.signature,
+        });
       })
     );
   }

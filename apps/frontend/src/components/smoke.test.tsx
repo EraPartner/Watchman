@@ -23,7 +23,10 @@ vi.mock("react-router-dom", () => ({
     className?: string | ((p: { isActive: boolean }) => string);
     end?: boolean;
   }) => {
-    const cls = typeof className === "function" ? className({ isActive: false }) : className;
+    const cls =
+      typeof className === "function"
+        ? className({ isActive: false })
+        : className;
     return h("a", { href: to, className: cls }, children);
   },
   useNavigate: () => vi.fn(),
@@ -32,10 +35,18 @@ vi.mock("react-router-dom", () => ({
 
 // Stub hooks used by TopNav
 vi.mock("../hooks/useWebSocket", () => ({
-  useWebSocket: () => ({ connect: vi.fn(), disconnect: vi.fn(), sendMessage: vi.fn() }),
+  useWebSocket: () => ({
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    sendMessage: vi.fn(),
+  }),
 }));
 vi.mock("../hooks/useServiceInstances", () => ({
-  useServiceInstances: () => ({ instances: [], instanceCount: 0, isMultiInstance: false }),
+  useServiceInstances: () => ({
+    instances: [],
+    instanceCount: 0,
+    isMultiInstance: false,
+  }),
 }));
 vi.mock("../services/ApiClient", () => ({
   apiClient: { getAggregatedServices: vi.fn(async () => []) },
@@ -43,6 +54,7 @@ vi.mock("../services/ApiClient", () => ({
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
@@ -81,11 +93,15 @@ import { KindCard } from "../pages/setup/KindCard";
 import { Server } from "lucide-react";
 
 beforeEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 afterEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = false;
   document.body.innerHTML = "";
 });
 
@@ -138,8 +154,16 @@ describe("DashboardTileSection", () => {
   });
 
   it("renders tiles in rows", async () => {
-    const tile1 = <span key="t1" id="tile1">tile1</span>;
-    const tile2 = <span key="t2" id="tile2">tile2</span>;
+    const tile1 = (
+      <span key="t1" id="tile1">
+        tile1
+      </span>
+    );
+    const tile2 = (
+      <span key="t2" id="tile2">
+        tile2
+      </span>
+    );
     const { container, root } = await render(
       <DashboardTileSection
         title="Services"
@@ -183,14 +207,18 @@ describe("Delta", () => {
   });
 
   it("applies float precision", async () => {
-    const { container, root } = await render(<Delta value={1.5} precision={2} />);
+    const { container, root } = await render(
+      <Delta value={1.5} precision={2} />
+    );
     expect(container.textContent).toContain("1.50");
     act(() => root.unmount());
   });
 
   it("renders size and tone variants without throwing", async () => {
     const { root: r1 } = await render(<Delta value={1} size="lg" tone="ok" />);
-    const { root: r2 } = await render(<Delta value={-1} size="md" tone="crit" />);
+    const { root: r2 } = await render(
+      <Delta value={-1} size="md" tone="crit" />
+    );
     const { root: r3 } = await render(<Delta value={0} tone="neutral" />);
     act(() => r1.unmount());
     act(() => r2.unmount());
@@ -233,13 +261,33 @@ describe("Skeleton", () => {
 
 describe("EventLog", () => {
   const events: ServiceEvent[] = [
-    { id: "1", ts: Date.now(), serviceKey: "bitcoin", level: "error", message: "node down" },
-    { id: "2", ts: Date.now(), serviceKey: "tor", level: "warn", message: "latency high" },
-    { id: "3", ts: Date.now(), serviceKey: "ipfs", level: "info", message: "peers connected" },
+    {
+      id: "1",
+      ts: Date.now(),
+      serviceKey: "bitcoin",
+      level: "error",
+      message: "node down",
+    },
+    {
+      id: "2",
+      ts: Date.now(),
+      serviceKey: "tor",
+      level: "warn",
+      message: "latency high",
+    },
+    {
+      id: "3",
+      ts: Date.now(),
+      serviceKey: "ipfs",
+      level: "info",
+      message: "peers connected",
+    },
   ];
 
   it("renders empty label when events array is empty", async () => {
-    const { container, root } = await render(<EventLog events={[]} emptyLabel="Nothing here" />);
+    const { container, root } = await render(
+      <EventLog events={[]} emptyLabel="Nothing here" />
+    );
     expect(container.textContent).toContain("Nothing here");
     act(() => root.unmount());
   });
@@ -297,7 +345,9 @@ describe("KindCard", () => {
       />
     );
     const btn = container.querySelector("button")!;
-    await act(async () => { btn.click(); });
+    await act(async () => {
+      btn.click();
+    });
     expect(onSelect).toHaveBeenCalledWith("bitcoin");
     act(() => root.unmount());
   });
@@ -376,7 +426,9 @@ describe("Sparkline", () => {
   });
 
   it("renders fill path when fill=true (default)", async () => {
-    const { container, root } = await render(<Sparkline data={[1, 2, 3]} fill />);
+    const { container, root } = await render(
+      <Sparkline data={[1, 2, 3]} fill />
+    );
     const paths = container.querySelectorAll("path");
     expect(paths.length).toBeGreaterThanOrEqual(2);
     act(() => root.unmount());
@@ -489,7 +541,9 @@ describe("ConfirmDialog", () => {
     const btn = Array.from(document.body.querySelectorAll("button")).find(
       (b) => b.textContent === "Yes"
     )!;
-    await act(async () => { btn.click(); });
+    await act(async () => {
+      btn.click();
+    });
     expect(onConfirm).toHaveBeenCalled();
   });
 
@@ -507,7 +561,9 @@ describe("ConfirmDialog", () => {
     const btn = Array.from(document.body.querySelectorAll("button")).find(
       (b) => b.textContent === "No thanks"
     )!;
-    await act(async () => { btn.click(); });
+    await act(async () => {
+      btn.click();
+    });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
@@ -530,10 +586,16 @@ describe("TopNav", () => {
 
   it("renders + Add service button when onAddService is provided", async () => {
     const onAddService = vi.fn();
-    const { container, root } = await render(<TopNav onAddService={onAddService} />);
-    const btn = container.querySelector("button");
+    const { container, root } = await render(
+      <TopNav onAddService={onAddService} />
+    );
+    const btn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Add service")
+    );
     expect(btn).toBeTruthy();
-    await act(async () => { btn!.click(); });
+    await act(async () => {
+      btn!.click();
+    });
     expect(onAddService).toHaveBeenCalled();
     act(() => root.unmount());
   });
@@ -555,7 +617,9 @@ describe("Toggle", () => {
   });
 
   it("renders with pressed state", async () => {
-    const { container, root } = await render(<Toggle pressed={true}>On</Toggle>);
+    const { container, root } = await render(
+      <Toggle pressed={true}>On</Toggle>
+    );
     expect(container.firstChild).toBeTruthy();
     act(() => root.unmount());
   });

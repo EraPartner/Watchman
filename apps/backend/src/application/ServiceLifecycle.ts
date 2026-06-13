@@ -7,6 +7,7 @@ import type {
   ConfigStore,
   StoredService,
 } from "../config/store/ConfigStore.js";
+import type { ProfileStore } from "../config/store/ProfileStore.js";
 import {
   createService,
   type ServiceInfra,
@@ -21,6 +22,7 @@ export interface ServiceInstrumentation {
 
 export interface ServiceLifecycleOptions {
   store: ConfigStore;
+  profiles: ProfileStore;
   registry: ServiceRegistry;
   poller: Poller;
   bus: EventBus;
@@ -37,13 +39,15 @@ export interface ServiceLifecycle {
   applyCreate(id: string): Promise<void>;
   applyUpdate(id: string): Promise<void>;
   applyDelete(id: string): Promise<void>;
+  /** Persist the active profile, reconcile which services run, then announce the switch. */
+  switchActiveProfile(id: string, reason?: "manual" | "auto"): Promise<void>;
   idByStoredId(storedId: string): string | undefined;
 }
 
 export function createServiceLifecycle(
   opts: ServiceLifecycleOptions
 ): ServiceLifecycle {
-  const { store, registry, poller, bus, infra, logger } = opts;
+  const { store, profiles, registry, poller, bus, infra, logger } = opts;
   const storedIdToSvcId = new Map<string, string>();
   const unsubs: Array<() => void> = [];
 
@@ -75,8 +79,21 @@ export function createServiceLifecycle(
     opts.instrument?.release(svcId);
   }
 
-  async function bringUp(stored: StoredService): Promise<BaseService | null> {
-    if (!stored.enabled) return null;
+  // A service runs only when enabled AND it belongs to the active profile
+  // (ADR-027): out-of-profile services are never brought up, so they are not
+  // polled or probed.
+  function shouldRun(
+    stored: StoredService,
+    activeProfileId: string | undefined
+  ): boolean {
+    return stored.enabled && stored.profileId === activeProfileId;
+  }
+
+  async function bringUp(
+    stored: StoredService,
+    activeProfileId: string | undefined
+  ): Promise<BaseService | null> {
+    if (!shouldRun(stored, activeProfileId)) return null;
     const created = createService(stored.config, infra);
     const svc = opts.instrument
       ? opts.instrument.wrap(created, stored)
@@ -106,10 +123,11 @@ export function createServiceLifecycle(
   async function applyCreate(id: string): Promise<void> {
     const stored = await store.get(id);
     if (!stored) return;
+    const activeProfileId = await profiles.getActiveProfileId();
     await serialize(async () => {
       poller.pause();
       try {
-        await bringUp(stored);
+        await bringUp(stored, activeProfileId);
       } finally {
         poller.resume();
       }
@@ -119,6 +137,7 @@ export function createServiceLifecycle(
   async function applyUpdate(id: string): Promise<void> {
     const stored = await store.get(id);
     if (!stored) return;
+    const activeProfileId = await profiles.getActiveProfileId();
     await serialize(async () => {
       poller.pause();
       try {
@@ -127,7 +146,7 @@ export function createServiceLifecycle(
           await teardown(prevSvcId);
           storedIdToSvcId.delete(id);
         }
-        await bringUp(stored);
+        await bringUp(stored, activeProfileId);
       } finally {
         poller.resume();
       }
@@ -150,6 +169,7 @@ export function createServiceLifecycle(
   }
 
   async function reloadAll(): Promise<void> {
+    const activeProfileId = await profiles.getActiveProfileId();
     await serialize(async () => {
       poller.pause();
       try {
@@ -159,10 +179,11 @@ export function createServiceLifecycle(
         storedIdToSvcId.clear();
         const all = await store.loadAll();
         // bring services up concurrently so one slow onStart doesn't delay
-        // the rest; per-service failures are contained
+        // the rest; per-service failures are contained. bringUp() filters out
+        // disabled and out-of-profile services.
         await Promise.all(
           all.map((s) =>
-            bringUp(s).catch((e) =>
+            bringUp(s, activeProfileId).catch((e) =>
               logger.error({ err: e, id: s.id }, "bringUp failed")
             )
           )
@@ -171,6 +192,17 @@ export function createServiceLifecycle(
         poller.resume();
       }
     });
+  }
+
+  async function switchActiveProfile(
+    id: string,
+    reason: "manual" | "auto" = "manual"
+  ): Promise<void> {
+    await profiles.setActiveProfileId(id);
+    // reloadAll() re-reads the now-active profile and reconciles which services
+    // run: out-of-profile ones are torn down, newly-in-profile ones brought up.
+    await reloadAll();
+    bus.emit("profile.switched", { profileId: id, reason });
   }
 
   return {
@@ -212,6 +244,7 @@ export function createServiceLifecycle(
     applyCreate,
     applyUpdate,
     applyDelete,
+    switchActiveProfile,
     idByStoredId(storedId: string): string | undefined {
       return storedIdToSvcId.get(storedId);
     },

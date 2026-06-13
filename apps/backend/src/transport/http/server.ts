@@ -6,6 +6,7 @@ import { servicesRoutes, type ServicesRouteDeps } from "./routes/services.js";
 import { instancesRoutes } from "./routes/instances.js";
 import { metricsRoutes } from "./routes/metrics.js";
 import { configRoutes, type ConfigRouteDeps } from "./routes/config.js";
+import { profileRoutes, type ProfileRouteDeps } from "./routes/profiles.js";
 import { setupRoutes, type SetupRouteDeps } from "./routes/setup.js";
 import { errorHandlerPlugin } from "./plugins/errorHandler.js";
 import { requestTimeoutPlugin } from "./plugins/requestTimeout.js";
@@ -20,6 +21,7 @@ export interface BuildServerDeps {
   listInstances: ListInstances;
   metrics: MetricsRegistry;
   config: ConfigRouteDeps;
+  profiles: ProfileRouteDeps;
   setup: SetupRouteDeps;
   requestTimeoutMs?: number | undefined;
   healthLogSampleRate?: number | undefined;
@@ -81,6 +83,7 @@ export async function buildServer(deps: BuildServerDeps) {
   await app.register(instancesRoutes(deps.listInstances));
   await app.register(setupRoutes(deps.setup));
   await app.register(configRoutes(deps.config));
+  await app.register(profileRoutes(deps.profiles));
 
   return app;
 }

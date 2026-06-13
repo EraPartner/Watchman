@@ -33,11 +33,18 @@ import { loadEncryptorFromEnv } from "./config/store/encryption.js";
 import { loadOrCreateMasterKey } from "./config/masterKey.js";
 import { runConfigMigrations } from "./config/store/migrations.js";
 import { createConfigStore } from "./config/store/ConfigStore.js";
+import { createProfileStore } from "./config/store/ProfileStore.js";
 import { migrateEnvServicesIfNeeded } from "./config/store/envMigrator.js";
 import {
   createServiceLifecycle,
   type ServiceInstrumentation,
 } from "./application/ServiceLifecycle.js";
+import { createNetworkWatcher } from "./application/NetworkWatcher.js";
+import {
+  createArpLookup,
+  defaultNeighborRunner,
+} from "./infra/net/arpLookup.js";
+import { createNetworkDetector } from "./infra/net/gatewayDetect.js";
 import { SnapshotCache } from "./application/SnapshotCache.js";
 import {
   createBreaker,
@@ -83,9 +90,17 @@ async function main(): Promise<void> {
   const dbPool = await createDuckDbPool({ path: dbPath });
   await dbPool.withConnection((c) => runConfigMigrations(c));
 
+  // Profiles (ADR-027): ensure a Default profile exists and is active, and that
+  // every pre-existing service instance is assigned to it, before anything reads
+  // the active profile or migrates env services into it.
+  const profileStore = createProfileStore(dbPool, logger);
+  await profileStore.ensureBootstrap(logger);
+
   const masterKey = loadOrCreateMasterKey(dataDir, env.WATCHMAN_MASTER_KEY);
   const encryptor = loadEncryptorFromEnv(masterKey);
-  const store = createConfigStore(dbPool, encryptor, bus);
+  const store = createConfigStore(dbPool, encryptor, bus, logger, {
+    resolveDefaultProfileId: () => profileStore.getActiveProfileId(),
+  });
   const migResult = await migrateEnvServicesIfNeeded(store, logger);
   if (migResult.migrated > 0) {
     logger.info(
@@ -132,12 +147,26 @@ async function main(): Promise<void> {
 
   const lifecycle = createServiceLifecycle({
     store,
+    profiles: profileStore,
     registry,
     poller,
     bus,
     infra,
     logger,
     instrument,
+  });
+
+  // LAN auto-switch (ADR-027): detect the default gateway, ARP-resolve its MAC,
+  // and switch the active profile when the network changes to a recognized one.
+  const networkDetector = createNetworkDetector({
+    arp: createArpLookup({ runner: defaultNeighborRunner }),
+  });
+  const networkWatcher = createNetworkWatcher({
+    detector: networkDetector,
+    profiles: profileStore,
+    lifecycle,
+    bus,
+    logger,
   });
 
   metrics.setPollerStats({
@@ -159,6 +188,12 @@ async function main(): Promise<void> {
     listInstances: new ListInstances(registry),
     metrics,
     config: { store, lifecycle, registry },
+    profiles: {
+      profiles: profileStore,
+      store,
+      lifecycle,
+      detector: networkDetector,
+    },
     setup: { store, http: infra.http },
     trustProxy: env.TRUST_PROXY,
     isOriginAllowed,
@@ -175,6 +210,7 @@ async function main(): Promise<void> {
   registerShutdown(
     {
       close: async () => {
+        await networkWatcher.stop();
         await poller.stop();
         await lifecycle.stop();
         snapshots.stop();
@@ -196,6 +232,9 @@ async function main(): Promise<void> {
 
   await lifecycle.start();
   logger.info({ tracked: registry.all().length }, "service bring-up complete");
+
+  // Begin watching for LAN changes after the initial bring-up.
+  networkWatcher.start();
 }
 
 main().catch((err: unknown) => {

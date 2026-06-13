@@ -51,8 +51,18 @@ function buildService(
   instance: ServiceInstance,
   infra: ServiceInfra
 ): BaseService {
-  const { http, ping, tcp, ssh, snmp, pigpio, torControl, roonConnect, zmqConnect, now } =
-    infra;
+  const {
+    http,
+    ping,
+    tcp,
+    ssh,
+    snmp,
+    pigpio,
+    torControl,
+    roonConnect,
+    zmqConnect,
+    now,
+  } = infra;
   switch (instance.kind) {
     case "ipfs":
       return new IpfsService({ http, ping, config: instance, now });
@@ -84,7 +94,13 @@ function buildService(
         now,
       });
     case "bitcoin":
-      return new BitcoinService({ http, ping, config: instance, now, ...(zmqConnect ? { zmqConnect } : {}) });
+      return new BitcoinService({
+        http,
+        ping,
+        config: instance,
+        now,
+        ...(zmqConnect ? { zmqConnect } : {}),
+      });
     case "macMini":
       return new MacMiniService({ ping, ssh, config: instance, now });
     case "synology": {
@@ -130,6 +146,13 @@ function buildService(
         config: instance,
         now,
       });
+    default: {
+      // Exhaustive over the discriminated union; the guard turns a future/unknown
+      // kind into a clear single-service failure instead of returning undefined and
+      // crashing registry.register for every service after it.
+      const unknownKind = (instance as { kind?: unknown }).kind;
+      throw new Error(`unknown service kind: ${String(unknownKind)}`);
+    }
   }
 }
 

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Logger } from "pino";
 import { DuckDBBlobValue, type DuckDBConnection } from "@duckdb/node-api";
 import type { DuckDbPool } from "../../infra/db/DuckDbPool.js";
 import { toTs } from "../../infra/db/DuckDbPool.js";
@@ -38,6 +39,8 @@ export interface StoredService {
   kind: ServiceKind;
   instanceId: string;
   enabled: boolean;
+  /** Owning profile (ADR-027). Empty string only transiently before bootstrap backfill. */
+  profileId: string;
   config: ServiceInstance;
   createdAt: Date;
   updatedAt: Date;
@@ -48,6 +51,7 @@ export interface RedactedService {
   kind: ServiceKind;
   instanceId: string;
   enabled: boolean;
+  profileId: string;
   config: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -56,7 +60,17 @@ export interface RedactedService {
 export interface AuditEntry {
   id: number;
   ts: Date;
-  action: "create" | "update" | "delete" | "import" | "export" | "rename";
+  action:
+    | "create"
+    | "update"
+    | "delete"
+    | "import"
+    | "export"
+    | "rename"
+    | "profile.create"
+    | "profile.update"
+    | "profile.delete"
+    | "profile.switch";
   targetKind: string | null;
   targetId: string | null;
   diff: unknown;
@@ -78,12 +92,34 @@ export interface ImportResult {
   errors: Array<{ kind: string; instanceId: string; message: string }>;
 }
 
+/**
+ * A stored row that could not be turned into a usable service — e.g. secrets that
+ * no longer decrypt after a WATCHMAN_MASTER_KEY rotation, a config that drifted out
+ * of the current schema, or an unknown kind. Surfaced so one bad row degrades to a
+ * visible, deletable entry instead of taking down every other service (see loadAll).
+ */
+export interface LoadError {
+  id: string;
+  kind: string;
+  instanceId: string;
+  message: string;
+}
+
 export interface ConfigStore {
+  /** Successfully-loaded services only. Never throws on a single bad row — those are skipped and exposed via loadErrors(). */
   loadAll(): Promise<ReadonlyArray<StoredService>>;
+  /** Rows that failed to load (decrypt/schema/kind). Pair with loadAll() to surface and recover broken config. */
+  loadErrors(): Promise<ReadonlyArray<LoadError>>;
   get(id: string): Promise<StoredService | null>;
-  create(input: unknown, actor?: string): Promise<StoredService>;
+  create(
+    input: unknown,
+    actor?: string,
+    profileId?: string
+  ): Promise<StoredService>;
   update(id: string, input: unknown, actor?: string): Promise<StoredService>;
   delete(id: string, actor?: string): Promise<void>;
+  /** Reassign a service to a different profile; emits config:service.updated so the lifecycle reconciles. */
+  setProfile(id: string, profileId: string, actor?: string): Promise<void>;
   redact(svc: StoredService): RedactedService;
   listAudit(limit?: number): Promise<ReadonlyArray<AuditEntry>>;
   writeAudit(
@@ -150,15 +186,62 @@ function toBuffer(value: unknown): Buffer | null {
   return null;
 }
 
+export interface ConfigStoreOptions {
+  /** Resolves the profile a newly-created service should land in when none is given (the active profile). */
+  resolveDefaultProfileId?: () => Promise<string | undefined>;
+}
+
 export function createConfigStore(
   pool: DuckDbPool,
   encryptor: Encryptor,
-  bus: EventBus
+  bus: EventBus,
+  logger?: Logger,
+  storeOpts?: ConfigStoreOptions
 ): ConfigStore {
   async function withConn<T>(
     fn: (c: DuckDBConnection) => Promise<T>
   ): Promise<T> {
     return pool.withConnection(fn);
+  }
+
+  // Single DB read, partitioned into usable services and per-row failures. A row that
+  // fails to parse/decrypt is logged and skipped rather than rejecting the whole batch,
+  // so one corrupt instance can't stop every other service from coming up at startup.
+  async function loadAllPartitioned(): Promise<{
+    services: StoredService[];
+    errors: LoadError[];
+  }> {
+    return withConn(async (c) => {
+      const result = await c.runAndReadAll(
+        `SELECT * FROM app_service_instance ORDER BY kind, instance_id`
+      );
+      const rows = result.getRowObjects() as Array<Record<string, unknown>>;
+      const services: StoredService[] = [];
+      const errors: LoadError[] = [];
+      for (const r of rows) {
+        try {
+          services.push(await rowToStored(r));
+        } catch (err) {
+          const entry: LoadError = {
+            id: String(r["id"] ?? ""),
+            kind: String(r["kind"] ?? "unknown"),
+            instanceId: String(r["instance_id"] ?? ""),
+            message: err instanceof Error ? err.message : String(err),
+          };
+          errors.push(entry);
+          logger?.warn(
+            {
+              err,
+              id: entry.id,
+              kind: entry.kind,
+              instanceId: entry.instanceId,
+            },
+            "service config row failed to load; skipping"
+          );
+        }
+      }
+      return { services, errors };
+    });
   }
 
   async function rowToStored(
@@ -197,6 +280,7 @@ export function createConfigStore(
       kind,
       instanceId: String(row["instance_id"]),
       enabled: Boolean(row["enabled"]),
+      profileId: row["profile_id"] == null ? "" : String(row["profile_id"]),
       config,
       createdAt,
       updatedAt,
@@ -270,15 +354,11 @@ export function createConfigStore(
 
   return {
     async loadAll(): Promise<ReadonlyArray<StoredService>> {
-      return withConn(async (c) => {
-        const result = await c.runAndReadAll(
-          `SELECT * FROM app_service_instance ORDER BY kind, instance_id`
-        );
-        const rows = result.getRowObjects() as Array<Record<string, unknown>>;
-        const out: StoredService[] = [];
-        for (const r of rows) out.push(await rowToStored(r));
-        return out;
-      });
+      return (await loadAllPartitioned()).services;
+    },
+
+    async loadErrors(): Promise<ReadonlyArray<LoadError>> {
+      return (await loadAllPartitioned()).errors;
     },
 
     async get(id: string): Promise<StoredService | null> {
@@ -293,12 +373,18 @@ export function createConfigStore(
       });
     },
 
-    async create(input: unknown, actor?: string): Promise<StoredService> {
+    async create(
+      input: unknown,
+      actor?: string,
+      profileId?: string
+    ): Promise<StoredService> {
       const config = validate(input);
       const parts = extractStorable(config);
       if (!KIND_META[parts.kind])
         throw new Error(`Unsupported kind: ${parts.kind}`);
       assertValidInstanceId(parts.instanceId);
+      const resolvedProfileId =
+        profileId ?? (await storeOpts?.resolveDefaultProfileId?.()) ?? "";
       const stored = await withConn(async (c): Promise<StoredService> => {
         const dup = await c.runAndReadAll(
           `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
@@ -317,13 +403,14 @@ export function createConfigStore(
             : null;
         await c.run(
           `INSERT INTO app_service_instance
-            (id, kind, instance_id, enabled, config_public, config_secret, poll_policy, cache_ttl_ms, timeout_ms, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, kind, instance_id, enabled, profile_id, config_public, config_secret, poll_policy, cache_ttl_ms, timeout_ms, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             parts.kind,
             parts.instanceId,
             parts.enabled,
+            resolvedProfileId || null,
             JSON.stringify(parts.publicPart),
             secretCipher,
             JSON.stringify(parts.pollPolicy),
@@ -338,7 +425,11 @@ export function createConfigStore(
           "create",
           parts.kind,
           id,
-          { kind: parts.kind, instanceId: parts.instanceId },
+          {
+            kind: parts.kind,
+            instanceId: parts.instanceId,
+            profileId: resolvedProfileId,
+          },
           actor ?? null
         );
         return {
@@ -346,6 +437,7 @@ export function createConfigStore(
           kind: parts.kind,
           instanceId: parts.instanceId,
           enabled: parts.enabled,
+          profileId: resolvedProfileId,
           config,
           createdAt: now,
           updatedAt: now,
@@ -447,6 +539,7 @@ export function createConfigStore(
           kind: parts.kind,
           instanceId: parts.instanceId,
           enabled: parts.enabled,
+          profileId: existing.profileId,
           config,
           createdAt: existing.createdAt,
           updatedAt: now,
@@ -469,20 +562,66 @@ export function createConfigStore(
     },
 
     async delete(id: string, actor?: string): Promise<void> {
-      const existing = await this.get(id);
-      if (!existing) return;
+      // Resolve identity without requiring a successful parse: a corrupt/undecryptable
+      // row (the kind surfaced by loadErrors) must still be deletable so the operator
+      // can recover. get() re-parses and would throw on exactly those rows.
+      let kind = "";
+      let instanceId = "";
+      try {
+        const existing = await this.get(id);
+        if (!existing) return;
+        kind = existing.kind;
+        instanceId = existing.instanceId;
+      } catch {
+        const identity = await withConn(async (c) => {
+          const res = await c.runAndReadAll(
+            `SELECT kind, instance_id FROM app_service_instance WHERE id = ?`,
+            [id]
+          );
+          return res.getRowObjects() as Array<Record<string, unknown>>;
+        });
+        if (identity.length === 0) return;
+        kind = String(identity[0]!["kind"] ?? "");
+        instanceId = String(identity[0]!["instance_id"] ?? "");
+      }
       await withConn(async (c) => {
         await c.run(`DELETE FROM app_service_instance WHERE id = ?`, [id]);
         await insertAudit(
           c,
           "delete",
-          existing.kind,
+          kind || null,
           id,
-          { kind: existing.kind, instanceId: existing.instanceId },
+          { kind, instanceId },
           actor ?? null
         );
       });
-      bus.emit("config:service.deleted", {
+      bus.emit("config:service.deleted", { id, kind, instanceId });
+    },
+
+    async setProfile(
+      id: string,
+      profileId: string,
+      actor?: string
+    ): Promise<void> {
+      const existing = await this.get(id);
+      if (!existing) throw new Error(`Not found: ${id}`);
+      if (existing.profileId === profileId) return;
+      await withConn(async (c) => {
+        const now = new Date();
+        await c.run(
+          `UPDATE app_service_instance SET profile_id = ?, updated_at = ? WHERE id = ?`,
+          [profileId, toTs(now), id]
+        );
+        await insertAudit(
+          c,
+          "update",
+          existing.kind,
+          id,
+          { profileMove: { from: existing.profileId, to: profileId } },
+          actor ?? null
+        );
+      });
+      bus.emit("config:service.updated", {
         id,
         kind: existing.kind,
         instanceId: existing.instanceId,
@@ -495,6 +634,7 @@ export function createConfigStore(
         kind: svc.kind,
         instanceId: svc.instanceId,
         enabled: svc.enabled,
+        profileId: svc.profileId,
         config: redactConfig(
           svc.kind,
           svc.config as unknown as Record<string, unknown>

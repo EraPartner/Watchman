@@ -305,6 +305,23 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/KindSchema" }
+  /config/load-errors:
+    get:
+      tags: [config]
+      summary: Stored service rows that failed to load (skipped by /config/services)
+      description: Rows whose secrets no longer decrypt, whose config drifted from the schema, or whose kind is unknown. loadAll skips these so the remaining services still come up; this lets the UI surface and delete the broken instance.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/LoadError" }
   /config/services:
     get:
       tags: [config]
@@ -466,6 +483,200 @@ paths:
                   data: { $ref: "#/components/schemas/ImportResult" }
         "400":
           description: Invalid bundle
+  /config/services/{id}/profile:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [config]
+      summary: Move a service to a different profile (ADR-027)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profileId]
+              properties:
+                profileId: { type: string }
+      responses:
+        "200":
+          description: Updated service
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ServiceInstance" }
+        "400": { description: Missing profileId }
+        "404": { description: Service not found }
+  /profiles:
+    get:
+      tags: [profiles]
+      summary: List profiles with service counts and active flag
+      responses:
+        "200":
+          description: Profile list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Profile" }
+    post:
+      tags: [profiles]
+      summary: Create a profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileInput" }
+      responses:
+        "201":
+          description: Created profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Profile" }
+        "400": { description: Validation error }
+  /profiles/active:
+    get:
+      tags: [profiles]
+      summary: Get the active profile id and auto-switch setting
+      responses:
+        "200":
+          description: Active profile state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      activeProfileId: { type: string, nullable: true }
+                      autoSwitch: { type: boolean }
+    put:
+      tags: [profiles]
+      summary: Manually switch the active profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profileId]
+              properties:
+                profileId: { type: string }
+      responses:
+        "200": { description: Switched }
+        "404": { description: Profile not found }
+  /profiles/settings:
+    put:
+      tags: [profiles]
+      summary: Toggle network auto-switching
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [autoSwitch]
+              properties:
+                autoSwitch: { type: boolean }
+      responses:
+        "200": { description: Updated }
+        "400": { description: Validation error }
+  /profiles/current-network:
+    get:
+      tags: [profiles]
+      summary: Detect the current LAN fingerprint and any matching profile
+      responses:
+        "200":
+          description: Current network
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      signature:
+                        { $ref: "#/components/schemas/NetworkSignature" }
+                      matchedProfileId: { type: string, nullable: true }
+  /profiles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [profiles]
+      summary: Get a profile
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Profile" }
+        "404": { description: Not found }
+    put:
+      tags: [profiles]
+      summary: Update a profile (name, description, color, network signatures)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileInput" }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Profile" }
+        "400": { description: Validation error }
+        "404": { description: Not found }
+    delete:
+      tags: [profiles]
+      summary: Delete a profile
+      description: Rejected with 409 when the profile is active, non-empty, or the last remaining one.
+      responses:
+        "204": { description: Deleted }
+        "409": { description: Invariant violation (active/non-empty/last) }
+  /profiles/{id}/capture-network:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [profiles]
+      summary: Capture the current LAN fingerprint onto a profile
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Profile" }
+        "404": { description: Profile not found }
+        "409": { description: No network could be detected }
 components:
   parameters:
     Kind:
@@ -694,18 +905,77 @@ components:
           items: { $ref: "#/components/schemas/FieldMeta" }
     ServiceInstance:
       type: object
-      required: [id, kind, instanceId, enabled, config, createdAt, updatedAt]
+      required:
+        [id, kind, instanceId, enabled, profileId, config, createdAt, updatedAt]
       properties:
         id: { type: string }
         kind: { type: string }
         instanceId: { type: string }
         enabled: { type: boolean }
+        profileId:
+          {
+            type: string,
+            description: Id of the owning profile (ADR-027). One profile per service.,
+          }
         config:
           type: object
           additionalProperties: true
           description: Full service config. Secret field values returned as "***".
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    NetworkSignature:
+      type: object
+      description: LAN fingerprint (ADR-027). gatewayMac is the primary identity.
+      properties:
+        gatewayMac: { type: string }
+        gatewayIp: { type: string }
+        subnet: { type: string }
+    CapturedSignature:
+      allOf:
+        - $ref: "#/components/schemas/NetworkSignature"
+        - type: object
+          required: [capturedAt]
+          properties:
+            capturedAt: { type: string, format: date-time }
+    Profile:
+      type: object
+      required:
+        [id, name, networkSigs, serviceCount, isActive, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        color: { type: string, nullable: true }
+        networkSigs:
+          type: array
+          items: { $ref: "#/components/schemas/CapturedSignature" }
+        serviceCount: { type: integer }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProfileInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        color: { type: string }
+        networkSigs:
+          type: array
+          items: { $ref: "#/components/schemas/CapturedSignature" }
+    LoadError:
+      type: object
+      required: [id, kind, instanceId, message]
+      description: A stored service row that could not be loaded (undecryptable secrets after a master-key rotation, schema drift, or unknown kind). Skipped by /config/services so the other services still come up; surfaced here so the UI can show and delete it.
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        instanceId: { type: string }
+        message:
+          {
+            type: string,
+            description: Reason the row failed to load (no secret values).,
+          }
     ServiceInstanceInput:
       type: object
       required: [kind, instanceId, enabled]
@@ -715,6 +985,11 @@ components:
         kind: { type: string, example: bitcoin }
         instanceId: { type: string, example: main }
         enabled: { type: boolean, example: true }
+        profileId:
+          {
+            type: string,
+            description: Owning profile id (ADR-027). Optional; defaults to the active profile.,
+          }
         pollPolicy:
           type: object
           additionalProperties: true

@@ -27,6 +27,7 @@ const BentoDashboardPage = lazy(
 );
 const SetupWizardPage = lazy(() => import("./pages/setup/SetupWizard"));
 const SettingsServicesPage = lazy(() => import("./pages/Settings/Services"));
+const SettingsProfilesPage = lazy(() => import("./pages/Settings/Profiles"));
 const SettingsAuditPage = lazy(() => import("./pages/Settings/Audit"));
 const SettingsBackupPage = lazy(() => import("./pages/Settings/BackupRestore"));
 
@@ -88,6 +89,10 @@ function App() {
                 <Route
                   path="/settings/services"
                   element={<SettingsServicesPage />}
+                />
+                <Route
+                  path="/settings/profiles"
+                  element={<SettingsProfilesPage />}
                 />
                 <Route path="/settings/audit" element={<SettingsAuditPage />} />
                 <Route

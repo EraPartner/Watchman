@@ -125,8 +125,9 @@ Fastify plugins are registered in the following order in [[apps/backend/src/tran
 | 8   | `servicesRoutes`       | `/services` (SnapshotCache), `/services/:kind/health` (SnapshotCache), `/services/:kind/stats` (SWR stats cache), `/services/:kind/control`                                                                                                      |
 | 9   | `instancesRoutes`      | `/instances`, `/instances/:kind`, `/kinds`                                                                                                                                                                                                       |
 | 10  | `setupRoutes`          | `/setup/status`, `/setup/philips-bridge/pair`                                                                                                                                                                                                    |
-| 11  | `configRoutes`         | UI-driven ConfigStore CRUD + export/import + audit log                                                                                                                                                                                           |
-| 12  | `wsPlugin`             | `/ws` upgrade — shared origin gate, connection manager, heartbeat, broadcaster subscribed to the event bus; token optional (browser-compatible)                                                                                                  |
+| 11  | `configRoutes`         | UI-driven ConfigStore CRUD + export/import + audit log; `PUT /config/services/:id/profile` moves a service between profiles                                                                                                                      |
+| 12  | `profileRoutes`        | Profiles CRUD, active-profile get/switch, auto-switch setting, `/profiles/current-network`, `/profiles/:id/capture-network` (see [[docs/features/profiles\|Profiles]], [[docs/adr/027-service-profiles-and-network-auto-switch\|ADR-027]])       |
+| 13  | `wsPlugin`             | `/ws` upgrade — shared origin gate, connection manager, heartbeat, broadcaster subscribed to the event bus; token optional (browser-compatible). Broadcasts `profile_switched` / `profile_network_unrecognized` alongside service updates.       |
 
 Request timeout and cancellation: `requestTimeoutPlugin` creates a real `AbortController` per request and decorates it onto `req.abortController`. It is aborted on 15 s timeout, client disconnect (`req.raw.once("aborted")`), or reply finish. The signal is threaded through route handlers into service calls, cancelling in-flight network I/O promptly.
 
@@ -137,15 +138,15 @@ Request timeout and cancellation: `requestTimeoutPlugin` creates a real `AbortCo
 
 The core layer (`[[apps/backend/src/core/]]`) provides shared foundations:
 
-| Module    | Purpose                                                                                                                                                                                           |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| logger    | Pino-based structured JSON logging with request ID correlation; `redact` config strips authorization/cookie headers and `password`/`passwd`/`token`/`secret`/`apiKey` fields from all log output. |
-| errors    | DomainError hierarchy (NotFound, Unavailable, Unauthorized, Timeout, etc.)                                                                                                                        |
-| Result    | Result<T, E> type for explicit success/failure semantics (no thrown errors)                                                                                                                       |
-| clock     | Clock interface with real and test implementations for time-dependent logic                                                                                                                       |
-| eventBus  | Typed pub/sub event emission with handler safety (see [[docs/architecture/core-systems\|Core Systems]]); `service.error` payload now includes `kind`, `instanceId`, `scope: "health"\|"stats"`    |
-| metrics   | MetricsRegistry with `removeBreaker`, `removeCache`, `recordServiceError`; `GET /metrics` snapshot has `errors: { total, byService }` field                                                       |
-| container | Simple service container for dependency injection (no external DI library)                                                                                                                        |
+| Module    | Purpose                                                                                                                                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| logger    | Pino-based structured JSON logging with request ID correlation; `redact` config strips authorization/cookie headers and `password`/`passwd`/`token`/`secret`/`apiKey` fields from all log output.                                                                               |
+| errors    | DomainError hierarchy (NotFound, Unavailable, Unauthorized, Timeout, etc.)                                                                                                                                                                                                      |
+| Result    | Result<T, E> type for explicit success/failure semantics (no thrown errors)                                                                                                                                                                                                     |
+| clock     | Clock interface with real and test implementations for time-dependent logic                                                                                                                                                                                                     |
+| eventBus  | Typed pub/sub event emission with handler safety (see [[docs/architecture/core-systems\|Core Systems]]); `service.error` payload now includes `kind`, `instanceId`, `scope: "health"\|"stats"`. Profile events `profile.switched` and `profile.network.unrecognized` (ADR-027). |
+| metrics   | MetricsRegistry with `removeBreaker`, `removeCache`, `recordServiceError`; `GET /metrics` snapshot has `errors: { total, byService }` field                                                                                                                                     |
+| container | Simple service container for dependency injection (no external DI library)                                                                                                                                                                                                      |
 
 ## Infrastructure Layer
 

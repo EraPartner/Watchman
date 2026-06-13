@@ -36,6 +36,8 @@ export interface ServiceInstance {
   kind: string;
   instanceId: string;
   enabled: boolean;
+  /** Owning profile (ADR-027). */
+  profileId: string;
   config: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +47,8 @@ export interface ServiceInstanceInput {
   kind: string;
   instanceId: string;
   enabled: boolean;
+  /** Optional; defaults to the active profile on create. */
+  profileId?: string;
   config?: Record<string, unknown>;
   pollPolicy?: Record<string, unknown>;
   cacheTtlMs?: number;
@@ -71,6 +75,16 @@ export interface AuditEntry {
 export interface SetupStatus {
   needsSetup: boolean;
   serviceCount: number;
+}
+
+// A stored row that couldn't be loaded (undecryptable secrets after a master-key
+// rotation, schema drift, or unknown kind). Skipped by listServices so the rest
+// still load; surfaced here so the UI can show and delete the broken instance.
+export interface LoadError {
+  id: string;
+  kind: string;
+  instanceId: string;
+  message: string;
 }
 
 const BASE = "";
@@ -100,8 +114,14 @@ export const configApi = {
     return sharedCore.request(`${BASE}/config/services`);
   },
 
+  async listLoadErrors(): Promise<LoadError[]> {
+    return sharedCore.request(`${BASE}/config/load-errors`);
+  },
+
   async getService(id: string): Promise<ServiceInstance> {
-    return sharedCore.request(`${BASE}/config/services/${encodeURIComponent(id)}`);
+    return sharedCore.request(
+      `${BASE}/config/services/${encodeURIComponent(id)}`
+    );
   },
 
   async createService(input: ServiceInstanceInput): Promise<ServiceInstance> {
@@ -116,10 +136,13 @@ export const configApi = {
   ): Promise<ServiceInstance> {
     const { config, ...rest } = input;
     const body = { ...rest, ...(config ?? {}) };
-    return sharedCore.request(`${BASE}/config/services/${encodeURIComponent(id)}`, {
-      ...jsonBody(body),
-      method: "PUT",
-    });
+    return sharedCore.request(
+      `${BASE}/config/services/${encodeURIComponent(id)}`,
+      {
+        ...jsonBody(body),
+        method: "PUT",
+      }
+    );
   },
 
   async deleteService(id: string): Promise<void> {
@@ -129,10 +152,28 @@ export const configApi = {
     );
   },
 
+  async moveServiceProfile(
+    id: string,
+    profileId: string
+  ): Promise<ServiceInstance> {
+    return sharedCore.request(
+      `${BASE}/config/services/${encodeURIComponent(id)}/profile`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ profileId }),
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  },
+
   async testService(id: string): Promise<TestConnectionResult> {
     return sharedCore.request(
       `${BASE}/config/services/${encodeURIComponent(id)}/test`,
-      { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } }
+      {
+        method: "POST",
+        body: "{}",
+        headers: { "Content-Type": "application/json" },
+      }
     );
   },
 

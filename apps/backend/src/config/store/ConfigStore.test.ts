@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   createDuckDbPool,
+  toTs,
   type DuckDbPool,
 } from "../../infra/db/DuckDbPool.js";
 import { createEventBus, type EventMap } from "../../core/eventBus.js";
@@ -311,6 +313,83 @@ describe("ConfigStore", () => {
           apiUrl: "http://127.0.0.1:5001",
         })
       ).rejects.toBeInstanceOf(ValidationError);
+    });
+  });
+
+  describe("resilient loadAll (graceful degradation)", () => {
+    // Insert a row directly so it bypasses create()'s validation, simulating a row
+    // that became unloadable after the fact (master-key rotation, schema drift, a
+    // kind removed from the code). loadAll() must not let it poison the others.
+    async function insertRawRow(row: {
+      kind: string;
+      instanceId: string;
+      configPublic: Record<string, unknown>;
+    }): Promise<string> {
+      const id = randomUUID();
+      const now = toTs(new Date());
+      await pool.withConnection((c) =>
+        c.run(
+          `INSERT INTO app_service_instance
+            (id, kind, instance_id, enabled, config_public, config_secret, poll_policy, cache_ttl_ms, timeout_ms, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            row.kind,
+            row.instanceId,
+            true,
+            JSON.stringify(row.configPublic),
+            null,
+            JSON.stringify({}),
+            10_000,
+            5_000,
+            now,
+            now,
+          ]
+        )
+      );
+      return id;
+    }
+
+    it("loads good services while skipping unloadable rows, surfacing them via loadErrors", async () => {
+      const good = await store.create({
+        kind: "ipfs",
+        instanceId: "main",
+        apiUrl: "http://127.0.0.1:5001",
+      });
+      // unknown kind (removed from code) and schema drift (adguard missing required baseUrl)
+      const unknownId = await insertRawRow({
+        kind: "bogus",
+        instanceId: "x",
+        configPublic: {},
+      });
+      const driftedId = await insertRawRow({
+        kind: "adguard",
+        instanceId: "drifted",
+        configPublic: {},
+      });
+
+      const loaded = await store.loadAll();
+      expect(loaded.map((s) => s.id)).toEqual([good.id]);
+
+      const errors = await store.loadErrors();
+      expect(errors.map((e) => e.id).sort()).toEqual(
+        [unknownId, driftedId].sort()
+      );
+      expect(errors.find((e) => e.id === unknownId)?.kind).toBe("bogus");
+    });
+
+    it("deletes an unloadable row so the operator can recover", async () => {
+      const badId = await insertRawRow({
+        kind: "adguard",
+        instanceId: "broken",
+        configPublic: {},
+      });
+      expect((await store.loadErrors()).map((e) => e.id)).toContain(badId);
+
+      await store.delete(badId);
+
+      expect(await store.loadErrors()).toEqual([]);
+      expect(await store.get(badId)).toBeNull();
     });
   });
 });

@@ -34,6 +34,14 @@ export interface EventMap {
     oldInstanceId: string;
     newInstanceId: string;
   };
+  // Active profile changed (ADR-027): lifecycle has finished reconciling which
+  // services are monitored. reason distinguishes a manual switch from a
+  // network-triggered auto-switch.
+  "profile.switched": { profileId: string; reason: "manual" | "auto" };
+  // The current LAN's fingerprint matches no profile — the UI surfaces a hint.
+  "profile.network.unrecognized": {
+    signature: { gatewayMac?: string; gatewayIp?: string; subnet?: string };
+  };
   "cache:revalidate.failed": { key: string; error: string };
 }
 

@@ -12,7 +12,9 @@ interface WebSocketMessage {
     | "service_update"
     | "alert"
     | "metrics"
-    | "service_config_changed";
+    | "service_config_changed"
+    | "profile_switched"
+    | "profile_network_unrecognized";
   service?: string;
   data?: unknown;
   level?: "info" | "warning" | "error";
@@ -21,6 +23,8 @@ interface WebSocketMessage {
   kind?: string;
   instanceId?: string;
   action?: "created" | "updated" | "deleted";
+  profileId?: string;
+  reason?: "manual" | "auto";
 }
 
 // Global singleton to prevent multiple WebSocket instances
@@ -216,6 +220,34 @@ export const useWebSocket = (url?: string) => {
             });
             queryClient.invalidateQueries({
               queryKey: queryKeys.servicesHealth(),
+            });
+            break;
+
+          case "profile_switched":
+            // Active profile changed (often a network auto-switch) — refresh
+            // profile state and the dashboard, since the monitored set changed.
+            if (message.reason === "auto") {
+              toast.info("Switched profile for the detected network");
+            }
+            queryClient.invalidateQueries({ queryKey: queryKeys.profiles() });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.activeProfile(),
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.currentNetwork(),
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.servicesInstances(),
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.servicesHealth(),
+            });
+            break;
+
+          case "profile_network_unrecognized":
+            // The current LAN matches no profile — refresh the hint source.
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.currentNetwork(),
             });
             break;
 

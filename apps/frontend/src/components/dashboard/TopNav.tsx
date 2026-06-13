@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAggregatedHealth } from "@/hooks/useAggregatedHealth";
-import { useBackendMetrics, summarizeBreakers } from "@/hooks/useBackendMetrics";
+import {
+  useBackendMetrics,
+  summarizeBreakers,
+} from "@/hooks/useBackendMetrics";
 import { useWebSocketContext } from "@/providers/WebSocketProvider";
 import { Button } from "@/components/primitives";
+import { ProfileSwitcher } from "./ProfileSwitcher";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: ReadonlyArray<{ to: string; label: string }> = [
   { to: "/", label: "Dashboard" },
   { to: "/settings/services", label: "Services" },
+  { to: "/settings/profiles", label: "Profiles" },
   { to: "/settings/audit", label: "Audit" },
   { to: "/settings/backup", label: "Backup" },
 ];
@@ -60,9 +65,7 @@ function StatusSummary({ ok, warn, crit, total, fetchedAt }: SummaryProps) {
         />
         {crit}
       </span>
-      <span className="hidden text-[var(--text-lo)] sm:inline">
-        of {total}
-      </span>
+      <span className="hidden text-[var(--text-lo)] sm:inline">of {total}</span>
       <span aria-hidden className="hidden text-[var(--text-dim)] sm:inline">
         ·
       </span>
@@ -144,6 +147,8 @@ export function TopNav({ onAddService }: TopNavProps) {
         </nav>
 
         <div className="ml-auto flex items-center gap-s-3">
+          <ProfileSwitcher />
+
           <StatusSummary
             ok={counts.ok}
             warn={counts.warn}
@@ -157,13 +162,18 @@ export function TopNav({ onAddService }: TopNavProps) {
               title={`${breakers.open} open, ${breakers.halfOpen} half-open`}
               className="hidden items-center gap-s-1 rounded-r-pill border border-[var(--warn)] bg-[var(--warn-soft)] px-s-2 py-s-1 font-mono text-fs-label text-[var(--warn)] md:flex"
             >
-              ⚠ {breakers.open + breakers.halfOpen} breaker{breakers.open + breakers.halfOpen === 1 ? "" : "s"}
+              ⚠ {breakers.open + breakers.halfOpen} breaker
+              {breakers.open + breakers.halfOpen === 1 ? "" : "s"}
             </span>
           ) : null}
 
           <span
-            title={ws.isConnected ? "WebSocket connected" : "WebSocket disconnected"}
-            aria-label={ws.isConnected ? "WebSocket connected" : "WebSocket disconnected"}
+            title={
+              ws.isConnected ? "WebSocket connected" : "WebSocket disconnected"
+            }
+            aria-label={
+              ws.isConnected ? "WebSocket connected" : "WebSocket disconnected"
+            }
             className={cn(
               "hidden h-2 w-2 rounded-full md:inline-block",
               ws.isConnected

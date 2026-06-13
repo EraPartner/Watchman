@@ -1,6 +1,6 @@
-import type { PingProber } from '../infra/net/pingProbe.js';
-import type { HostHealth, ServiceHealth, HealthResult } from './BaseService.js';
-import { ok } from '../core/result.js';
+import type { PingProber } from "../infra/net/pingProbe.js";
+import type { HostHealth, ServiceHealth, HealthResult } from "./BaseService.js";
+import { ok } from "../core/result.js";
 
 export interface PingOpts {
   host: string;
@@ -12,13 +12,15 @@ export interface PingOpts {
 /**
  * Run host ping and service probe in parallel.
  * Always resolves ok() — network failures captured as reachable:false in tier sub-objects.
- * Top-level reachable = host.reachable AND service.reachable.
+ * Top-level reachable = service.reachable: these are daemon-primary services, so the
+ * protocol probe is the defining signal and the host (ICMP) tier is diagnostic only.
+ * A host that blocks/filters ICMP must not mark a healthy daemon offline (ADR-026).
  */
 export async function withHostPing(
   pingOpts: PingOpts,
   probe: (signal: AbortSignal) => Promise<ServiceHealth>,
   at: number,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<HealthResult> {
   const [pingSettled, serviceSettled] = await Promise.allSettled([
     pingOpts.prober.probe({
@@ -31,15 +33,17 @@ export async function withHostPing(
   ]);
 
   const host: HostHealth =
-    pingSettled.status === 'fulfilled'
+    pingSettled.status === "fulfilled"
       ? {
           reachable: pingSettled.value.success,
-          ...(pingSettled.value.avgMs !== undefined ? { pingMs: pingSettled.value.avgMs } : {}),
+          ...(pingSettled.value.avgMs !== undefined
+            ? { pingMs: pingSettled.value.avgMs }
+            : {}),
         }
       : { reachable: false };
 
   const service: ServiceHealth =
-    serviceSettled.status === 'fulfilled'
+    serviceSettled.status === "fulfilled"
       ? serviceSettled.value
       : {
           reachable: false,
@@ -49,7 +53,7 @@ export async function withHostPing(
               : String(serviceSettled.reason),
         };
 
-  const reachable = host.reachable && service.reachable;
+  const reachable = service.reachable;
   const latencyMs = service.latencyMs ?? host.pingMs;
 
   return ok({
