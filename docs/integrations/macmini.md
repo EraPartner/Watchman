@@ -2,7 +2,7 @@
 title: Mac Mini Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -31,25 +31,36 @@ Two-tier health with inline parallel probe:
 
 - **Host tier** — ICMP ping to Mac Mini host
 - **Service tier** — SSH uptime command probe
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Composite reachability** — `reachable = host.reachable` — host-primary: the box itself is the point (ICMP ping); the SSH probe is an auxiliary capability (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
 
-```bash
-MACMINI_HOST=127.0.0.1
-MACMINI_SSH_USER=your-username
-MACMINI_SSH_KEY_PATH=/path/to/your/ssh/key
-MACMINI_SSH_PORT=22  # optional, default 22
-MACMINI_TIMEOUT=10000  # optional, default 10s
-MACMINI_PING_COUNT=1  # optional, default 1
-```
+Configuration lives in the **DuckDB config store** — manage via the Settings UI or the `/config` API. `MACMINI_*` environment variables are **legacy**: they were imported once on first boot and are now ignored (see [[docs/adr/015-config-store|ADR-015]]).
+
+### Mac Mini instance fields (`kind: macMini`)
+
+| Field           | Type    | Required | Default                                            | Secret | Description                                               |
+| --------------- | ------- | -------- | -------------------------------------------------- | ------ | --------------------------------------------------------- |
+| `instanceId`    | string  | yes      | `"main"`                                           |        | Unique identifier for this instance.                      |
+| `enabled`       | boolean |          | `true`                                             |        | Whether this instance is polled.                          |
+| `host`          | string  | yes      | —                                                  |        | Hostname or IP of the Mac Mini.                           |
+| `sshUser`       | string  |          | `""`                                               |        | SSH login username.                                       |
+| `sshPort`       | number  |          | `22`                                               |        | SSH port.                                                 |
+| `sshKeyPath`    | string  |          | `""`                                               |        | Path to the SSH private key file.                         |
+| `sshPassphrase` | string  |          | `""`                                               | yes    | Passphrase for the SSH private key (stored encrypted).    |
+| `pingCount`     | number  |          | `1`                                                |        | Number of ICMP pings per health check.                    |
+| `timeoutMs`     | number  |          | `5000`                                             |        | Per-request timeout in milliseconds.                      |
+| `cacheTtlMs`    | number  |          | `10000`                                            |        | How long to serve a cached result before re-polling (ms). |
+| `pollPolicy`    | object  |          | `{healthMs:10000, statsMs:30000, jitterRatio:0.1}` |        | Override polling intervals and jitter for this instance.  |
 
 ## Endpoints
 
-| Endpoint                  | Description          | Auth              |
-| ------------------------- | -------------------- | ----------------- |
-| `GET /api/macmini/status` | Health check         | No (rate limited) |
-| `GET /api/macmini/stats`  | System stats via SSH | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                       | Description          |
+| ------------------------------ | -------------------- |
+| `GET /services/macMini/health` | Health check         |
+| `GET /services/macMini/stats`  | System stats via SSH |
 
 ## Stats Metrics
 

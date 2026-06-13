@@ -2,7 +2,7 @@
 title: Raspberry Pi Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -42,20 +42,18 @@ Two-tier health with inline parallel probe:
 
 ## Direct SSH Configuration (Preferred, PI1)
 
-Configure direct SSH to the Pi for full system metrics (vcgencmd, /proc):
+Configure direct SSH to the Pi for full system metrics (vcgencmd, /proc). Set these fields via the Settings UI or the `/config` API (configuration is stored in DuckDB; legacy `RASPI_*` environment variables are imported once on first boot then ignored):
 
-```bash
-RASPI_HOST=192.0.2.230
-RASPI_SSH_USER=pi
-RASPI_SSH_KEY_PATH=/home/user/.ssh/id_rsa
-RASPI_SSH_PORT=22  # optional, default 22
-RASPI_SSH_PASSPHRASE=  # optional, for encrypted keys
-RASPI_TIMEOUT=10000  # optional, default 10s
-
-# Pigpio (optional, for I/O monitoring)
-RASPI_PIGPIO_HOST=192.0.2.230  # optional, defaults to RASPI_HOST
-RASPI_PIGPIO_PORT=8888  # optional, default 8888
-```
+| Field           | Type     | Default | Required | Secret  | Description                                      |
+| --------------- | -------- | ------- | -------- | ------- | ------------------------------------------------ |
+| `host`          | text     | —       | yes      |         | Pi hostname or IP address                        |
+| `port`          | number   | `8888`  |          |         | pigpiod TCP port                                 |
+| `sshUser`       | text     | —       |          |         | SSH username on the Pi (enables direct SSH path) |
+| `sshPort`       | number   | `22`    |          |         | SSH port                                         |
+| `sshKeyPath`    | text     | —       |          |         | Path to SSH private key                          |
+| `sshPassphrase` | password | —       |          | **yes** | Passphrase for encrypted SSH key                 |
+| `pingCount`     | number   | `1`     |          |         | ICMP ping probes per health check                |
+| `timeoutMs`     | number   | `5000`  |          |         | Request timeout (ms)                             |
 
 **Preferred path** — when `sshUser` and `sshKeyPath` are set, direct SSH is used. The backend runs 9 SSH commands concurrently on the Pi:
 
@@ -82,21 +80,17 @@ Bit flags indicate: under-voltage, ARM frequency capped, currently throttled, et
 
 ## Legacy Mac Mini Relay (Fallback, Backward Compatible)
 
-If `sshUser` and `sshKeyPath` are **not** set, the backend uses a Mac Mini relay (legacy path):
+If `sshUser` and `sshKeyPath` are **not** set, the backend uses a Mac Mini relay (legacy path). Configure these additional fields via the Settings UI or `/config` API:
 
-```bash
-# Pi configuration (pigpio only)
-RASPI_HOST=192.0.2.230
-RASPI_PORT=8888
-
-# Mac Mini relay (used for rpi-cli over SSH)
-RASPI_MACMINI_HOST=192.168.1.10
-RASPI_MACMINI_SSH_USER=admin
-RASPI_MACMINI_SSH_KEY_PATH=/path/to/mac/key
-RASPI_MACMINI_SSH_PORT=22  # optional, default 22
-RASPI_NODE_PATH=/usr/local/bin/node
-RASPI_RPI_CLI_PATH=/path/to/rpi-cli
-```
+| Field                  | Type     | Default               | Required | Secret  | Description                                  |
+| ---------------------- | -------- | --------------------- | -------- | ------- | -------------------------------------------- |
+| `macMiniHost`          | text     | —                     |          |         | Mac Mini hostname or IP (enables relay path) |
+| `macMiniSshPort`       | number   | `22`                  |          |         | Mac Mini SSH port                            |
+| `macMiniSshUser`       | text     | —                     |          |         | Mac Mini SSH username                        |
+| `macMiniSshKeyPath`    | text     | —                     |          |         | Path to Mac Mini SSH private key             |
+| `macMiniSshPassphrase` | password | —                     |          | **yes** | Passphrase for Mac Mini SSH key              |
+| `nodePath`             | text     | `/usr/local/bin/node` |          |         | Path to Node.js binary on the Mac Mini       |
+| `rpiCliPath`           | text     | —                     |          |         | Path to the `rpi-cli` script on the Mac Mini |
 
 **Used only when direct SSH not configured.** The Mac Mini runs a Node.js CLI (`rpi-cli`) to fetch Pi stats remotely. Less direct, subject to Mac sleep and relay availability.
 

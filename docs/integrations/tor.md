@@ -2,8 +2,26 @@
 title: Tor Integration
 type: integration
 status: active
-date: 2026-06-12
-tags: [integration, services, backend, monitoring, control-port, phase-0b, task-b3, task-b4, task-b5, task-b6, task-b7, cookie-auth, event-subscription, bandwidth, traffic-deltas, onionoo-enrichment]
+date: 2026-06-13
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    control-port,
+    phase-0b,
+    task-b3,
+    task-b4,
+    task-b5,
+    task-b6,
+    task-b7,
+    cookie-auth,
+    event-subscription,
+    bandwidth,
+    traffic-deltas,
+    onionoo-enrichment,
+  ]
 description: Tor relay and proxy integration for Watchman — ControlPort health checks, Onionoo API, two-tier health model (ICMP + protocol), cookie auth (B3), GETCONF/SIGNAL (B4), realtime BW events (B5), traffic deltas (B6), Onionoo enrichment (B7)
 aliases: [tor, tor relay, onion, tor proxy, tor control port]
 ---
@@ -15,10 +33,32 @@ aliases: [tor, tor relay, onion, tor proxy, tor control port]
 
 ## Configuration
 
-```bash
-TOR_RELAY_NICKNAME=your-relay-nickname
-TOR_RELAY_IP=your-ip-address
-```
+Configure via the Settings UI or the `/config` API (DuckDB config store). Environment variables (`TOR_*`) are legacy — imported once on first boot then ignored (see [[docs/adr/015-service-config-migration|ADR-015]]).
+
+### Service-specific fields
+
+| Field             | Type    | Default                          | Required | Secret  | Description                                                            |
+| ----------------- | ------- | -------------------------------- | -------- | ------- | ---------------------------------------------------------------------- |
+| `relayNickname`   | string  | —                                | yes      | no      | Tor relay nickname used for Onionoo lookups                            |
+| `onionooBaseUrl`  | url     | `https://onionoo.torproject.org` | no       | no      | Onionoo API base URL                                                   |
+| `useControlPort`  | boolean | `false`                          | no       | no      | Probe via ControlPort + ICMP; falls back to Onionoo when off-LAN       |
+| `host`            | string  | `127.0.0.1`                      | no       | no      | IP/hostname of the relay (ICMP and ControlPort connection)             |
+| `controlPort`     | number  | `9051`                           | no       | no      | TCP port for the Tor control protocol                                  |
+| `controlPassword` | string  | —                                | no       | **yes** | Plaintext ControlPort password; leave empty for cookie auth or no auth |
+| `cookieAuthFile`  | string  | —                                | no       | no      | Path to `control_auth_cookie`; takes precedence over password when set |
+| `pingCount`       | number  | `1`                              | no       | no      | Number of ICMP pings per health check                                  |
+
+### Shared base fields
+
+| Field                    | Type    | Default | Description                       |
+| ------------------------ | ------- | ------- | --------------------------------- |
+| `instanceId`             | string  | `main`  | Unique instance identifier        |
+| `enabled`                | boolean | `true`  | Enable/disable polling            |
+| `pollPolicy.healthMs`    | number  | `10000` | Health-check interval (ms)        |
+| `pollPolicy.statsMs`     | number  | `30000` | Stats poll interval (ms)          |
+| `pollPolicy.jitterRatio` | number  | `0.1`   | Poll jitter ratio                 |
+| `cacheTtlMs`             | number  | `10000` | Cache TTL (ms)                    |
+| `timeoutMs`              | number  | `5000`  | Connection + GETINFO timeout (ms) |
 
 ## Health Check Modes
 
@@ -33,16 +73,17 @@ The **Tor Control Protocol** (RFC 5050) path probes circuit establishment direct
 - **Composite reachable**: `true` if either host OR service reachable (OR logic)
 - **Latency**: ICMP ping time, fallback to elapsed time if ICMP unavailable
 
-**Configuration** (Phase 0b+):
+**Relevant config fields** (set via Settings UI or `/config` API):
 
-```bash
-TOR_USE_CONTROL_PORT=true              # Enable ControlPort health checks
-TOR_CONTROL_PORT=9051                  # ControlPort TCP listen port
-TOR_CONTROL_PASSWORD=secret            # ControlPort auth: plaintext password or empty
-TOR_CONTROL_COOKIE_AUTH_FILE=''        # Path to control auth cookie file (takes precedence over password)
-TOR_CONTROL_TIMEOUT_MS=5000            # Connection + GETINFO timeout
-TOR_PING_COUNT=3                       # ICMP probe count
-```
+| Field             | Default     | Notes                                            |
+| ----------------- | ----------- | ------------------------------------------------ |
+| `useControlPort`  | `false`     | Set to `true` to enable this mode                |
+| `host`            | `127.0.0.1` | Relay host for ICMP + ControlPort                |
+| `controlPort`     | `9051`      | TCP port                                         |
+| `controlPassword` | —           | Plaintext password; secret field                 |
+| `cookieAuthFile`  | —           | Cookie file path; takes precedence over password |
+| `pingCount`       | `1`         | ICMP probe count                                 |
+| `timeoutMs`       | `5000`      | Connection + GETINFO timeout (ms)                |
 
 **Authentication Priority** (Phase 0b+, task B3):
 
@@ -141,6 +182,7 @@ consensusWeightFraction → relay fractional consensus weight (from Onionoo enri
 **BW Event Subscription** (Task B5):
 
 When `useControlPort=true`, `TorService.onStart()` creates an event subscription that:
+
 - Subscribes to `BW` (bandwidth) events via `SETEVENTS BW`
 - Parses `650 BW read=<bytes> written=<bytes>` async events
 - Updates instance fields `bwRead` and `bwWritten` for inclusion in next stats poll
@@ -149,6 +191,7 @@ When `useControlPort=true`, `TorService.onStart()` creates an event subscription
 **Traffic Deltas** (Task B6):
 
 To track network activity, the ControlPort path maintains cumulative traffic read/written from the daemon and computes delta values:
+
 - Instance fields `lastTrafficRead` and `lastTrafficWritten` store the previous poll's cumulative byte counts (initialized to -1 as "no baseline" sentinel)
 - On each `getStatsControlPort()` call, reads `traffic/read` and `traffic/written`, computes:
   - `trafficDeltaRead = traffic/read[current] - traffic/read[previous]` (bytes sent to wire since last poll)
@@ -160,6 +203,7 @@ To track network activity, the ControlPort path maintains cumulative traffic rea
 **Onionoo Supplemental Enrichment** (Task B7):
 
 The ControlPort path is now the primary polling source. To supplement ControlPort metrics with Onionoo geolocation and consensus weight data:
+
 - `getStatsControlPort()` calls private `enrich(signal)` method
 - `enrich()` calls `searchRelay()` to fetch Onionoo relay data, **cached for 1 hour** — enrichment changes slowly, so the external Onionoo service is hit at most once per hour instead of every stats poll
 - Returns best-effort subset: `{ country?, consensusWeight?, asName?, consensusWeightFraction? }`
@@ -187,13 +231,12 @@ consensus_weight       → weight in network consensus
 
 ## Endpoints
 
-| Endpoint                       | Description              | Auth              |
-| ------------------------------ | ------------------------ | ----------------- |
-| `GET /api/tor/status`          | Health check (2-tier)    | No (rate limited) |
-| `GET /api/tor/stats`           | ControlPort or Onionoo   | Yes               |
-| `GET /api/tor/health`          | Health alias             | No (rate limited) |
-| `GET /api/tor/relay/:nickname` | Specific relay info      | Yes               |
-| `GET /api/tor/updates`         | Check for updates        | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                   | Description                            |
+| -------------------------- | -------------------------------------- |
+| `GET /services/tor/health` | Health check (two-tier)                |
+| `GET /services/tor/stats`  | Relay metrics (ControlPort or Onionoo) |
 
 ## Service Classes
 
@@ -215,10 +258,12 @@ consensus_weight       → weight in network consensus
 ### TorService Methods (ControlPort Path, Phase 0b+ through Task B5)
 
 **Lifecycle Methods** (Task B5):
+
 - `onStart()` — Creates event subscription, subscribes to `BW` events, starts listening for bandwidth updates
 - `onStop()` — Closes event subscription gracefully (sends `SETEVENTS` then `QUIT`)
 
 **Health & Status Methods**:
+
 - `checkHealth()` — Two-tier check: ICMP ping + ControlPort circuit probe; always returns `ok(HealthSnapshot)` with reachable state
 - `getStats()` — Reads traffic, version, dormant, descriptor-limit, accounting metrics, and realtime bwRead/bwWritten from BW events via ControlPort; returns `ok(metrics)` or `err(UnavailableError)`
 - `probeCircuit()` — Connects to ControlPort and queries `status/circuit-established`; returns boolean

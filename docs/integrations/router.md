@@ -2,7 +2,7 @@
 title: Router Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -15,12 +15,11 @@ tags:
     snmp,
     snmp-walk,
     snmp-v2c,
-    snmp-v3,
     interface-stats,
     cpu-load,
     connected-clients,
   ]
-description: Network router integration with two-tier health model (ICMP + TCP probe), SNMP metrics (v2c/v3), and interface statistics collection
+description: Network router integration with two-tier health model (ICMP + TCP probe), SNMP metrics (v2c community string), and interface statistics collection
 aliases: [router, beryl, telenet, arp, network, snmp-router]
 ---
 
@@ -39,35 +38,31 @@ Two-tier health with inline parallel probe:
 
 ## Configuration
 
-### Beryl
+Router instances are managed via the Settings UI or the `/config` API (DuckDB config store). Legacy `ROUTER_*` environment variables were imported once on first boot and are now ignored — use the config store going forward (ADR-015 / ADR-008).
 
-```bash
-BERYL_HOST=192.0.2.1
-BERYL_PORTS=80,443
-BERYL_TIMEOUT=10000  # optional, default 10s
-BERYL_SNMP_COMMUNITY=public  # optional; enables SNMP metrics collection (v2c)
-BERYL_INTERFACE_FILTER=eth0,wlan0  # optional; restricts interface stats to these names
-```
+### Fields
 
-### Telenet
-
-```bash
-TELENET_HOST=192.0.2.1
-TELENET_PORTS=80
-TELENET_TIMEOUT=10000  # optional, default 10s
-TELENET_SNMP_COMMUNITY=public  # optional; enables SNMP metrics collection (v2c)
-TELENET_INTERFACE_FILTER=eth0,wlan0  # optional; restricts interface stats to these names
-```
+| Field             | Type            | Required | Default                                | Description                                                                                                              |
+| ----------------- | --------------- | -------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `instanceId`      | string          | yes      | `"main"`                               | Unique identifier for this instance.                                                                                     |
+| `enabled`         | boolean         | —        | `true`                                 | Whether the instance is polled.                                                                                          |
+| `host`            | string          | **yes**  | —                                      | IP address or hostname of the router (e.g. `192.168.1.1`).                                                               |
+| `ports`           | number\[\]      | —        | `[]`                                   | TCP ports to probe (service tier). Empty = no TCP probe.                                                                 |
+| `pingCount`       | number          | —        | `1`                                    | Number of ICMP echo requests per health check.                                                                           |
+| `snmpCommunity`   | string (secret) | —        | —                                      | SNMPv2c community string (e.g. `public`). When set, enables SNMP stats collection. Stored encrypted with the master key. |
+| `interfaceFilter` | string\[\]      | —        | `[]`                                   | Interface names to include in traffic stats (e.g. `["eth0", "wlan0"]`). Empty = all interfaces summed.                   |
+| `timeoutMs`       | number          | —        | `5000`                                 | Per-probe timeout in milliseconds (shared by ICMP, TCP, and SNMP).                                                       |
+| `cacheTtlMs`      | number          | —        | `10000`                                | How long a cached response is served before a fresh poll is required (ms).                                               |
+| `pollPolicy`      | object          | —        | health 10 s / stats 30 s / jitter 10 % | Override polling intervals (`healthMs`, `statsMs`, `jitterRatio`).                                                       |
 
 ## SNMP Configuration (Optional)
 
-When `snmpCommunity` is set, the router service polls SNMP metrics using SNMPv2c (or v3 if configured). This provides additional visibility into router device health and network interface statistics. The SNMP walk implementation (see [[docs/architecture/backend-architecture#infrastructure-layer|Infrastructure Layer]]) supports both v2c and v3 credentials.
+When `snmpCommunity` is set, the router service polls SNMP metrics using SNMPv2c. This provides additional visibility into router device health and network interface statistics. The SNMP walk implementation (see [[docs/architecture/backend-architecture#infrastructure-layer|Infrastructure Layer]]) performs subtree walks in parallel.
 
-Configuration fields:
+The two relevant config fields are:
 
-- **snmpVersion** — SNMP protocol version (default: `v2c`; `v3` also supported via schema but requires additional v3 credentials fields — see [[docs/integrations/synology|Synology Integration]] for v3 example)
-- **snmpCommunity** — SNMPv2c community string (e.g., `public`). When present, enables SNMP polling. Marked as a secret field in config store (encrypted with master key)
-- **interfaceFilter** — Array of interface names to include in stats (e.g., `["eth0", "wlan0"]`). If empty, all interfaces are collected and summed
+- **snmpCommunity** — SNMPv2c community string (e.g., `public`). When present, enables SNMP polling. Stored encrypted with the master key (secret field).
+- **interfaceFilter** — Array of interface names to include in stats (e.g., `["eth0", "wlan0"]`). If empty, all interfaces are collected and summed.
 
 ### SNMP Metrics Collected
 
@@ -96,13 +91,12 @@ If `interfaceFilter` is empty, all interfaces are summed. Example: `interfaceFil
 
 ## Endpoints
 
-| Endpoint                                     | Description         | Auth              |
-| -------------------------------------------- | ------------------- | ----------------- |
-| `GET /api/beryl/status`                      | Health check        | No (rate limited) |
-| `GET /api/beryl/stats`                       | Router statistics   | Yes               |
-| `GET /api/telenet/status`                    | Health check        | No (rate limited) |
-| `GET /api/telenet/stats`                     | Router statistics   | Yes               |
-| `GET /api/router/arp?service=beryl\|telenet` | ARP/neighbor lookup | Yes + CSRF        |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025). Multiple routers are separate `router` instances; target one with the `instance` query parameter (e.g. `?instance=beryl`).
+
+| Endpoint                                            | Description                                      |
+| --------------------------------------------------- | ------------------------------------------------ |
+| `GET /services/router/health?instance={instanceId}` | Health check (ICMP + TCP port probe)             |
+| `GET /services/router/stats?instance={instanceId}`  | Router statistics, incl. SNMP interface/ARP data |
 
 ## Service Class
 
@@ -114,7 +108,7 @@ If `interfaceFilter` is empty, all interfaces are summed. Example: `interfaceFil
 interface RouterDeps {
   ping: PingProber; // ICMP ping probe (host tier)
   tcp: TcpProber; // TCP port probe (service tier)
-  snmp?: SnmpGetter; // Optional SNMP walker (v2c/v3)
+  snmp?: SnmpGetter; // Optional SNMP walker (v2c)
   config: RouterInstance; // Runtime configuration
   now: () => number; // Clock function
 }
@@ -127,7 +121,7 @@ interface RouterDeps {
 
 ### ARP Lookup
 
-The `/api/router/arp` endpoint performs network neighbor discovery:
+ARP/neighbor discovery (surfaced through `getStats`, not a separate REST endpoint) works as follows:
 
 - Uses `ip neigh` (Linux) or `arp -a` (macOS)
 - Uses a short-lived in-memory TTL cache (3s) in `RouterArpService` to reduce repeated ARP command executions during rapid refreshes
@@ -138,10 +132,10 @@ The `/api/router/arp` endpoint performs network neighbor discovery:
 
 ## Security
 
-- Only `beryl` and `telenet` services are allowed for ARP lookup
-- Requires authentication + CSRF verification
-- Input validation prevents command injection
+- ARP lookup is restricted to configured `router` instances; the service identifier is validated against known instance keys (strict allowlist) to prevent command injection
+- Input validation prevents command injection in ARP lookup
 - Host IP validated as proper IPv4 address
+- No authentication or CSRF — single-user trusted-network model (ADR-017/ADR-025); do not expose the backend beyond the trusted network
 
 ## Frontend Component
 

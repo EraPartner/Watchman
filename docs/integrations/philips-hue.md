@@ -2,9 +2,24 @@
 title: Philips Hue Bridge Integration
 type: integration
 status: active
-date: 2026-06-12
-last-updated: 2026-05-08
-tags: [integration, services, backend, monitoring, two-tier, icmp, http, api-v2, cert-pinning, sha256, hue-lights, charts, x3-task]
+date: 2026-06-13
+last-updated: 2026-06-13
+tags:
+  [
+    integration,
+    services,
+    backend,
+    monitoring,
+    two-tier,
+    icmp,
+    http,
+    api-v2,
+    cert-pinning,
+    sha256,
+    hue-lights,
+    charts,
+    x3-task,
+  ]
 description: Philips Hue Bridge monitoring with Hue API v2, light metrics, optional SHA-256 certificate pinning, and time-series charts (X3 Task)
 aliases: [philips hue, hue bridge, smart lighting, philips bridge]
 ---
@@ -19,8 +34,10 @@ aliases: [philips hue, hue bridge, smart lighting, philips bridge]
 **Service Kind**: `philipsBridge`
 
 The Philips Hue Bridge service provides:
+
 - **Health Checks**: ICMP ping to host; optional HTTP probe to Hue API v2
-- **Light Metrics**: Count of total, on, and off lights (requires `applicationKey`)
+- **Light Metrics**: Count of total, on, and off lights; Zigbee connectivity, battery health, device/room counts (requires `applicationKey`)
+- **Live Updates**: Persistent SSE connection to `/eventstream/clip/v2` keeps light state current between polls (when `applicationKey` is set)
 - **Certificate Pinning**: Optional SHA-256 verification for TLS connections (requires `certHash`)
 
 ## Health Model (Phase 0a)
@@ -32,6 +49,7 @@ Two-tier health with inline parallel probe:
 - **Composite reachability** — `host.reachable OR service.reachable` (bridge considered up if either tier responds)
 
 Health snapshot includes `host` and `service` tiers:
+
 ```typescript
 {
   reachable: boolean;
@@ -49,26 +67,15 @@ Health snapshot includes `host` and `service` tiers:
 
 Supported configuration fields (in the service instance UI):
 
-| Field            | Type                    | Required | Description                                                    |
-| ---------------- | ----------------------- | -------- | -------------------------------------------------------------- |
+| Field            | Type                    | Required | Description                                                     |
+| ---------------- | ----------------------- | -------- | --------------------------------------------------------------- |
 | `host`           | text (hostname/IP)      | Yes      | IP address or hostname of the Hue Bridge                        |
-| `pingCount`      | number                  | No       | Number of ping probes per health check (default: 2)            |
-| `usePing`        | boolean                 | No       | Enable/disable ICMP ping (default: true)                       |
-| `applicationKey` | password (secret field) | No       | Hue API v2 application key; enables light stats when set       |
+| `pingCount`      | number                  | No       | Number of ping probes per health check (default: 2)             |
+| `usePing`        | boolean                 | No       | Enable/disable ICMP ping (default: true)                        |
+| `applicationKey` | password (secret field) | No       | Hue API v2 application key; enables light stats when set        |
 | `certHash`       | text                    | No       | SHA-256 fingerprint of bridge TLS cert (hex or colon-delimited) |
 
-### Via Environment Variables (Legacy)
-
-```bash
-# Minimal configuration (host-only)
-PHILIPS_BRIDGE_HOST=192.0.2.200
-PHILIPS_BRIDGE_TIMEOUT=10000  # optional, default 10s
-
-# Full configuration with API v2 + cert pinning
-PHILIPS_BRIDGE_HOST=192.0.2.200
-PHILIPS_BRIDGE_APPLICATION_KEY=your-app-key-here
-PHILIPS_BRIDGE_CERT_HASH=ab:cd:ef:...  # colon-delimited or plain hex
-```
+Configuration is managed via the `/config` API or the Settings UI. Legacy `PHILIPS_BRIDGE_*` environment variables (e.g. `PHILIPS_BRIDGE_HOST`, `PHILIPS_BRIDGE_APPLICATION_KEY`) are imported once on first boot and then ignored — use the UI or `/config` API for all ongoing configuration.
 
 ## Hue API v2 Integration
 
@@ -103,25 +110,39 @@ hue-application-key: <applicationKey>
 
 ### Metrics Exposed
 
+When `applicationKey` is set, `getStats` returns:
+
 ```typescript
 {
-  lightCount: number;    // Total number of lights
-  onCount: number;       // Lights currently on
-  offCount: number;      // Lights currently off
+  host: string;                    // Bridge hostname/IP
+  configured: boolean;             // Always true when host is set
+  lightCount: number;              // Total lights (from SSE map or HTTP fetch)
+  onCount: number;                 // Lights currently on
+  offCount: number;                // Lights currently off
+  zigbeeUnreachableCount: number | null;  // Zigbee devices not in "connected" state
+  batteryLowCount: number | null;  // Devices with low/critical battery or level < 20%
+  minBatteryPercent: number | null;// Lowest battery level across all devices
+  deviceCount: number | null;      // Total Hue devices
+  roomCount: number | null;        // Total rooms
+  sseConnected: boolean;           // Whether the SSE eventstream is healthy
+  lastEventAt?: number;            // Timestamp of last received SSE event
 }
 ```
+
+Light counts are served from the live SSE map (no HTTP fetch) when the eventstream is healthy and seeded; otherwise they fall back to `GET /clip/v2/resource/light`. The Zigbee, battery, device, and room values are fetched via slow-lane TTL-memoized calls (`/resource/zigbee_connectivity`, `/resource/device_power`, `/resource/device`, `/resource/room`) that refresh every 5 minutes.
 
 ### Charts (X3 Task)
 
 When metrics are available, the service dashboard displays three time-series charts:
 
-| Chart        | Metric      | Type | Description                 |
-| ------------ | ----------- | ---- | --------------------------- |
-| Total Lights | `lightCount`| line | Total number of lights      |
-| Lights On    | `onCount`   | area | Lights currently powered on |
-| Lights Off   | `offCount`  | area | Lights currently powered off|
+| Chart        | Metric       | Type | Description                  |
+| ------------ | ------------ | ---- | ---------------------------- |
+| Total Lights | `lightCount` | line | Total number of lights       |
+| Lights On    | `onCount`    | area | Lights currently powered on  |
+| Lights Off   | `offCount`   | area | Lights currently powered off |
 
 The charts show historical trends of light count and on/off distribution, useful for:
+
 - Detecting automation patterns (e.g., lights turning on at specific times)
 - Identifying underutilized lights
 - Monitoring bridge responsiveness (sudden drops in on/off counts)
@@ -134,10 +155,12 @@ The charts show historical trends of light count and on/off distribution, useful
 ### Configuration
 
 1. **Obtain the certificate fingerprint**:
+
    ```bash
    openssl s_client -connect <bridge-host>:443 -servername <bridge-host> < /dev/null 2>/dev/null | \
      openssl x509 -noout -fingerprint -sha256
    ```
+
    Output: `SHA256 Fingerprint=AB:CD:EF:12:34:56:...`
 
 2. **Format for Watchman** (supports both formats):
@@ -145,8 +168,8 @@ The charts show historical trends of light count and on/off distribution, useful
    - **Plain hex**: `ABCDEF123456...` (also accepts lowercase)
 
 3. **Store in configuration**:
-   - Via UI: Paste into `certHash` field
-   - Via env var: Set `PHILIPS_BRIDGE_CERT_HASH=AB:CD:EF:...`
+   - Via UI: Paste into the `certHash` field in Settings → Services
+   - Via API: set the `certHash` field through the `/config` API
 
 ### How It Works
 
@@ -186,6 +209,7 @@ Initiates the pairing flow. Requires the physical **link button** on the bridge 
 ### Request/Response
 
 **Request:**
+
 ```json
 {
   "host": "192.0.2.200",
@@ -194,6 +218,7 @@ Initiates the pairing flow. Requires the physical **link button** on the bridge 
 ```
 
 **Success Response (200):**
+
 ```json
 {
   "data": {
@@ -204,6 +229,7 @@ Initiates the pairing flow. Requires the physical **link button** on the bridge 
 ```
 
 **Error: Link button not pressed (400):**
+
 ```json
 {
   "error": {
@@ -214,6 +240,7 @@ Initiates the pairing flow. Requires the physical **link button** on the bridge 
 ```
 
 **Error: Bridge unreachable (503):**
+
 ```json
 {
   "error": {
@@ -239,18 +266,19 @@ Initiates the pairing flow. Requires the physical **link button** on the bridge 
 
 ### Troubleshooting Pairing
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| "Link button not pressed" | Bridge didn't receive POST within 30s of button press | Press the link button again, wait <1s, then retry |
-| "Bridge unreachable" | Network or firewall blocking port 443 | Verify bridge IP, check firewall, ensure bridge is powered on |
-| "Timeout" | Bridge is slow or unresponsive | Increase `timeoutMs` parameter (e.g., 15000) or check network latency |
-| "Certificate probe failed" | TLS handshake issues | Verify the bridge's certificate is valid; try manual `openssl s_client` command |
+| Issue                      | Cause                                                 | Solution                                                                        |
+| -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------- |
+| "Link button not pressed"  | Bridge didn't receive POST within 30s of button press | Press the link button again, wait <1s, then retry                               |
+| "Bridge unreachable"       | Network or firewall blocking port 443                 | Verify bridge IP, check firewall, ensure bridge is powered on                   |
+| "Timeout"                  | Bridge is slow or unresponsive                        | Increase `timeoutMs` parameter (e.g., 15000) or check network latency           |
+| "Certificate probe failed" | TLS handshake issues                                  | Verify the bridge's certificate is valid; try manual `openssl s_client` command |
 
 ### Manual Alternative
 
 If the wizard doesn't work, obtain `applicationKey` and `certHash` manually:
 
 **Application Key:**
+
 ```bash
 # Press link button, then within 30 seconds run:
 curl -X POST https://<bridge-ip>/api \
@@ -260,6 +288,7 @@ curl -X POST https://<bridge-ip>/api \
 ```
 
 **Certificate Hash:**
+
 ```bash
 openssl s_client -connect <bridge-ip>:443 -servername <bridge-ip> < /dev/null 2>/dev/null | \
   openssl x509 -noout -fingerprint -sha256 | \
@@ -276,22 +305,31 @@ Then paste both values into the configuration form manually.
 
 ```typescript
 constructor(deps: PhilipsBridgeDeps) {
-  // If certHash set, wraps HTTP client with certificate pinning
+  // If certHash set, creates a pinned HTTP client and SSE dispatcher
   this.http = deps.config.certHash
-    ? createPinnedClient(deps.http, deps.config.certHash)
+    ? createPinnedClient(deps.config.certHash)
     : deps.http;
+  this.sseDispatcher = deps.config.certHash
+    ? createPinnedDispatcher(deps.config.certHash)
+    : undefined;
 }
 ```
+
+### Lifecycle
+
+- `onStart()` — When `applicationKey` is configured, opens a persistent SSE connection to `GET /eventstream/clip/v2` using the `hue-application-key` header. Pushed light state updates (`type: "light"`) are applied to an in-memory map so `getStats` can return current on/off counts without a round-trip HTTP fetch.
+- `onStop()` — Aborts the SSE stream.
 
 ### Methods
 
 - `checkHealth(signal)` — Two-tier health check
-  - ICMP ping to host (via `pinger`)
-  - If `applicationKey` set: HTTP probe to `/clip/v2/resource/light`
-  - Returns composite `reachable` result
-- `getStats(signal)` — Fetch light metrics
+  - ICMP ping to host (via `pinger`; skipped when `usePing: false`)
+  - If `applicationKey` set: HTTP probe to `GET /clip/v2/resource/light`
+  - Returns composite `reachable` (`host.reachable OR service.reachable`)
+  - Details include `pingEnabled` and `sseConnected`
+- `getStats(signal)` — Fetch service metrics
   - If no `applicationKey`: returns `{ host, configured }`
-  - If `applicationKey` set: fetches lights and returns `{ host, configured, lightCount, onCount, offCount }`
+  - If `applicationKey` set: returns the full metrics object (see Metrics Exposed below)
 
 ## Test Coverage
 

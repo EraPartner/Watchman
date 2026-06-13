@@ -2,7 +2,7 @@
 title: qBittorrent Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -32,40 +32,39 @@ Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to qBittorrent host
 - **Service tier** — HTTP `/api/v2/app/webapiVersion` probe
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the Web UI/API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
 
-### Single Instance
+Service config lives in the DuckDB config store, managed via the Settings UI or the `/config` API. `QBITTORRENT_*` environment variables are legacy — they were imported once on first boot and are now ignored (see [[docs/adr/index|ADR-008 / ADR-015]]).
 
-```bash
-QBITTORRENT_URL=http://127.0.0.1:8069
-QBITTORRENT_USERNAME=admin
-QBITTORRENT_PASSWORD=your-password
-QBITTORRENT_TIMEOUT=10000  # optional, default 10s
-```
+### Fields
+
+| Field                    | Type     | Default                 | Required | Secret  | Description                                          |
+| ------------------------ | -------- | ----------------------- | -------- | ------- | ---------------------------------------------------- |
+| `instanceId`             | text     | `main`                  | yes      | no      | Unique identifier for this instance within the kind. |
+| `enabled`                | boolean  | `true`                  | no       | no      | Enable or disable polling for this instance.         |
+| `baseUrl`                | url      | `http://127.0.0.1:8069` | yes      | no      | Base URL of the qBittorrent Web UI.                  |
+| `username`               | text     | `admin`                 | no       | no      | Web UI login username.                               |
+| `password`               | password | _(empty)_               | no       | **yes** | Web UI login password (encrypted at rest).           |
+| `timeoutMs`              | number   | `5000`                  | no       | no      | Per-request HTTP timeout in milliseconds.            |
+| `cacheTtlMs`             | number   | `10000`                 | no       | no      | Response cache TTL in milliseconds.                  |
+| `pollPolicy.healthMs`    | number   | `10000`                 | no       | no      | Health check interval in milliseconds.               |
+| `pollPolicy.statsMs`     | number   | `30000`                 | no       | no      | Stats poll interval in milliseconds.                 |
+| `pollPolicy.jitterRatio` | number   | `0.1`                   | no       | no      | Fractional jitter applied to poll intervals.         |
 
 ### Multi-Instance
 
-```bash
-QBITTORRENT_1_URL=http://192.0.2.10:8080
-QBITTORRENT_1_USERNAME=admin
-QBITTORRENT_1_PASSWORD=password1
-QBITTORRENT_1_TIMEOUT=10000
-QBITTORRENT_2_URL=http://192.0.2.11:8080
-QBITTORRENT_2_USERNAME=admin
-QBITTORRENT_2_PASSWORD=password2
-QBITTORRENT_2_TIMEOUT=10000
-```
+Add multiple instances of kind `qbittorrent` in the config store, each with a distinct `instanceId`. There is no env-var numbering scheme — all instances are managed through the UI or `/config` API.
 
 ## Endpoints
 
-| Endpoint                        | Description                  | Auth              |
-| ------------------------------- | ---------------------------- | ----------------- |
-| `GET /api/qbittorrent/status`   | Health check                 | No (rate limited) |
-| `GET /api/qbittorrent/stats`    | Transfer stats, torrent list | Yes               |
-| `GET /api/qbittorrent_N/status` | Instance health              | No (rate limited) |
-| `GET /api/qbittorrent_N/stats`  | Instance stats               | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025). Use the `instance` query parameter to target a specific instance.
+
+| Endpoint                                                 | Description                  |
+| -------------------------------------------------------- | ---------------------------- |
+| `GET /services/qbittorrent/health?instance={instanceId}` | Health check                 |
+| `GET /services/qbittorrent/stats?instance={instanceId}`  | Transfer stats, torrent list |
 
 ## Incremental Delta Sync (QB1)
 

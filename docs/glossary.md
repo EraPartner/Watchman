@@ -2,8 +2,17 @@
 title: Glossary & Terminology
 type: reference
 status: active
-date: 2026-05-16
-tags: [glossary, terminology, reference, search, aliases, disambiguation, single-user]
+date: 2026-06-13
+tags:
+  [
+    glossary,
+    terminology,
+    reference,
+    search,
+    aliases,
+    disambiguation,
+    single-user,
+  ]
 description: Key terms, aliases, and disambiguation for the Watchman project - helps with search and navigation
 aliases:
   [
@@ -41,14 +50,14 @@ aliases:
 
 ## Core Concepts
 
-| Term                 | Also Known As                                | Description                                                                                           | See Also                                    |
-| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------- |
-| **Service**          | integration, monitor, addon, plugin          | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay). | [[docs/features/service-monitoring          | Service Monitoring]] |
-| **Service Instance** | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.           | [[docs/features/multi-instance              | Multi-Instance]]     |
-| **Health Check**     | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.               | [[docs/api/index                            | API]]                |
-| **Stats**            | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                    | [[docs/api/index                            | API]]                |
+| Term                 | Also Known As                                | Description                                                                                           | See Also                                  |
+| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------- |
+| **Service**          | integration, monitor, addon, plugin          | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay). | [[docs/features/service-monitoring        | Service Monitoring]] |
+| **Service Instance** | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.           | [[docs/features/multi-instance            | Multi-Instance]]     |
+| **Health Check**     | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.               | [[docs/api/index                          | API]]                |
+| **Stats**            | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                    | [[docs/api/index                          | API]]                |
 | **ServiceManager**   | orchestrator, service manager                | Central backend class that manages all service instances and routes requests.                         | `apps/backend/services/ServiceManager.js` |
-| **Circuit Breaker**  | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                             | [[docs/performance/index                    | Performance]]        |
+| **Circuit Breaker**  | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                             | [[docs/performance/index                  | Performance]]        |
 
 ## Services
 
@@ -67,20 +76,19 @@ aliases:
 | **Mac Mini**     | Mac Mini Server, macOS Server      | macOS-based server or device                      | [[docs/integrations/macmini      | Mac Mini Integration]]     |
 | **Raspberry Pi** | RPi, RasPi                         | Raspberry Pi single-board computer                | [[docs/integrations/raspberry-pi | Raspberry Pi Integration]] |
 | **Router**       | Network Router, Beryl, Telenet     | Network router monitoring (Beryl/Telenet)         | [[docs/integrations/router       | Router Integration]]       |
-| **Nostrcheck**   | Nostr Relay Checker                | Nostr relay availability checker                  | [[docs/integrations/nostrcheck   | Nostrcheck Integration]]   |
 
 ## Technical Terms
 
-| Term                | Also Known As                              | Description                                                          | See Also                                 |
-| ------------------- | ------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------- | ---------------------- |
-| **WebSocket**       | WS, Socket, real-time, live                | Real-time bidirectional communication for status updates             | [[docs/features/real-time-updates        | Real-Time Updates]]    |
-| **Master Key**      | encryption key, secret key, aes-256        | AES-256-GCM key for encrypting service credentials in DuckDB        | [[docs/reference/environment-variables  | Environment Variables]] |
-| **Setup Wizard**    | first-run, configuration, initial setup    | Interactive UI for configuring services on first boot               | [[docs/features/ui-configuration        | UI Configuration]]     |
-| **Rate Limiting**   | rate limit, throttling, rate cap           | Tiered request throttling per IP (planned future feature)           | [[docs/security/rate-limiting           | Rate Limiting]]        |
-| **IP Control**      | IP whitelist, IP blacklist, IP filtering   | Whitelist/blacklist for IP-based access                              | [[docs/security/ip-control               | IP Control]]           |
-| **OpenAPI**         | Swagger, API specification, OpenAPI spec   | API specification format (Swagger)                                   | [[docs/api/index                         | API Documentation]]    |
-| **Factory Pattern** | factory, service factory                   | Service instantiation pattern via `serviceFactoryConfig.js`          | [[docs/architecture/backend-architecture | Backend Architecture]] |
-| **ARP Lookup**      | ARP, neighbor discovery, network scan      | Network neighbor discovery for router services                       | [[docs/integrations/router               | Router Integration]]   |
+| Term                | Also Known As                            | Description                                                  | See Also                                 |
+| ------------------- | ---------------------------------------- | ------------------------------------------------------------ | ---------------------------------------- | ----------------------- |
+| **WebSocket**       | WS, Socket, real-time, live              | Real-time bidirectional communication for status updates     | [[docs/features/real-time-updates        | Real-Time Updates]]     |
+| **Master Key**      | encryption key, secret key, aes-256      | AES-256-GCM key for encrypting service credentials in DuckDB | [[docs/reference/environment-variables   | Environment Variables]] |
+| **Setup Wizard**    | first-run, configuration, initial setup  | Interactive UI for configuring services on first boot        | [[docs/features/ui-configuration         | UI Configuration]]      |
+| **Rate Limiting**   | rate limit, throttling, rate cap         | Tiered request throttling per IP (planned future feature)    | [[docs/security/rate-limiting            | Rate Limiting]]         |
+| **IP Control**      | IP whitelist, IP blacklist, IP filtering | Whitelist/blacklist for IP-based access                      | [[docs/security/ip-control               | IP Control]]            |
+| **OpenAPI**         | Swagger, API specification, OpenAPI spec | API specification format (Swagger)                           | [[docs/api/index                         | API Documentation]]     |
+| **Factory Pattern** | factory, service factory                 | Service instantiation pattern via `serviceFactoryConfig.js`  | [[docs/architecture/backend-architecture | Backend Architecture]]  |
+| **ARP Lookup**      | ARP, neighbor discovery, network scan    | Network neighbor discovery for router services               | [[docs/integrations/router               | Router Integration]]    |
 
 ## UI Terms
 
@@ -97,10 +105,10 @@ aliases:
 ### Common Search Patterns
 
 | Search Query                             | Finds                             |
-| ---------------------------------------- | --------------------------------- | ------------------------------------------------- | ---------------- |
-| `adguard`                                | [[docs/integrations/adguard       | AdGuard Integration]], [[docs/api/index           | API]]            |
-| `setup`, `wizard`, `configuration`       | [[docs/features/ui-configuration  | UI Configuration]], [[docs/guides/setup           | Setup Guide]]    |
-| `multi-instance`, `multiple`, `instance` | [[docs/features/multi-instance    | Multi-Instance]], [[docs/integrations/qbittorrent | qBittorrent]]    |
+| ---------------------------------------- | --------------------------------- | ------------------------------------------------- | ------------- |
+| `adguard`                                | [[docs/integrations/adguard       | AdGuard Integration]], [[docs/api/index           | API]]         |
+| `setup`, `wizard`, `configuration`       | [[docs/features/ui-configuration  | UI Configuration]], [[docs/guides/setup           | Setup Guide]] |
+| `multi-instance`, `multiple`, `instance` | [[docs/features/multi-instance    | Multi-Instance]], [[docs/integrations/qbittorrent | qBittorrent]] |
 | `websocket`, `real-time`, `live`         | [[docs/features/real-time-updates | Real-Time Updates]]                               |
 | `rate limit`, `throttle`                 | [[docs/security/rate-limiting     | Rate Limiting]]                                   |
 | `circuit breaker`, `failure`             | [[docs/performance/index          | Performance]]                                     |

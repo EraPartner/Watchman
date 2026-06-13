@@ -2,7 +2,7 @@
 title: Bitcoin Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -34,32 +34,40 @@ Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to Bitcoin node host
 - **Service tier** — RPC `getblockchaininfo` probe
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the RPC/ZMQ probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 If host is unreachable, service tier is skipped.
 
 ## Configuration
 
-```bash
-BITCOIN_ONION_URL=your-onion-address.onion
-BITCOIN_RPC_USER=your-bitcoin-rpc-user
-BITCOIN_RPC_PASSWORD=your-bitcoin-rpc-password
-BITCOIN_RPC_PORT=8332
-BITCOIN_TOR_PROXY=socks5h://127.0.0.1:9050  # default
-```
+Configure via the Settings UI or `/config` API (DuckDB config store). Legacy `BITCOIN_*` environment variables are imported once on first boot then ignored (see [[docs/adr/015-config-store|ADR-015]]).
+
+| Field                  | Type     | Required | Default                 | Secret | Description                                                            |
+| ---------------------- | -------- | -------- | ----------------------- | ------ | ---------------------------------------------------------------------- |
+| `instanceId`           | text     | yes      | `main`                  |        | Unique identifier for this instance                                    |
+| `enabled`              | boolean  |          | `true`                  |        | Enable/disable polling                                                 |
+| `rpcUrl`               | url      | yes      | `http://127.0.0.1:8332` |        | Bitcoin Core JSON-RPC endpoint (host + port)                           |
+| `rpcUser`              | text     |          |                         |        | RPC username                                                           |
+| `rpcPassword`          | password |          |                         | yes    | RPC password                                                           |
+| `zmqHashblockEndpoint` | url      |          |                         |        | ZMQ endpoint for hashblock notifications, e.g. `tcp://127.0.0.1:28332` |
+| `zmqRawtxEndpoint`     | url      |          |                         |        | ZMQ endpoint for rawtx notifications, e.g. `tcp://127.0.0.1:28333`     |
+| `timeoutMs`            | number   |          | `5000`                  |        | Per-request timeout (ms)                                               |
+| `cacheTtlMs`           | number   |          | `10000`                 |        | Stats cache TTL (ms)                                                   |
+
+The ICMP ping target is derived from the hostname in `rpcUrl` — there is no separate host field.
 
 ## Endpoints
 
-| Endpoint                   | Description                | Auth              |
-| -------------------------- | -------------------------- | ----------------- |
-| `GET /api/bitcoin/status`  | Health check               | No (rate limited) |
-| `GET /api/bitcoin/stats`   | Block height, network info | Yes               |
-| `GET /api/bitcoin/health`  | Health alias               | No (rate limited) |
-| `GET /api/bitcoin/updates` | Check for updates          | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                       | Description                |
+| ------------------------------ | -------------------------- |
+| `GET /services/bitcoin/health` | Health check               |
+| `GET /services/bitcoin/stats`  | Block height, network info |
 
 ## Service Class
 
-`[[apps/backend/src/domain/services/BitcoinService.ts|BitcoinService.ts]]`
+`[[apps/backend/src/domain/services/bitcoin/BitcoinService.ts|BitcoinService.ts]]`
 
 ### Health Check (`checkHealth()`)
 
@@ -68,21 +76,24 @@ Uses `withHostPing()` helper to run ICMP ping and RPC probe in parallel:
 ```ts
 withHostPing(
   {
-    host: rpcHost,
+    host: this.pingHost,
     timeoutMs: this.timeoutMs,
-    pingCount: 4,
-    prober: this.ping,
+    pingCount: 1,
+    prober: this.pinger,
   },
-  async (signal) => {
-    // RPC getblockchaininfo
-    const res = await rpcCall("getblockchaininfo", { signal });
+  async (sig) => {
+    const started = this.now();
+    const [chainRaw, netRaw] = await this.rpcBatch(
+      [{ method: "getblockchaininfo" }, { method: "getnetworkinfo" }],
+      sig
+    );
     return {
-      reachable: res.ok,
-      latencyMs: Date.now() - start,
-      message: res.ok ? "OK" : `RPC error: ${res.error}`,
+      reachable: Boolean(chainRaw?.chain),
+      latencyMs: this.now() - started,
+      details: { chain: chainRaw?.chain, version: resolveVersion(netRaw) },
     };
   },
-  Date.now(),
+  this.now(),
   signal
 );
 ```
@@ -130,18 +141,20 @@ All BT1 metrics are optional and graceful — if a Bitcoin node is older and doe
 
 ### Configuration
 
-Enable ZMQ subscription by setting:
+Enable ZMQ subscription by configuring Bitcoin Core and setting the Watchman fields via the Settings UI or `/config` API:
 
-```bash
+```ini
 # Bitcoin Core bitcoin.conf
-# Enable ZMQ notifications
 zmqpubhashblock=tcp://127.0.0.1:28332
 zmqpubrawtx=tcp://127.0.0.1:28333
-
-# Watchman config (via UI or env)
-BITCOIN_ZMQ_HASHBLOCK_ENDPOINT=tcp://127.0.0.1:28332
-BITCOIN_ZMQ_RAWTX_ENDPOINT=tcp://127.0.0.1:28333  # optional
 ```
+
+Then set the corresponding Watchman config fields:
+
+| Field                  | Value                              |
+| ---------------------- | ---------------------------------- |
+| `zmqHashblockEndpoint` | `tcp://127.0.0.1:28332`            |
+| `zmqRawtxEndpoint`     | `tcp://127.0.0.1:28333` (optional) |
 
 ### Real-Time Metrics
 

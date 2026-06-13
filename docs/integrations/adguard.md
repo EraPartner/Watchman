@@ -2,7 +2,7 @@
 title: AdGuard Home Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -33,35 +33,39 @@ Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to AdGuard host
 - **Service tier** — HTTP `GET /control/status` probe
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the control-API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 If host is unreachable, service tier is skipped; dashboard shows both indicators red.
 
 ## Configuration
 
-```bash
-ADGUARD_MAIN_URL=http://192.0.2.1
-ADGUARD_MAIN_AUTH=your-adguard-auth-token
-ADGUARD_TIMEOUT=10000  # optional, default 10s
-```
+Configuration lives in the DuckDB config store, managed via the Settings UI or the `/config` API. Environment variables (`ADGUARD_*`) are legacy and were imported once on first boot — they are now ignored (see ADR-015 / ADR-008).
 
-**Configuration Notes:**
+| Field        | Type    | Required | Default                 | Secret  | Description                                                                                     |
+| ------------ | ------- | -------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `instanceId` | text    | yes      | `"main"`                | no      | Unique identifier for this instance                                                             |
+| `enabled`    | boolean | —        | `true`                  | no      | Enable/disable polling                                                                          |
+| `baseUrl`    | URL     | **yes**  | —                       | no      | AdGuard Home base URL (e.g. `http://192.0.2.1`). Host is extracted from this URL for ICMP ping. |
+| `username`   | text    | no       | `""`                    | no      | AdGuard Home username for HTTP Basic auth. Leave empty if auth is disabled.                     |
+| `password`   | text    | no       | `""`                    | **yes** | AdGuard Home password for HTTP Basic auth. Encrypted at rest.                                   |
+| `timeoutMs`  | number  | —        | `5000`                  | no      | Request timeout in milliseconds (applies to both ICMP ping and HTTP probe)                      |
+| `cacheTtlMs` | number  | —        | `10000`                 | no      | Stats cache TTL in milliseconds                                                                 |
+| `pollPolicy` | object  | —        | health 10 s, stats 30 s | no      | Poll intervals and jitter                                                                       |
 
-- `ADGUARD_MAIN_URL` — HTTP endpoint (host is extracted from URL for ping)
-- `ADGUARD_TIMEOUT` — Timeout for both host ping and service probe
+**Authentication:** When `username` or `password` is non-empty, the service sends an `Authorization: Basic <base64>` header on every API request. Both fields default to empty (no auth).
 
 ## Endpoints
 
-| Endpoint                       | Description              | Auth              |
-| ------------------------------ | ------------------------ | ----------------- |
-| `GET /api/adguard/status`      | Health check             | No (rate limited) |
-| `GET /api/adguard/stats`       | Query stats, filter info | Yes               |
-| `POST /api/adguard/protection` | Toggle protection        | Yes + CSRF        |
-| `GET /api/adguard/updates`     | Check for updates        | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                       | Description              |
+| ------------------------------ | ------------------------ |
+| `GET /services/adguard/health` | Health check             |
+| `GET /services/adguard/stats`  | Query stats, filter info |
 
 ## Service Class
 
-`[[apps/backend/src/domain/services/AdGuardService.ts|AdGuardService.ts]]`
+`[[apps/backend/src/domain/services/adguard/AdGuardService.ts|AdGuardService.ts]]`
 
 ### Health Check (`checkHealth()`)
 
@@ -70,22 +74,26 @@ Uses `withHostPing()` helper to run ICMP ping and HTTP probe in parallel:
 ```ts
 withHostPing(
   {
-    host: urlHost,
+    host: this.pingHost,
     timeoutMs: this.timeoutMs,
-    pingCount: 4,
-    prober: this.ping,
+    pingCount: 1,
+    prober: this.pinger,
   },
-  async (signal) => {
-    // HTTP GET /control/status
-    const res = await fetch(`${this.url}/control/status`, { signal });
-    const json = await res.json();
+  async (sig) => {
+    const started = this.now();
+    const status = await this.get<AdGuardStatus>("/control/status", sig);
+    const latencyMs = this.now() - started;
+    const running = Boolean(status.running);
     return {
-      reachable: res.ok,
-      latencyMs: Date.now() - start,
-      message: res.ok ? "OK" : `HTTP ${res.status}`,
+      reachable: running,
+      latencyMs,
+      details: {
+        version: status.version,
+        protectionEnabled: Boolean(status.protection_enabled),
+      },
     };
   },
-  Date.now(),
+  this.now(),
   signal
 );
 ```

@@ -2,8 +2,24 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-04-20
-tags: [architecture, frontend, react, typescript, design-system, primitives, configuration, settings, api-client, v2, single-user, bento, dynamic-layout, multi-instance]
+date: 2026-06-13
+tags:
+  [
+    architecture,
+    frontend,
+    react,
+    typescript,
+    design-system,
+    primitives,
+    configuration,
+    settings,
+    api-client,
+    v2,
+    single-user,
+    bento,
+    dynamic-layout,
+    multi-instance,
+  ]
 description: Frontend architecture documentation for the Watchman React application - single-user design with v2 API contract, design system, dynamic bento dashboard with instance-aware layout, and UI-driven configuration
 aliases: [frontend, react architecture, frontend design]
 ---
@@ -21,6 +37,7 @@ aliases: [frontend, react architecture, frontend design]
 **Backend URL Resolution (Split Deploy)**
 
 In split-deploy mode (Electron client paired with remote Pi backend):
+
 - `[[apps/frontend/src/lib/backendUrl.ts|backendUrl.ts]]` defines `getBackendUrl()` which reads from `window.__WATCHMAN__.apiUrl` (injected by Electron IPC)
 - If `apiUrl` is not set, returns empty string (dev mode uses vite proxy to `localhost:3001`)
 - SetupWizard gates on `apiUrl` presence; if empty, starts at ConnectStep (split-deploy URL entry)
@@ -29,15 +46,15 @@ In split-deploy mode (Electron client paired with remote Pi backend):
 
 ## Pages
 
-| Page      | File                                          | Description                                   |
-| --------- | --------------------------------------------- | --------------------------------------------- |
-| Dashboard (Legacy) | Removed (Phase 3)                             | Replaced by bento dashboard |
-| Dashboard (Bento, Phase 3)  | `[[apps/frontend/src/components/dashboard/BentoDashboard.tsx]]` | New bento dashboard (behind `?bento=1` flag) |
-| Setup Wizard | `[[apps/frontend/src/pages/setup/SetupWizard.tsx]]` | Multi-step first-boot configuration wizard (4 steps: welcome → kind picker → configure → review) |
-| Settings — Services | `[[apps/frontend/src/pages/Settings/Services.tsx]]` | Service CRUD interface with list, edit, delete |
-| Settings — Editor | `[[apps/frontend/src/pages/Settings/ServiceEditor.tsx]]` | Dynamic form driven by `/config/kinds` schemas |
-| Settings — Audit | `[[apps/frontend/src/pages/Settings/Audit.tsx]]` | Timeline of configuration changes and migrations |
-| Not Found | `[[apps/frontend/src/pages/NotFound.tsx]]`   | 404 fallback page                             |
+| Page                       | File                                                            | Description                                                                                      |
+| -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Dashboard (Legacy)         | Removed (Phase 3)                                               | Replaced by bento dashboard                                                                      |
+| Dashboard (Bento, Phase 3) | `[[apps/frontend/src/components/dashboard/BentoDashboard.tsx]]` | New bento dashboard (behind `?bento=1` flag)                                                     |
+| Setup Wizard               | `[[apps/frontend/src/pages/setup/SetupWizard.tsx]]`             | Multi-step first-boot configuration wizard (4 steps: welcome → kind picker → configure → review) |
+| Settings — Services        | `[[apps/frontend/src/pages/Settings/Services.tsx]]`             | Service CRUD interface with list, edit, delete                                                   |
+| Settings — Editor          | `[[apps/frontend/src/pages/Settings/ServiceEditor.tsx]]`        | Dynamic form driven by `/config/kinds` schemas                                                   |
+| Settings — Audit           | `[[apps/frontend/src/pages/Settings/Audit.tsx]]`                | Timeline of configuration changes and migrations                                                 |
+| Not Found                  | `[[apps/frontend/src/pages/NotFound.tsx]]`                      | 404 fallback page                                                                                |
 
 > [!note] Auth Removed (v2.3)
 > The Login page and AuthGuard component have been removed as of v2.3. Watchman is now a single-user application. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for details.
@@ -127,11 +144,11 @@ The bento dashboard uses a pluggable renderer registry to drive tile summaries, 
 
 Location: `[[apps/frontend/src/services/renderers/]]`
 
-| Service          | Status      | Location                                    |
-| ---------------- | ----------- | ------------------------------------------- |
-| Bitcoin          | ✅ Phase 3  | `[[apps/frontend/src/services/renderers/bitcoin.ts]]`   |
-| Synology         | ✅ Phase 3  | `[[apps/frontend/src/services/renderers/synology.ts]]`  |
-| 14 remaining     | ⏳ Phase 4  | Stubbed in `index.ts`                       |
+| Service      | Status     | Location                                               |
+| ------------ | ---------- | ------------------------------------------------------ |
+| Bitcoin      | ✅ Phase 3 | `[[apps/frontend/src/services/renderers/bitcoin.ts]]`  |
+| Synology     | ✅ Phase 3 | `[[apps/frontend/src/services/renderers/synology.ts]]` |
+| 14 remaining | ⏳ Phase 4 | Stubbed in `index.ts`                                  |
 
 **Registry API**: `getRenderer(kind: ServiceKind)` returns the renderer or undefined if not yet implemented.
 
@@ -141,7 +158,7 @@ See [[docs/services/renderers/index|Renderer Registry Documentation]] for comple
 
 | Hook                  | Purpose                        | File                                                  |
 | --------------------- | ------------------------------ | ----------------------------------------------------- |
-| `useSetupDismissal`   | Setup wizard dismissal state    | `[[apps/frontend/src/hooks/useSetupDismissal.ts]]`    |
+| `useSetupDismissal`   | Setup wizard dismissal state   | `[[apps/frontend/src/hooks/useSetupDismissal.ts]]`    |
 | `useServiceHealth`    | Single service health          | `[[apps/frontend/src/hooks/useServiceHealth.ts]]`     |
 | `useServiceInstances` | Multi-instance management      | `[[apps/frontend/src/hooks/useServiceInstances.tsx]]` |
 | `useEnabledServices`  | Enabled services config        | `[[apps/frontend/src/hooks/useEnabledServices.ts]]`   |
@@ -217,7 +234,6 @@ package "Service Cards" {
   [AlbyHubCard] as Alby
   [RaspberryPiCard] as RPi
   [RouterCard] as Router
-  [NostrcheckCard] as Nostr
 }
 
 package "Hooks" {
@@ -263,7 +279,6 @@ Layout --> Mac
 Layout --> Alby
 Layout --> RPi
 Layout --> Router
-Layout --> Nostr
 Layout --> SvcLink
 Layout --> Update
 

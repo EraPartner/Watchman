@@ -2,7 +2,7 @@
 title: Alby Hub Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -33,21 +33,34 @@ Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to Alby Hub host
 - **Service tier** — HTTP probe (adaptive or deterministic NWC)
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the NWC API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
 
-```bash
-ALBYHUB_URL=http://127.0.0.1:8080
-ALBYHUB_TOKEN=your-albyhub-token
-ALBYHUB_TIMEOUT=10000           # optional, default 10s
-ALBYHUB_LEGACY_PROBE=false      # optional, default false (deterministic NWC mode)
-```
+Configuration is stored in the DuckDB config store and managed via the `/config` API or the Settings UI. There are no active environment variables for this service — any legacy `ALBYHUB_*` env vars were imported once on first boot and are now ignored (see ADR-015 / ADR-008).
+
+### AlbyHub-specific fields
+
+| Field         | Type            | Required | Default | Description                                                                                                        |
+| ------------- | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `baseUrl`     | URL             | yes      | —       | Base URL of the Alby Hub instance (e.g. `http://127.0.0.1:8080`)                                                   |
+| `token`       | string (secret) | no       | `""`    | Bearer token for authenticated endpoints (`/api/balances`, `/api/channels`). Leave empty for unauthenticated mode. |
+| `legacyProbe` | boolean         | no       | `false` | Probe mode — see below.                                                                                            |
+
+### Shared base fields (all services)
+
+| Field        | Type    | Default                                            | Description                                                  |
+| ------------ | ------- | -------------------------------------------------- | ------------------------------------------------------------ |
+| `instanceId` | string  | `"main"`                                           | Unique identifier for this instance within the kind.         |
+| `enabled`    | boolean | `true`                                             | Whether polling is active.                                   |
+| `cacheTtlMs` | number  | `10000`                                            | How long cached results are served before a fresh poll (ms). |
+| `timeoutMs`  | number  | `5000`                                             | HTTP + ping timeout per request (ms).                        |
+| `pollPolicy` | object  | `{healthMs:10000, statsMs:30000, jitterRatio:0.1}` | Poll intervals and jitter.                                   |
 
 ### `legacyProbe` Field
 
 - **When `true`**: Uses adaptive probing to discover working endpoints. Tries multiple candidate paths (`/api`, `/api/info`, `/api/v1/info`, `/info`, `/status`, `/health`, `/`) until finding a reachable one; the last known-good path is cached and reused on subsequent polls (re-scan only when it stops answering). Backward-compatible with pre-NWC deployments.
-- **When `false` (default since 2026-06-12)**: Uses deterministic NWC API endpoints (`/api/info` for health, `/api/info` + `/api/apps` for stats — 2 requests per cycle). Existing stored configs keep their persisted value.
+- **When `false` (schema default)**: Uses deterministic NWC API endpoints (`/api/info` for health, `/api/info` + `/api/apps` for stats — 2 requests per cycle). Existing stored configs keep their persisted value.
 
 ## Stats Metrics
 

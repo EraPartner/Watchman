@@ -2,7 +2,7 @@
 title: Bento Layout Configuration
 type: reference
 status: active
-date: 2026-04-18
+date: 2026-06-13
 tags: [configuration, bento, frontend, grid, layout, phase3]
 description: Data-driven grid layout configuration for the bento dashboard. Ordered array of service kind and tile size pairs.
 aliases: [bento layout, layout config]
@@ -22,26 +22,24 @@ aliases: [bento layout, layout config]
 ```typescript
 export interface BentoLayoutEntry {
   kind: ServiceKind;
-  size: TileSize;    // "S" | "M" | "L" | "XL"
+  size: TileSize; // "S" | "M" | "L" | "XL"
 }
 
+// Mirrors apps/frontend/src/config/bentoLayout.ts (canonical camelCase kinds).
 export const BENTO_LAYOUT: BentoLayoutEntry[] = [
   { kind: "bitcoin", size: "XL" },
   { kind: "synology", size: "L" },
   { kind: "router", size: "L" },
   { kind: "adguard", size: "M" },
-  { kind: "tor", size: "M" },
   { kind: "qbittorrent", size: "M" },
   { kind: "ipfs", size: "M" },
+  { kind: "tor", size: "M" },
   { kind: "homebridge", size: "M" },
-  { kind: "albyhub", size: "M" },
+  { kind: "macMini", size: "M" },
+  { kind: "raspberryPi", size: "M" },
+  { kind: "albyHub", size: "S" },
+  { kind: "philipsBridge", size: "S" },
   { kind: "roon", size: "S" },
-  { kind: "philips", size: "S" },
-  { kind: "macmini", size: "S" },
-  { kind: "raspi", size: "S" },
-  { kind: "beryl", size: "S" },
-  { kind: "telenet", size: "S" },
-  { kind: "nostrcheck", size: "S" },
 ];
 ```
 
@@ -50,16 +48,12 @@ export const BENTO_LAYOUT: BentoLayoutEntry[] = [
 With 12-column grid and 72px base row height:
 
 ```
-┌────────────────────────────────────────────────────────┐
-│ Bitcoin (XL: 4 cols, 2 rows)   │ Synology (L: 2, 2)     │
-│                                 │ & Router (L: 2, 2)     │
-├─────────────────┬───────────────┼────────────────────────┤
-│ AdGuard (M: 2)  │ Tor (M: 2)    │ qBit (M: 2) │ IPFS (M) │
-├──────────────────────┼──────────────────┼──────────────┤
-│ Home (M: 2)    │ Alby (M: 2)    │ Roon (S) │ Philips (S) │
-├────────────┬──────────┬───────────┴──────────┴────────────┤
-│ MacMini (S)│ Raspi (S)│ Beryl (S) │ Telenet (S) │ Nostr(S) │
-└────────────┴──────────┴───────────┴──────────────┴─────────┘
+12-column grid, sized by tier (mirrors BENTO_LAYOUT, in order):
+
+XL  │ Bitcoin
+L   │ Synology · Router
+M   │ AdGuard · qBittorrent · IPFS · Tor · Homebridge · MacMini · RaspberryPi
+S   │ AlbyHub · Philips · Roon
 ```
 
 ## Size Semantics

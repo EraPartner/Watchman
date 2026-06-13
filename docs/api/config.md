@@ -2,7 +2,7 @@
 title: Configuration API Reference
 type: api
 status: active
-date: 2026-04-19
+date: 2026-06-13
 tags: [api, configuration, setup, audit, backup, export, import, endpoints]
 description: REST API reference for runtime service configuration endpoints - CRUD operations, test connection, backup/restore, audit log
 aliases: [config api, configuration endpoints, setup api]
@@ -43,9 +43,9 @@ Check setup wizard state — no auth required.
 
 ```typescript
 {
-  needsSetup: boolean  // true if no services configured yet
-  hasServices: boolean // true if at least one service exists
-  adminConfigured: boolean // true if AUTH_USERNAME is set in env
+  needsSetup: boolean; // true if no services configured yet
+  hasServices: boolean; // true if at least one service exists
+  adminConfigured: boolean; // true if AUTH_USERNAME is set in env
 }
 ```
 
@@ -103,8 +103,12 @@ Fetch all service kind schemas with UI field metadata.
         }
       ]
     },
-    "adguard": { /* ... */ },
-    "synology": { /* ... */ },
+    "adguard": {
+      /* ... */
+    },
+    "synology": {
+      /* ... */
+    }
     /* ... other kinds ... */
   }
 }
@@ -112,16 +116,16 @@ Fetch all service kind schemas with UI field metadata.
 
 **Field Metadata:**
 
-| Property   | Type     | Description                                    |
-|-----------|----------|------------------------------------------------|
-| `name`    | string   | Config field name                             |
-| `label`   | string   | UI label                                       |
-| `type`    | string   | `text`, `password`, `number`, `select`, etc.   |
-| `secret`  | boolean  | If true, encrypt at rest and redact on GET    |
-| `required`| boolean  | If true, validation fails when absent          |
-| `placeholder` | string | UI placeholder text                           |
-| `help`    | string   | Inline help text                              |
-| `options` | array    | For `type: "select"`: `[{ label, value }, ...]` |
+| Property      | Type    | Description                                     |
+| ------------- | ------- | ----------------------------------------------- |
+| `name`        | string  | Config field name                               |
+| `label`       | string  | UI label                                        |
+| `type`        | string  | `text`, `password`, `number`, `select`, etc.    |
+| `secret`      | boolean | If true, encrypt at rest and redact on GET      |
+| `required`    | boolean | If true, validation fails when absent           |
+| `placeholder` | string  | UI placeholder text                             |
+| `help`        | string  | Inline help text                                |
+| `options`     | array   | For `type: "select"`: `[{ label, value }, ...]` |
 
 ---
 
@@ -129,14 +133,14 @@ Fetch all service kind schemas with UI field metadata.
 
 #### `GET /config/services`
 
-List all configured service instances.
+List all configured service instances that loaded successfully at startup. Rows that failed to load (undecryptable secrets, schema drift, unknown kind) are silently excluded from this response — they never cause a 500 — and are surfaced separately via `GET /config/load-errors`.
 
 **Query Parameters:**
 
-| Param   | Type   | Default | Description          |
-|---------|--------|---------|----------------------|
-| `limit` | number | 100     | Max results          |
-| `offset`| number | 0       | Pagination offset    |
+| Param    | Type   | Default | Description       |
+| -------- | ------ | ------- | ----------------- |
+| `limit`  | number | 100     | Max results       |
+| `offset` | number | 0       | Pagination offset |
 
 **Response:**
 
@@ -178,15 +182,62 @@ List all configured service instances.
 
 ```typescript
 {
-  id: string                    // "${kind}:${instanceId}"
-  kind: string                  // Service kind (bitcoin, adguard, etc.)
-  name: string                  // User-friendly name
-  enabled: boolean              // Enabled/disabled status
-  config: Record<string, any>   // Public config; secrets masked as "***"
-  createdAt: number            // Timestamp (ms)
-  updatedAt: number            // Timestamp (ms)
+  id: string; // "${kind}:${instanceId}"
+  kind: string; // Service kind (bitcoin, adguard, etc.)
+  name: string; // User-friendly name
+  enabled: boolean; // Enabled/disabled status
+  config: Record<string, any>; // Public config; secrets masked as "***"
+  createdAt: number; // Timestamp (ms)
+  updatedAt: number; // Timestamp (ms)
 }
 ```
+
+---
+
+#### `GET /config/load-errors`
+
+Return the rows that `loadAll()` skipped during the most recent config scan. A row lands here when:
+
+- Its secret blob cannot be decrypted (e.g. after a `WATCHMAN_MASTER_KEY` rotation).
+- Its public config no longer passes the current Zod schema (schema drift after an upgrade).
+- Its `kind` is not recognised by the server (unknown kind string stored in the DB).
+
+Because `loadAll()` skips these rows rather than aborting, all other services come up normally. This endpoint surfaces the skipped rows so the UI can display a recovery banner and let the operator delete the broken instance via `DELETE /config/services/{id}` (which tolerates an unparseable row).
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "kind": "bitcoin",
+      "instanceId": "main",
+      "message": "AES-GCM decryption failed: bad auth tag (master key mismatch?)"
+    }
+  ]
+}
+```
+
+**LoadError Schema:**
+
+```typescript
+{
+  id: string; // Row UUID from app_service_instance
+  kind: string; // Service kind stored in the DB (may be unknown/unrecognised)
+  instanceId: string; // instance_id column value
+  message: string; // Human-readable failure reason (decrypt/schema/unknown kind)
+}
+```
+
+**Recovery flow:**
+
+1. Call `GET /config/load-errors` to identify broken rows.
+2. Call `DELETE /config/services/{id}` (using the `id` from the error entry) to remove the broken row.
+3. Re-create the service via `POST /config/services` with correct credentials.
+
+> [!info] No auth required
+> Same single-user, no-auth posture as all other config endpoints.
 
 ---
 
@@ -247,8 +298,8 @@ Fetch a single service instance.
 
 **Path Parameters:**
 
-| Param | Description   |
-|-------|---------------|
+| Param | Description                                |
+| ----- | ------------------------------------------ |
 | `id`  | `{kind}:{instanceId}` or auto-generated ID |
 
 **Response:**
@@ -436,9 +487,9 @@ Export all service configurations as an encrypted bundle.
 
 ```typescript
 {
-  version: 1                    // Bundle format version (always 1)
-  exportedAt: string           // ISO 8601 timestamp of export
-  payload: string              // Base64 AES-256-GCM encrypted JSON array of service configurations
+  version: 1; // Bundle format version (always 1)
+  exportedAt: string; // ISO 8601 timestamp of export
+  payload: string; // Base64 AES-256-GCM encrypted JSON array of service configurations
 }
 ```
 
@@ -469,9 +520,9 @@ Import a previously exported bundle. Upserts services by `(kind, instanceId)`.
 
 ```typescript
 {
-  version: 1                    // Bundle format version (must be 1)
-  exportedAt: string           // Timestamp from export
-  payload: string              // Base64 AES-256-GCM ciphertext
+  version: 1; // Bundle format version (must be 1)
+  exportedAt: string; // Timestamp from export
+  payload: string; // Base64 AES-256-GCM ciphertext
 }
 ```
 
@@ -492,14 +543,14 @@ Import a previously exported bundle. Upserts services by `(kind, instanceId)`.
 
 ```typescript
 {
-  imported: number             // New services created
-  updated: number              // Existing services upserted
-  skipped: number              // Services that already exist and no change
+  imported: number; // New services created
+  updated: number; // Existing services upserted
+  skipped: number; // Services that already exist and no change
   errors: Array<{
-    kind: string               // Service kind
-    instanceId: string         // Instance ID
-    message: string            // Error reason (e.g., validation failure)
-  }>
+    kind: string; // Service kind
+    instanceId: string; // Instance ID
+    message: string; // Error reason (e.g., validation failure)
+  }>;
 }
 ```
 
@@ -528,11 +579,11 @@ Fetch audit trail of configuration changes.
 
 **Query Parameters:**
 
-| Param    | Type   | Default | Description           |
-|----------|--------|---------|----------------------|
-| `limit`  | number | 50      | Max entries           |
-| `offset` | number | 0       | Pagination offset     |
-| `kind`   | string | -       | Filter by service kind|
+| Param    | Type   | Default | Description            |
+| -------- | ------ | ------- | ---------------------- |
+| `limit`  | number | 50      | Max entries            |
+| `offset` | number | 0       | Pagination offset      |
+| `kind`   | string | -       | Filter by service kind |
 
 **Response:**
 
@@ -625,6 +676,7 @@ The complete specification is defined in [[apps/backend/openapi.yaml]]:
 - `ServiceInstanceInput` — Create/update request
 - `TestConnectionResult` — Test connection response
 - `AuditEntry` — Audit log entry
+- `LoadError` — Row skipped by `loadAll()` (id, kind, instanceId, message)
 
 See [[apps/backend/openapi.yaml]] for complete schema definitions with constraints and examples.
 
@@ -645,12 +697,12 @@ All errors follow the standard [[docs/api/index|API error envelope]]:
 
 **Common Error Codes:**
 
-| Code         | HTTP | Meaning                                    |
-|--------------|------|--------------------------------------------|
-| `VALIDATION` | 400  | Config fails per-kind schema validation    |
-| `NOT_FOUND`  | 404  | Service instance not found                 |
-| `CONFLICT`   | 409  | Duplicate kind+instanceId combination      |
-| `UNAVAILABLE`| 503  | Service unreachable (test-connection only)|
+| Code          | HTTP | Meaning                                    |
+| ------------- | ---- | ------------------------------------------ |
+| `VALIDATION`  | 400  | Config fails per-kind schema validation    |
+| `NOT_FOUND`   | 404  | Service instance not found                 |
+| `CONFLICT`    | 409  | Duplicate kind+instanceId combination      |
+| `UNAVAILABLE` | 503  | Service unreachable (test-connection only) |
 
 ---
 

@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     architecture,
@@ -365,106 +365,6 @@ pool.destroy();
 
 - **RaspberryPiService** — Direct SSH to Pi for vcgencmd and /proc stats (PI1 feature)
 
-## WebSocket Client (I5 — Auto-Reconnecting Outbound WS)
-
-Located in [[apps/backend/src/infra/ws/wsClient.ts|wsClient.ts]]:
-
-### Overview
-
-Provides a lightweight auto-reconnecting WebSocket client for Node.js 22+ environments using the global `WebSocket` API. Suitable for outbound connections to remote WebSocket services (e.g., Nostr relays, status feeds). Features exponential backoff, send buffering during connection, and a simple event-driven API.
-
-### API
-
-```typescript
-export type WsState = "connecting" | "ready" | "reconnecting" | "destroyed";
-
-export interface WsClientHandle {
-  send(data: string): void;
-  onMessage(handler: (data: string) => void): () => void;
-  onOpen(handler: () => void): () => void;
-  onClose(handler: (code: number, reason: string) => void): () => void;
-  destroy(): void;
-  readonly state: WsState;
-}
-
-function createWsClient(opts: WsClientOptions): WsClientHandle;
-```
-
-### State Machine
-
-```
-connecting ──(open)──> ready ──(close/error)──> reconnecting ──(timeout)──> connecting
-    │                                                │
-    └────────────(destroy)───────────────────────> destroyed
-```
-
-- **`connecting`** — Initial state; connection in progress, sends buffered
-- **`ready`** — Connected and authenticated; sends delivered immediately
-- **`reconnecting`** — Disconnected; exponential backoff timer running
-- **`destroyed`** — Shutdown; no further reconnects; `send()` throws
-
-### Features
-
-1. **Exponential Backoff Reconnect**
-   - Base delay: 2s (default, configurable via `reconnectMs`)
-   - Max delay: 30s (default, configurable via `maxReconnectMs`)
-   - Backoff resets to base on successful connection
-   - Prevents thundering herd on upstream service restarts
-
-2. **Send Buffering**
-   - Queues sends while `connecting`; flushes on `open` in order
-   - Discards buffered sends if reconnection fails (no delivery guarantee)
-   - Throws `Error` if `send()` called while `destroyed`
-
-3. **Event Handlers**
-   - `onMessage(handler)` — Subscribe to text messages; returns unsubscribe function
-   - `onOpen(handler)` — Fires when connection establishes; returns unsubscribe function
-   - `onClose(handler)` — Fires when connection closes; includes code + reason; returns unsubscribe function
-
-4. **Error Handling**
-   - 'error' event logs but does not drive reconnect (by design; 'close' always follows)
-   - Graceful shutdown via `destroy()` — closes socket, clears timers, clears handlers
-
-### Configuration
-
-```typescript
-interface WsClientOptions {
-  url: string; // WebSocket URL (ws:// or wss://)
-  reconnectMs?: number; // Base reconnect delay (default: 2000)
-  maxReconnectMs?: number; // Max reconnect delay (default: 30000)
-  logger?: Logger; // Optional Pino logger
-}
-```
-
-### Implementation Details
-
-- Uses Node.js 22+ global `WebSocket` (no external library required)
-- Handler sets (messageHandlers, openHandlers, closeHandlers) prevent duplicates
-- Single reconnectTimer per client (cleared on destroy)
-- All state transitions are atomic (state variable)
-
-### Test Coverage
-
-[[apps/backend/src/infra/ws/wsClient.test.ts|wsClient.test.ts]] — 9 tests covering:
-
-- Initial connection and `onOpen` firing
-- Message delivery via `send()`
-- `onMessage` subscription
-- Send buffering during `connecting` phase
-- `onClose` with code and reason
-- Reconnection backoff and exponential delay
-- `destroy()` cleanup
-- Handler unsubscription
-- State transitions
-
-### Services Using WsClient
-
-- **NotorcheckService** (future) — Monitor Nostr relay status via WebSocket
-
-### Services Using SSH Pool
-
-- **RaspberryPiService** — Direct SSH to Pi for vcgencmd and /proc stats (PI1 feature)
-
 ## ZMQ Subscriber (I6 — Real-Time ZeroMQ Subscriptions)
 
 Located in [[apps/backend/src/infra/zmq/]]:
@@ -707,11 +607,10 @@ Services are keyed by `${kind}:${instanceId}` in [[apps/backend/src/domain/Servi
 | Roon         | `src/domain/services/roon/...`                              | Music server                                             | **Yes**        |
 | Philips Hue  | `src/domain/services/philipsBridge/PhilipsBridgeService.ts` | Smart lighting (Hue API v2, light metrics, cert pinning) | No             |
 | Homebridge   | `src/domain/services/homebridge/...`                        | HomeKit bridge                                           | No             |
-| Mac Mini     | `src/domain/services/macmini/...`                           | macOS server                                             | **Yes**        |
-| Alby Hub     | `src/domain/services/albyhub/...`                           | Lightning wallet                                         | **Yes**        |
-| Raspberry Pi | `src/domain/services/raspi/...`                             | Raspberry Pi device                                      | **Yes**        |
+| Mac Mini     | `src/domain/services/macMini/...`                           | macOS server                                             | **Yes**        |
+| Alby Hub     | `src/domain/services/albyHub/...`                           | Lightning wallet                                         | **Yes**        |
+| Raspberry Pi | `src/domain/services/raspberryPi/...`                       | Raspberry Pi device                                      | **Yes**        |
 | Router       | `src/domain/services/router/...`                            | Network router                                           | No             |
-| Nostrcheck   | Configured in ServiceRegistry                               | Nostr relay checker                                      | No             |
 
 ## Application Layer
 
@@ -778,6 +677,7 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`, plus share
 ### Service Configuration (UI-Driven, v2.2+)
 
 - `[[apps/backend/src/config/store/ConfigStore.ts]]` – DuckDB-backed CRUD for service instances; **partial updates preserve** `pollPolicy`, `cacheTtlMs`, `timeoutMs`, `enabled`, and `instanceId` from the existing record when those fields are omitted from the update payload (previously they reset to schema defaults). Uses `DuckDbPool` (bounded max 4 connections, `withConnection()` helper, `release()` on done).
+- **Resilient loading (graceful degradation):** `loadAll()` partitions rows — a row that can't be turned into a usable service (secrets that no longer decrypt after a `WATCHMAN_MASTER_KEY` rotation, config that drifted from the current Zod schema, or an unknown `kind`) is **skipped and logged**, never throwing the whole batch. One bad instance therefore can't stop the others from coming up at startup, and `GET /config/services` no longer 500s. Skipped rows are exposed via `loadErrors()` / `GET /config/load-errors` so the Settings UI can show a recovery banner; `delete()` tolerates an unparseable row so a broken instance is still removable. See [[docs/api/config|Configuration API — load-errors]].
 - `[[apps/backend/src/config/store/encryption.ts]]` – AES-256-GCM encryption/decryption (keyed by `WATCHMAN_MASTER_KEY`)
 - `[[apps/backend/src/config/store/migrations.ts]]` – DuckDB schema setup (tables: `app_service_instance`, `app_config_audit`)
 - `[[apps/backend/src/config/store/envMigrator.ts]]` – One-shot legacy env var import on first boot
@@ -785,7 +685,7 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`, plus share
 
 ### Service Instantiation
 
-- `[[apps/backend/src/config/ServiceFactory.ts]]` – Pure function to create a service instance from config (no env reading)
+- `[[apps/backend/src/bootstrap/registerServices.ts]]` – `buildService()`: pure function mapping a validated config instance to a service class (no env reading). Its `default` branch throws a clear "unknown service kind" error, so an unexpected kind fails that one service (contained by `reloadAll`'s per-service catch) instead of crashing registration for the rest.
 - `[[apps/backend/src/application/ServiceLifecycle.ts]]` – Orchestrates hot-reload on config change: pause poller → stop old service → create new → start new → retrack → resume
 - Services are registered by `${kind}:${instanceId}` in `[[apps/backend/src/domain/ServiceRegistry.ts]]`
 

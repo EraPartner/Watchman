@@ -2,7 +2,7 @@
 title: "Component: LiveServerDashboard"
 type: component
 status: superseded
-date: 2026-04-11
+date: 2026-06-13
 superseded_by: docs/adr/013-backend-rewrite-typescript-fastify
 superseded_date: 2026-04-20
 tags: [component, frontend, react, page, dashboard, layout]
@@ -14,7 +14,6 @@ aliases: [live server dashboard, dashboard, main dashboard, home page]
 
 > [!danger] Superseded — No Longer Implemented
 > The `LiveServerDashboard` component was **replaced by `BentoDashboard`** in the Phase 3 frontend rewrite. The per-service card grid was replaced by the bento tile layout with `ServiceTile` + renderer registry (see [[docs/components/bento-dashboard|BentoDashboard]]). Content retained for archival reference only.
-
 
 > [!abstract] Overview
 > The main dashboard component that fetches service health data, determines enabled services, and renders all service cards in a responsive grid layout with overview statistics.
@@ -48,11 +47,11 @@ Uses `apps/frontend/src/components/dashboard/useDashboardQueries.ts` to centrali
 
 Related services are vertically stacked within the same grid cell to save horizontal space:
 
-| Stack      | Services              |
-| ---------- | --------------------- |
-| Network    | IPFS + Homebridge     |
-| Smart Home | Nostrcheck + Alby Hub |
-| Media      | Roon + Philips Hue    |
+| Stack      | Services           |
+| ---------- | ------------------ |
+| Network    | IPFS + Homebridge  |
+| Smart Home | Alby Hub           |
+| Media      | Roon + Philips Hue |
 
 ### Grid Structure
 

@@ -2,7 +2,7 @@
 title: IPFS Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -34,23 +34,36 @@ aliases: [ipfs, interplanetary file system, ipfs node]
 Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to IPFS node host
-- **Service tier** — HTTP `GET /api/v0/id` probe
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Service tier** — HTTP `POST /api/v0/version` probe
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the HTTP API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
 
-```bash
-IPFS_API_URL=http://127.0.0.1:5001
-IPFS_TIMEOUT=10000  # optional, default 10s
-```
+Configure via the Settings UI or `/config` API (`kind: "ipfs"`). Environment variables (`IPFS_*`) are legacy — imported once on first boot, then ignored (ADR-015 / ADR-008).
+
+### Fields
+
+| Field                    | Type    | Required | Default                   | Secret | Notes                                             |
+| ------------------------ | ------- | -------- | ------------------------- | ------ | ------------------------------------------------- |
+| `instanceId`             | text    | yes      | `"main"`                  | no     | Unique identifier within this service kind        |
+| `enabled`                | boolean | —        | `true`                    | no     | Enables/disables polling                          |
+| `apiUrl`                 | url     | yes      | `"http://127.0.0.1:5001"` | no     | IPFS HTTP API base URL (Kubo default port 5001)   |
+| `cacheTtlMs`             | number  | —        | `10000`                   | no     | Response cache TTL in milliseconds                |
+| `timeoutMs`              | number  | —        | `5000`                    | no     | Per-request HTTP timeout in milliseconds          |
+| `pollPolicy.healthMs`    | number  | —        | `10000`                   | no     | Health check interval in milliseconds             |
+| `pollPolicy.statsMs`     | number  | —        | `30000`                   | no     | Stats poll interval in milliseconds               |
+| `pollPolicy.jitterRatio` | number  | —        | `0.1`                     | no     | Fractional jitter applied to poll intervals (0–1) |
+
+No secret fields.
 
 ## Endpoints
 
-| Endpoint                | Description       | Auth                |
-| ----------------------- | ----------------- | ------------------- |
-| `GET /api/ipfs/status`  | Health check      | No (rate limited)   |
-| `GET /api/ipfs/stats`   | Node statistics   | Yes                 |
-| `GET /api/ipfs/updates` | Check for updates | Yes (auth required) |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                    | Description     |
+| --------------------------- | --------------- |
+| `GET /services/ipfs/health` | Health check    |
+| `GET /services/ipfs/stats`  | Node statistics |
 
 ## RPC Transport
 
@@ -64,7 +77,6 @@ All Kubo API calls are **POST-only** (Kubo ≥ 0.5 dropped GET support). The pre
 
 - `checkHealth()` - IPFS API connection test
 - `getStats()` - Node info, peer count, storage, system diagnostics, DHT metrics, and Bitswap stats
-- `checkForUpdates()` - Check for IPFS updates
 
 ## Statistics Metrics
 

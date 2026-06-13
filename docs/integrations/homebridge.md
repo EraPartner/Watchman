@@ -2,7 +2,7 @@
 title: Homebridge Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -35,26 +35,34 @@ Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to Homebridge host
 - **Service tier** — HTTP `GET /api/status/homebridge` probe
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the HTTP API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
 
-```bash
-HOMEBRIDGE_URL=http://192.0.2.210:8581
-HOMEBRIDGE_AUTH_TOKEN=your-homebridge-token
-HOMEBRIDGE_TIMEOUT=10000  # optional, default 10s
-```
+Configuration is managed via the Settings UI or the `/config` API (DuckDB config store). Environment variables (`HOMEBRIDGE_*`) are **legacy** — they are imported once on first boot and then ignored (see ADR-015 / ADR-008).
+
+| Field         | Type     | Required | Default                          | Secret  | Notes                                                                                |
+| ------------- | -------- | -------- | -------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `baseUrl`     | URL      | yes      | —                                | no      | Base URL of the Homebridge Config UI X server (e.g. `http://192.168.1.10:8581`)      |
+| `username`    | text     | no       | `""`                             | no      | Homebridge UI username for login                                                     |
+| `password`    | password | no       | `""`                             | **yes** | Homebridge UI password for login                                                     |
+| `authToken`   | password | no       | `""`                             | **yes** | Pre-issued JWT bearer token; used if set, otherwise login is performed automatically |
+| `statusPath`  | text     | no       | `/api/status/server-information` | no      | Path for the server-information health probe                                         |
+| `versionPath` | text     | no       | `/api/status/homebridge-version` | no      | Path for the version check (slow lane)                                               |
+| `loginPath`   | text     | no       | `/api/auth/login`                | no      | Path used by jwtClient to obtain a token on 401                                      |
+| `instanceId`  | text     | no       | `main`                           | no      | Unique ID when running multiple instances                                            |
+| `enabled`     | boolean  | no       | `true`                           | no      | Disable without removing the config                                                  |
+| `cacheTtlMs`  | number   | no       | `10000`                          | no      | Stats cache TTL in milliseconds                                                      |
+| `timeoutMs`   | number   | no       | `5000`                           | no      | HTTP request timeout in milliseconds                                                 |
 
 ## Endpoints
 
-| Endpoint                             | Description                  | Auth              |
-| ------------------------------------ | ---------------------------- | ----------------- |
-| `GET /api/homebridge/status`         | Health check                 | No (rate limited) |
-| `GET /api/homebridge/stats`          | Server statistics            | Yes               |
-| `GET /api/status/homebridge-version` | Homebridge version           | Yes               |
-| `GET /api/status/server-information` | Server information           | Yes               |
-| `GET /api/accessories`               | Accessories list (paginated) | Yes               |
-| `GET /api/homebridge/updates`        | Check for updates            | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                          | Description       |
+| --------------------------------- | ----------------- |
+| `GET /services/homebridge/health` | Health check      |
+| `GET /services/homebridge/stats`  | Server statistics |
 
 ## Service Class
 
@@ -124,7 +132,7 @@ HomebridgeService now uses the [[apps/backend/src/infra/http/jwtClient.ts|jwtCli
 ## Route Registration
 
 - Homebridge special routes (accessories, version) are registered as Fastify plugins in `apps/backend/src/transport/http/`.
-- Core `/api/homebridge/status` and `/api/homebridge/stats` come from the standard service route plugin.
+- Core `GET /services/homebridge/health` and `GET /services/homebridge/stats` come from the standard service route plugin.
 
 ## Frontend Component
 

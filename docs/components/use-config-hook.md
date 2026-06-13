@@ -2,7 +2,7 @@
 title: "Hook: useFrontendConfig (replaces useConfig)"
 type: component
 status: superseded
-date: 2026-04-09
+date: 2026-06-13
 tags: [hook, frontend, react, config]
 description: React Query frontend configuration hook; legacy useConfig hook removed
 aliases: [use frontend config, use config, config hook]
@@ -45,12 +45,6 @@ interface FrontendConfig {
   services: {
     adguard: { webUrl: string };
     tor: { nickname?: string; ip?: string; port?: number; metricsUrl?: string };
-    nostrcheck?: {
-      relayUrl?: string | null;
-      webUrl?: string | null;
-      enabled?: boolean;
-      configured?: boolean;
-    };
   };
   app: { name: string; version: string };
 }

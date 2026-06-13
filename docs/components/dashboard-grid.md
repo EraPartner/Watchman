@@ -2,7 +2,7 @@
 title: DashboardGrid Component
 type: component
 status: active
-date: 2026-04-18
+date: 2026-06-13
 tags: [component, bento, grid, layout, frontend, phase3]
 description: 12-column CSS Grid container for bento tile layout. Auto-places ServiceTile children with `grid-auto-rows: 72px` and responsive spacing.
 aliases: [DashboardGrid, bento grid, tile grid]
@@ -32,7 +32,7 @@ interface DashboardGridProps {
 display: grid;
 grid-template-columns: repeat(12, minmax(0, 1fr));
 grid-auto-rows: 72px;
-gap: var(--space-4);  /* Tailwind: gap-s-4 */
+gap: var(--space-4); /* Tailwind: gap-s-4 */
 ```
 
 ### Column Layout
@@ -43,12 +43,12 @@ gap: var(--space-4);  /* Tailwind: gap-s-4 */
 
 ### Tile Sizing (via CVA in tileVariants.ts)
 
-| Size | col-span | row-span | Width    | Height   |
-| ---- | -------- | -------- | -------- | -------- |
-| S    | 1        | 1        | 8.33%    | 72px     |
-| M    | 2        | 1        | 16.66%   | 72px     |
-| L    | 2        | 2        | 16.66%   | 144px    |
-| XL   | 4        | 2        | 33.33%   | 144px    |
+| Size | col-span | row-span | Width  | Height |
+| ---- | -------- | -------- | ------ | ------ |
+| S    | 1        | 1        | 8.33%  | 72px   |
+| M    | 2        | 1        | 16.66% | 72px   |
+| L    | 2        | 2        | 16.66% | 144px  |
+| XL   | 4        | 2        | 33.33% | 144px  |
 
 ## Responsive Behavior
 
@@ -93,6 +93,7 @@ export function DashboardGrid({ children, className }: DashboardGridProps) {
 ## Child Expectations
 
 Children must:
+
 1. Be `ServiceTile` components (or compatible grid items)
 2. Accept `size` prop (S/M/L/XL) to set `grid-column-end` and `grid-row-end`
 3. Be wrapped in a Surface or equivalent to respect grid cell boundaries
@@ -102,21 +103,21 @@ Children must:
 The order and size of tiles come from `[[apps/frontend/src/config/bentoLayout.ts]]`:
 
 ```typescript
+// Mirrors apps/frontend/src/config/bentoLayout.ts (canonical camelCase kinds).
 export const BENTO_LAYOUT: BentoLayoutEntry[] = [
   { kind: "bitcoin", size: "XL" },
   { kind: "synology", size: "L" },
   { kind: "router", size: "L" },
   { kind: "adguard", size: "M" },
-  { kind: "tor", size: "M" },
   { kind: "qbittorrent", size: "M" },
   { kind: "ipfs", size: "M" },
+  { kind: "tor", size: "M" },
   { kind: "homebridge", size: "M" },
-  { kind: "albyhub", size: "M" },
+  { kind: "macMini", size: "M" },
+  { kind: "raspberryPi", size: "M" },
+  { kind: "albyHub", size: "S" },
+  { kind: "philipsBridge", size: "S" },
   { kind: "roon", size: "S" },
-  { kind: "philips", size: "S" },
-  { kind: "macmini", size: "S" },
-  { kind: "raspi", size: "S" },
-  { kind: "nostrcheck", size: "S" },
 ];
 ```
 

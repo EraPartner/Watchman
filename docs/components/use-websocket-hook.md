@@ -2,7 +2,7 @@
 title: useWebSocket Hook
 type: component
 status: active
-date: 2026-04-11
+date: 2026-06-13
 tags: [hook, frontend, react, websocket, real-time, singleton]
 description: Global singleton WebSocket hook with automatic reconnection, exponential backoff, connection throttling, and batched targeted React Query invalidation
 aliases: [websocket hook, real-time hook, ws hook]
@@ -91,7 +91,7 @@ Dashboard freshness display (`Updated Xs ago`) relies on React Query `dataUpdate
   - `queryKeys.serviceStats(baseServiceKey, serviceKey)`
 - For AdGuard updates, it also invalidates `queryKeys.adguardFull()`.
 - For Tor updates, it also invalidates `queryKeys.torRelay()`.
-- For router services (`beryl`, `telenet`), it also invalidates `queryKeys.routerArp(baseServiceKey)`.
+- For `router` services, it also invalidates `queryKeys.routerArp(baseServiceKey)` (keyed by the instance's service key).
 - For `metrics`, it invalidates `queryKeys.metrics()`.
 - After any non-metrics service invalidation batch, it invalidates `queryKeys.servicesHealth()` so dashboard aggregate health stays aligned.
 
@@ -113,7 +113,7 @@ Coverage now includes focused hook tests in [[apps/frontend/src/hooks/useWebSock
 - malformed payload parse-error logging behavior for invalid JSON messages
 - reconnect scheduling/throttling behavior after abnormal close events
 - Tor invalidation family coverage (`queryKeys.torRelay()`) during relevant service updates
-- Router invalidation family coverage (`queryKeys.routerArp(...)`) for `beryl`/`telenet` update paths
+- Router invalidation family coverage (`queryKeys.routerArp(...)`) for `router` instance update paths
 - metrics invalidation + connection toast behavior coverage (`queryKeys.metrics()` and `connection` message handling)
 - max reconnect attempts error-path coverage (stops retry loop and surfaces terminal reconnect failure behavior)
 - test cleanup stability coverage for singleton/global WebSocket state reset between tests

@@ -2,7 +2,7 @@
 title: Synology Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -103,15 +103,7 @@ All new fields are **optional** in the stats response and included only when DSM
 
 ### Configuration
 
-DSM metrics are enabled when **all three** of these are non-empty:
-
-```bash
-SYNOLOGY_DSM_URL=https://nas.local:5001
-SYNOLOGY_DSM_ACCOUNT=your-username
-SYNOLOGY_DSM_PASSWORD=your-password
-```
-
-If any are empty/missing, DSM calls are skipped; SNMP-only metrics are returned.
+DSM metrics are enabled when **all three** of the DSM fields are non-empty in the instance config: `dsmUrl`, `dsmAccount`, and `dsmPassword`. Configure them via the Settings UI or the `/config` API (see [[#Configuration]] below). If any are empty/missing, DSM calls are skipped; SNMP-only metrics are returned.
 
 ### Test Coverage
 
@@ -127,56 +119,53 @@ Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to NAS host
 - **Service tier** — SNMP `sysUpTime` probe
-- **Composite reachability** — `host.reachable AND service.reachable`
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the SNMP/DSM probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
 
-### Single Instance
+Service instances are configured via the Settings UI or the `/config` API — not environment variables. Legacy `SYNOLOGY_*` env vars are imported once on first boot to seed the config store, then ignored thereafter (see [[docs/adr/015-config-store|ADR-015]]).
 
-```bash
-# SNMP (required)
-SYNOLOGY_HOST=192.0.2.100
-SYNOLOGY_SNMP_USER=your-snmp-user
-SYNOLOGY_SNMP_AUTH_KEY=your-auth-key
-SYNOLOGY_SNMP_PRIV_KEY=your-priv-key
-SYNOLOGY_SNMP_AUTH_PROTOCOL=SHA  # optional: SHA or MD5
-SYNOLOGY_SNMP_PRIV_PROTOCOL=AES  # optional: AES or DES
-SYNOLOGY_TIMEOUT=10000  # optional, default 10s
+### Fields
 
-# DSM API (optional; all three required to enable)
-SYNOLOGY_DSM_URL=https://nas.local:5001
-SYNOLOGY_DSM_ACCOUNT=your-username
-SYNOLOGY_DSM_PASSWORD=your-password
-```
+#### Base fields (all service kinds)
 
-### Multi-Instance
+| Field                    | Type    | Default  | Required | Description                                   |
+| ------------------------ | ------- | -------- | -------- | --------------------------------------------- |
+| `instanceId`             | text    | `"main"` | yes      | Unique ID for this instance within the kind   |
+| `enabled`                | boolean | `true`   | —        | Enable/disable polling for this instance      |
+| `cacheTtlMs`             | number  | `10000`  | —        | How long to cache health/stats results (ms)   |
+| `timeoutMs`              | number  | `5000`   | —        | Request timeout (ms)                          |
+| `pollPolicy.healthMs`    | number  | `10000`  | —        | Health-check poll interval (ms)               |
+| `pollPolicy.statsMs`     | number  | `30000`  | —        | Stats poll interval (ms)                      |
+| `pollPolicy.jitterRatio` | number  | `0.1`    | —        | Random jitter applied to poll intervals (0–1) |
 
-```bash
-# Instance 1
-SYNOLOGY_1_HOST=192.0.2.100
-SYNOLOGY_1_SNMP_USER=snmp-user
-SYNOLOGY_1_SNMP_AUTH_KEY=auth-key
-SYNOLOGY_1_SNMP_PRIV_KEY=priv-key
-SYNOLOGY_1_DSM_URL=https://nas1.local:5001
-SYNOLOGY_1_DSM_ACCOUNT=admin
-SYNOLOGY_1_DSM_PASSWORD=password
+#### Synology-specific fields
 
-# Instance 2
-SYNOLOGY_2_HOST=192.0.2.101
-SYNOLOGY_2_SNMP_USER=snmp-user
-SYNOLOGY_2_SNMP_AUTH_KEY=auth-key
-SYNOLOGY_2_SNMP_PRIV_KEY=priv-key
-SYNOLOGY_2_DSM_URL=https://nas2.local:5001
-SYNOLOGY_2_DSM_ACCOUNT=admin
-SYNOLOGY_2_DSM_PASSWORD=password
-```
+| Field              | Type     | Default | Required | Secret  | Description                                                                                                                      |
+| ------------------ | -------- | ------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `host`             | text     | —       | **yes**  | —       | IP/hostname of the NAS (used for ICMP + SNMP)                                                                                    |
+| `snmpUser`         | text     | `""`    | —        | —       | SNMPv3 username                                                                                                                  |
+| `snmpAuthKey`      | password | `""`    | —        | **yes** | SNMPv3 authentication key                                                                                                        |
+| `snmpPrivKey`      | password | `""`    | —        | **yes** | SNMPv3 privacy (encryption) key                                                                                                  |
+| `snmpAuthProtocol` | select   | `"SHA"` | —        | —       | SNMPv3 auth protocol: `SHA` or `MD5`                                                                                             |
+| `snmpPrivProtocol` | select   | `"AES"` | —        | —       | SNMPv3 priv protocol: `AES` or `DES`                                                                                             |
+| `dsmUrl`           | url      | `""`    | —        | —       | DSM base URL, e.g. `https://nas.local:5001` (optional; enables extended stats when set together with `dsmAccount`/`dsmPassword`) |
+| `dsmAccount`       | text     | `""`    | —        | —       | DSM login account                                                                                                                |
+| `dsmPassword`      | password | `""`    | —        | **yes** | DSM login password                                                                                                               |
+
+> [!tip] DSM-only mode
+> If `snmpUser`/`snmpAuthKey`/`snmpPrivKey` are left empty, the service falls back to DSM-only stats mode (no SNMP metrics). DSM extended stats are fetched whenever all three of `dsmUrl`, `dsmAccount`, and `dsmPassword` are non-empty.
+
+Multi-instance support follows the standard pattern — add additional instances via the Settings UI or `/config` API, each with a distinct `instanceId`. See [[docs/features/multi-instance|Multi-Instance Support]].
 
 ## Endpoints
 
-| Endpoint                   | Description                | Auth              |
-| -------------------------- | -------------------------- | ----------------- |
-| `GET /api/synology/status` | Health check               | No (rate limited) |
-| `GET /api/synology/stats`  | System stats, storage info | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                        | Description                |
+| ------------------------------- | -------------------------- |
+| `GET /services/synology/health` | Health check               |
+| `GET /services/synology/stats`  | System stats, storage info |
 
 ## Service Class
 

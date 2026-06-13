@@ -2,7 +2,7 @@
 title: Roon Integration
 type: integration
 status: active
-date: 2026-06-12
+date: 2026-06-13
 tags:
   [
     integration,
@@ -42,15 +42,22 @@ When `useRoonApi: true` (optional, default `false`), the service establishes a p
 
 ### Configuration
 
-```bash
-ROON_HOST=192.0.2.150
-ROON_PORTS=9100                    # TCP probe ports
-ROON_API_PORT=9100                 # Roon Core API (WebSocket) port, default 9100
-ROON_USE_ROON_API=false            # Enable API integration (opt-in)
-ROON_TIMEOUT=10000                 # optional, default 10s
-ROON_PING_ENABLED=true             # optional ICMP ping (default true)
-ROON_PING_COUNT=2                  # ICMP count (default 2)
-```
+Configure via the Settings UI or the `/config` API (DuckDB config store). Legacy `ROON_*` environment variables were imported once on first boot and are now ignored.
+
+| Field        | Type       | Required | Default  | Description                                   |
+| ------------ | ---------- | -------- | -------- | --------------------------------------------- |
+| `instanceId` | text       | yes      | `"main"` | Unique identifier for this instance           |
+| `enabled`    | boolean    | —        | `true`   | Enable/disable this instance                  |
+| `host`       | text       | **yes**  | —        | Roon Core IP/hostname                         |
+| `ports`      | number\[\] | —        | `[9100]` | TCP ports to probe for liveness               |
+| `usePing`    | boolean    | —        | `true`   | Enable ICMP ping probe                        |
+| `pingCount`  | number     | —        | `2`      | ICMP ping count per health check              |
+| `apiPort`    | number     | —        | `9100`   | Roon Core API (WebSocket) port                |
+| `useRoonApi` | boolean    | —        | `false`  | Enable zone/now-playing tracking via Roon API |
+| `timeoutMs`  | number     | —        | `5000`   | Probe timeout in ms                           |
+| `cacheTtlMs` | number     | —        | `10000`  | Health/stats cache TTL in ms                  |
+
+No secret fields — Roon does not require credentials for the extension pairing model.
 
 ### Lifecycle
 
@@ -126,10 +133,12 @@ When API is disabled (`useRoonApi=false`), only basic metrics returned:
 
 ## Endpoints
 
-| Endpoint                    | Description                     | Auth              |
-| --------------------------- | ------------------------------- | ----------------- |
-| `GET /services/roon/health` | Health check (two-tier)         | No (rate limited) |
-| `GET /services/roon/stats`  | Server info, zones, now-playing | Yes               |
+No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).
+
+| Endpoint                    | Description                     |
+| --------------------------- | ------------------------------- |
+| `GET /services/roon/health` | Health check (two-tier)         |
+| `GET /services/roon/stats`  | Server info, zones, now-playing |
 
 ## Service Implementation
 

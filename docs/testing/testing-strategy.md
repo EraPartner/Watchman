@@ -2,10 +2,39 @@
 title: Testing Strategy and Patterns
 type: doc
 status: active
-date: 2026-05-14
-tags: [testing, strategy, vitest, patterns, phase-0b, task-b5, task-b6, task-b7, backend, tcp-server, control-port, event-subscription, traffic-deltas, onionoo-enrichment, ci, coverage-reporting, github-actions, dependabot]
+date: 2026-06-13
+tags:
+  [
+    testing,
+    strategy,
+    vitest,
+    patterns,
+    phase-0b,
+    task-b5,
+    task-b6,
+    task-b7,
+    backend,
+    tcp-server,
+    control-port,
+    event-subscription,
+    traffic-deltas,
+    onionoo-enrichment,
+    ci,
+    coverage-reporting,
+    github-actions,
+    dependabot,
+  ]
 description: Comprehensive testing strategy, patterns, and conventions for the Watchman project — service class testing patterns, health check contract, fake TCP server pattern, Phase 0b updates, Task B5 event subscription lifecycle testing, Task B6 traffic delta computation, Task B7 Onionoo enrichment
-aliases: [testing strategy, test patterns, test conventions, service testing, health check testing, fake tcp server, protocol testing]
+aliases:
+  [
+    testing strategy,
+    test patterns,
+    test conventions,
+    service testing,
+    health check testing,
+    fake tcp server,
+    protocol testing,
+  ]
 ---
 
 # Testing Strategy and Patterns
@@ -357,7 +386,7 @@ Frontend WebSocket hook coverage in [[apps/frontend/src/hooks/useWebSocket.test.
 - malformed payload parse-error logging path
 - reconnect scheduling/throttling behavior after abnormal close events
 - Tor invalidation family coverage (`queryKeys.torRelay()`) on relevant service updates
-- router invalidation family coverage (`queryKeys.routerArp(...)`) for `beryl`/`telenet`
+- router invalidation family coverage (`queryKeys.routerArp(...)`) for `router` instances
 - metrics invalidation and connection toast handling paths
 - max reconnect attempts error path (terminal retry failure behavior)
 - singleton/global test cleanup stability between test cases
@@ -389,8 +418,8 @@ Frontend Vitest setup now also includes alias/plugin configuration in [[apps/fro
 All service classes require a `ping: PingProber` dependency mock and follow the two-tier health model:
 
 ```typescript
-import type { PingProber } from '../../../infra/net/pingProbe.js';
-import { AdGuardService } from './AdGuardService.js';
+import type { PingProber } from "../../../infra/net/pingProbe.js";
+import { AdGuardService } from "./AdGuardService.js";
 
 function fakePing(): PingProber {
   return { probe: async () => ({ success: true, avgMs: 5 }) };
@@ -400,16 +429,16 @@ describe("AdGuardService", () => {
   it("checkHealth always returns ok() with reachable snapshot", async () => {
     const svc = new AdGuardService({
       http: createHttpClient(),
-      ping: fakePing(),  // REQUIRED — two-tier health needs ICMP probe mock
+      ping: fakePing(), // REQUIRED — two-tier health needs ICMP probe mock
       config: makeConfig(),
       now: () => 1,
     });
     const res = await svc.checkHealth(new AbortController().signal);
-    expect(res.ok).toBe(true);  // Always ok(), never err()
+    expect(res.ok).toBe(true); // Always ok(), never err()
     if (res.ok) {
-      expect(res.value).toHaveProperty('host');       // ICMP tier
-      expect(res.value).toHaveProperty('service');    // Protocol tier
-      expect(res.value).toHaveProperty('reachable');  // Composite
+      expect(res.value).toHaveProperty("host"); // ICMP tier
+      expect(res.value).toHaveProperty("service"); // Protocol tier
+      expect(res.value).toHaveProperty("reachable"); // Composite
     }
   });
 
@@ -417,19 +446,20 @@ describe("AdGuardService", () => {
     const svc = new AdGuardService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ baseUrl: 'http://127.0.0.1:1' }),
+      config: makeConfig({ baseUrl: "http://127.0.0.1:1" }),
       now: () => 0,
     });
     const res = await svc.checkHealth(new AbortController().signal);
-    expect(res.ok).toBe(true);  // Still ok()
+    expect(res.ok).toBe(true); // Still ok()
     if (res.ok) {
-      expect(res.value.reachable).toBe(false);  // Failure as state, not error
+      expect(res.value.reachable).toBe(false); // Failure as state, not error
     }
   });
 });
 ```
 
 **Key contract (Phase 0a+):**
+
 - `checkHealth()` **always returns `ok(HealthSnapshot)`** — never throws or returns `err()`
 - Errors (network, timeout, parse failure) are captured in the snapshot as `reachable: false` or `service.ok: false`
 - Tests assert snapshot state, not error paths
@@ -440,9 +470,9 @@ describe("AdGuardService", () => {
 Services that use protocol clients (e.g., Tor ControlPort, SNMP, Roon WebSocket) use a shared fake TCP server for isolation:
 
 ```typescript
-import net from 'node:net';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createTorControlClient } from './controlClient.js';
+import net from "node:net";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTorControlClient } from "./controlClient.js";
 
 let server: net.Server | null = null;
 let serverHandler: ((socket: net.Socket) => void) | null = null;
@@ -454,7 +484,7 @@ beforeEach(() => {
     }
   });
   return new Promise<void>((resolve) => {
-    server!.listen(0, '127.0.0.1', resolve);
+    server!.listen(0, "127.0.0.1", resolve);
   });
 });
 
@@ -471,33 +501,39 @@ afterEach(() => {
 function torResponder(responseLines: string[]): (socket: net.Socket) => void {
   return (socket) => {
     const lines = [...responseLines];
-    socket.on('data', () => {
+    socket.on("data", () => {
       for (const line of lines) {
-        socket.write(line + '\r\n');
+        socket.write(line + "\r\n");
       }
     });
   };
 }
 
-describe('TorControlClient', () => {
-  it('connects with password and retrieves GETINFO', async () => {
+describe("TorControlClient", () => {
+  it("connects with password and retrieves GETINFO", async () => {
     const addr = server!.address() as net.AddressInfo;
-    serverHandler = torResponder(['250 OK', '250-key=value', '250 OK']);
+    serverHandler = torResponder(["250 OK", "250-key=value", "250 OK"]);
 
     const client = createTorControlClient();
     const handle = await client.connect(
-      { host: '127.0.0.1', port: addr.port, password: 'secret', timeoutMs: 1000 },
+      {
+        host: "127.0.0.1",
+        port: addr.port,
+        password: "secret",
+        timeoutMs: 1000,
+      },
       new AbortController().signal
     );
 
-    const info = await handle.getinfo(['key'], new AbortController().signal);
-    expect(info.get('key')).toBe('value');
+    const info = await handle.getinfo(["key"], new AbortController().signal);
+    expect(info.get("key")).toBe("value");
     await handle.close();
   });
 });
 ```
 
 **Key pattern:**
+
 - Shared `net.Server` per test suite, re-bound for each test
 - Mutable `serverHandler` callback allows per-test response logic
 - Responder helper wraps response lines and auto-sends on data
@@ -505,18 +541,21 @@ describe('TorControlClient', () => {
 - Used for: Tor ControlPort, Roon WebSocket, Synology, SNMP, etc.
 
 **Task B5 Addition (Tor Event Subscription):**
+
 - Tests for `TorEventSubscription` use the same fake TCP server pattern
 - Subscription lifecycle tested: `authenticate()` → `setevents()` → `on(event, handler)` → `close()`
 - Async `650` event routing and FIFO reply-waiter queue tested via fake server response sequencing
 - TorService integration tests cover `onStart()` creating subscription, `BW` event handling updating `bwRead`/`bwWritten`, and `onStop()` closing subscription gracefully
 
 **Task B6 Addition (Tor Traffic Deltas):**
+
 - `TorService` unit tests verify delta computation: `trafficDeltaRead = currentRead - lastRead`, `trafficDeltaWritten = currentWritten - lastWritten`
 - First poll returns deltas of 0 (sentinel -1 means no baseline)
 - Subsequent polls compute correct deltas from cumulative byte counts
 - State persistence across polls tested via sequential calls to `getStatsControlPort()`
 
 **Task B7 Addition (Tor Onionoo Supplemental Enrichment):**
+
 - `TorService.enrich()` tested via fake Onionoo HTTP server response injection
 - Successful enrichment: verifies country, consensusWeight, asName, and consensusWeightFraction fields conditionally present in metrics
 - Error handling: verifies Onionoo failures swallowed silently and ControlPort metrics complete without enrichment
@@ -609,25 +648,26 @@ it("handles rejected promises", async () => {
 
 ## Current Test Coverage
 
-| Area               | Status               | Notes                                                                                                                                                                                                                                                                           |
-| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Utility functions  | ✅ Improved          | Frontend lib aggregate improved materially; dashboard helpers now have targeted coverage; expanded formatter and display utilities                                                                                                                                              |
-| API response utils | ✅ Covered           | New `apiResponse.test.ts` covers `isApiResponseEnvelope`, `unwrapApiResponse`, and `extractApiError` including nested error objects and v2 envelope cases                                                                                                                        |
-| React components   | ✅ Phase 3 complete  | **Phase 3 added smoke tests** for `BentoDashboard`, `ChartsPanel`, `ConfigPanel`, `RawStatsPanel`, `WelcomeStep`, `KindPickerStep`, `ReviewStep`, `ConfigureStep`, `SetupWizard`, plus UI component coverage (Toggle, ToggleGroup, Popover, Sheet)                                |
-| Custom hooks       | ✅ Phase 3 complete  | `useMetricSeries` hook tests added; `useWebSocket` has comprehensive invalidation/message-handling coverage; `WebSocketProvider` and context consumption tests                                                                                                                     |
-| Renderers          | ✅ Phase 3 complete  | Extended coverage for ALL renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + `getRenderer()` and `rendererTrackedMetrics()` in [[apps/frontend/src/services/renderers/renderers.test.ts]]                         |
-| Setup pages        | ✅ Phase 3 complete  | Pure tests for `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` in [[apps/frontend/src/pages/setup/kindCategories.test.ts]] + jsdom smoke tests for all setup steps in [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]]                                       |
-| Detail views       | ✅ Phase 3 complete  | jsdom smoke tests for detail panels (`ChartsPanel`, `ConfigPanel`, `RawStatsPanel`) covering all config branches and user interactions in [[apps/frontend/src/components/detail/detail.smoke.test.tsx]]                                                                        |
-| Backend services   | ✅ Covered           | All service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                                                  |
-| Backend middleware | ✅ Improved          | `auth` and `csrf` middleware are now at 100% line coverage; `requestTimeout` and `responseSizeLimit` are directly tested                                                                                                                                                       |
-| Backend routes     | ⚠️ Partially covered | Auth route integration includes login compatibility and `/api/auth/me` decoded-token fallback coverage in `apps/backend/tests/authRoutes.integration.test.js`                                                                                                                |
-| E2E tests          | ✅ Phase 4 complete  | **Phase 4 added CI enforcement**: Playwright E2E smoke tests run in `test-e2e` job, gated on `build` job, required by `ci-complete` branch protection check                                                                                                                      |
+| Area               | Status               | Notes                                                                                                                                                                                                                                                  |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Utility functions  | ✅ Improved          | Frontend lib aggregate improved materially; dashboard helpers now have targeted coverage; expanded formatter and display utilities                                                                                                                     |
+| API response utils | ✅ Covered           | New `apiResponse.test.ts` covers `isApiResponseEnvelope`, `unwrapApiResponse`, and `extractApiError` including nested error objects and v2 envelope cases                                                                                              |
+| React components   | ✅ Phase 3 complete  | **Phase 3 added smoke tests** for `BentoDashboard`, `ChartsPanel`, `ConfigPanel`, `RawStatsPanel`, `WelcomeStep`, `KindPickerStep`, `ReviewStep`, `ConfigureStep`, `SetupWizard`, plus UI component coverage (Toggle, ToggleGroup, Popover, Sheet)     |
+| Custom hooks       | ✅ Phase 3 complete  | `useMetricSeries` hook tests added; `useWebSocket` has comprehensive invalidation/message-handling coverage; `WebSocketProvider` and context consumption tests                                                                                         |
+| Renderers          | ✅ Phase 3 complete  | Extended coverage for ALL renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + `getRenderer()` and `rendererTrackedMetrics()` in [[apps/frontend/src/services/renderers/renderers.test.ts]] |
+| Setup pages        | ✅ Phase 3 complete  | Pure tests for `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` in [[apps/frontend/src/pages/setup/kindCategories.test.ts]] + jsdom smoke tests for all setup steps in [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]]                |
+| Detail views       | ✅ Phase 3 complete  | jsdom smoke tests for detail panels (`ChartsPanel`, `ConfigPanel`, `RawStatsPanel`) covering all config branches and user interactions in [[apps/frontend/src/components/detail/detail.smoke.test.tsx]]                                                |
+| Backend services   | ✅ Covered           | All service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                          |
+| Backend middleware | ✅ Improved          | `auth` and `csrf` middleware are now at 100% line coverage; `requestTimeout` and `responseSizeLimit` are directly tested                                                                                                                               |
+| Backend routes     | ⚠️ Partially covered | Auth route integration includes login compatibility and `/api/auth/me` decoded-token fallback coverage in `apps/backend/tests/authRoutes.integration.test.js`                                                                                          |
+| E2E tests          | ✅ Phase 4 complete  | **Phase 4 added CI enforcement**: Playwright E2E smoke tests run in `test-e2e` job, gated on `build` job, required by `ci-complete` branch protection check                                                                                            |
 
 Backend test suite status: expanded with additional middleware/auth route coverage in this update cycle.
 
 ### Phase 3 Frontend Test Suite Expansion (2026-05-13)
 
 **Test file additions:**
+
 - `apps/frontend/src/services/renderers/renderers.test.ts` — covers ALL 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + `getRenderer()` factory and `rendererTrackedMetrics()` helper
 - `apps/frontend/src/pages/setup/kindCategories.test.ts` — pure unit tests for `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` helper
 - `apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx` — jsdom smoke tests for `WelcomeStep`, `KindPickerStep`, `ReviewStep`, `ConfigureStep`, and `SetupWizard` integration
@@ -639,6 +679,7 @@ Backend test suite status: expanded with additional middleware/auth route covera
 - `apps/frontend/src/lib/apiResponse.test.ts` — added nested error object and v2 envelope cases
 
 **Vitest configuration (`apps/frontend/vitest.config.ts`):**
+
 ```typescript
 coverage: {
   thresholds: {
@@ -651,6 +692,7 @@ coverage: {
 ```
 
 **Frontend coverage results (Phase 3 final):**
+
 - **Lines:** 80.07% (threshold: 80%)
 - **Branches:** 79.08% (threshold: 75%)
 - **Functions:** 68.12% (threshold: 65%)
@@ -661,6 +703,7 @@ coverage: {
 **CI workflow enhancements (.github/workflows/ci.yml):**
 
 New `test-e2e` job:
+
 - Installs Playwright Chromium + dependencies
 - Runs `npm run test:e2e` (Playwright smoke tests)
 - Uploads playwright-report artifact (14-day retention)
@@ -885,17 +928,17 @@ end
 
 The `.github/workflows/ci.yml` pipeline enforces all test gates:
 
-| Job                 | Purpose                                   | Required? |
-| ------------------- | ----------------------------------------- | --------- |
-| `secrets-scan`      | Gitleaks secret detection                 | No        |
-| `deps-audit`        | npm audit for HIGH/CRITICAL vulns         | No        |
-| `lint`              | ESLint frontend + backend                 | No        |
-| `typecheck`         | TypeScript strict checks                  | No        |
-| `build`             | Production bundle verification            | No        |
-| `test-backend`      | Backend Vitest + coverage report          | No        |
-| `test-frontend`     | Frontend Vitest + coverage report         | No        |
-| `test-e2e`          | Playwright smoke tests (Phase 4)          | No        |
-| `ci-complete`       | Aggregates all jobs for branch protection | **Yes**   |
+| Job             | Purpose                                   | Required? |
+| --------------- | ----------------------------------------- | --------- |
+| `secrets-scan`  | Gitleaks secret detection                 | No        |
+| `deps-audit`    | npm audit for HIGH/CRITICAL vulns         | No        |
+| `lint`          | ESLint frontend + backend                 | No        |
+| `typecheck`     | TypeScript strict checks                  | No        |
+| `build`         | Production bundle verification            | No        |
+| `test-backend`  | Backend Vitest + coverage report          | No        |
+| `test-frontend` | Frontend Vitest + coverage report         | No        |
+| `test-e2e`      | Playwright smoke tests (Phase 4)          | No        |
+| `ci-complete`   | Aggregates all jobs for branch protection | **Yes**   |
 
 **Branch protection:** The `ci-complete` job must pass before merging to `main`. This ensures the full pipeline runs without failures.
 
@@ -904,6 +947,7 @@ The `.github/workflows/ci.yml` pipeline enforces all test gates:
 Both `test-backend` and `test-frontend` jobs use `davelosert/vitest-coverage-report-action@v2` to post human-readable coverage summaries on pull requests:
 
 **Backend job** (`apps/backend`):
+
 ```yaml
 - uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c
   with:
@@ -914,6 +958,7 @@ Both `test-backend` and `test-frontend` jobs use `davelosert/vitest-coverage-rep
 ```
 
 **Frontend job** (`apps/frontend`):
+
 ```yaml
 - uses: davelosert/vitest-coverage-report-action@3c50566c523e04813df28de8f7c48dd97d663f1c
   with:
@@ -929,11 +974,11 @@ The action reads `vite-config-path` to resolve Vitest configuration and coverage
 
 `.github/dependabot.yml` defines three ecosystem groups:
 
-| Ecosystem        | Directory       | Schedule | Groups            | Purpose                             |
-| ---------------- | --------------- | -------- | ----------------- | ----------------------------------- |
-| **npm (root)**   | `/`             | Weekly   | `dev-deps`, `prod-deps` | Root workspace + backend/frontend |
-| **npm (desktop)** | `/apps/desktop` | Weekly   | `desktop-deps`    | Electron app isolated from main    |
-| **GitHub Actions** | `/`            | Weekly   | `github-actions`  | CI workflow action updates         |
+| Ecosystem          | Directory       | Schedule | Groups                  | Purpose                           |
+| ------------------ | --------------- | -------- | ----------------------- | --------------------------------- |
+| **npm (root)**     | `/`             | Weekly   | `dev-deps`, `prod-deps` | Root workspace + backend/frontend |
+| **npm (desktop)**  | `/apps/desktop` | Weekly   | `desktop-deps`          | Electron app isolated from main   |
+| **GitHub Actions** | `/`             | Weekly   | `github-actions`        | CI workflow action updates        |
 
 This structure mirrors Vision's approach: Electron packaging deps (Node, build tools) are isolated from main monorepo versioning, while CI infrastructure (Actions) stays synchronized globally.
 
