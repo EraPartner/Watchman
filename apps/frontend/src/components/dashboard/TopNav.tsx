@@ -43,7 +43,7 @@ function StatusSummary({ ok, warn, crit, total, fetchedAt }: SummaryProps) {
   }, []);
 
   return (
-    <div className="flex items-center gap-s-3 rounded-r-pill border border-[var(--hairline)] bg-[var(--surface-1)] px-s-3 py-s-1 font-mono tabular-nums text-fs-label">
+    <div className="flex shrink-0 items-center gap-s-3 rounded-r-pill border border-[var(--hairline)] bg-[var(--surface-1)] px-s-3 py-s-1 font-mono tabular-nums text-fs-label">
       <span className="flex items-center gap-s-1 text-[var(--ok)]">
         <span
           className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--ok)]"
@@ -146,7 +146,7 @@ export function TopNav({ onAddService }: TopNavProps) {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-s-3">
+        <div className="ml-auto flex min-w-0 items-center gap-s-3">
           <ProfileSwitcher />
 
           <StatusSummary
@@ -183,7 +183,12 @@ export function TopNav({ onAddService }: TopNavProps) {
           />
 
           {onAddService ? (
-            <Button variant="accent" size="sm" onClick={onAddService}>
+            <Button
+              variant="accent"
+              size="sm"
+              className="shrink-0 whitespace-nowrap"
+              onClick={onAddService}
+            >
               + Add service
             </Button>
           ) : null}

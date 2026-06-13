@@ -33,8 +33,13 @@ aliases: [router, beryl, telenet, arp, network, snmp-router]
 Two-tier health with inline parallel probe:
 
 - **Host tier** — ICMP ping to router host
-- **Service tier** — TCP port connectivity probe (HTTP/HTTPS)
-- **Composite reachability** — `host.reachable OR service.reachable` (device considered up if either tier responds)
+- **Service tier** — TCP port connectivity probe (HTTP/HTTPS); only present when `ports` is non-empty
+- **Composite reachability**:
+  - **With ports configured** — `host.reachable OR service.reachable` (device considered up if either tier responds)
+  - **No ports configured** — only the host (ICMP) tier is emitted; `reachable = host.reachable`. No service tier is included in the health snapshot.
+
+> [!info] No-ports behavior (ADR-026)
+> When a router instance has `ports: []` (the default), `checkHealth` returns a single host tier and derives reachability from ICMP alone. This prevents a misleading amber-diamond service-tier dot from appearing on routers that have no port probe configured. The tile status dot reflects the actual probe that is running.
 
 ## Configuration
 
@@ -116,7 +121,7 @@ interface RouterDeps {
 
 ### Methods
 
-- `checkHealth(signal: AbortSignal)` — Two-tier health: ICMP ping + TCP port connectivity. Returns composite reachability (`host.reachable OR service.reachable`), latency, and detailed port status
+- `checkHealth(signal: AbortSignal)` — ICMP ping + optional TCP port probe. When `ports` is non-empty: two-tier health with `reachable = host.reachable OR service.reachable`. When `ports` is empty: host-only tier with `reachable = host.reachable`. Returns latency and detailed port status.
 - `getStats(signal: AbortSignal)` — Base metrics (host, portCount, configured) + optional SNMP metrics (sysUptime, connectedClients, cpuLoad, ifInOctets, ifOutOctets). Returns empty SNMP block if collector fails or no credentials set
 
 ### ARP Lookup

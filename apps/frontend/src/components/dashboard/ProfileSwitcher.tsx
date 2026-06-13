@@ -47,7 +47,7 @@ export function ProfileSwitcher() {
         <button
           type="button"
           className={cn(
-            "flex items-center gap-s-2 rounded-r-pill border px-s-3 py-s-1 text-fs-label transition-colors",
+            "flex min-w-0 items-center gap-s-2 rounded-r-pill border px-s-3 py-s-1 text-fs-label transition-colors",
             "border-[var(--hairline)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)]",
             unrecognized && "border-[var(--warn)]"
           )}
@@ -139,7 +139,7 @@ export function ProfileSwitcher() {
             disabled={setAutoSwitch.isPending}
             onClick={() => setAutoSwitch.mutate(!(active?.autoSwitch ?? false))}
             className={cn(
-              "relative h-4 w-7 rounded-full transition-colors",
+              "inline-flex h-5 w-9 shrink-0 items-center rounded-full px-0.5 transition-colors disabled:opacity-50",
               active?.autoSwitch
                 ? "bg-[var(--accent)]"
                 : "bg-[var(--surface-3)]"
@@ -147,8 +147,8 @@ export function ProfileSwitcher() {
           >
             <span
               className={cn(
-                "absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform",
-                active?.autoSwitch ? "translate-x-3.5" : "translate-x-0.5"
+                "inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
+                active?.autoSwitch ? "translate-x-4" : "translate-x-0"
               )}
             />
           </button>

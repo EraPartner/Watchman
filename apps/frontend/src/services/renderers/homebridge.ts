@@ -1,6 +1,13 @@
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
-import { fmtRaw, fmtUptime } from "./formatters";
+import {
+  dotGet,
+  fmtNumber,
+  fmtPercent,
+  fmtRaw,
+  fmtTempC,
+  fmtUptime,
+} from "./formatters";
 
 type Stats = Record<string, unknown>;
 
@@ -16,10 +23,17 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
   quickLinkLabel: "Open Homebridge UI",
 
   summary: [
-    { key: "currentVersion", label: "Version", format: fmtRaw },
-    { key: "homebridgeVersion", label: "HB core", format: fmtRaw },
-    { key: "uptime", label: "Uptime", format: fmtUptime },
+    { key: "cpuTemp", label: "CPU temp", format: fmtTempC },
+    { key: "cpuLoad", label: "CPU", format: fmtPercent(0, 100) },
+    { key: "accessoryCount", label: "Accessories", format: fmtNumber(0) },
   ],
+
+  subtitle: ({ stats }) => {
+    const v = stats ? dotGet(stats, "currentVersion") : undefined;
+    return typeof v === "string" && v.length > 0 && v !== "unknown"
+      ? `v${v}`
+      : null;
+  },
 
   detail: [
     {
@@ -51,16 +65,28 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
       metrics: [
         { key: "hostname", label: "Hostname", format: fmtRaw },
         { key: "platform", label: "Platform", format: fmtRaw },
-        { key: "cpuLoad", label: "CPU load %", format: fmtRaw },
-        { key: "cpuTemp", label: "CPU temp °C", format: fmtRaw },
+        { key: "cpuLoad", label: "CPU load", format: fmtPercent(0, 100) },
+        { key: "cpuTemp", label: "CPU temp", format: fmtTempC },
         { key: "hostUptime", label: "Host uptime", format: fmtUptime },
-        { key: "uptime", label: "Process uptime", format: fmtUptime },
+        { key: "processUptime", label: "Process uptime", format: fmtUptime },
       ],
     },
   ],
 
   charts: [
-    { metric: "uptime", label: "Uptime", kind: "line", format: fmtUptime },
+    {
+      metric: "cpuLoad",
+      label: "CPU load",
+      kind: "area",
+      format: fmtPercent(0, 100),
+    },
+    { metric: "cpuTemp", label: "CPU temp", kind: "line", format: fmtTempC },
+    {
+      metric: "processUptime",
+      label: "Uptime",
+      kind: "line",
+      format: fmtUptime,
+    },
   ],
 
   tone: ({ stats, health }) => {

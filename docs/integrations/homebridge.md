@@ -83,16 +83,35 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 
 `getStats()` now fetches a rich set of system and Homebridge metrics from the Config UI X REST API:
 
-| Endpoint                               | Metrics                                 | Notes                                                                                                       |
-| -------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `/api/status/cpu`                      | `cpuLoad`, `cpuTemp`                    | CPU load average and temperature                                                                            |
-| `/api/status/ram`                      | `memTotalBytes`, `memUsedBytes`         | Host RAM totals                                                                                             |
-| `/api/status/uptime`                   | `hostUptime`, `processUptime`           | Host and Homebridge process uptime (seconds)                                                                |
-| `/api/status/homebridge`               | `status`                                | Bridge status: `up`, `pending`, or `down`                                                                   |
-| `/api/status/homebridge/child-bridges` | `childBridgeCount`, `childBridgesUp`    | Count of child bridges and how many are running                                                             |
-| `/api/plugins`                         | `pluginCount`, `pluginUpdatesAvailable` | **Slow lane (15-min ttlMemo)** — plugin list and update count; slow because the UI server checks npm        |
-| `/api/accessories`                     | `accessoryCount`                        | `null` unless Homebridge is running in insecure mode                                                        |
-| Version endpoint                       | `latestVersion`, `updateAvailable`      | **Slow lane (15-min ttlMemo)** — latest release from npm; `updateAvailable` is `true` when current < latest |
+| Endpoint                               | Metrics                                 | Notes                                                                                                                                                                                                   |
+| -------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/status/cpu`                      | `cpuLoad`, `cpuTemp`                    | CPU load and temperature. Config UI X returns systeminformation objects, so the percent is read from `currentLoad.currentLoad` and the temp from `cpuTemperature.main` (a bare number is also accepted) |
+| `/api/status/ram`                      | `memTotalBytes`, `memUsedBytes`         | Host RAM totals                                                                                                                                                                                         |
+| `/api/status/uptime`                   | `hostUptime`, `processUptime`           | Host and Homebridge process uptime (seconds)                                                                                                                                                            |
+| `/api/status/homebridge`               | `status`                                | Bridge status: `up`, `pending`, or `down`                                                                                                                                                               |
+| `/api/status/homebridge/child-bridges` | `childBridgeCount`, `childBridgesUp`    | Count of child bridges and how many are running                                                                                                                                                         |
+| `/api/plugins`                         | `pluginCount`, `pluginUpdatesAvailable` | **Slow lane (15-min ttlMemo)** — plugin list and update count; slow because the UI server checks npm                                                                                                    |
+| `/api/accessories`                     | `accessoryCount`                        | `null` unless Homebridge is running in insecure mode                                                                                                                                                    |
+| Version endpoint                       | `latestVersion`, `updateAvailable`      | **Slow lane (15-min ttlMemo)** — latest release from npm; `updateAvailable` is `true` when current < latest                                                                                             |
+
+### Tile Summary (renderer)
+
+The `homebridge` renderer tile summary displays:
+
+| Position | Metric key       | Label       | Formatter |
+| -------- | ---------------- | ----------- | --------- |
+| Hero     | `cpuTemp`        | CPU temp    | °C        |
+| 2nd      | `cpuLoad`        | CPU         | percent   |
+| 3rd      | `accessoryCount` | Accessories | integer   |
+
+CPU temperature is the hero (stable and the operator-relevant signal); CPU load sits beside it. The UI/Config-UI-X version is shown as the tile **subtitle** (below the hero metric), not as a summary cell.
+
+Detail "Process uptime" reads `processUptime` (seconds since the Homebridge process started) — previously used the always-zero `uptime` field.
+
+Charts include CPU load and CPU temp sparklines.
+
+> [!info] CPU-load parsing fix
+> `cpuLoad` previously read `/api/status/cpu` → `currentLoad` as a bare number, but Config UI X returns systeminformation's `currentLoad()` **object**, so the value collapsed to `null`/0% on the tile. `getStats()` now extracts the percent from `currentLoad.currentLoad` (and the temp from `cpuTemperature.main`), still accepting a plain number for older builds. `cpuTemp`, `accessoryCount`, and `processUptime` were already returned correctly.
 
 ### Status Tone
 

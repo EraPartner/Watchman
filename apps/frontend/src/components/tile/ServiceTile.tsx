@@ -225,6 +225,21 @@ export function ServiceTile({
 
   const statsErrorBadge = computeStatsErrorBadge(stats.error, stats.data);
 
+  // A down health tier is only critical when the service is actually offline.
+  // When the service is reachable overall (e.g. a NAS that blocks ICMP but
+  // answers SNMP, or a router with no port probe configured), a down tier is a
+  // diagnostic heads-up — render it as warn (amber) rather than a crit square.
+  const tierTone = (up: boolean): "ok" | "warn" | "crit" =>
+    up ? "ok" : offline ? "crit" : "warn";
+
+  // Hide secondary cells whose value is genuinely absent (null/undefined/"")
+  // so Roon doesn't show "Zones —"/"Playing —" when the Roon API isn't in use,
+  // and Homebridge doesn't render a blank "HB core" cell. Real 0/false stay.
+  const visibleSecondary = secondary.filter((m) => {
+    const v = pickSource(m, statsMetrics, healthRaw);
+    return v !== undefined && v !== null && v !== "";
+  });
+
   const handleOpen = () => {
     if (!onOpenDetail) return;
     onOpenDetail({ kind, instanceId, renderer });
@@ -324,7 +339,7 @@ export function ServiceTile({
               {hasTwoTiers ? (
                 <>
                   <StatusDot
-                    tone={hostHealth.reachable ? "ok" : "crit"}
+                    tone={tierTone(hostHealth.reachable)}
                     pulse={hostHealth.reachable}
                     label={`host: ${hostHealth.reachable ? "up" : "down"}${
                       hostHealth.pingMs !== undefined
@@ -333,7 +348,7 @@ export function ServiceTile({
                     }`}
                   />
                   <StatusDot
-                    tone={serviceHealth.reachable ? "ok" : "crit"}
+                    tone={tierTone(serviceHealth.reachable)}
                     pulse={serviceHealth.reachable}
                     label={`service: ${serviceHealth.reachable ? "up" : "down"}${
                       serviceHealth.latencyMs !== undefined
@@ -468,9 +483,9 @@ export function ServiceTile({
                 )
               ) : null}
 
-              {secondary.length > 0 ? (
+              {visibleSecondary.length > 0 ? (
                 <dl className="grid grid-cols-2 gap-x-s-4 gap-y-s-2">
-                  {secondary.map((m) => (
+                  {visibleSecondary.map((m) => (
                     <div key={m.key} className="min-w-0">
                       <dt className="truncate text-[10px] uppercase tracking-[0.08em] text-[var(--text-lo)]">
                         {m.label}

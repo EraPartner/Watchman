@@ -1,13 +1,7 @@
 import type { ReactNode } from "react";
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
-import {
-  dotGet,
-  fmtBytes,
-  fmtNumber,
-  fmtRaw,
-  fmtUptime,
-} from "./formatters";
+import { dotGet, fmtBytes, fmtNumber, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
 
@@ -75,7 +69,9 @@ function renderActivePanel(stats: Stats | undefined): ReactNode {
           <ul className="divide-y divide-[var(--hairline)]">
             {list.map((t) => {
               const pct =
-                typeof t.progress === "number" ? Math.round(t.progress * 100) : 0;
+                typeof t.progress === "number"
+                  ? Math.round(t.progress * 100)
+                  : 0;
               const tone = STATE_TONE[t.state ?? ""] ?? "var(--text-md)";
               return (
                 <li
@@ -173,8 +169,8 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
   customPanelLabel: "Torrents",
 
   summary: [
-    { key: "dlSpeed", label: "DL/s", format: fmtBytes },
     { key: "upSpeed", label: "UL/s", format: fmtBytes },
+    { key: "torrentsSeeding", label: "Seeding", format: fmtNumber(0) },
     { key: "torrentsTotal", label: "Torrents", format: fmtNumber(0) },
   ],
 
@@ -192,7 +188,11 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
       title: "Torrents",
       metrics: [
         { key: "torrentsTotal", label: "Total", format: fmtNumber(0) },
-        { key: "torrentsDownloading", label: "Downloading", format: fmtNumber(0) },
+        {
+          key: "torrentsDownloading",
+          label: "Downloading",
+          format: fmtNumber(0),
+        },
         { key: "torrentsSeeding", label: "Seeding", format: fmtNumber(0) },
         { key: "torrentsPaused", label: "Paused", format: fmtNumber(0) },
         { key: "torrentsCompleted", label: "Completed", format: fmtNumber(0) },
@@ -206,7 +206,7 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
         { key: "dhtNodes", label: "DHT nodes", format: fmtNumber(0) },
         { key: "listenPort", label: "Port", format: fmtRaw },
         { key: "version", label: "Version", format: fmtRaw },
-        { key: "uptime", label: "Uptime", format: fmtUptime },
+        { key: "ratio", label: "Ratio", format: fmtRaw },
       ],
     },
   ],
@@ -214,12 +214,32 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
   charts: [
     { metric: "dlSpeed", label: "DL speed", kind: "area", format: fmtBytes },
     { metric: "upSpeed", label: "UL speed", kind: "area", format: fmtBytes },
-    { metric: "torrentsDownloading", label: "Downloading", kind: "line", format: fmtNumber(0) },
-    { metric: "torrentsSeeding", label: "Seeding", kind: "line", format: fmtNumber(0) },
+    {
+      metric: "torrentsDownloading",
+      label: "Downloading",
+      kind: "line",
+      format: fmtNumber(0),
+    },
+    {
+      metric: "torrentsSeeding",
+      label: "Seeding",
+      kind: "line",
+      format: fmtNumber(0),
+    },
     { metric: "dlData", label: "DL total", kind: "area", format: fmtBytes },
     { metric: "upData", label: "UL total", kind: "area", format: fmtBytes },
-    { metric: "freeSpaceOnDisk", label: "Free space", kind: "line", format: fmtBytes },
-    { metric: "dhtNodes", label: "DHT nodes", kind: "line", format: fmtNumber(0) },
+    {
+      metric: "freeSpaceOnDisk",
+      label: "Free space",
+      kind: "line",
+      format: fmtBytes,
+    },
+    {
+      metric: "dhtNodes",
+      label: "DHT nodes",
+      kind: "line",
+      format: fmtNumber(0),
+    },
   ],
 
   tone: ({ stats, health }) => {

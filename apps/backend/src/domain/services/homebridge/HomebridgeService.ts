@@ -42,8 +42,22 @@ interface VersionInfo {
 }
 
 interface CpuStatus {
-  currentLoad?: number;
-  cpuTemperature?: { main?: number | null };
+  // Config UI X passes through systeminformation's currentLoad()/cpuTemperature()
+  // — objects whose percent/temp live at `.currentLoad`/`.main`. Older builds (and
+  // our fixtures) sometimes send a bare number, so accept both shapes.
+  currentLoad?: number | { currentLoad?: number | null };
+  cpuTemperature?: number | { main?: number | null };
+}
+
+/** Pull a finite number from a value that may be the number itself or an object
+ *  carrying it under `key` (e.g. systeminformation's nested load/temp objects). */
+function numAt(v: unknown, key: string): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (v && typeof v === "object") {
+    const inner = (v as Record<string, unknown>)[key];
+    if (typeof inner === "number" && Number.isFinite(inner)) return inner;
+  }
+  return undefined;
 }
 
 interface RamStatus {
@@ -210,11 +224,11 @@ export class HomebridgeService extends BaseService {
           latestVersion: versionInfo?.latestVersion ?? null,
           updateAvailable: versionInfo?.updateAvailable ?? null,
           status: hbStatus?.status ?? null,
-          cpuLoad:
-            typeof cpu?.currentLoad === "number"
-              ? Math.round(cpu.currentLoad * 100) / 100
-              : null,
-          cpuTemp: cpu?.cpuTemperature?.main ?? null,
+          cpuLoad: ((load) =>
+            load !== undefined ? Math.round(load * 100) / 100 : null)(
+            numAt(cpu?.currentLoad, "currentLoad")
+          ),
+          cpuTemp: numAt(cpu?.cpuTemperature, "main") ?? null,
           memTotalBytes: ram?.mem?.total ?? null,
           memUsedBytes: ram?.mem?.active ?? ram?.mem?.used ?? null,
           hostUptime: uptimeStatus?.time?.uptime ?? null,

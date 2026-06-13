@@ -82,16 +82,54 @@ Steady-state polling therefore requires only **2 outbound requests per cycle**: 
 
 ## Stats Response
 
-`getStats()` returns these new metrics:
+`getStats()` returns these metrics:
 
-| Metric           | Type          | Description                                   |
-| ---------------- | ------------- | --------------------------------------------- |
-| `torrentsError`  | number        | Count of torrents in error/missingFiles state |
-| `activeTorrents` | TorrentInfo[] | Top 20 torrents by combined dl+ul speed       |
-| `recentErrors`   | string[]      | Critical log messages since last poll         |
-| `recentWarnings` | string[]      | Warning log messages since last poll          |
+| Metric                | Type          | Description                                                                                             |
+| --------------------- | ------------- | ------------------------------------------------------------------------------------------------------- |
+| `version`             | string        | qBittorrent application version                                                                         |
+| `torrentsTotal`       | number        | Total number of torrents                                                                                |
+| `torrentsDownloading` | number        | Count of torrents actively downloading                                                                  |
+| `torrentsSeeding`     | number        | Count of torrents in any seeding state (`uploading`, `stalledUP`, `forcedUP`, `queuedUP`, `checkingUP`) |
+| `torrentsPaused`      | number        | Count of paused/stopped torrents (`pausedDL`, `pausedUP`, `stoppedDL`, `stoppedUP`)                     |
+| `torrentsCompleted`   | number        | Count of torrents at 100% progress or in any seeding state                                              |
+| `torrentsError`       | number        | Count of torrents in error/missingFiles state                                                           |
+| `dlSpeed`             | number        | Current download speed (bytes/s)                                                                        |
+| `upSpeed`             | number        | Current upload speed (bytes/s)                                                                          |
+| `dlData`              | number        | All-time total downloaded bytes (`alltime_dl`; falls back to session `dl_info_data`)                    |
+| `upData`              | number        | All-time total uploaded bytes (`alltime_ul`; falls back to session `up_info_data`)                      |
+| `ratio`               | string        | Global share ratio (`global_ratio` from server_state, e.g. `"1.80"`)                                    |
+| `connectionStatus`    | string        | qBittorrent connection status string                                                                    |
+| `listenPort`          | number        | Listening port                                                                                          |
+| `dhtNodes`            | number        | Number of DHT nodes                                                                                     |
+| `freeSpaceOnDisk`     | number        | Free disk space (bytes)                                                                                 |
+| `activeTorrents`      | TorrentInfo[] | Top 20 torrents by combined dl+ul speed                                                                 |
+| `recentErrors`        | string[]      | Critical log messages since last poll                                                                   |
+| `recentWarnings`      | string[]      | Warning log messages since last poll                                                                    |
 
-Plus existing metrics: version, uptime, torrentsTotal, torrentsDownloading, torrentsSeeding, torrentsPaused, torrentsCompleted, dlSpeed, upSpeed, dlData, upData, connectionStatus, listenPort, dhtNodes, freeSpaceOnDisk.
+> [!note] Removed: `uptime`
+> The `uptime` field has been removed. qBittorrent's `sync/maindata` `server_state` has no uptime field — the value was always 0 and carried no diagnostic information.
+
+> [!note] `dlData` / `upData` are all-time totals
+> `dlData` and `upData` now come from `alltime_dl` / `alltime_ul` (falling back to session totals `dl_info_data` / `up_info_data` when the all-time fields are absent). These represent **lifetime** downloaded/uploaded bytes, not session totals.
+
+> [!note] Torrent state counting
+>
+> - **Seeding** counts all seeding-family states: `uploading`, `stalledUP`, `forcedUP`, `queuedUP`, `checkingUP`.
+> - **Paused/stopped** covers both the legacy names (`pausedDL`, `pausedUP`) and the qBittorrent 5 renames (`stoppedDL`, `stoppedUP`).
+> - **Completed** counts any torrent at 100% progress OR in any seeding state.
+
+### Tile Summary (renderer)
+
+The `qbittorrent` renderer tile summary displays:
+
+| Position | Metric key        | Label    | Formatter |
+| -------- | ----------------- | -------- | --------- |
+| Hero     | `upSpeed`         | UL/s     | bytes     |
+| 2nd      | `torrentsSeeding` | Seeding  | integer   |
+| 3rd      | `torrentsTotal`   | Torrents | integer   |
+
+> [!note] Upload speed is the hero; download speed is off the tile
+> The card leads with **upload** speed — this deployment seeds far more than it downloads, so download speed isn't shown on the tile (and the tile/detail hero is no longer `dlSpeed`). Both `dlSpeed` and `upSpeed` remain in the detail sheet's Traffic group.
 
 ## Service Class
 

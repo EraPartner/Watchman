@@ -1106,14 +1106,29 @@ components:
         ]
       properties:
         version: { type: string, description: qBittorrent API version }
-        uptime: { type: number, description: Uptime in seconds }
+        ratio:
+          {
+            type: string,
+            description: Global all-time share ratio (e.g. "1.80"),
+          }
         torrentsTotal: { type: integer, description: Total torrent count }
         torrentsDownloading:
-          { type: integer, description: Torrents in downloading state }
+          { type: integer, description: Torrents in any downloading state }
         torrentsSeeding:
-          { type: integer, description: Torrents in uploading state }
-        torrentsPaused: { type: integer, description: Paused torrents }
-        torrentsCompleted: { type: integer, description: Completed torrents }
+          {
+            type: integer,
+            description: Torrents in any seeding state (uploading,
+            stalledUP,
+            forcedUP,
+            queuedUP,
+            checkingUP),
+          }
+        torrentsPaused: { type: integer, description: Paused/stopped torrents }
+        torrentsCompleted:
+          {
+            type: integer,
+            description: Fully-downloaded torrents (100% progress or seeding),
+          }
         torrentsError:
           {
             type: integer,
@@ -1122,8 +1137,13 @@ components:
         dlSpeed:
           { type: number, description: Global download speed in bytes/sec }
         upSpeed: { type: number, description: Global upload speed in bytes/sec }
-        dlData: { type: number, description: Total downloaded in bytes }
-        upData: { type: number, description: Total uploaded in bytes }
+        dlData:
+          {
+            type: number,
+            description: All-time downloaded in bytes (alltime_dl),
+          }
+        upData:
+          { type: number, description: All-time uploaded in bytes (alltime_ul) }
         connectionStatus:
           {
             type: string,

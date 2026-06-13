@@ -54,7 +54,7 @@ export interface ServiceTileProps {
    - When both `host` and `service` tiers present: **two `StatusDot` components** (F1 two-tier status dots — Phase 0a).
    - Otherwise: **single `StatusDot`** for backward compatibility.
 6. **Hero metric** (anchored low, above the chart): `MetricValue` from `renderer.summary[0]`. A bare-boolean value (`true`/`yes`/`reachable`) renders as a **state chip** (`✓`/`✕` + the metric label) instead of a giant word, via `heroState()`.
-7. **Secondary Metrics**: 2-column definition list (uppercase label + mono value).
+7. **Secondary Metrics**: 2-column definition list (uppercase label + mono value). Cells whose resolved value is `null`, `undefined`, or empty string (`""`) are **not rendered** — the slot is dropped entirely. Real zero (`0`) and boolean `false` still render normally. This means optional metrics (e.g. Roon "Zones/Playing" when `useRoonApi=false`, Homebridge "HB core" when absent) never show a "—" placeholder.
 8. **Subtitle**: Optional custom subtitle from `renderer.subtitle(ctx)`.
 9. **Entrance**: staggered `motion-tile` fade-in-up on mount (respects reduced-motion).
 
@@ -70,6 +70,17 @@ const tone = renderer.tone({ stats, health, instance });
 ```
 
 Maps to SVG color on `StatusDot` and CSS class on surface.
+
+### Two-Tier Status Dot Logic
+
+When both `host` and `service` health tiers are present the tile renders **two `StatusDot` components** side-by-side (Phase 0a F1). The dot tone for the `down` health tier is determined as follows:
+
+| Condition                                       | Dot tone               |
+| ----------------------------------------------- | ---------------------- |
+| Whole service offline (`reachable = false`)     | `crit` (red square)    |
+| Service reachable overall but this tier is down | `warn` (amber diamond) |
+
+**Rationale (ADR-026)**: A NAS that blocks ICMP but answers SNMP, or a router with no port probe configured, was previously shown with an alarming red `crit` dot despite being genuinely online. ICMP is diagnostic-only — the protocol probe defines reachability. A down tier on an otherwise-reachable service now renders amber (`warn`) rather than red (`crit`) to reflect this.
 
 ### Interaction
 
@@ -98,7 +109,7 @@ Maps to SVG color on `StatusDot` and CSS class on surface.
 const BENTO_LAYOUT = [
   { kind: "bitcoin", size: "XL" },
   { kind: "synology", size: "L" },
-  { kind: "router", size: "L" },
+  { kind: "router", size: "S" },
   // rest: "M" or "S"
 ];
 ```
@@ -181,6 +192,7 @@ Two-tier status dots unit tests (Phase 0a — F1):
   - Host and service tier labels correctly set
   - Partial tier fallbacks (only host or only service tier)
   - Tone mapping: `ok` for reachable, `crit` for unreachable
+  - Down tier on a reachable service renders `warn` (amber diamond), not `crit` (red square); `crit` only when the whole service is offline
 
 ## Related
 

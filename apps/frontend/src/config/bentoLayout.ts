@@ -7,16 +7,16 @@ export interface LayoutEntry {
 }
 
 /**
- * Data-driven bento layout. Size tiers:
+ * Data-driven bento layout. Size tiers scale with how much each card shows:
  * - XL: hero infra (Bitcoin full node)
- * - L:  infra-critical (Synology, Router)
+ * - L:  metric-rich (Synology)
  * - M:  default
- * - S:  status-only (Philips, Roon)
+ * - S:  status-only (Router, Philips, Roon — reachability + a couple of fields)
  */
 export const BENTO_LAYOUT: ReadonlyArray<LayoutEntry> = [
   { kind: "bitcoin", size: "XL" },
   { kind: "synology", size: "L" },
-  { kind: "router", size: "L" },
+  { kind: "router", size: "S" },
   { kind: "adguard", size: "M" },
   { kind: "qbittorrent", size: "M" },
   { kind: "ipfs", size: "M" },

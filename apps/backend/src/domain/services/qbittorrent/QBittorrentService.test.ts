@@ -109,7 +109,6 @@ function handler(req: IncomingMessage, res: ServerResponse) {
           rid: responseRid,
           full_update: true,
           server_state: {
-            uptime: 1234,
             connection_status: "connected",
             dht_nodes: 50,
             free_space_on_disk: 999,
@@ -117,6 +116,9 @@ function handler(req: IncomingMessage, res: ServerResponse) {
             up_info_speed: 50,
             dl_info_data: 1000,
             up_info_data: 500,
+            alltime_dl: 5000,
+            alltime_ul: 9000,
+            global_ratio: "1.80",
           },
           torrents: {
             abc: { ...TORRENT_LIST[0] },
@@ -286,15 +288,18 @@ describe("QBittorrentService", () => {
     if (res.ok) {
       expect(res.value.metrics).toMatchObject({
         version: "v4.6.0",
-        uptime: 1234,
         torrentsTotal: 4,
         torrentsDownloading: 1,
-        torrentsSeeding: 1,
+        torrentsSeeding: 2,
         torrentsPaused: 1,
         torrentsCompleted: 2,
         torrentsError: 0,
         dlSpeed: 100,
         upSpeed: 50,
+        // all-time totals preferred over session dl_info_data/up_info_data
+        dlData: 5000,
+        upData: 9000,
+        ratio: "1.80",
         connectionStatus: "connected",
         listenPort: 6881,
         dhtNodes: 50,
@@ -387,13 +392,13 @@ describe("QBittorrentService", () => {
     expect(res1.ok).toBe(true);
     if (res1.ok) expect(res1.value.metrics.dhtNodes).toBe(50);
 
-    // Second call: delta with dht_nodes=75; uptime/connectionStatus preserved from cache
+    // Second call: delta with dht_nodes=75; connection_status/ratio preserved from cache
     const res2 = await svc.getStats(new AbortController().signal);
     expect(res2.ok).toBe(true);
     if (res2.ok) {
       expect(res2.value.metrics.dhtNodes).toBe(75);
-      expect(res2.value.metrics.uptime).toBe(1234);
       expect(res2.value.metrics.connectionStatus).toBe("connected");
+      expect(res2.value.metrics.ratio).toBe("1.80");
     }
   });
 

@@ -131,6 +131,9 @@ When API is disabled (`useRoonApi=false`), only basic metrics returned:
 }
 ```
 
+> [!info] Tile display when API is disabled
+> The `ServiceTile` secondary metric cells for "Zones" and "Playing" are **not rendered** when `useRoonApi=false`, because those fields are absent from the stats payload (null/undefined). Only genuinely-present values are shown; placeholder "—" cells are suppressed. This is the global null-suppression behavior introduced in `ServiceTile` — see [[docs/components/service-tile|ServiceTile]].
+
 ## Endpoints
 
 No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).

@@ -1730,17 +1730,17 @@ export interface components {
         QBittorrentStats: {
             /** @description qBittorrent API version */
             version?: string;
-            /** @description Uptime in seconds */
-            uptime?: number;
+            /** @description Global all-time share ratio (e.g. "1.80") */
+            ratio?: string;
             /** @description Total torrent count */
             torrentsTotal: number;
-            /** @description Torrents in downloading state */
+            /** @description Torrents in any downloading state */
             torrentsDownloading: number;
-            /** @description Torrents in uploading state */
+            /** @description Torrents in any seeding state (uploading */
             torrentsSeeding: number;
-            /** @description Paused torrents */
+            /** @description Paused/stopped torrents */
             torrentsPaused: number;
-            /** @description Completed torrents */
+            /** @description Fully-downloaded torrents (100% progress or seeding) */
             torrentsCompleted: number;
             /** @description Torrents in error or missingFiles state */
             torrentsError: number;
@@ -1748,9 +1748,9 @@ export interface components {
             dlSpeed: number;
             /** @description Global upload speed in bytes/sec */
             upSpeed: number;
-            /** @description Total downloaded in bytes */
+            /** @description All-time downloaded in bytes (alltime_dl) */
             dlData?: number;
-            /** @description Total uploaded in bytes */
+            /** @description All-time uploaded in bytes (alltime_ul) */
             upData?: number;
             /** @description Connection status (connected */
             connectionStatus?: string;

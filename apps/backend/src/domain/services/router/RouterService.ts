@@ -97,9 +97,24 @@ export class RouterService extends BaseService {
       reachable: icmpAlive,
       ...(pingRes.avgMs !== undefined ? { pingMs: pingRes.avgMs } : {}),
     };
+    const latencyMs = pingRes.avgMs ?? this.now() - started;
+    const baseDetails = { icmpAlive, anyPortOpen, ports, host: this.host };
+
+    // No service ports configured → there is no protocol tier to probe. Report
+    // a single (host/ICMP) tier so the UI doesn't render a permanently-down
+    // "service" indicator for a check that was never set up.
+    if (this.ports.length === 0) {
+      return ok({
+        reachable: icmpAlive,
+        latencyMs,
+        at: this.now(),
+        host,
+        details: baseDetails,
+      });
+    }
+
     const service = { reachable: anyPortOpen, details: { ports } };
     const reachable = host.reachable || service.reachable;
-    const latencyMs = pingRes.avgMs ?? this.now() - started;
 
     return ok({
       reachable,
@@ -107,12 +122,7 @@ export class RouterService extends BaseService {
       at: this.now(),
       host,
       service,
-      details: {
-        icmpAlive,
-        anyPortOpen,
-        ports,
-        host: this.host,
-      },
+      details: baseDetails,
     });
   }
 

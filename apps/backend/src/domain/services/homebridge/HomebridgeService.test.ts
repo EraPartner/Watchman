@@ -162,7 +162,11 @@ describe("HomebridgeService", () => {
             updateAvailable: true,
           };
         if (p === "/api/status/cpu")
-          return { currentLoad: 12.345, cpuTemperature: { main: 51 } };
+          // Config UI X shape: currentLoad is systeminformation's object, not a bare number
+          return {
+            currentLoad: { currentLoad: 12.345 },
+            cpuTemperature: { main: 51 },
+          };
         if (p === "/api/status/ram")
           return { mem: { total: 8_000_000, active: 3_000_000 } };
         if (p === "/api/status/uptime")

@@ -37,14 +37,18 @@ interface Torrent {
 }
 
 interface ServerState {
-  uptime?: number;
   connection_status?: string;
   dht_nodes?: number;
   free_space_on_disk?: number;
   dl_info_speed?: number;
   up_info_speed?: number;
+  // session totals (since the client started)
   dl_info_data?: number;
   up_info_data?: number;
+  // all-time totals (persisted across restarts) — preferred for "DL/UL total"
+  alltime_dl?: number;
+  alltime_ul?: number;
+  global_ratio?: string;
 }
 
 interface MainData {
@@ -68,6 +72,33 @@ interface LogEntry {
 
 const COOKIE_TTL_MS = 60 * 60 * 1000;
 const MAX_ACTIVE_TORRENTS = 20;
+
+// qBittorrent torrent states grouped by activity. Covers the v4 names and the
+// v5 "stopped*" renames of "paused*". A torrent counts toward exactly one of
+// downloading/seeding/paused; "completed" is tracked independently via progress.
+const DOWNLOADING_STATES = new Set([
+  "downloading",
+  "metaDL",
+  "forcedDL",
+  "stalledDL",
+  "queuedDL",
+  "checkingDL",
+  "allocating",
+]);
+const SEEDING_STATES = new Set([
+  "uploading",
+  "forcedUP",
+  "stalledUP",
+  "queuedUP",
+  "checkingUP",
+]);
+const PAUSED_STATES = new Set([
+  "pausedDL",
+  "pausedUP",
+  "stoppedDL",
+  "stoppedUP",
+]);
+const ERROR_STATES = new Set(["error", "missingFiles", "unknownError"]);
 // app version and preferences are configuration-grade — refresh hourly, not per poll
 const STATIC_INFO_TTL_MS = 60 * 60 * 1000;
 
@@ -195,20 +226,13 @@ export class QBittorrentService extends BaseService {
       let completed = 0;
       let errored = 0;
       for (const t of Object.values(torrents)) {
-        const state = t.state;
-        if (state === "downloading") downloading++;
-        if (state === "uploading") {
-          seeding++;
-          completed++;
-        }
-        if (state === "pausedDL" || state === "pausedUP") paused++;
-        if (state === "stalledUP") completed++;
-        if (
-          state === "error" ||
-          state === "missingFiles" ||
-          state === "unknownError"
-        )
-          errored++;
+        const state = t.state ?? "";
+        if (DOWNLOADING_STATES.has(state)) downloading++;
+        else if (SEEDING_STATES.has(state)) seeding++;
+        else if (PAUSED_STATES.has(state)) paused++;
+        if (ERROR_STATES.has(state)) errored++;
+        // "completed" = fully downloaded: 100% progress or any seeding state
+        if ((t.progress ?? 0) >= 1 || SEEDING_STATES.has(state)) completed++;
       }
 
       // Per-torrent detail: top MAX_ACTIVE_TORRENTS by combined dl+ul speed,
@@ -240,7 +264,6 @@ export class QBittorrentService extends BaseService {
         at: this.now(),
         metrics: {
           version: typeof version === "string" ? version : "unknown",
-          uptime: serverState.uptime ?? 0,
           torrentsTotal: Object.keys(torrents).length,
           torrentsDownloading: downloading,
           torrentsSeeding: seeding,
@@ -249,8 +272,10 @@ export class QBittorrentService extends BaseService {
           torrentsError: errored,
           dlSpeed: serverState.dl_info_speed ?? 0,
           upSpeed: serverState.up_info_speed ?? 0,
-          dlData: serverState.dl_info_data ?? 0,
-          upData: serverState.up_info_data ?? 0,
+          // prefer all-time totals; fall back to session totals on older builds
+          dlData: serverState.alltime_dl ?? serverState.dl_info_data ?? 0,
+          upData: serverState.alltime_ul ?? serverState.up_info_data ?? 0,
+          ratio: serverState.global_ratio ?? "0",
           connectionStatus: serverState.connection_status ?? "disconnected",
           listenPort: preferences.listen_port ?? 0,
           dhtNodes: serverState.dht_nodes ?? 0,

@@ -2,7 +2,7 @@
 title: StatusDot Primitive
 type: component
 status: active
-date: 2026-05-07
+date: 2026-06-13
 tags: [primitive, status, indicator, dot, visual, a11y, color-blind, phase-0a]
 description: Colored status indicator dot component with color-blind-friendly shapes and data-state attribute for accessibility
 aliases: [status-dot, StatusDot]
@@ -31,28 +31,38 @@ Render a colored dot to indicate status, health, or state without relying on col
 <span role="status" data-state="ok" class="..."><!-- ok circle --></span>
 <span role="status" data-state="warn" class="..."><!-- warn diamond --></span>
 <span role="status" data-state="crit" class="..."><!-- crit square --></span>
-<span role="status" data-state="neutral" class="..."><!-- neutral rectangle --></span>
+<span role="status" data-state="neutral" class="..."
+  ><!-- neutral rectangle --></span
+>
 ```
 
 ## Variants
 
-| Tone | Shape | Color | Usage |
-|------|-------|-------|-------|
-| `ok` | Circle (⚪) | `--ok` (green) | Online, healthy, success |
-| `warn` | Diamond (◇) | `--warn` (yellow) | Warning, caution, pending |
-| `crit` | Square (▢) | `--crit` (red) | Critical, offline, error |
+| Tone      | Shape         | Color              | Usage                     |
+| --------- | ------------- | ------------------ | ------------------------- |
+| `ok`      | Circle (⚪)   | `--ok` (green)     | Online, healthy, success  |
+| `warn`    | Diamond (◇)   | `--warn` (yellow)  | Warning, caution, pending |
+| `crit`    | Square (▢)    | `--crit` (red)     | Critical, offline, error  |
 | `neutral` | Rectangle (▬) | `--text-lo` (gray) | Unknown, neutral, default |
+
+### Two-tier dot tone in ServiceTile
+
+`ServiceTile` renders two `StatusDot` components side-by-side when both `host` and `service` health tiers are present. The tone assigned to a **down** tier depends on overall service reachability:
+
+- `crit` (red square) — the whole service is offline (`reachable = false`)
+- `warn` (amber diamond) — the service is reachable overall but this individual tier is down
+
+This prevents a red square from appearing on services that are genuinely online but have one non-responsive tier (e.g. a NAS blocking ICMP while SNMP answers, or a router with no TCP port probe configured). See [[docs/components/service-tile|ServiceTile]] and [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]].
 
 ## Props
 
 ```typescript
 interface StatusDotProps
-  extends HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof dotVariants> {
-  tone?: 'ok' | 'warn' | 'crit' | 'neutral'; // Defaults to 'ok'
-  size?: 'sm' | 'md' | 'lg';                  // Defaults to 'md'
-  pulse?: boolean;                             // Pulse animation, defaults to false
-  label?: string;                              // aria-label text
+  extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof dotVariants> {
+  tone?: "ok" | "warn" | "crit" | "neutral"; // Defaults to 'ok'
+  size?: "sm" | "md" | "lg"; // Defaults to 'md'
+  pulse?: boolean; // Pulse animation, defaults to false
+  label?: string; // aria-label text
 }
 ```
 

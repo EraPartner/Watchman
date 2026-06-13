@@ -29,7 +29,7 @@ export interface BentoLayoutEntry {
 export const BENTO_LAYOUT: BentoLayoutEntry[] = [
   { kind: "bitcoin", size: "XL" },
   { kind: "synology", size: "L" },
-  { kind: "router", size: "L" },
+  { kind: "router", size: "S" },
   { kind: "adguard", size: "M" },
   { kind: "qbittorrent", size: "M" },
   { kind: "ipfs", size: "M" },
@@ -51,17 +51,19 @@ With 12-column grid and 72px base row height:
 12-column grid, sized by tier (mirrors BENTO_LAYOUT, in order):
 
 XL  │ Bitcoin
-L   │ Synology · Router
+L   │ Synology
 M   │ AdGuard · qBittorrent · IPFS · Tor · Homebridge · MacMini · RaspberryPi
-S   │ AlbyHub · Philips · Roon
+S   │ Router · AlbyHub · Philips · Roon
 ```
 
 ## Size Semantics
 
-- **XL** — Flagship services (Bitcoin: flagship currency monitor)
-- **L** — Major infrastructure (Synology: NAS storage, Router: network gateway)
-- **M** — Standard services (apps, downloaders, bridges)
-- **S** — Supplementary monitoring (small devices, niche services)
+Tile size scales with how much each card shows — more metrics and charts warrant a larger footprint.
+
+- **XL** — Flagship services with the most data (Bitcoin: block height, mempool, fees, charts)
+- **L** — Major infrastructure with rich telemetry (Synology: CPU/RAM/disk with charts)
+- **M** — Standard services with several metrics (apps, downloaders, bridges)
+- **S** — Reachability-only or minimal-field tiles (Router: shows reachability + a couple of fields; AlbyHub, Philips Hue, Roon in base mode)
 
 ## Modification Guide
 
@@ -100,7 +102,7 @@ When rendered, `BentoDashboard` filters the layout:
 const entries = BENTO_LAYOUT.filter((e) => getRenderer(e.kind));
 ```
 
-In Phase 3, this produces a 3-tile dashboard (Bitcoin XL, Synology L, Router L). Phase 4 will complete the remaining renderers and show all 16 tiles.
+In Phase 3, this produces a 3-tile dashboard (Bitcoin XL, Synology L, Router S). Phase 4 will complete the remaining renderers and show all 16 tiles.
 
 ## Responsive Adjustments
 
