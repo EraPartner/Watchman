@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12161D"/>
+      <stop offset="1" stop-color="#0A0C10"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.46" r="0.55">
+      <stop offset="0" stop-color="#F5B83D" stop-opacity="0.45"/>
+      <stop offset="0.55" stop-color="#F5B83D" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#F5B83D" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD27A"/>
+      <stop offset="1" stop-color="#F5B83D"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E9EEF6" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#E9EEF6" stop-opacity="0.28"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Glass tile -->
+  <rect width="1024" height="1024" rx="232" ry="232" fill="url(#bg)"/>
+  <rect x="2" y="2" width="1020" height="1020" rx="230" ry="230"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="3"/>
+  <circle cx="512" cy="472" r="430" fill="url(#glow)"/>
+
+  <!-- Sentinel: concentric monitoring rings + amber core (the "watch") -->
+  <g fill="none" stroke="url(#ring)" stroke-linecap="round">
+    <circle cx="512" cy="472" r="296" stroke-width="10" stroke-opacity="0.30"/>
+    <circle cx="512" cy="472" r="220" stroke-width="12" stroke-opacity="0.55"/>
+    <circle cx="512" cy="472" r="148" stroke-width="14" stroke-opacity="0.85"/>
+  </g>
+
+  <!-- Radar sweep tick -->
+  <path d="M 512 472 L 512 176" stroke="#F5B83D" stroke-width="16"
+        stroke-linecap="round" stroke-opacity="0.9"/>
+
+  <!-- Core -->
+  <circle cx="512" cy="472" r="78" fill="url(#core)"/>
+  <circle cx="512" cy="472" r="78" fill="none" stroke="#FFF3D6" stroke-width="4" stroke-opacity="0.7"/>
+  <circle cx="486" cy="446" r="22" fill="#FFFFFF" fill-opacity="0.55"/>
+
+  <!-- Wordmark baseline accent -->
+  <rect x="372" y="812" width="280" height="14" rx="7" fill="#E9EEF6" fill-opacity="0.22"/>
+</svg>

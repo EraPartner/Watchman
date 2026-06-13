@@ -16,6 +16,9 @@ packages/*/node_modules
 dist
 dist-ssr
 apps/*/dist
+apps/*/out
+apps/backend/.bundle
+/Launch Watchman.command
 *.local
 
 # Environment variables

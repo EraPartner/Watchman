@@ -4,13 +4,15 @@
   "version": "1.0.0",
   "description": "Electron desktop shell for Watchman",
   "license": "AGPL-3.0-only",
+  "author": "EraPartner",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && cross-env NODE_ENV=development electron .",
     "start": "npm run build && electron .",
-    "package": "npm run build && electron-builder",
-    "package:mac": "npm run build && electron-builder --mac",
+    "stage:backend": "node scripts/stage-backend.mjs",
+    "package": "npm run build && npm run stage:backend && electron-builder",
+    "package:mac": "npm run build && npm run stage:backend && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
     "package:linux": "npm run build && electron-builder --linux",
     "clean": "rm -rf dist out"
@@ -18,8 +20,8 @@
   "devDependencies": {
     "@types/node": "^25.7.0",
     "cross-env": "^10.1.0",
-    "electron": "^42.0.1",
-    "electron-builder": "^26.8.1",
+    "electron": "42.2.0",
+    "electron-builder": "26.8.1",
     "typescript": "^6.0.3"
   }
 }

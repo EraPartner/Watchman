@@ -2,6 +2,7 @@
 @import "./styles/tokens.css";
 @import "./styles/motion.css";
 @import "./styles/glass.css";
+@import "./styles/desktop.css";
 
 @tailwind base;
 @tailwind components;

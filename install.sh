@@ -131,12 +131,20 @@ open /Applications/Watchman.app
 LAUNCHER_EOF
 chmod +x "$LAUNCHER"
 
-# ── Backend env hint ─────────────────────────────────────────────────────────
+# ── Backend env note ─────────────────────────────────────────────────────────
+# The packaged .app is self-contained: it runs the bundled backend with its data
+# dir under "~/Library/Application Support/Watchman" and auto-generates an
+# encryption key there on first launch (WATCHMAN_MASTER_KEY, used to encrypt
+# service secrets at rest). No env configuration is needed to use Watchman.app —
+# Watchman runs no-auth on a trusted network by design (ADR-017/ADR-025).
 BACKEND_ENV="$REPO_PATH/apps/backend/.env.local"
 if [ ! -f "$BACKEND_ENV" ] && [ -f "$REPO_PATH/apps/backend/.env.example" ]; then
-  echo "==> Note: $BACKEND_ENV does not exist."
-  echo "    Copy the example and set AUTH_USERNAME, AUTH_PASSWORD_HASH, JWT_SECRET, FRONTEND_URL:"
+  echo "==> Note: Watchman.app needs no configuration — an encryption key is"
+  echo "    generated automatically under ~/Library/Application Support/Watchman."
+  echo "    To run the backend standalone from the repo instead (npm run dev),"
+  echo "    you can create apps/backend/.env.local from the example:"
   echo "      cp apps/backend/.env.example $BACKEND_ENV"
+  echo "    WATCHMAN_MASTER_KEY is optional there too (auto-created in DATA_DIR)."
 fi
 
 echo ""

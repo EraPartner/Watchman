@@ -2,6 +2,7 @@ export interface DesktopBridge {
   apiUrl?: string;
   wsUrl?: string;
   isDesktop?: boolean;
+  platform?: string;
 }
 
 export function getDesktopBridge(): DesktopBridge | undefined {

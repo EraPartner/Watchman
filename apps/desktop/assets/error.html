@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"
+    />
+    <title>Watchman</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100vh;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 0 40px;
+        text-align: center;
+        background: radial-gradient(
+          125% 125% at 50% 38%,
+          #12161d 0%,
+          #0a0c10 72%
+        );
+        color: #9aa4b2;
+        font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+        cursor: default;
+        -webkit-app-region: drag;
+      }
+      .badge {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        border: 2px solid #f5b83d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #f5b83d;
+        font-size: 24px;
+        font-weight: 700;
+        box-shadow: 0 0 22px -4px rgba(245, 184, 61, 0.5);
+        margin-bottom: 6px;
+      }
+      h1 {
+        color: #e9eef6;
+        font-size: 17px;
+        font-weight: 600;
+        margin: 0;
+      }
+      p {
+        font-size: 13px;
+        line-height: 1.5;
+        max-width: 460px;
+        margin: 0;
+      }
+      .detail {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        color: #6b7480;
+        max-width: 520px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin-top: 2px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+        -webkit-app-region: no-drag;
+      }
+      button {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 8px 18px;
+        border-radius: 9px;
+        border: 1px solid transparent;
+        transition:
+          filter 0.15s ease,
+          background 0.15s ease;
+      }
+      button:focus-visible {
+        outline: 2px solid #f5b83d;
+        outline-offset: 2px;
+      }
+      .primary {
+        background: #f5b83d;
+        color: #1a1205;
+      }
+      .primary:hover {
+        filter: brightness(1.08);
+      }
+      .secondary {
+        background: transparent;
+        color: #c3ccd8;
+        border-color: rgba(233, 238, 246, 0.18);
+      }
+      .secondary:hover {
+        background: rgba(233, 238, 246, 0.06);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="badge">!</div>
+    <h1 id="title">Watchman couldn't start</h1>
+    <p id="message">
+      The backend did not become ready. You can retry, or open the logs to see
+      what went wrong.
+    </p>
+    <div class="detail" id="detail"></div>
+    <div class="row">
+      <button class="primary" id="retry">Retry</button>
+      <button class="secondary" id="logs">Open logs</button>
+    </div>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var msg = params.get("msg");
+        if (msg) document.getElementById("detail").textContent = msg;
+
+        var desktop = window.watchmanDesktop || {};
+        var retry = document.getElementById("retry");
+        var logs = document.getElementById("logs");
+
+        retry.addEventListener("click", function () {
+          retry.disabled = true;
+          retry.textContent = "Retrying…";
+          if (desktop.retry) {
+            Promise.resolve(desktop.retry())
+              .catch(function () {})
+              .then(function () {
+                retry.disabled = false;
+                retry.textContent = "Retry";
+              });
+          }
+        });
+        logs.addEventListener("click", function () {
+          if (desktop.openLogs) desktop.openLogs();
+        });
+      })();
+    </script>
+  </body>
+</html>

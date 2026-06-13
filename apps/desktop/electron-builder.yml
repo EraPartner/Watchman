@@ -5,13 +5,17 @@ directories:
   buildResources: build
 files:
   - dist/**/*
+  - assets/**/*
   - package.json
+# Backend is staged as a self-contained production tree by
+# scripts/stage-backend.mjs (run from the `package` script) — its node_modules
+# is complete, unlike the hoisted workspace ../backend/node_modules.
 extraResources:
-  - from: ../backend/dist
+  - from: ../backend/.bundle/dist
     to: backend/dist
-  - from: ../backend/node_modules
+  - from: ../backend/.bundle/node_modules
     to: backend/node_modules
-  - from: ../backend/package.json
+  - from: ../backend/.bundle/package.json
     to: backend/package.json
   - from: ../backend/.env.example
     to: backend/.env.example
@@ -20,11 +24,18 @@ extraResources:
 asar: true
 mac:
   category: public.app-category.developer-tools
+  icon: build/icon.icns
+  # Ad-hoc signed (no paid Apple Developer ID): the build loads but Gatekeeper
+  # needs a one-time right-click → Open. See packaging/release/README.md.
+  # arm64-only: the bundled backend ships an arch-specific @duckdb prebuilt
+  # binding (darwin-arm64), so a single staged install can't serve x64.
   target:
     - target: dmg
       arch:
         - arm64
-        - x64
+    - target: zip
+      arch:
+        - arm64
 win:
   target:
     - nsis
@@ -33,3 +44,7 @@ linux:
     - AppImage
     - deb
   category: Utility
+publish:
+  provider: github
+  owner: EraPartner
+  repo: Watchman

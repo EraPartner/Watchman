@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { useSetupStatus } from "./pages/Settings/useConfigQueries";
 import { useSetupDismissal } from "./hooks/useSetupDismissal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { DesktopChrome } from "./components/DesktopChrome";
 import { lazy, Suspense, type ReactNode } from "react";
 import { WebSocketProvider } from "./providers/WebSocketProvider";
 
@@ -75,6 +76,7 @@ function App() {
         <Toaster theme="dark" position="top-right" />
         <BrowserRouter>
           <ErrorBoundary>
+            <DesktopChrome />
             <div aria-hidden className="atmosphere" />
             <div className="relative z-10">
               <Suspense fallback={<PageLoader />}>

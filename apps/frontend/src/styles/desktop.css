@@ -1,0 +1,29 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Native desktop chrome (Electron). All rules are gated behind
+   [data-desktop="macos"], which useDesktopChrome sets only in the macOS
+   desktop build — the browser build is unaffected.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* The window uses titleBarStyle: 'hiddenInset', so the title bar is part of the
+   content. Make the topbar a drag region so the user can move the window by it. */
+[data-desktop="macos"] .glass-topbar {
+  -webkit-app-region: drag;
+}
+
+/* Shift the topbar's content right so it clears the inset traffic lights.
+   In fullscreen the lights auto-hide, so the rule lifts and the normal
+   horizontal padding (px-s-8) is restored. */
+[data-desktop="macos"]:not([data-fullscreen="true"]) .glass-topbar > div {
+  padding-left: 80px;
+}
+
+/* Interactive controls must opt out of the drag region, otherwise the window
+   drag swallows their clicks. */
+[data-desktop="macos"] .glass-topbar a,
+[data-desktop="macos"] .glass-topbar button,
+[data-desktop="macos"] .glass-topbar input,
+[data-desktop="macos"] .glass-topbar select,
+[data-desktop="macos"] .glass-topbar [role="button"],
+[data-desktop="macos"] .glass-topbar [role="switch"] {
+  -webkit-app-region: no-drag;
+}
