@@ -29,7 +29,8 @@ No releases have been tagged yet; the work below is staged for the first
 - Liquid-glass material + observability-card UI on the frontend.
 - Developer experience & repo hygiene: `.editorconfig` + `.prettierignore`
   (populated), Node version pinning (`.nvmrc` / `.node-version` / `engines`),
-  `.gitattributes`, husky pre-commit (lint-staged) + pre-push (typecheck) hooks,
+  `.gitattributes`, `.githooks` wired via `core.hooksPath` (gitleaks + lint-staged
+  pre-commit, commitlint commit-msg, typecheck + tests pre-push),
   `CONTRIBUTING.md`, `SECURITY.md`, `CODEOWNERS`, and this changelog.
 
 ### Changed

@@ -1,2 +1,0 @@
-# Format + lint only the staged files (fast). Config: lint-staged.config.mjs
-npx lint-staged

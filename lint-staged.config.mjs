@@ -20,6 +20,10 @@ export default {
   "apps/backend/**/*.{ts,js,mjs,cjs}": lintWorkspace("apps/backend"),
   "apps/frontend/**/*.{ts,tsx,js,jsx}": lintWorkspace("apps/frontend"),
 
+  // Desktop (Electron shell) ships no ESLint config of its own — Prettier-format
+  // its sources on commit so they don't drift from the rest of the tree.
+  "apps/desktop/**/*.{ts,tsx,js,mjs,cjs}": prettierOnly,
+
   // Everything else Prettier understands (docs, config, styles), anywhere in
   // the tree. .prettierignore still protects lockfiles & generated output.
   "**/*.{json,jsonc,md,yml,yaml,css,html}": prettierOnly,

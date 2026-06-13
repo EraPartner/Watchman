@@ -144,6 +144,40 @@ jobs:
         run: npm run typecheck --workspace=apps/backend
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Verify generated artifacts — the committed OpenAPI-derived TS types must
+  # match apps/backend/openapi.yaml. Drift means someone edited openapi.yaml
+  # without running `npm run generate:types`. Cheap, high-signal — and CLAUDE.md
+  # explicitly flags this sync risk.
+  # ─────────────────────────────────────────────────────────────────────────────
+  verify-generated:
+    name: Verify Generated Artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Regenerate OpenAPI types and check for drift
+        run: |
+          npm run generate:types
+          if ! git diff --exit-code -- apps/frontend/src/types/generated.ts; then
+            echo "ERROR: apps/frontend/src/types/generated.ts is out of sync with apps/backend/openapi.yaml."
+            echo "Run 'npm run generate:types' locally and commit the regenerated file."
+            exit 1
+          fi
+          echo "OpenAPI types in sync."
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Build frontend — verify the frontend production bundle compiles
   # ─────────────────────────────────────────────────────────────────────────────
   build-frontend:
@@ -306,7 +340,7 @@ jobs:
 
       - name: Upload Trivy SARIF to GitHub Security
         if: always()
-        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy
@@ -325,6 +359,7 @@ jobs:
       - lint
       - typecheck
       - typecheck-backend
+      - verify-generated
       - build-frontend
       - build-backend
       - test-frontend

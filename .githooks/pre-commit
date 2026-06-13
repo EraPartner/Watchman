@@ -1,0 +1,75 @@
+#!/usr/bin/env sh
+#
+# Watchman pre-commit -- fast, staged-only checks. The heavier gate (typecheck,
+# tests) lives in .githooks/pre-push.
+#
+# Wiring:   git config core.hooksPath .githooks   (done by scripts/setup-git-hooks.mjs)
+# Bypass:   git commit --no-verify        or       SKIP_HOOKS=1 git commit ...
+#
+# Checks (in order):
+#   1. gitleaks -- staged changes scanned for secrets (CI is the backstop)
+#   2. leftover merge-conflict markers in staged content
+#   3. oversized files newly staged (>1 MB; override ALLOW_BIG_FILES=1)
+#   4. lint-staged -- eslint --fix (per workspace) + prettier --write on staged files
+#
+# Output is ASCII-only on purpose: this runs under dash/busybox sh too.
+
+set -u
+
+if [ "${SKIP_HOOKS:-}" = "1" ]; then
+  echo "[pre-commit] SKIP_HOOKS=1 -- skipping all checks."
+  exit 0
+fi
+
+REPO_ROOT=$(git rev-parse --show-toplevel) || exit 0
+cd "$REPO_ROOT" || exit 1
+
+fail=0
+
+# --- 1. Secret scan (gitleaks) -----------------------------------------------
+# Blocks a leaked key/token before it enters history. CI's gitleaks only runs
+# post-push, by which point the secret is already committed and must be rotated.
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "[pre-commit] gitleaks: scanning staged changes..."
+  gitleaks git --staged --redact --no-banner \
+    || { fail=1; echo "[pre-commit] FAIL: gitleaks flagged potential secrets (above)."; }
+else
+  echo "[pre-commit] gitleaks not found -- skipping secret scan (brew install gitleaks; CI still scans)."
+fi
+
+# --- 2. Leftover merge-conflict markers --------------------------------------
+conflicts=$(git diff --cached --check 2>/dev/null | grep "conflict marker" || true)
+if [ -n "$conflicts" ]; then
+  echo "[pre-commit] FAIL: leftover merge-conflict markers in staged content:"
+  echo "$conflicts"
+  fail=1
+fi
+
+# --- 3. Oversized files ------------------------------------------------------
+if [ "${ALLOW_BIG_FILES:-}" != "1" ]; then
+  LIMIT=$((1024 * 1024)) # 1 MB
+  big=$(git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    size=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
+    [ "$size" -gt "$LIMIT" ] && printf '  %s (%s KB)\n' "$f" "$((size / 1024))"
+  done)
+  if [ -n "$big" ]; then
+    echo "[pre-commit] FAIL: files over 1 MB staged (override with ALLOW_BIG_FILES=1):"
+    echo "$big"
+    fail=1
+  fi
+fi
+
+# --- 4. Format + lint staged files (lint-staged) -----------------------------
+# eslint --fix (per workspace) + prettier --write; config: lint-staged.config.mjs.
+echo "[pre-commit] lint-staged: formatting + linting staged files..."
+npx lint-staged || fail=1
+
+# --- Result ------------------------------------------------------------------
+if [ "$fail" -ne 0 ]; then
+  echo ""
+  echo "[pre-commit] FAIL: checks failed -- fix the issues above, or bypass with: git commit --no-verify"
+  exit 1
+fi
+echo "[pre-commit] OK: all checks passed."
+exit 0

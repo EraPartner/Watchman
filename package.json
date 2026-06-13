@@ -47,7 +47,8 @@
     "test:e2e:visual": "npm run test:e2e:visual --workspace=apps/frontend",
     "generate:types": "openapi-typescript apps/backend/openapi.yaml -o apps/frontend/src/types/generated.ts",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/out",
-    "prepare": "husky || true"
+    "hooks:setup": "node scripts/setup-git-hooks.mjs",
+    "prepare": "node scripts/setup-git-hooks.mjs"
   },
   "overrides": {
     "fast-uri": "^3.1.2",
@@ -58,10 +59,11 @@
     "esbuild": "^0.28.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "audit-ci": "^7.1.0",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
-    "husky": "^9.1.7",
     "lint-staged": "^17.0.7",
     "openapi-typescript": "^7.4.4",
     "prettier": "^3.4.2"

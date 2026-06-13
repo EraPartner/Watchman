@@ -18,7 +18,7 @@ live in [`docs/`](./docs/) (start at [`docs/INDEX.md`](./docs/INDEX.md));
 git clone git@github.com:EraPartner/Watchman.git
 cd Watchman
 nvm use                 # or ensure Node 22+
-npm install             # installs all workspaces + sets up git hooks (husky)
+npm install             # installs all workspaces + wires git hooks (.githooks via core.hooksPath)
 
 # Backend + frontend env (never commit these)
 cp apps/backend/.env.example  apps/backend/.env.local
@@ -69,17 +69,29 @@ Patterns and conventions: [`docs/reference/code-patterns.md`](./docs/reference/c
 
 ## Git hooks
 
-`npm install` wires up [husky](https://typicode.github.io/husky/):
+`npm install` runs `scripts/setup-git-hooks.mjs`, which points
+`core.hooksPath` at the version-controlled `.githooks/` directory (the same
+mechanism Vision and VaultLens use — no husky). Re-run by hand with
+`npm run hooks:setup`.
 
-- **pre-commit** → `lint-staged` runs ESLint `--fix` + Prettier on **staged files only**.
-- **pre-push** → `npm run typecheck` (mirrors the CI gate).
+- **pre-commit** → scans staged changes for secrets with
+  [gitleaks](https://github.com/gitleaks/gitleaks), blocks leftover
+  merge-conflict markers and >1 MB files (`ALLOW_BIG_FILES=1` to override), then
+  runs `lint-staged` (ESLint `--fix` + Prettier on **staged files only**).
+- **commit-msg** → `commitlint` enforces Conventional Commits (see below).
+- **pre-push** → `npm run typecheck` (backend + frontend + desktop) and the
+  backend test suite (`SKIP_TESTS=1` / `SKIP_TYPECHECK=1` to skip individually).
+
+The secret scan needs the gitleaks binary locally (`brew install gitleaks`); if
+it's missing the hook warns and skips — CI's gitleaks job is the backstop.
 
 Hooks can be bypassed in a pinch with `--no-verify`, but CI runs the same checks,
 so a bypassed commit will just fail later.
 
 ## Commit messages
 
-Use [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject`.
+Use [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject`
+— enforced by the `commit-msg` hook (config: `commitlint.config.mjs`).
 
 Types in use: `feat`, `fix`, `chore`, `docs`, `refactor`, `build`, `perf`, `test`,
 plus scoped variants like `feat(backend):`, `feat(desktop):`, `chore(security):`.

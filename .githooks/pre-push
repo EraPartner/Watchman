@@ -1,0 +1,53 @@
+#!/usr/bin/env sh
+#
+# Watchman pre-push -- the heavier gate before code leaves the machine. Mirrors
+# the cheap CI jobs so failures surface locally instead of after a push.
+#
+# Bypass:        git push --no-verify     or     SKIP_HOOKS=1 git push
+# Skip just one: SKIP_TESTS=1 / SKIP_TYPECHECK=1 git push
+#
+# Checks: backend+frontend typecheck . desktop typecheck . backend tests
+#
+# Output is ASCII-only on purpose (see the note in pre-commit).
+
+set -u
+
+if [ "${SKIP_HOOKS:-}" = "1" ]; then
+  echo "[pre-push] SKIP_HOOKS=1 -- skipping all checks."
+  exit 0
+fi
+
+REPO_ROOT=$(git rev-parse --show-toplevel) || exit 0
+cd "$REPO_ROOT" || exit 1
+
+fail=0
+run() { # <label> <command...>
+  _label="$1"; shift
+  echo "[pre-push] > ${_label}..."
+  if "$@"; then
+    echo "[pre-push]   OK: ${_label}"
+  else
+    echo "[pre-push]   FAIL: ${_label}"
+    fail=1
+  fi
+}
+
+if [ "${SKIP_TYPECHECK:-}" != "1" ]; then
+  run "typecheck (backend + frontend)" npm run typecheck
+  run "typecheck (desktop)" sh -c 'cd apps/desktop && npx tsc --noEmit -p tsconfig.json'
+fi
+
+# `npm run test` is the backend Vitest suite. Frontend tests run in CI only
+# (kept off the push path for speed), matching Vision's pre-push.
+if [ "${SKIP_TESTS:-}" != "1" ]; then
+  run "backend tests" npm run test
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo ""
+  echo "[pre-push] FAIL: gate failed -- fix the issues above, or bypass with: git push --no-verify"
+  echo "[pre-push]   (skip individual steps with SKIP_TESTS=1 / SKIP_TYPECHECK=1)"
+  exit 1
+fi
+echo "[pre-push] OK: all checks passed."
+exit 0
