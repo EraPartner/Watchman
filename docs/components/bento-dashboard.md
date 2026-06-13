@@ -2,8 +2,21 @@
 title: BentoDashboard Component
 type: component
 status: active
-date: 2026-05-09
-tags: [component, bento, dashboard, page, frontend, multi-instance, dynamic-layout, crud, add-service, top-bar, summary-chip]
+date: 2026-06-13
+tags:
+  [
+    component,
+    bento,
+    dashboard,
+    page,
+    frontend,
+    multi-instance,
+    dynamic-layout,
+    crud,
+    add-service,
+    top-bar,
+    summary-chip,
+  ]
 description: Main page component for the bento dashboard. Dynamic, instance-aware layout orchestrator combining TopNav, DashboardGrid, ServiceTile, and ServiceDetailSheet. Editorial dark-luxury header with global up/warn/crit summary chip and atmospheric accent.
 aliases: [BentoDashboard, bento page, dashboard page, add service]
 ---
@@ -26,7 +39,7 @@ None. Designed as a page component (mounted directly in routing).
 ```
 BentoDashboard
 ├── TooltipProvider (context for primitives)
-├── atmospheric overlay (radial gold + SVG noise)
+├── .atmosphere layer (fixed gold wash + cool counter-wash + blueprint grid + film grain — ADR-028)
 ├── TopNav
 │   ├── brand mark (gold pulse + "Watchman · Bento")
 │   ├── nav links (Dashboard, Services, Audit, Backup)
@@ -92,11 +105,12 @@ Per-tile stats remain through `useServiceStats(kind, instance, enabled, trackedM
 
 ```typescript
 const entries = BENTO_LAYOUT.filter(
-  (e) => getRenderer(e.kind) && (configuredKinds[e.kind]?.count ?? 0) > 0,
+  (e) => getRenderer(e.kind) && (configuredKinds[e.kind]?.count ?? 0) > 0
 );
 ```
 
 Filters `BENTO_LAYOUT` entries by two criteria:
+
 1. A renderer exists for the service kind
 2. At least one instance of that kind is configured (count > 0)
 
@@ -125,6 +139,7 @@ Clicking the button opens the create service editor dialog (same as header "+ Ad
 ### Header Add Service Button
 
 Right-aligned button in the header:
+
 ```
 [+ Add service]
 ```
@@ -136,9 +151,12 @@ Clicking opens the create service editor dialog. Always visible, even when servi
 When `editorState.mode === "create"`:
 
 ```tsx
-<Dialog open={editorState.mode === "create"} onOpenChange={(o) => {
-  setEditorState(o ? { mode: "create" } : { mode: "closed" });
-}}>
+<Dialog
+  open={editorState.mode === "create"}
+  onOpenChange={(o) => {
+    setEditorState(o ? { mode: "create" } : { mode: "closed" });
+  }}
+>
   <DialogContent>
     <ServiceEditor
       presetKind={undefined}
@@ -209,6 +227,7 @@ The dashboard is fully dynamic and instance-aware:
 4. **Renderer Requirement** — Only services with implemented renderers appear (Phase 3: Bitcoin, Synology; Phase 4+: all 14)
 
 To add a new service to the dashboard:
+
 1. Implement a renderer in `[[apps/frontend/src/services/renderers/{service}.ts]]` exporting a `ServiceRenderer` object
 2. Export it from `[[apps/frontend/src/services/renderers/index.ts]]`
 3. Add/update a layout entry in `[[apps/frontend/src/config/bentoLayout.ts]]` (sets tile size)
@@ -219,12 +238,13 @@ To add a new service to the dashboard:
 Currently mounted via lazy import in `[[apps/frontend/src/App.tsx]]`:
 
 ```typescript
-const BentoDashboardPage = lazy(() =>
-  import("@/components/dashboard/BentoDashboard")
+const BentoDashboardPage = lazy(
+  () => import("@/components/dashboard/BentoDashboard")
 );
 ```
 
 Routed with:
+
 ```tsx
 {
   path: "/?bento=1",  // Behind query flag in Phase 3
@@ -256,6 +276,7 @@ Will become the default dashboard (replacing `LiveServerDashboard`) after Phase 
 - **Mobile (<768px)**: 1–2 col stack; all tiles become S
 
 Detail sheet behavior:
+
 - **Desktop/Tablet**: Right-anchored, 40–50vw width
 - **Mobile**: Full-screen modal overlay
 
@@ -277,3 +298,4 @@ Detail sheet behavior:
 - [[docs/api/config|Configuration API]] — Service CRUD endpoints
 - [[docs/architecture/frontend-architecture|Frontend Architecture]]
 - [[docs/adr/014-time-series-duckdb-and-bento-design-system|ADR-014]]
+- [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] — liquid-glass material + observability-card tiles (icon watermark, full-bleed signal chart, `.atmosphere` backdrop)

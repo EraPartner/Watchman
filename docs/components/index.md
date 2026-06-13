@@ -3,9 +3,35 @@ title: Frontend Components
 type: index
 status: active
 date: 2026-05-07
-tags: [component, index, frontend, ui, primitives, design-system, bento, phase3, phase0a, settings, backup, setup-wizard, single-user, v2, two-tier, status-dots]
+tags:
+  [
+    component,
+    index,
+    frontend,
+    ui,
+    primitives,
+    design-system,
+    bento,
+    phase3,
+    phase0a,
+    settings,
+    backup,
+    setup-wizard,
+    single-user,
+    v2,
+    two-tier,
+    status-dots,
+  ]
 description: Index of all React component and hook documentation for the Watchman frontend including design system primitives, setup wizard, bento dashboard with two-tier status dots (Phase 0a), and Phase 3 bento dashboard (single-user, no auth)
-aliases: [components index, react components, ui components, bento components, settings pages, setup wizard]
+aliases:
+  [
+    components index,
+    react components,
+    ui components,
+    bento components,
+    settings pages,
+    setup wizard,
+  ]
 ---
 
 # Frontend Components
@@ -36,6 +62,7 @@ The foundation layer is a set of 14 typed, accessible primitives built on OKLCH 
 See [[docs/components/primitives/index|Primitive Components Index]] for complete documentation.
 
 **Core Primitives:**
+
 - **Interactive**: [[docs/components/primitives/button|Button]], [[docs/components/primitives/toggle|Toggle]]
 - **Containers**: [[docs/components/primitives/surface|Surface]], [[docs/components/primitives/skeleton|Skeleton]]
 - **Modal**: [[docs/components/primitives/dialog|Dialog]], [[docs/components/primitives/confirm-dialog|ConfirmDialog]], [[docs/components/primitives/sheet|Sheet]]
@@ -59,8 +86,8 @@ SORT file.name ASC
 
 The 18 service-specific card components below are **legacy** and remain active for the `LiveServerDashboard` until Phase 6. The bento dashboard (Phase 3, LIVE) replaces them with a single `<ServiceTile>` component driven by a `ServiceRenderer` registry.
 
-| Component                                                  | Service      | Status          |
-| ---------------------------------------------------------- | ------------ | --------------- |
+| Component                                                  | Service      | Status            |
+| ---------------------------------------------------------- | ------------ | ----------------- |
 | [[docs/components/adguard-card\|AdGuardCard]]              | AdGuard Home | Removed (Phase 3) |
 | [[docs/components/bitcoin-card\|BitcoinCard]]              | Bitcoin      | Removed (Phase 3) |
 | [[docs/components/tor-card\|TorCard]]                      | Tor          | Removed (Phase 3) |
@@ -78,21 +105,23 @@ The 18 service-specific card components below are **legacy** and remain active f
 
 ## Shared Components
 
-| Component                                                      | Description                 | File                                                     | Status           |
-| -------------------------------------------------------------- | --------------------------- | -------------------------------------------------------- | ---------------- |
-| [[docs/components/error-boundary\|ErrorBoundary]]              | Error boundary wrapper      | [[apps/frontend/src/components/ErrorBoundary.tsx]]       | Active           |
-| [[docs/components/offline-banner\|OfflineBanner]]              | LAN backend unreachable     | [[apps/frontend/src/components/OfflineBanner.tsx]]       | Active (split-deploy) |
-| [[docs/components/live-server-dashboard\|LiveServerDashboard]] | Legacy dashboard (Phase 6)  | Removed          | **Deprecated**   |
+| Component                                                      | Description                | File                                               | Status                |
+| -------------------------------------------------------------- | -------------------------- | -------------------------------------------------- | --------------------- |
+| [[docs/components/error-boundary\|ErrorBoundary]]              | Error boundary wrapper     | [[apps/frontend/src/components/ErrorBoundary.tsx]] | Active                |
+| [[docs/components/offline-banner\|OfflineBanner]]              | LAN backend unreachable    | [[apps/frontend/src/components/OfflineBanner.tsx]] | Active (split-deploy) |
+| [[docs/components/live-server-dashboard\|LiveServerDashboard]] | Legacy dashboard (Phase 6) | Removed                                            | **Deprecated**        |
 
 ### Deleted Components
 
 **Phase 3 Deletions:**
+
 - **UpdateBadge** — Removed
 - **ServerStatusBadge** — Replaced by primitives (Badge, StatusDot)
 - All 18 `*Card.tsx` components — Removed (replaced by `ServiceTile` + renderer registry)
 - **LiveServerDashboard** — Removed
 
 **Version 2.3 Deletions (Auth Removal):**
+
 - **AuthGuard** — Removed (no authentication in single-user design)
 - **Login page** — Removed (no authentication in single-user design)
 - See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for details
@@ -105,28 +134,28 @@ The 18 service-specific card components below are **legacy** and remain active f
 
 ### Data & Service Hooks
 
-| Hook                                                                                              | Description                                           | File                                                |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------- |
-| [[docs/components/use-service-health\|useServiceHealth / useServiceStats]]                       | Query service health/stats snapshots                  | [[apps/frontend/src/hooks/useServiceHealth.ts]]     |
-| `useServiceHistory`                                                                               | Query time-series historical metrics (Phase 1)        | [[apps/frontend/src/hooks/useServiceHistory.ts]]    |
-| [[docs/components/use-service-instances\|useServiceInstances]]                                    | Multi-instance service management                    | [[apps/frontend/src/hooks/useServiceInstances.tsx]] |
-| [[docs/components/use-enabled-services\|useEnabledServices]]                                      | Enabled services configuration                       | [[apps/frontend/src/hooks/useEnabledServices.ts]]   |
-| `useBackendReachable`                                                                           | Polls `/meta/health` and detects backend unreachable | [[apps/frontend/src/hooks/useBackendReachable.ts]]  |
+| Hook                                                                       | Description                                          | File                                                |
+| -------------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| [[docs/components/use-service-health\|useServiceHealth / useServiceStats]] | Query service health/stats snapshots                 | [[apps/frontend/src/hooks/useServiceHealth.ts]]     |
+| `useServiceHistory`                                                        | Query time-series historical metrics (Phase 1)       | [[apps/frontend/src/hooks/useServiceHistory.ts]]    |
+| [[docs/components/use-service-instances\|useServiceInstances]]             | Multi-instance service management                    | [[apps/frontend/src/hooks/useServiceInstances.tsx]] |
+| [[docs/components/use-enabled-services\|useEnabledServices]]               | Enabled services configuration                       | [[apps/frontend/src/hooks/useEnabledServices.ts]]   |
+| `useBackendReachable`                                                      | Polls `/meta/health` and detects backend unreachable | [[apps/frontend/src/hooks/useBackendReachable.ts]]  |
 
 ### WebSocket & Realtime Hooks
 
-| Hook                                                                                              | Description                                           | File                                                |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------- |
-| [[docs/components/use-websocket-hook\|useWebSocket]]                                              | Singleton WebSocket connection (internal to provider) | [[apps/frontend/src/hooks/useWebSocket.ts]]         |
-| `useWebSocketContext()`                                                                           | Access connection state (isConnected, reconnectAttempts) | [[apps/frontend/src/providers/WebSocketProvider.tsx]] |
-| `useWebSocketEvent(type)`                                                                         | Subscribe to specific WebSocket message type          | [[apps/frontend/src/hooks/useWebSocket.ts]]         |
+| Hook                                                 | Description                                              | File                                                  |
+| ---------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| [[docs/components/use-websocket-hook\|useWebSocket]] | Singleton WebSocket connection (internal to provider)    | [[apps/frontend/src/hooks/useWebSocket.ts]]           |
+| `useWebSocketContext()`                              | Access connection state (isConnected, reconnectAttempts) | [[apps/frontend/src/providers/WebSocketProvider.tsx]] |
+| `useWebSocketEvent(type)`                            | Subscribe to specific WebSocket message type             | [[apps/frontend/src/hooks/useWebSocket.ts]]           |
 
 ### UI & Setup Hooks
 
-| Hook                                                                                              | Description                                           | File                                                |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------- |
-| [[docs/components/use-setup-dismissal\|useSetupDismissal]]                                        | Setup wizard dismissal state via localStorage         | [[apps/frontend/src/hooks/useSetupDismissal.ts]]    |
-| [[docs/components/use-mobile-hook\|use-mobile]]                                                   | Mobile breakpoint detection       | [[apps/frontend/src/hooks/use-mobile.tsx]]          |
+| Hook                                                       | Description                                   | File                                             |
+| ---------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------ |
+| [[docs/components/use-setup-dismissal\|useSetupDismissal]] | Setup wizard dismissal state via localStorage | [[apps/frontend/src/hooks/useSetupDismissal.ts]] |
+| [[docs/components/use-mobile-hook\|use-mobile]]            | Mobile breakpoint detection                   | [[apps/frontend/src/hooks/use-mobile.tsx]]       |
 
 ### Hook Coverage Notes
 
@@ -135,13 +164,13 @@ The 18 service-specific card components below are **legacy** and remain active f
 
 ## Pages
 
-| Page         | Route              | File                                     |
-| ------------ | ------------------ | ---------------------------------------- |
-| Dashboard    | `/`                | [[apps/frontend/src/App.tsx]]            |
-| Setup Wizard | `/setup`           | [[docs/components/setup-wizard\|SetupWizard]] |
+| Page              | Route                | File                                                                     |
+| ----------------- | -------------------- | ------------------------------------------------------------------------ |
+| Dashboard         | `/`                  | [[apps/frontend/src/App.tsx]]                                            |
+| Setup Wizard      | `/setup`             | [[docs/components/setup-wizard\|SetupWizard]]                            |
 | Services Settings | `/settings/services` | [[docs/components/service-editor\|ServiceEditor]] (embedded in Settings) |
-| Backup       | `/settings/backup` | [[docs/components/backup-restore\|BackupRestore]] |
-| Not Found    | `*`                | [[apps/frontend/src/pages/NotFound.tsx]] |
+| Backup            | `/settings/backup`   | [[docs/components/backup-restore\|BackupRestore]]                        |
+| Not Found         | `*`                  | [[apps/frontend/src/pages/NotFound.tsx]]                                 |
 
 ### Page Test Coverage Notes
 
@@ -170,9 +199,13 @@ The 18 service-specific card components below are **legacy** and remain active f
 
 ## Design System
 
-The new dark-luxury design system provides a cohesive visual language:
+The dark-luxury design system provides a cohesive visual language. [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] added the liquid-glass material layer and static atmosphere backdrop on top of the existing token foundation:
 
-- **Tokens**: OKLCH color spaces, 12-step spacing scale, typography scale (8 sizes), motion (3 durations, 2 easing functions)
+- **Tokens**: OKLCH color spaces, 12-step spacing scale, typography scale (8 sizes), motion (3 durations, 2 easing functions), plus new `--atmo-*` and `--grid-line` atmosphere tokens (`styles/tokens.css`)
+- **Glass material** (`styles/glass.css`): `.glass-thin`, `.glass-regular`, `.glass-thick`, `.glass-topbar` utility classes — translucent gradient + inset specular `::before` + `backdrop-filter: blur() saturate()`. Full a11y fallbacks for `prefers-reduced-transparency`, `prefers-contrast`, `prefers-reduced-motion`, and `@supports not (backdrop-filter)`.
+- **Atmosphere** (`.atmosphere` in `App.tsx`): fixed gold radial wash + faint cool counter-wash + blueprint grid + film grain. Rendered once at the App root behind every route so the glass panels have a backdrop to refract. Page containers are transparent; `body` paints `--surface-0`.
+- **Glass tone utilities**: `.glass-tone-ok`, `.glass-tone-warn`, `.glass-tone-crit` — status-tinted top hairlines on tiles and panels.
+- **`glass-interactive`**: hover/active state variant for clickable glass surfaces.
 - **Elevation**: 3-level shadow system with inset hairlines
 - **Typography**: Geist Variable (sans) + Geist Mono Variable (mono, tabular numerals)
 - **Motion**: Keyframes (tile-enter, sheet-enter/exit, fade, skeleton), reduced-motion support

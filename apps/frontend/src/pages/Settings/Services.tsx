@@ -59,7 +59,7 @@ export default function Services() {
       )}
 
       {loadErrors && loadErrors.length > 0 && (
-        <div className="flex flex-col gap-s-3 rounded-r-3 border border-[var(--crit)] bg-[var(--surface-1)] p-s-4">
+        <div className="glass-regular glass-tone-crit flex flex-col gap-s-3 overflow-hidden rounded-r-3 p-s-4">
           <div className="text-fs-label font-medium text-[var(--crit)]">
             {loadErrors.length} service
             {loadErrors.length === 1 ? "" : "s"} could not be loaded
@@ -98,7 +98,7 @@ export default function Services() {
         </div>
       )}
 
-      <div className="rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] divide-y divide-[var(--hairline)]">
+      <div className="glass-regular divide-y divide-[var(--hairline)] overflow-hidden rounded-r-3">
         {services?.length === 0 && (
           <p className="p-s-6 text-fs-body text-[var(--text-lo)]">
             No services configured yet.

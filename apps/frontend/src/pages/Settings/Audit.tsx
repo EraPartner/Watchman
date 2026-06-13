@@ -19,7 +19,9 @@ export default function Audit() {
       title="Config audit"
       description="Recent configuration changes, most recent first."
     >
-      {isLoading && <p className="text-fs-body text-[var(--text-md)]">Loading…</p>}
+      {isLoading && (
+        <p className="text-fs-body text-[var(--text-md)]">Loading…</p>
+      )}
       {error && (
         <p className="text-fs-label text-[var(--crit)]">
           {(error as Error).message ?? "Failed to load"}
@@ -28,12 +30,14 @@ export default function Audit() {
 
       <ol className="space-y-s-2">
         {entries?.length === 0 && (
-          <li className="text-fs-body text-[var(--text-lo)]">No activity yet.</li>
+          <li className="text-fs-body text-[var(--text-lo)]">
+            No activity yet.
+          </li>
         )}
         {entries?.map((e) => (
           <li
             key={e.id}
-            className="rounded-r-2 border border-[var(--hairline)] bg-[var(--surface-1)] px-s-4 py-s-3"
+            className="glass-regular overflow-hidden rounded-r-2 px-s-4 py-s-3"
           >
             <div className="flex items-baseline justify-between gap-s-4">
               <div>

@@ -148,7 +148,7 @@ export default function Profiles() {
         </p>
       )}
 
-      <div className="mb-s-6 flex flex-wrap items-center justify-between gap-s-4 rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] px-s-4 py-s-3">
+      <div className="glass-regular mb-s-6 flex flex-wrap items-center justify-between gap-s-4 overflow-hidden rounded-r-3 px-s-4 py-s-3">
         <div className="text-fs-label text-[var(--text-md)]">
           {currentMac ? (
             <>
@@ -177,7 +177,7 @@ export default function Profiles() {
         </label>
       </div>
 
-      <div className="divide-y divide-[var(--hairline)] rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)]">
+      <div className="glass-regular divide-y divide-[var(--hairline)] overflow-hidden rounded-r-3">
         {profiles?.length === 0 && (
           <p className="p-s-6 text-fs-body text-[var(--text-lo)]">
             No profiles yet.

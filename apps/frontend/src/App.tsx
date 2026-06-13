@@ -75,33 +75,39 @@ function App() {
         <Toaster theme="dark" position="top-right" />
         <BrowserRouter>
           <ErrorBoundary>
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route
-                  path="/"
-                  element={
-                    <SetupGate>
-                      <BentoDashboardPage />
-                    </SetupGate>
-                  }
-                />
-                <Route path="/setup" element={<SetupWizardPage />} />
-                <Route
-                  path="/settings/services"
-                  element={<SettingsServicesPage />}
-                />
-                <Route
-                  path="/settings/profiles"
-                  element={<SettingsProfilesPage />}
-                />
-                <Route path="/settings/audit" element={<SettingsAuditPage />} />
-                <Route
-                  path="/settings/backup"
-                  element={<SettingsBackupPage />}
-                />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Suspense>
+            <div aria-hidden className="atmosphere" />
+            <div className="relative z-10">
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  <Route
+                    path="/"
+                    element={
+                      <SetupGate>
+                        <BentoDashboardPage />
+                      </SetupGate>
+                    }
+                  />
+                  <Route path="/setup" element={<SetupWizardPage />} />
+                  <Route
+                    path="/settings/services"
+                    element={<SettingsServicesPage />}
+                  />
+                  <Route
+                    path="/settings/profiles"
+                    element={<SettingsProfilesPage />}
+                  />
+                  <Route
+                    path="/settings/audit"
+                    element={<SettingsAuditPage />}
+                  />
+                  <Route
+                    path="/settings/backup"
+                    element={<SettingsBackupPage />}
+                  />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
+            </div>
           </ErrorBoundary>
         </BrowserRouter>
       </WebSocketProvider>

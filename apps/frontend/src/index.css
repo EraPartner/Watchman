@@ -1,17 +1,19 @@
-@import './styles/fonts.css';
-@import './styles/tokens.css';
-@import './styles/motion.css';
+@import "./styles/fonts.css";
+@import "./styles/tokens.css";
+@import "./styles/motion.css";
+@import "./styles/glass.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  html, body {
+  html,
+  body {
     background-color: var(--surface-0);
     color: var(--text-hi);
     font-family: var(--font-sans);
-    font-feature-settings: 'ss01', 'cv01';
+    font-feature-settings: "ss01", "cv01";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

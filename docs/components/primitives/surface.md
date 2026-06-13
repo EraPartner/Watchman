@@ -2,9 +2,9 @@
 title: Surface Primitive
 type: component
 status: active
-date: 2026-04-18
-tags: [primitive, surface, container, dark-luxury]
-description: Elevated container component with depth hierarchy and tone variants
+date: 2026-06-13
+tags: [primitive, surface, container, dark-luxury, glass, liquid-glass]
+description: Elevated container component with depth hierarchy, tone variants, and a glass material variant introduced in ADR-028.
 aliases: [surface, Surface]
 ---
 
@@ -16,57 +16,81 @@ Elevated container built on native `<div>` for creating visual hierarchy via sur
 
 Render a visually distinct container with configurable elevation (shadow), tone (semantic color), and padding.
 
+## Glass Material Variant (ADR-028)
+
+In addition to the elevation/tone/padding variants, `Surface` gained a `material` prop as part of the [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] liquid-glass redesign:
+
+```typescript
+<Surface material="glass">
+  {/* Frosted glass panel — uses .glass-regular CSS class */}
+</Surface>
+```
+
+| Value               | CSS applied                                                                                                | Usage                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `"solid"` (default) | `--surface-1` bg + elevation shadow                                                                        | All pre-ADR-028 surfaces                                   |
+| `"glass"`           | `.glass-regular` — translucent gradient + inset specular `::before` + `backdrop-filter: blur() saturate()` | `ServiceTile`, detail-sheet hero card, settings list cards |
+
+When `material="glass"` is set, the elevation and tone props still apply (e.g., `tone="warn"` adds the tinted hairline on top). The glass surface is tuned lighter (~20–24% L) than the near-black canvas (~14% L) so it reads as a raised surface rather than a transparent void.
+
+Full a11y fallbacks are defined in `glass.css`:
+
+- `prefers-reduced-transparency`: near-opaque fallback, no blur
+- `prefers-contrast`: raised opacity + stronger border
+- `@supports not (backdrop-filter)`: opaque solid fallback
+
 ## Variants
 
 ### Elevation Variants
 
 Elevation creates depth through inset hairlines and drop shadows:
 
-| Level | Style | Usage |
-|-------|-------|-------|
-| `0` | `--surface-0` bg, no shadow | Flat, non-interactive backgrounds |
-| `1` | `--surface-1` + `--elev-1` shadow | Default interactive surfaces |
-| `2` | `--surface-1` + `--elev-2` shadow | Modal content, emphasized containers |
-| `3` | `--surface-1` + `--elev-3` shadow | Highest overlay layer, top-level modal |
+| Level | Style                             | Usage                                  |
+| ----- | --------------------------------- | -------------------------------------- |
+| `0`   | `--surface-0` bg, no shadow       | Flat, non-interactive backgrounds      |
+| `1`   | `--surface-1` + `--elev-1` shadow | Default interactive surfaces           |
+| `2`   | `--surface-1` + `--elev-2` shadow | Modal content, emphasized containers   |
+| `3`   | `--surface-1` + `--elev-3` shadow | Highest overlay layer, top-level modal |
 
 ### Tone Variants
 
 Semantic color accents via inset borders:
 
-| Tone | Border | Usage |
-|------|--------|-------|
-| `neutral` | None (default) | Standard surfaces |
-| `ok` | `1px solid --ok` | Success, healthy, valid state |
-| `warn` | `1px solid --warn` | Warning, caution, potential issue |
-| `crit` | `1px solid --crit` | Critical error, offline, failure |
+| Tone      | Border             | Usage                             |
+| --------- | ------------------ | --------------------------------- |
+| `neutral` | None (default)     | Standard surfaces                 |
+| `ok`      | `1px solid --ok`   | Success, healthy, valid state     |
+| `warn`    | `1px solid --warn` | Warning, caution, potential issue |
+| `crit`    | `1px solid --crit` | Critical error, offline, failure  |
 
 ### Padding Variants
 
 Configurable inner spacing:
 
-| Size | Padding | Usage |
-|------|---------|-------|
-| `none` | `0` | No internal padding (custom layout) |
-| `sm` | `--s-3` (12px) | Compact sections |
-| `md` | `--s-4` (16px) | Default padding, most containers |
-| `lg` | `--s-6` (24px) | Spacious sections, feature cards |
+| Size   | Padding        | Usage                               |
+| ------ | -------------- | ----------------------------------- |
+| `none` | `0`            | No internal padding (custom layout) |
+| `sm`   | `--s-3` (12px) | Compact sections                    |
+| `md`   | `--s-4` (16px) | Default padding, most containers    |
+| `lg`   | `--s-6` (24px) | Spacious sections, feature cards    |
 
 ## Props
 
 ```typescript
 interface SurfaceProps
-  extends HTMLAttributes<HTMLDivElement>,
+  extends
+    HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof surfaceVariants> {}
 ```
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `elevation` | `0 \| 1 \| 2 \| 3` | `1` | Shadow/depth level |
-| `tone` | `'neutral' \| 'ok' \| 'warn' \| 'crit'` | `'neutral'` | Semantic color tone |
-| `padding` | `'none' \| 'sm' \| 'md' \| 'lg'` | `'md'` | Internal spacing |
-| `children` | `ReactNode` | — | Container content |
-| `className` | `string` | — | Additional CSS classes |
-| `...rest` | — | — | Standard div attributes |
+| Prop        | Type                                    | Default     | Description             |
+| ----------- | --------------------------------------- | ----------- | ----------------------- |
+| `elevation` | `0 \| 1 \| 2 \| 3`                      | `1`         | Shadow/depth level      |
+| `tone`      | `'neutral' \| 'ok' \| 'warn' \| 'crit'` | `'neutral'` | Semantic color tone     |
+| `padding`   | `'none' \| 'sm' \| 'md' \| 'lg'`        | `'md'`      | Internal spacing        |
+| `children`  | `ReactNode`                             | —           | Container content       |
+| `className` | `string`                                | —           | Additional CSS classes  |
+| `...rest`   | —                                       | —           | Standard div attributes |
 
 ## Usage
 
@@ -110,16 +134,18 @@ import { Surface } from "@/components/primitives";
 
 ## Elevation System
 
-| Level | Inset Hairline | Drop Shadow |
-|-------|---|---|
-| 1 | `0 0 0 1px var(--hairline)` | `0 1px 3px rgba(0,0,0,0.2)` |
-| 2 | `0 0 0 1px var(--hairline)` | `0 4px 12px rgba(0,0,0,0.3)` |
-| 3 | `0 0 0 1px var(--hairline)` | `0 8px 24px rgba(0,0,0,0.4)` |
+| Level | Inset Hairline              | Drop Shadow                  |
+| ----- | --------------------------- | ---------------------------- |
+| 1     | `0 0 0 1px var(--hairline)` | `0 1px 3px rgba(0,0,0,0.2)`  |
+| 2     | `0 0 0 1px var(--hairline)` | `0 4px 12px rgba(0,0,0,0.3)` |
+| 3     | `0 0 0 1px var(--hairline)` | `0 8px 24px rgba(0,0,0,0.4)` |
 
 ## Related
 
-- [[docs/architecture/frontend-design-system|Design System]] — Elevation and color tokens
+- [[docs/architecture/frontend-design-system|Design System]] — Elevation, color tokens, and glass material system
 - [[docs/components/primitives/button|Button]] — Interactive surface
-- [[docs/components/primitives/dialog|Dialog]] — Modal surface
-- [[docs/components/primitives/sheet|Sheet]] — Drawer surface
+- [[docs/components/primitives/dialog|Dialog]] — Modal surface (`glass-thick`)
+- [[docs/components/primitives/sheet|Sheet]] — Drawer surface (`glass-thick`)
+- [[apps/frontend/src/styles/glass.css|glass.css]] — Glass utility classes
 - [[apps/frontend/src/components/primitives/Surface.tsx|Surface.tsx]]
+- [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] — `material="glass"` variant introduction

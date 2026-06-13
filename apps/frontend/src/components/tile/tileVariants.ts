@@ -23,7 +23,7 @@ export const tileVariants = cva(
         compact: "gap-s-2",
       },
       interactive: {
-        true: "cursor-pointer hover:-translate-y-px",
+        true: "cursor-pointer hover:-translate-y-px active:scale-[0.99]",
         false: "",
       },
     },

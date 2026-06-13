@@ -1,14 +1,23 @@
 import { useMemo, type KeyboardEvent, type MouseEvent } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Check, X } from "lucide-react";
+import { serviceIcon, heroState } from "@/lib/serviceVisuals";
 import { Surface } from "@/components/primitives/Surface";
 import { StatusDot } from "@/components/primitives/StatusDot";
 import { MetricValue } from "@/components/primitives/MetricValue";
 import { Badge } from "@/components/primitives/Badge";
 import { Skeleton } from "@/components/primitives/Skeleton";
 import { Sparkline } from "@/components/primitives/Sparkline";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/primitives/Tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/primitives/Tooltip";
 import { cn } from "@/lib/utils";
-import { useServiceHealth, useServiceStats, StatsApiError } from "@/hooks/useServiceHealth";
+import {
+  useServiceHealth,
+  useServiceStats,
+  StatsApiError,
+} from "@/hooks/useServiceHealth";
 import { useServices } from "@/pages/Settings/useConfigQueries";
 import type { ServiceInstance } from "@/hooks/useServiceInstances";
 import { getRenderer, rendererTrackedMetrics } from "@/services/renderers";
@@ -30,7 +39,10 @@ const TONE_TO_STATUS: Record<Tone, "neutral" | "ok" | "warn" | "crit"> = {
   crit: "crit",
 };
 
-const SPARKLINE_TONE: Record<Tone, "neutral" | "ok" | "warn" | "crit" | "accent"> = {
+const SPARKLINE_TONE: Record<
+  Tone,
+  "neutral" | "ok" | "warn" | "crit" | "accent"
+> = {
   neutral: "neutral",
   ok: "accent",
   warn: "warn",
@@ -90,7 +102,7 @@ function computeStatsErrorBadge(
 function pickSource(
   metric: Pick<MetricSpec, "key" | "source">,
   stats: Record<string, unknown> | undefined,
-  health: HealthSnapshot | undefined,
+  health: HealthSnapshot | undefined
 ): unknown {
   if (metric.source === "health") {
     if (!health) return undefined;
@@ -156,7 +168,11 @@ export function ServiceTile({
   const tone = useMemo<Tone>(() => {
     if (!renderer) return "neutral";
     try {
-      return renderer.tone({ stats: statsMetrics, health: healthShape, instance });
+      return renderer.tone({
+        stats: statsMetrics,
+        health: healthShape,
+        instance,
+      });
     } catch {
       return "neutral";
     }
@@ -169,7 +185,10 @@ export function ServiceTile({
   if (!renderer) {
     return (
       <Surface
-        className={cn(tileVariants({ size, density, interactive: false }), className)}
+        className={cn(
+          tileVariants({ size, density, interactive: false }),
+          className
+        )}
         padding="md"
       >
         <div className="text-fs-label text-[var(--text-lo)]">
@@ -184,8 +203,11 @@ export function ServiceTile({
     ? primary.format(pickSource(primary, statsMetrics, healthRaw))
     : "—";
   const subtitle =
-    renderer.subtitle?.({ stats: statsMetrics, health: healthShape, instance }) ??
-    null;
+    renderer.subtitle?.({
+      stats: statsMetrics,
+      health: healthShape,
+      instance,
+    }) ?? null;
   const surfaceTone = tone === "ok" ? "neutral" : tone;
 
   const quickLinkUrl =
@@ -221,17 +243,33 @@ export function ServiceTile({
   };
 
   const loading = stats.isLoading && !statsMetrics;
-  const showSparkline = size !== "S" && sparkData.length >= 2 && !offline;
+
+  const Icon = serviceIcon(kind);
+  const accentColor =
+    tone === "crit"
+      ? "var(--crit)"
+      : tone === "warn"
+        ? "var(--warn)"
+        : "var(--accent)";
+  const watermarkSize =
+    size === "XL" ? 168 : size === "L" ? 140 : size === "S" ? 84 : 116;
+  const chartHeight =
+    size === "S" ? 0 : size === "M" ? 72 : size === "L" ? 84 : 104;
+  const showChart = chartHeight > 0 && sparkData.length >= 2 && !offline;
+  const { isBool: heroIsBool, truthy: heroTruthy } = heroState(
+    primary ? primaryValue : undefined
+  );
 
   return (
     <Surface
-      tone={surfaceTone}
+      material="glass"
       padding="md"
-      elevation={1}
       className={cn(
         tileVariants({ size, density, interactive: !!onOpenDetail }),
-        "group",
-        "transition-shadow hover:shadow-elev-2",
+        "group motion-tile",
+        surfaceTone === "warn" && "glass-tone-warn",
+        surfaceTone === "crit" && "glass-tone-crit",
+        onOpenDetail && "glass-interactive",
         className
       )}
       role={onOpenDetail ? "button" : undefined}
@@ -240,148 +278,213 @@ export function ServiceTile({
       onClick={onOpenDetail ? handleOpen : undefined}
       onKeyDown={onOpenDetail ? handleKey : undefined}
     >
-      <header className="flex items-start justify-between gap-s-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-s-2">
-            {hasTwoTiers ? (
-              <>
-                <StatusDot
-                  tone={hostHealth.reachable ? "ok" : "crit"}
-                  pulse={hostHealth.reachable}
-                  label={`host: ${hostHealth.reachable ? "up" : "down"}${
-                    hostHealth.pingMs !== undefined ? ` (${fmtMs(hostHealth.pingMs)})` : ""
-                  }`}
-                />
-                <StatusDot
-                  tone={serviceHealth.reachable ? "ok" : "crit"}
-                  pulse={serviceHealth.reachable}
-                  label={`service: ${serviceHealth.reachable ? "up" : "down"}${
-                    serviceHealth.latencyMs !== undefined ? ` (${fmtMs(serviceHealth.latencyMs)})` : ""
-                  }`}
-                />
-              </>
-            ) : (
-              <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
-            )}
-            <span className="truncate text-fs-label font-[600] uppercase tracking-[0.06em] text-[var(--text-md)]">
-              {renderer.displayName}
-            </span>
-            {hasTwoTiers ? (
-              <span className="hidden sm:inline-flex items-baseline gap-s-1 text-fs-label font-mono tabular-nums text-[var(--text-lo)]">
-                {fmtMs(hostHealth.pingMs) ? (
-                  <span title="host ping">{fmtMs(hostHealth.pingMs)}</span>
-                ) : null}
-                {fmtMs(hostHealth.pingMs) && fmtMs(serviceHealth.latencyMs) ? (
-                  <span aria-hidden>·</span>
-                ) : null}
-                {fmtMs(serviceHealth.latencyMs) ? (
-                  <span title="service latency">
-                    {fmtMs(serviceHealth.latencyMs)}
-                  </span>
-                ) : null}
-              </span>
-            ) : null}
-          </div>
-          {subtitle ? (
-            <div className="mt-s-1 truncate text-fs-label text-[var(--text-lo)]">
-              {subtitle}
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-s-2">
-          {quickLinkUrl ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a
-                  href={quickLinkUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  onClick={handleQuickLink}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-r-2 text-[var(--text-lo)] opacity-0 transition-[opacity,color,background-color] duration-fast group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-                  aria-label={renderer.quickLinkLabel ?? "Open service UI"}
-                >
-                  <ExternalLink size={12} aria-hidden />
-                </a>
-              </TooltipTrigger>
-              <TooltipContent>
-                {renderer.quickLinkLabel ?? "Open"}
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
-          {healthShape?.status ? (
-            <Badge
-              tone={
-                tone === "ok"
-                  ? "ok"
-                  : tone === "warn"
-                    ? "warn"
-                    : tone === "crit"
-                      ? "crit"
-                      : "mono"
-              }
-            >
-              {healthShape.status}
-            </Badge>
-          ) : null}
-          {statsErrorBadge && !offline ? (
-            <Badge tone="warn" title={statsErrorBadge.title}>
-              {statsErrorBadge.label}
-            </Badge>
-          ) : null}
-        </div>
-      </header>
+      {/* status-tinted top accent */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-px opacity-60 transition-opacity duration-med group-hover:opacity-100"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
+        }}
+      />
 
-      <div className="flex flex-1 flex-col justify-end gap-s-2">
-        {offline ? (
-          <div className="text-fs-label text-[var(--text-md)]">
-            <p className="text-[var(--crit)] font-mono uppercase tracking-[0.06em]">
-              Unavailable
-            </p>
-            <p className="mt-s-1 line-clamp-2 text-[var(--text-lo)]">
-              {offlineMessage}
-            </p>
-          </div>
-        ) : statsErrorBadge ? (
-          <p className="text-fs-label text-[var(--text-lo)]">
-            configure to see metrics
-          </p>
-        ) : (
-          <>
-            {loading ? (
-              <Skeleton height={40} className="w-3/5" />
-            ) : primary ? (
-              <div className="flex items-end justify-between gap-s-3">
-                <MetricValue
-                  size={size === "S" ? "md" : size === "XL" ? "xl" : "lg"}
-                  value={primaryValue}
-                  unit={primary.label.toLowerCase()}
-                />
-                {showSparkline ? (
-                  <Sparkline
-                    data={sparkData}
-                    width={size === "XL" ? 160 : size === "L" ? 120 : 88}
-                    height={size === "XL" ? 40 : 32}
-                    tone={SPARKLINE_TONE[tone]}
-                    className="shrink-0"
+      {/* service glyph watermark — fills the upper field with identity */}
+      <Icon
+        aria-hidden
+        size={watermarkSize}
+        strokeWidth={1}
+        className="pointer-events-none absolute -right-5 -top-6 z-0 text-[var(--text-hi)] opacity-[0.05] transition-opacity duration-med group-hover:opacity-[0.08]"
+      />
+
+      {/* full-bleed signal footer */}
+      {showChart ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 opacity-60 transition-opacity duration-med group-hover:opacity-90 [mask-image:linear-gradient(to_top,black_55%,transparent)]"
+          style={{ height: chartHeight }}
+        >
+          <Sparkline
+            data={sparkData}
+            stretch
+            height={chartHeight}
+            tone={SPARKLINE_TONE[tone]}
+            className="h-full w-full"
+          />
+        </div>
+      ) : null}
+
+      <div
+        className="relative z-[1] flex h-full flex-col"
+        style={{
+          paddingBottom: showChart ? Math.round(chartHeight * 0.5) : undefined,
+        }}
+      >
+        <header className="flex items-start justify-between gap-s-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-s-2">
+              {hasTwoTiers ? (
+                <>
+                  <StatusDot
+                    tone={hostHealth.reachable ? "ok" : "crit"}
+                    pulse={hostHealth.reachable}
+                    label={`host: ${hostHealth.reachable ? "up" : "down"}${
+                      hostHealth.pingMs !== undefined
+                        ? ` (${fmtMs(hostHealth.pingMs)})`
+                        : ""
+                    }`}
                   />
-                ) : null}
+                  <StatusDot
+                    tone={serviceHealth.reachable ? "ok" : "crit"}
+                    pulse={serviceHealth.reachable}
+                    label={`service: ${serviceHealth.reachable ? "up" : "down"}${
+                      serviceHealth.latencyMs !== undefined
+                        ? ` (${fmtMs(serviceHealth.latencyMs)})`
+                        : ""
+                    }`}
+                  />
+                </>
+              ) : (
+                <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
+              )}
+              <span className="truncate text-fs-label font-[600] uppercase tracking-[0.06em] text-[var(--text-md)]">
+                {renderer.displayName}
+              </span>
+              {hasTwoTiers ? (
+                <span className="hidden sm:inline-flex items-baseline gap-s-1 text-fs-label font-mono tabular-nums text-[var(--text-lo)]">
+                  {fmtMs(hostHealth.pingMs) ? (
+                    <span title="host ping">{fmtMs(hostHealth.pingMs)}</span>
+                  ) : null}
+                  {fmtMs(hostHealth.pingMs) &&
+                  fmtMs(serviceHealth.latencyMs) ? (
+                    <span aria-hidden>·</span>
+                  ) : null}
+                  {fmtMs(serviceHealth.latencyMs) ? (
+                    <span title="service latency">
+                      {fmtMs(serviceHealth.latencyMs)}
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+            </div>
+            {subtitle ? (
+              <div className="mt-s-1 truncate text-fs-label text-[var(--text-lo)]">
+                {subtitle}
               </div>
             ) : null}
-
-            {secondary.length > 0 ? (
-              <dl className="grid grid-cols-2 gap-s-2 text-fs-label">
-                {secondary.map((m) => (
-                  <div key={m.key} className="min-w-0">
-                    <dt className="truncate text-[var(--text-lo)]">{m.label}</dt>
-                    <dd className="truncate font-mono tabular-nums text-[var(--text-hi)]">
-                      {m.format(pickSource(m, statsMetrics, healthRaw))}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+          </div>
+          <div className="flex items-center gap-s-2">
+            {quickLinkUrl ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href={quickLinkUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    onClick={handleQuickLink}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-r-2 text-[var(--text-lo)] opacity-0 transition-[opacity,color,background-color] duration-fast group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    aria-label={renderer.quickLinkLabel ?? "Open service UI"}
+                  >
+                    <ExternalLink size={12} aria-hidden />
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {renderer.quickLinkLabel ?? "Open"}
+                </TooltipContent>
+              </Tooltip>
             ) : null}
-          </>
-        )}
+            {healthShape?.status ? (
+              <Badge
+                tone={
+                  tone === "ok"
+                    ? "ok"
+                    : tone === "warn"
+                      ? "warn"
+                      : tone === "crit"
+                        ? "crit"
+                        : "mono"
+                }
+              >
+                {healthShape.status}
+              </Badge>
+            ) : null}
+            {statsErrorBadge && !offline ? (
+              <Badge tone="warn" title={statsErrorBadge.title}>
+                {statsErrorBadge.label}
+              </Badge>
+            ) : null}
+          </div>
+        </header>
+
+        <div className="mt-auto flex flex-col gap-s-3">
+          {offline ? (
+            <div className="text-fs-label text-[var(--text-md)]">
+              <p className="font-mono uppercase tracking-[0.06em] text-[var(--crit)]">
+                Unavailable
+              </p>
+              <p className="mt-s-1 line-clamp-2 text-[var(--text-lo)]">
+                {offlineMessage}
+              </p>
+            </div>
+          ) : statsErrorBadge ? (
+            <p className="text-fs-label text-[var(--text-lo)]">
+              configure to see metrics
+            </p>
+          ) : (
+            <>
+              {loading ? (
+                <Skeleton height={40} className="w-3/5" />
+              ) : primary ? (
+                heroIsBool ? (
+                  <div className="flex items-center gap-s-2">
+                    <span
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full"
+                      style={{
+                        color: heroTruthy ? accentColor : "var(--crit)",
+                        background: heroTruthy
+                          ? "var(--accent-soft)"
+                          : "var(--crit-soft)",
+                      }}
+                    >
+                      {heroTruthy ? (
+                        <Check size={15} strokeWidth={3} />
+                      ) : (
+                        <X size={15} strokeWidth={3} />
+                      )}
+                    </span>
+                    <span
+                      className="font-mono text-fs-h2 font-[700] uppercase tracking-[0.01em]"
+                      style={{
+                        color: heroTruthy ? "var(--text-hi)" : "var(--crit)",
+                      }}
+                    >
+                      {primary.label}
+                    </span>
+                  </div>
+                ) : (
+                  <MetricValue
+                    size={size === "S" ? "md" : size === "XL" ? "xl" : "lg"}
+                    value={primaryValue}
+                    unit={primary.unit ?? primary.label.toLowerCase()}
+                  />
+                )
+              ) : null}
+
+              {secondary.length > 0 ? (
+                <dl className="grid grid-cols-2 gap-x-s-4 gap-y-s-2">
+                  {secondary.map((m) => (
+                    <div key={m.key} className="min-w-0">
+                      <dt className="truncate text-[10px] uppercase tracking-[0.08em] text-[var(--text-lo)]">
+                        {m.label}
+                      </dt>
+                      <dd className="truncate font-mono text-fs-body tabular-nums text-[var(--text-hi)]">
+                        {m.format(pickSource(m, statsMetrics, healthRaw))}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
     </Surface>
   );

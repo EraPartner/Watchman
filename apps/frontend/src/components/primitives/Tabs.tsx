@@ -1,4 +1,8 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import {
+  forwardRef,
+  type ComponentPropsWithoutRef,
+  type ElementRef,
+} from "react";
 import * as T from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +16,7 @@ export const TabsList = forwardRef<
     ref={ref}
     className={cn(
       "inline-flex items-center gap-s-1 p-s-1",
-      "rounded-r-2 bg-[var(--surface-2)] shadow-[inset_0_0_0_1px_var(--hairline)]",
+      "glass-thin rounded-r-2",
       className
     )}
     {...rest}

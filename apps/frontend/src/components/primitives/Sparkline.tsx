@@ -3,8 +3,10 @@ import { cn } from "@/lib/utils";
 
 export type SparklineTone = "neutral" | "ok" | "warn" | "crit" | "accent";
 
-export interface SparklineProps
-  extends Omit<SVGAttributes<SVGSVGElement>, "children"> {
+export interface SparklineProps extends Omit<
+  SVGAttributes<SVGSVGElement>,
+  "children"
+> {
   /** Numeric series. Non-finite values are filtered. */
   data: ReadonlyArray<number>;
   width?: number;
@@ -15,8 +17,8 @@ export interface SparklineProps
   fill?: boolean;
   /** Optional accessible label; if omitted, chart is treated as decorative. */
   label?: string;
-  /** Optional baseline value to render as a hairline. */
-  baseline?: number;
+  /** Stretch horizontally to fill the container (preserveAspectRatio: none). */
+  stretch?: boolean;
 }
 
 const TONE_VAR: Record<SparklineTone, string> = {
@@ -32,20 +34,31 @@ interface ScaleResult {
   areaD: string;
   lastX: number;
   lastY: number;
-  baselineY: number | null;
+}
+
+/** Smooth a polyline with midpoint quadratic curves — calm, organic line. */
+function smoothPath(pts: ReadonlyArray<readonly [number, number]>): string {
+  if (pts.length === 0) return "";
+  const p0 = pts[0]!;
+  if (pts.length === 1) return `M${p0[0].toFixed(2)},${p0[1].toFixed(2)}`;
+  let d = `M${p0[0].toFixed(2)},${p0[1].toFixed(2)}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [cx, cy] = pts[i]!;
+    const [nx, ny] = pts[i + 1]!;
+    const mx = (cx + nx) / 2;
+    const my = (cy + ny) / 2;
+    d += `Q${cx.toFixed(2)},${cy.toFixed(2)} ${mx.toFixed(2)},${my.toFixed(2)}`;
+  }
+  const last = pts[pts.length - 1]!;
+  d += `L${last[0].toFixed(2)},${last[1].toFixed(2)}`;
+  return d;
 }
 
 function buildPaths(
   values: ReadonlyArray<number>,
   width: number,
-  height: number,
-  baseline?: number
+  height: number
 ): ScaleResult | null {
-  const padX = 1;
-  const padY = 1;
-  const innerW = Math.max(1, width - padX * 2);
-  const innerH = Math.max(1, height - padY * 2);
-
   const finite = values.filter((v) => Number.isFinite(v));
   if (finite.length === 0) return null;
 
@@ -55,31 +68,28 @@ function buildPaths(
     if (v < min) min = v;
     if (v > max) max = v;
   }
-  if (baseline !== undefined && Number.isFinite(baseline)) {
-    if (baseline < min) min = baseline;
-    if (baseline > max) max = baseline;
-  }
-  if (min === max) {
-    min -= 1;
-    max += 1;
-  }
-  const range = max - min;
 
-  const xFor = (i: number) => {
-    if (finite.length === 1) return padX + innerW / 2;
-    return padX + (i / (finite.length - 1)) * innerW;
+  // Reserve headroom so peaks never touch the top edge; constant series rest
+  // on a calm low line rather than filling the whole box as a flat rectangle.
+  const topFrac = 0.2;
+  const botFrac = 0.96;
+  const flat = max - min < 1e-9;
+
+  const xFor = (i: number) =>
+    finite.length === 1 ? width / 2 : (i / (finite.length - 1)) * width;
+  const yFor = (v: number) => {
+    if (flat) return height * 0.64;
+    const t = (v - min) / (max - min);
+    return height * (botFrac - t * (botFrac - topFrac));
   };
-  const yFor = (v: number) => padY + (1 - (v - min) / range) * innerH;
 
-  const points = finite.map((v, i) => `${xFor(i).toFixed(2)},${yFor(v).toFixed(2)}`);
-  const pathD = `M${points.join("L")}`;
-  const lastX = finite.length === 1 ? xFor(0) : xFor(finite.length - 1);
-  const lastY = yFor(finite[finite.length - 1]!);
-  const areaD = `${pathD}L${lastX.toFixed(2)},${(height - padY).toFixed(2)}L${padX.toFixed(2)},${(height - padY).toFixed(2)}Z`;
-  const baselineY =
-    baseline !== undefined && Number.isFinite(baseline) ? yFor(baseline) : null;
+  const pts = finite.map((v, i) => [xFor(i), yFor(v)] as [number, number]);
+  const pathD = smoothPath(pts);
+  const first = pts[0]!;
+  const last = pts[pts.length - 1]!;
+  const areaD = `${pathD}L${last[0].toFixed(2)},${height.toFixed(2)}L${first[0].toFixed(2)},${height.toFixed(2)}Z`;
 
-  return { pathD, areaD, lastX, lastY, baselineY };
+  return { pathD, areaD, lastX: last[0], lastY: last[1] };
 }
 
 export const Sparkline = forwardRef<SVGSVGElement, SparklineProps>(
@@ -91,7 +101,7 @@ export const Sparkline = forwardRef<SVGSVGElement, SparklineProps>(
       tone = "accent",
       fill = true,
       label,
-      baseline,
+      stretch = false,
       className,
       ...rest
     },
@@ -99,18 +109,20 @@ export const Sparkline = forwardRef<SVGSVGElement, SparklineProps>(
   ) => {
     const gradientId = useId();
     const stroke = TONE_VAR[tone];
+    const vbW = stretch ? 100 : width;
 
     const built = useMemo(
-      () => buildPaths(data, width, height, baseline),
-      [data, width, height, baseline]
+      () => buildPaths(data, vbW, height),
+      [data, vbW, height]
     );
 
     return (
       <svg
         ref={ref}
-        width={width}
+        width={stretch ? "100%" : width}
         height={height}
-        viewBox={`0 0 ${width} ${height}`}
+        viewBox={`0 0 ${vbW} ${height}`}
+        preserveAspectRatio={stretch ? "none" : "xMidYMid meet"}
         className={cn("block overflow-visible", className)}
         aria-hidden={label ? undefined : true}
         role={label ? "img" : undefined}
@@ -119,40 +131,36 @@ export const Sparkline = forwardRef<SVGSVGElement, SparklineProps>(
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={stroke} stopOpacity={0.32} />
+            <stop offset="0%" stopColor={stroke} stopOpacity={0.24} />
+            <stop offset="70%" stopColor={stroke} stopOpacity={0.04} />
             <stop offset="100%" stopColor={stroke} stopOpacity={0} />
           </linearGradient>
         </defs>
         {built ? (
           <>
-            {built.baselineY !== null ? (
-              <line
-                x1={1}
-                x2={width - 1}
-                y1={built.baselineY}
-                y2={built.baselineY}
-                stroke="var(--hairline-strong)"
-                strokeWidth={0.75}
-                strokeDasharray="2 3"
-              />
+            {fill ? (
+              <path d={built.areaD} fill={`url(#${gradientId})`} />
             ) : null}
-            {fill ? <path d={built.areaD} fill={`url(#${gradientId})`} /> : null}
             <path
               d={built.pathD}
               fill="none"
               stroke={stroke}
-              strokeWidth={1.25}
+              strokeWidth={1.5}
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+              opacity={0.85}
             />
-            <circle
-              cx={built.lastX}
-              cy={built.lastY}
-              r={1.75}
-              fill={stroke}
-              stroke="var(--surface-1)"
-              strokeWidth={0.75}
-            />
+            {!stretch ? (
+              <circle
+                cx={built.lastX}
+                cy={built.lastY}
+                r={2}
+                fill={stroke}
+                stroke="var(--surface-1)"
+                strokeWidth={0.75}
+              />
+            ) : null}
           </>
         ) : null}
       </svg>

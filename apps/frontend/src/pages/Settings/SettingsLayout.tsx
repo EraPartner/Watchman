@@ -19,23 +19,29 @@ export function SettingsLayout({
 }: SettingsLayoutProps) {
   return (
     <TooltipProvider>
-      <div className="relative min-h-screen bg-[var(--surface-0)] text-[var(--text-hi)]">
+      <div className="relative min-h-screen text-[var(--text-hi)]">
         <TopNav />
         <main className="relative mx-auto max-w-screen-xl px-s-8 py-s-10">
-          <header className="mb-s-8 flex items-end justify-between gap-s-6">
-            <div className="space-y-s-2">
+          <header className="mb-s-10 flex items-end justify-between gap-s-6">
+            <div className="space-y-s-3">
               {eyebrow ? (
                 <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--accent)]">
                   {eyebrow}
                 </p>
               ) : null}
-              <h1 className="text-fs-h1 font-[700] tracking-[-0.02em]">
+              <h1 className="text-[clamp(2rem,1.6rem+1.4vw,3rem)] font-[700] leading-[0.98] tracking-[-0.03em] text-[var(--text-hi)]">
                 {title}
               </h1>
               {description ? (
-                <p className="text-fs-body text-[var(--text-md)]">
-                  {description}
-                </p>
+                <div className="flex items-center gap-s-3">
+                  <span
+                    aria-hidden
+                    className="inline-block h-px w-12 shrink-0 bg-[var(--accent)]"
+                  />
+                  <p className="max-w-2xl text-fs-body text-[var(--text-md)]">
+                    {description}
+                  </p>
+                </div>
               ) : null}
             </div>
             {actions ? (

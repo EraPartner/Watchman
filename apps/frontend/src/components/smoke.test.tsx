@@ -417,14 +417,6 @@ describe("Sparkline", () => {
     act(() => root.unmount());
   });
 
-  it("renders a baseline line when baseline is provided", async () => {
-    const { container, root } = await render(
-      <Sparkline data={[10, 20, 15]} baseline={12} />
-    );
-    expect(container.querySelector("line")).toBeTruthy();
-    act(() => root.unmount());
-  });
-
   it("renders fill path when fill=true (default)", async () => {
     const { container, root } = await render(
       <Sparkline data={[1, 2, 3]} fill />

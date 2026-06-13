@@ -181,7 +181,9 @@ React Router v6 with the following structure:
 
 ## Styling & Design System
 
-- **Design System** - Dark-luxury OKLCH tokens, Geist typography, motion foundations (see [[docs/architecture/frontend-design-system|Frontend Design System]])
+- **Design System** - Dark-luxury OKLCH tokens, Geist typography, motion foundations, and the ADR-028 liquid-glass material layer (see [[docs/architecture/frontend-design-system|Frontend Design System]])
+- **Glass material** (`styles/glass.css`) - `.glass-thin/regular/thick/topbar` frosted utilities applied app-wide; static `.atmosphere` backdrop rendered once at the App root in `App.tsx` (see [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]])
+- **Service visuals** (`lib/serviceVisuals.ts`) - Per-service icon watermark map and `heroState()` bool-hero chip helper shared by `ServiceTile` and `ServiceDetailSheet`
 - **Primitives** - 14 typed components <150 LOC each (see [[docs/components/primitives/index|Primitives Index]])
 - **Tailwind CSS** - Utility-first CSS framework with extended token utilities
 - **shadcn/ui** - Component library (`[[apps/frontend/src/components/ui/]]`, legacy, scheduled for gradual replacement)

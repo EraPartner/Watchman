@@ -1,4 +1,7 @@
-import { Sparkline, type SparklineTone } from "@/components/primitives/Sparkline";
+import {
+  Sparkline,
+  type SparklineTone,
+} from "@/components/primitives/Sparkline";
 import { useMetricSeries } from "@/lib/metricHistory";
 import type { ChartSpec, Tone } from "@/services/renderers/types";
 
@@ -22,7 +25,7 @@ function ChartCard({ kind, instanceId, spec, tone }: ChartCardProps) {
   const latest = data.length > 0 ? data[data.length - 1]! : undefined;
 
   return (
-    <div className="rounded-r-2 border border-[var(--hairline)] bg-[var(--surface-1)] p-s-3">
+    <div className="glass-regular overflow-hidden rounded-r-2 p-s-3">
       <div className="flex items-baseline justify-between gap-s-3">
         <div className="text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
           {spec.label}
@@ -43,7 +46,9 @@ function ChartCard({ kind, instanceId, spec, tone }: ChartCardProps) {
         />
       </div>
       <div className="mt-s-1 flex justify-between font-mono text-fs-label text-[var(--text-lo)]">
-        <span>{data.length} sample{data.length === 1 ? "" : "s"}</span>
+        <span>
+          {data.length} sample{data.length === 1 ? "" : "s"}
+        </span>
         <span>live</span>
       </div>
     </div>

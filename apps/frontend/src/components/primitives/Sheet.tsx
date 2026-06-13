@@ -1,4 +1,8 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import {
+  forwardRef,
+  type ComponentPropsWithoutRef,
+  type ElementRef,
+} from "react";
 import * as D from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,8 +33,9 @@ export const SheetOverlay = forwardRef<
 ));
 SheetOverlay.displayName = "SheetOverlay";
 
-export interface SheetContentProps
-  extends ComponentPropsWithoutRef<typeof D.Content> {
+export interface SheetContentProps extends ComponentPropsWithoutRef<
+  typeof D.Content
+> {
   width?: string;
 }
 
@@ -44,8 +49,8 @@ export const SheetContent = forwardRef<
       ref={ref}
       className={cn(
         "fixed right-0 top-0 z-50 h-full",
-        "bg-[var(--surface-1)] text-[var(--text-hi)]",
-        "shadow-elev-3 border-l border-[var(--hairline-strong)]",
+        "glass-thick text-[var(--text-hi)]",
+        "border-l border-[var(--hairline-strong)]",
         "motion-sheet-in data-[state=closed]:motion-sheet-out",
         "focus:outline-none",
         "flex flex-col",
@@ -66,21 +71,30 @@ export const SheetContent = forwardRef<
 ));
 SheetContent.displayName = "SheetContent";
 
-export const SheetHeader = ({ className, ...rest }: ComponentPropsWithoutRef<"div">) => (
+export const SheetHeader = ({
+  className,
+  ...rest
+}: ComponentPropsWithoutRef<"div">) => (
   <div
-    className={cn(
-      "px-s-6 py-s-4 border-b border-[var(--hairline)]",
-      className
-    )}
+    className={cn("px-s-6 py-s-4 border-b border-[var(--hairline)]", className)}
     {...rest}
   />
 );
 
-export const SheetBody = ({ className, ...rest }: ComponentPropsWithoutRef<"div">) => (
-  <div className={cn("flex-1 overflow-auto px-s-6 py-s-4", className)} {...rest} />
+export const SheetBody = ({
+  className,
+  ...rest
+}: ComponentPropsWithoutRef<"div">) => (
+  <div
+    className={cn("flex-1 overflow-auto px-s-6 py-s-4", className)}
+    {...rest}
+  />
 );
 
-export const SheetFooter = ({ className, ...rest }: ComponentPropsWithoutRef<"div">) => (
+export const SheetFooter = ({
+  className,
+  ...rest
+}: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
       "px-s-6 py-s-4 border-t border-[var(--hairline)] flex items-center justify-end gap-s-2",

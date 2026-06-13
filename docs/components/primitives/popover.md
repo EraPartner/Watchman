@@ -2,9 +2,9 @@
 title: Popover Primitive
 type: component
 status: active
-date: 2026-04-18
-tags: [primitive, popover, floating, interactive, radix]
-description: Floating popover/panel wrapper around Radix Popover
+date: 2026-06-13
+tags: [primitive, popover, floating, interactive, radix, glass, liquid-glass]
+description: Floating popover/panel wrapper around Radix Popover. PopoverContent uses glass-thick frosted material (ADR-028), including the profile-switcher dropdown.
 aliases: [popover, Popover]
 ---
 
@@ -18,11 +18,11 @@ Display interactive content in a floating panel anchored to a trigger element, w
 
 ## Components
 
-| Component | Element | Purpose |
-|-----------|---------|---------|
-| `Popover` | `Root` | Container, manages open/close state |
-| `PopoverTrigger` | `Trigger` | Opens popover on click |
-| `PopoverContent` | `Content` | Floating panel with arrow |
+| Component        | Element   | Purpose                             |
+| ---------------- | --------- | ----------------------------------- |
+| `Popover`        | `Root`    | Container, manages open/close state |
+| `PopoverTrigger` | `Trigger` | Opens popover on click              |
+| `PopoverContent` | `Content` | Floating panel with arrow           |
 
 ## Props
 
@@ -38,9 +38,9 @@ interface PopoverTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 interface PopoverContentProps extends HTMLAttributes<HTMLDivElement> {
-  side?: 'top' | 'right' | 'bottom' | 'left';
+  side?: "top" | "right" | "bottom" | "left";
   sideOffset?: number;
-  align?: 'start' | 'center' | 'end';
+  align?: "start" | "center" | "end";
   alignOffset?: number;
   children: ReactNode;
 }
@@ -76,7 +76,8 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/primitives
 
 ## Styling Details
 
-- **Content**: `--surface-2` background, `--text-hi` text
+- **Content**: `glass-thick` frosted material (ADR-028) — replaces the previous `--surface-2` opaque background. Applies to all `PopoverContent` panels including the profile-switcher dropdown. Translucent gradient + inset specular highlight + `backdrop-filter: blur(24px) saturate(180%)`. Falls back to near-opaque surface under `prefers-reduced-transparency` or when `backdrop-filter` is unsupported.
+- **Text**: `--text-hi`
 - **Padding**: `--s-4` (16px)
 - **Radius**: `--r-3` (12px)
 - **Shadow**: `--elev-2` for depth
@@ -99,6 +100,8 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/primitives
 ## Related
 
 - [[docs/components/primitives/tooltip|Tooltip]] — Non-interactive floating label
-- [[docs/components/primitives/dialog|Dialog]] — Full-screen modal variant
+- [[docs/components/primitives/dialog|Dialog]] — Full-screen modal variant (`glass-thick`)
+- [[apps/frontend/src/styles/glass.css|glass.css]] — Glass utility classes
 - [[https://www.radix-ui.com/docs/primitives/components/popover|Radix Popover Docs]]
 - [[apps/frontend/src/components/primitives/Popover.tsx|Popover.tsx]]
+- [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] — `glass-thick` material on `PopoverContent`

@@ -50,7 +50,7 @@ export default function BackupRestore() {
       description="Export every service config as an encrypted bundle, or restore from one. Bundles are encrypted with the server master key."
     >
       <div className="grid grid-cols-1 gap-s-4 md:grid-cols-2">
-        <section className="rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] p-s-6">
+        <section className="glass-regular overflow-hidden rounded-r-3 p-s-6">
           <h2 className="text-fs-label font-[600] uppercase tracking-[0.06em] text-[var(--text-lo)]">
             Export
           </h2>
@@ -74,7 +74,7 @@ export default function BackupRestore() {
           )}
         </section>
 
-        <section className="rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] p-s-6">
+        <section className="glass-regular overflow-hidden rounded-r-3 p-s-6">
           <h2 className="text-fs-label font-[600] uppercase tracking-[0.06em] text-[var(--text-lo)]">
             Restore
           </h2>
@@ -95,10 +95,14 @@ export default function BackupRestore() {
             className="mt-s-4 block w-full text-fs-label text-[var(--text-md)] file:mr-s-3 file:rounded-r-2 file:border-0 file:bg-[var(--surface-2)] file:px-s-3 file:py-s-1 file:text-[var(--text-hi)]"
           />
           {importMut.isPending && (
-            <p className="mt-s-2 text-fs-label text-[var(--text-lo)]">Importing…</p>
+            <p className="mt-s-2 text-fs-label text-[var(--text-lo)]">
+              Importing…
+            </p>
           )}
           {importError && (
-            <p className="mt-s-2 text-fs-label text-[var(--crit)]">{importError}</p>
+            <p className="mt-s-2 text-fs-label text-[var(--crit)]">
+              {importError}
+            </p>
           )}
           {importResult && (
             <div className="mt-s-3 space-y-s-1 font-mono text-fs-label text-[var(--text-md)]">

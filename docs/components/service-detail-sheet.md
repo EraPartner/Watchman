@@ -2,20 +2,66 @@
 title: ServiceDetailSheet Component
 type: component
 status: active
-date: 2026-05-07
-tags: [component, bento, sheet, modal, detail-view, frontend, phase3, phase0a, crud, edit, delete, two-tier, status-dots]
-description: Right-anchored detail sheet for service inspection, editing, and deletion. Displays two-tier status dots (F2), tabbed metric groups, charts, service controls, and inline form editing.
-aliases: [ServiceDetailSheet, detail sheet, service details, service editor, two-tier status dots]
+date: 2026-06-13
+tags:
+  [
+    component,
+    bento,
+    sheet,
+    modal,
+    detail-view,
+    frontend,
+    phase3,
+    phase0a,
+    crud,
+    edit,
+    delete,
+    two-tier,
+    status-dots,
+    glass,
+    liquid-glass,
+  ]
+description: Right-anchored detail sheet for service inspection, editing, and deletion. Glass-thick frosted sheet with a glass-card hero (icon watermark + sparkline + state-aware hero), two-tier status dots (F2), tabbed metric groups, ChartsPanel with glass-regular cards, service controls, and inline form editing.
+aliases:
+  [
+    ServiceDetailSheet,
+    detail sheet,
+    service details,
+    service editor,
+    two-tier status dots,
+  ]
 ---
 
 # ServiceDetailSheet Component
 
 > [!abstract] Overview
-> `ServiceDetailSheet` provides a detailed drill-down view for each service with full CRUD affordances. Opens from the right side of the screen, displaying **two-tier status dots** when available (Phase 0a F2), tabbed metric groups, charts placeholder (Phase 5), service controls (enable/disable), and inline edit mode. Driven entirely by the `ServiceRenderer` registry.
+> `ServiceDetailSheet` provides a detailed drill-down view for each service with full CRUD affordances. Opens from the right side of the screen. The sheet itself uses the `glass-thick` frosted material (ADR-028). The hero area is a `glass-regular` card with an icon watermark, sparkline, and state-aware hero metric. Two-tier status dots (Phase 0a F2) appear in the header when both health tiers are present. Tabbed metric groups, a `ChartsPanel` with `glass-regular` cards, service controls (enable/disable), and inline edit mode complete the view. Driven entirely by the `ServiceRenderer` registry.
 
 ## Location
 
 `[[apps/frontend/src/components/detail/ServiceDetailSheet.tsx]]`
+
+## Glass Material (ADR-028)
+
+The sheet and its inner panels use the liquid-glass material system introduced in [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]]:
+
+| Surface                           | CSS class       | Notes                                                      |
+| --------------------------------- | --------------- | ---------------------------------------------------------- |
+| `SheetContent` outer panel        | `glass-thick`   | Frosted glass sheet; sits above the `.atmosphere` backdrop |
+| Hero card (watermark + sparkline) | `glass-regular` | State-aware glass card inside the sheet                    |
+| `ChartsPanel` metric cards        | `glass-regular` | Consistent card material across the charts tab             |
+
+### Hero Card
+
+The hero area at the top of the detail view is a `glass-regular` card containing:
+
+1. **Icon watermark** — large, faint per-service glyph (from `lib/serviceVisuals.ts`) filling the upper-right corner, providing service identity at a glance.
+2. **Sparkline** — inline trend chart using `Sparkline` in standard (non-stretch) mode. Resolves metrics from `source:"health"` correctly (fixing a prior bug where router and roon showed `—`).
+3. **State-aware hero metric** — the primary `renderer.summary[0]` value. Boolean heroes (`true`/`yes`/`reachable`) render as a state chip (`✓ Reachable` / `✕ Unreachable`) via the shared `heroState()` helper from `lib/serviceVisuals.ts`, not as a bare word.
+
+### `source:"health"` Resolution Fix
+
+Prior to ADR-028, metrics declared with `source: "health"` in a renderer were not resolved in the detail sheet hero — the value displayed as `—`. The hero now correctly reads from the `health` data object for such metrics, ensuring router reachability and roon connection state display correctly.
 
 ## Props
 
@@ -61,10 +107,12 @@ When the backend supplies both `host` and `service` health tiers:
   - Pulsing when up
 
 Fallback (backward compat):
+
 - Single status dot using `renderer.tone()` when only one or neither tier is present
 - Matches the pattern used in [[docs/components/service-tile|ServiceTile]] (F1)
 
 Implementation:
+
 ```typescript
 const hostHealth = healthRaw?.host;
 const serviceHealth = healthRaw?.service;
@@ -90,6 +138,7 @@ const hasTwoTiers = hostHealth !== undefined && serviceHealth !== undefined;
 ```
 
 Tests (5 passing):
+
 1. Renders two dots when both host and service tiers present
 2. Renders single dot when health has no tiers (backward compat)
 3. Renders single dot when health data is undefined
@@ -122,17 +171,21 @@ detail: [
     title: "Network",
     metrics: [
       { key: "peers", label: "Peers", format: String },
-      { key: "fee_rate", label: "Fee Rate (sat/vB)", format: (v) => v.toFixed(2) },
-    ]
+      {
+        key: "fee_rate",
+        label: "Fee Rate (sat/vB)",
+        format: (v) => v.toFixed(2),
+      },
+    ],
   },
   {
     title: "Mempool",
     metrics: [
       { key: "mempool.txs", label: "Transactions", format: String },
       { key: "mempool.bytes", label: "Size", format: formatBytes },
-    ]
-  }
-]
+    ],
+  },
+];
 ```
 
 Each group renders as a 2-column definition list:
@@ -158,6 +211,7 @@ History chart coming in Phase 5
 ```
 
 When Phase 5 completes:
+
 - Render `renderer.charts` list
 - Use visx `AreaClosed` for line charts
 - Range picker: 1h / 24h / 7d / 30d
@@ -222,12 +276,17 @@ When `view === "edit"`:
 When `open=true` and `kind` is set:
 
 1. **Service Lookup** — Fetch full `ServiceInstance` from `useServices()` by matching `kind` + `instanceId` (defaults to `"main"` when undefined)
+
    ```typescript
    const { data: services } = useServices();
-   const service = services?.find(s => s.kind === kind && (s.instanceId || "main") === (instanceId || "main"));
+   const service = services?.find(
+     (s) =>
+       s.kind === kind && (s.instanceId || "main") === (instanceId || "main")
+   );
    ```
 
 2. **Health & Stats** — Query via renderer pattern
+
    ```typescript
    const { data: health } = useServiceHealth(kind);
    const { data: stats } = useServiceStats(kind);
@@ -274,8 +333,8 @@ const [openCtx, setOpenCtx] = useState<OpenCtx | null>(null);
   kind={openCtx?.kind}
   instanceId={openCtx?.instanceId}
   open={!!openCtx}
-  onOpenChange={(o) => o ? null : setOpenCtx(null)}
-/>
+  onOpenChange={(o) => (o ? null : setOpenCtx(null))}
+/>;
 ```
 
 On ServiceTile click → `onOpenDetail({ kind, instanceId })` → updates `openCtx` → sheet opens.
@@ -283,6 +342,7 @@ On ServiceTile click → `onOpenDetail({ kind, instanceId })` → updates `openC
 ## Multi-Instance Support
 
 If `instanceId` is provided:
+
 - Queries use `useServiceHealth(kind, instanceId)` + `useServiceStats(kind, instanceId)`
 - Sheet title may append instance number (e.g., "Bitcoin #2")
 
@@ -318,6 +378,7 @@ Storage
 ## Loading States
 
 While queries load:
+
 - Skeleton placeholders for metrics
 - Spinner in chart area
 - Header content hidden until `health` arrives
@@ -325,6 +386,7 @@ While queries load:
 ## Error States
 
 If service is offline or unreachable:
+
 - Badge shows "offline" or "error"
 - Metric values show `—` (em-dash)
 - Charts tab still renders (Phase 5: no data)
@@ -337,6 +399,9 @@ If service is offline or unreachable:
 - [[docs/components/dashboard-grid|DashboardGrid]] — Layout container
 - [[docs/components/bento-dashboard|BentoDashboard]] — Parent orchestrator
 - [[docs/services/renderers/index|Renderer Registry]] — Detail view specs
-- [[docs/components/primitives/sheet|Sheet Primitive]] — Modal wrapper
+- [[docs/components/primitives/sheet|Sheet Primitive]] — `glass-thick` modal wrapper
+- [[docs/components/primitives/sparkline|Sparkline]] — Trend chart in hero card
 - [[docs/api/config|Configuration API]] — Service CRUD endpoints
+- [[apps/frontend/src/lib/serviceVisuals.ts]] — Icon watermark map + `heroState()` helper
 - [[docs/adr/014-time-series-duckdb-and-bento-design-system|ADR-014]]
+- [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] — glass-thick sheet, glass-regular hero card, `source:"health"` fix

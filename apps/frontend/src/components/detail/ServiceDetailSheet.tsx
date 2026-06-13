@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Check, X } from "lucide-react";
 import { EventLog, type ServiceEvent } from "./EventLog";
 import { ChartsPanel } from "./ChartsPanel";
 import { RawStatsPanel } from "./RawStatsPanel";
@@ -22,7 +22,10 @@ import {
   TabsTrigger,
   TabsContent,
   MetricValue,
+  Sparkline,
 } from "@/components/primitives";
+import { useMetricSeries } from "@/lib/metricHistory";
+import { serviceIcon, heroState } from "@/lib/serviceVisuals";
 import { useServiceHealth, useServiceStats } from "@/hooks/useServiceHealth";
 import {
   useServices,
@@ -84,7 +87,9 @@ export function ServiceDetailSheet({
         ? allServices.find(
             (s) =>
               s.kind === kind &&
-              (instanceId ? s.instanceId === instanceId : s.instanceId === "main")
+              (instanceId
+                ? s.instanceId === instanceId
+                : s.instanceId === "main")
           )
         : undefined,
     [allServices, kind, instanceId]
@@ -138,10 +143,15 @@ export function ServiceDetailSheet({
   const handleWsEvent = useCallback(
     (ev: WsEvent) => {
       if (!kind) return;
-      if (ev.service && ev.service !== serviceKey && ev.service !== kind) return;
+      if (ev.service && ev.service !== serviceKey && ev.service !== kind)
+        return;
       if (ev.type !== "alert") return;
       const level: ServiceEvent["level"] =
-        ev.level === "error" ? "error" : ev.level === "warning" ? "warn" : "info";
+        ev.level === "error"
+          ? "error"
+          : ev.level === "warning"
+            ? "warn"
+            : "info";
       const next: ServiceEvent = {
         id: `${ev.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
         ts: Date.parse(ev.timestamp) || Date.now(),
@@ -156,9 +166,31 @@ export function ServiceDetailSheet({
   useWebSocketEvent("alert", handleWsEvent);
 
   const primary = renderer?.summary[0];
-  const primaryValue = primary
-    ? primary.format(dotGet(statsMetrics, primary.key))
-    : "—";
+  const primaryRaw = primary
+    ? primary.source === "health"
+      ? dotGet(healthRaw, primary.key)
+      : dotGet(statsMetrics, primary.key)
+    : undefined;
+  const primaryValue = primary ? primary.format(primaryRaw) : "—";
+
+  const heroSeries = useMetricSeries(
+    kind ?? "",
+    instanceId,
+    primary?.key ?? ""
+  );
+  const heroData = useMemo(() => heroSeries.map((s) => s.v), [heroSeries]);
+  const HeroIcon = serviceIcon(kind);
+  const { isBool: heroIsBool, truthy: heroTruthy } = heroState(
+    primary ? primaryValue : undefined
+  );
+  const accentColor =
+    tone === "crit"
+      ? "var(--crit)"
+      : tone === "warn"
+        ? "var(--warn)"
+        : "var(--accent)";
+  const sparkTone =
+    tone === "neutral" ? "neutral" : tone === "ok" ? "accent" : tone;
 
   const handleToggleEnabled = () => {
     if (!service) return;
@@ -203,7 +235,10 @@ export function ServiceDetailSheet({
                     />
                   </>
                 ) : (
-                  <StatusDot tone={TONE_TO_STATUS[tone]} pulse={tone === "ok"} />
+                  <StatusDot
+                    tone={TONE_TO_STATUS[tone]}
+                    pulse={tone === "ok"}
+                  />
                 )}
                 <SheetTitle>{renderer.displayName}</SheetTitle>
                 {healthShape?.status ? (
@@ -241,17 +276,24 @@ export function ServiceDetailSheet({
                 <div className="mt-s-2 flex flex-wrap gap-s-3 font-mono tabular-nums text-fs-label text-[var(--text-lo)]">
                   {fmtMs(hostHealth.pingMs) ? (
                     <span>
-                      host ping <span className="text-[var(--text-md)]">{fmtMs(hostHealth.pingMs)}</span>
+                      host ping{" "}
+                      <span className="text-[var(--text-md)]">
+                        {fmtMs(hostHealth.pingMs)}
+                      </span>
                     </span>
                   ) : null}
                   {fmtMs(serviceHealth.latencyMs) ? (
                     <span>
                       service latency{" "}
-                      <span className="text-[var(--text-md)]">{fmtMs(serviceHealth.latencyMs)}</span>
+                      <span className="text-[var(--text-md)]">
+                        {fmtMs(serviceHealth.latencyMs)}
+                      </span>
                     </span>
                   ) : null}
                   {serviceHealth.message ? (
-                    <span className="text-[var(--warn)]">{serviceHealth.message}</span>
+                    <span className="text-[var(--warn)]">
+                      {serviceHealth.message}
+                    </span>
                   ) : null}
                 </div>
               ) : healthShape?.error ? (
@@ -278,11 +320,71 @@ export function ServiceDetailSheet({
               ) : (
                 <>
                   {primary ? (
-                    <div className="mb-s-6">
-                      <div className="text-fs-label uppercase tracking-[0.06em] text-[var(--text-lo)]">
-                        {primary.label}
+                    <div className="glass-regular relative mb-s-6 overflow-hidden rounded-r-3 p-s-5">
+                      <HeroIcon
+                        aria-hidden
+                        size={148}
+                        strokeWidth={1}
+                        className="pointer-events-none absolute -right-6 -top-6 z-0 text-[var(--text-hi)] opacity-[0.05]"
+                      />
+                      {heroData.length >= 2 ? (
+                        <div
+                          aria-hidden
+                          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-20 opacity-60 [mask-image:linear-gradient(to_top,black_55%,transparent)]"
+                        >
+                          <Sparkline
+                            data={heroData}
+                            stretch
+                            height={80}
+                            tone={sparkTone}
+                            className="h-full w-full"
+                          />
+                        </div>
+                      ) : null}
+                      <div className="relative z-[1]">
+                        <div className="text-fs-label uppercase tracking-[0.08em] text-[var(--text-lo)]">
+                          {primary.label}
+                        </div>
+                        <div className="mt-s-2">
+                          {heroIsBool ? (
+                            <div className="flex items-center gap-s-2">
+                              <span
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full"
+                                style={{
+                                  color: heroTruthy
+                                    ? accentColor
+                                    : "var(--crit)",
+                                  background: heroTruthy
+                                    ? "var(--accent-soft)"
+                                    : "var(--crit-soft)",
+                                }}
+                              >
+                                {heroTruthy ? (
+                                  <Check size={18} strokeWidth={3} />
+                                ) : (
+                                  <X size={18} strokeWidth={3} />
+                                )}
+                              </span>
+                              <span
+                                className="font-mono text-fs-h1 font-[700] uppercase tracking-[0.01em]"
+                                style={{
+                                  color: heroTruthy
+                                    ? "var(--text-hi)"
+                                    : "var(--crit)",
+                                }}
+                              >
+                                {primary.label}
+                              </span>
+                            </div>
+                          ) : (
+                            <MetricValue
+                              size="xl"
+                              value={primaryValue}
+                              unit={primary.unit}
+                            />
+                          )}
+                        </div>
                       </div>
-                      <MetricValue size="xl" value={primaryValue} />
                     </div>
                   ) : null}
 
@@ -333,15 +435,15 @@ export function ServiceDetailSheet({
 
                     {renderer.customPanel ? (
                       <TabsContent value="custom" className="pt-s-4">
-                        {renderer.customPanel({ stats: statsMetrics, health: healthShape })}
+                        {renderer.customPanel({
+                          stats: statsMetrics,
+                          health: healthShape,
+                        })}
                       </TabsContent>
                     ) : null}
 
                     <TabsContent value="raw" className="pt-s-4">
-                      <RawStatsPanel
-                        renderer={renderer}
-                        stats={statsMetrics}
-                      />
+                      <RawStatsPanel renderer={renderer} stats={statsMetrics} />
                     </TabsContent>
 
                     <TabsContent value="config" className="pt-s-4">
@@ -370,10 +472,7 @@ export function ServiceDetailSheet({
                     >
                       {service.enabled ? "Disable" : "Enable"}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setView("edit")}
-                    >
+                    <Button variant="ghost" onClick={() => setView("edit")}>
                       Edit
                     </Button>
                     <Button

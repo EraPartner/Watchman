@@ -1,4 +1,8 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import {
+  forwardRef,
+  type ComponentPropsWithoutRef,
+  type ElementRef,
+} from "react";
 import * as D from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,8 +39,8 @@ export const DialogContent = forwardRef<
       className={cn(
         "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
         "w-[min(92vw,560px)] max-h-[85vh] overflow-auto",
-        "bg-[var(--surface-1)] text-[var(--text-hi)]",
-        "rounded-r-3 shadow-elev-3 p-s-6",
+        "glass-thick text-[var(--text-hi)]",
+        "rounded-r-3 p-s-6",
         "motion-fade-in",
         "focus:outline-none",
         className

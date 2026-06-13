@@ -3,9 +3,16 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const surfaceVariants = cva(
-  ["relative", "bg-[var(--surface-1)]", "text-[var(--text-hi)]", "rounded-r-3"],
+  ["relative", "text-[var(--text-hi)]", "rounded-r-3"],
   {
     variants: {
+      // `solid` keeps the original flat depth ladder; `glass` swaps in the
+      // frosted liquid-glass material (background + shadow come from the
+      // .glass-regular utility, so elevation/tone box-shadows are dropped).
+      material: {
+        solid: "bg-[var(--surface-1)]",
+        glass: "glass-regular",
+      },
       elevation: {
         0: "bg-[var(--surface-0)]",
         1: "shadow-elev-1",
@@ -25,22 +32,40 @@ const surfaceVariants = cva(
         lg: "p-s-6",
       },
     },
-    defaultVariants: { elevation: 1, tone: "neutral", padding: "md" },
+    defaultVariants: { material: "solid", padding: "md" },
   }
 );
 
 export interface SurfaceProps
-  extends HTMLAttributes<HTMLDivElement>,
+  extends
+    HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof surfaceVariants> {}
 
 export const Surface = forwardRef<HTMLDivElement, SurfaceProps>(
-  ({ className, elevation, tone, padding, ...rest }, ref) => (
-    <div
-      ref={ref}
-      className={cn(surfaceVariants({ elevation, tone, padding }), className)}
-      {...rest}
-    />
-  )
+  (
+    { className, material = "solid", elevation, tone, padding, ...rest },
+    ref
+  ) => {
+    // Glass brings its own surface + depth via the .glass-regular utility;
+    // applying elevation/tone box-shadows would override it, so suppress them
+    // for glass and keep the original defaults (elev 1 / neutral) for solid.
+    const glass = material === "glass";
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          surfaceVariants({
+            material,
+            elevation: glass ? undefined : (elevation ?? 1),
+            tone: glass ? undefined : (tone ?? "neutral"),
+            padding,
+          }),
+          className
+        )}
+        {...rest}
+      />
+    );
+  }
 );
 Surface.displayName = "Surface";
 

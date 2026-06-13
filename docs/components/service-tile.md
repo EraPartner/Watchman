@@ -2,10 +2,11 @@
 title: ServiceTile Component
 type: component
 status: active
-date: 2026-05-08
+date: 2026-06-13
 tags: [component, bento, tile, frontend, phase3, two-tier, health, phase-0a]
 description: Generic single-tile component replacing all 18 service-specific *Card.tsx components. Driven by ServiceRenderer registry. Includes health query, metrics display, detail-sheet trigger, and two-tier status dots (Phase 0a F1).
-aliases: [ServiceTile, bento tile, service card, generic tile, two-tier status dots]
+aliases:
+  [ServiceTile, bento tile, service card, generic tile, two-tier status dots]
 ---
 
 # ServiceTile Component
@@ -24,8 +25,8 @@ export interface ServiceTileProps {
   kind: ServiceKind;
   instanceId?: string;
   instance?: ServiceInstance;
-  size?: TileSize;                              // "S" | "M" | "L" | "XL" (default: "M")
-  density?: TileDensity;                        // "comfortable" | "compact" (default: "comfortable")
+  size?: TileSize; // "S" | "M" | "L" | "XL" (default: "M")
+  density?: TileDensity; // "comfortable" | "compact" (default: "comfortable")
   onOpenDetail?: (ctx: {
     kind: ServiceKind;
     instanceId?: string;
@@ -43,17 +44,21 @@ export interface ServiceTileProps {
 - **Stats**: `useServiceStats(kind)` for detailed metrics
 - Loading states: renders `Skeleton` while queries are pending
 
-### Rendering
+### Rendering (observability card — ADR-028)
 
-1. **Container**: `Surface` primitive with sizing variants (CVA)
-2. **Header**: Status dots + `Badge` (status label) + optional close button
-   - When both `host` and `service` tiers present: **two `StatusDot` components** (F1 two-tier status dots — Phase 0a)
-     - First dot: host tier with label "host: up/down" and tone `ok` (green) or `crit` (red)
-     - Second dot: service tier with label "service: up/down" and tone `ok` (green) or `crit` (red)
-   - Otherwise: **single `StatusDot`** for backward compatibility (no tiers or only one tier present)
-3. **Primary Metric**: Single `MetricValue` from `renderer.summary[0]`
-4. **Secondary Metrics** (if room): 2-column definition list (label + value)
-5. **Subtitle**: Optional custom subtitle from `renderer.subtitle(ctx)`
+1. **Container**: `Surface` primitive with `material="glass"` (frosted liquid-glass) + sizing variants (CVA), `overflow-hidden`.
+2. **Status-tinted top hairline**: full-bleed accent line (gold/`warn`/`crit` by tone), brightening on hover.
+3. **Service-glyph watermark**: large, faint per-service icon (`lib/serviceVisuals.ts`) bleeding off the top-right corner, filling the upper field with identity.
+4. **Full-bleed signal footer**: a `stretch` `Sparkline` (smooth gradient area chart) anchored to the tile's bottom edge, masked to fade upward. Omitted on `S` tiles.
+5. **Header**: Status dots + service name + latency · `Badge` (status label).
+   - When both `host` and `service` tiers present: **two `StatusDot` components** (F1 two-tier status dots — Phase 0a).
+   - Otherwise: **single `StatusDot`** for backward compatibility.
+6. **Hero metric** (anchored low, above the chart): `MetricValue` from `renderer.summary[0]`. A bare-boolean value (`true`/`yes`/`reachable`) renders as a **state chip** (`✓`/`✕` + the metric label) instead of a giant word, via `heroState()`.
+7. **Secondary Metrics**: 2-column definition list (uppercase label + mono value).
+8. **Subtitle**: Optional custom subtitle from `renderer.subtitle(ctx)`.
+9. **Entrance**: staggered `motion-tile` fade-in-up on mount (respects reduced-motion).
+
+> The tile reads its metric series from the client ring buffer (`lib/metricHistory.ts`); flat/constant series render as a calm low line, not a filled rectangle. See [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]].
 
 ### Tone Computation
 
@@ -184,3 +189,4 @@ Two-tier status dots unit tests (Phase 0a — F1):
 - [[docs/components/bento-dashboard|BentoDashboard]]
 - [[docs/services/renderers/index|Renderer Registry]]
 - [[docs/adr/014-time-series-duckdb-and-bento-design-system|ADR-014]]
+- [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] — observability-card redesign (glass material, watermark, full-bleed chart, state-aware hero)

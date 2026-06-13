@@ -111,7 +111,7 @@ export function TopNav({ onAddService }: TopNavProps) {
   const breakers = summarizeBreakers(metrics?.breakers);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--hairline)] bg-[var(--surface-0)]/80 backdrop-blur-md backdrop-saturate-150">
+    <header className="glass-topbar sticky top-0 z-40">
       <div className="mx-auto flex max-w-screen-2xl items-center gap-s-6 px-s-8 py-s-4">
         <div className="flex items-baseline gap-s-3">
           <span
@@ -136,7 +136,7 @@ export function TopNav({ onAddService }: TopNavProps) {
                 cn(
                   "rounded-r-2 px-s-3 py-s-1 text-fs-label uppercase tracking-[0.06em] transition-colors",
                   isActive
-                    ? "bg-[var(--surface-2)] text-[var(--text-hi)] shadow-[inset_0_0_0_1px_var(--hairline)]"
+                    ? "bg-[var(--accent-soft)] text-[var(--text-hi)] shadow-[inset_0_0_0_1px_oklch(80%_0.13_85_/_0.25)]"
                     : "text-[var(--text-md)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
                 )
               }

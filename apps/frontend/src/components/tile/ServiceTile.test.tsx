@@ -68,7 +68,10 @@ async function render() {
   });
   return {
     container,
-    cleanup: () => act(() => { root.unmount(); }),
+    cleanup: () =>
+      act(() => {
+        root.unmount();
+      }),
   };
 }
 
@@ -81,11 +84,15 @@ function resetState() {
   statsData = undefined;
   statsError = undefined;
   currentRenderer = defaultRenderer();
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 }
 
 function teardownState() {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = false;
   document.body.innerHTML = "";
 }
 
@@ -191,7 +198,12 @@ describe("ServiceTile metric source resolution", () => {
       displayName: "Router",
       kind: "router",
       summary: [
-        { key: "reachable", label: "Reachable", source: "health", format: fmtRaw },
+        {
+          key: "reachable",
+          label: "Reachable",
+          source: "health",
+          format: fmtRaw,
+        },
         { key: "portCount", label: "Ports", format: fmtNumber(0) },
         { key: "host", label: "Host", format: fmtRaw },
       ],
@@ -211,8 +223,10 @@ describe("ServiceTile metric source resolution", () => {
     };
 
     const { container, cleanup } = await render();
-    // Primary value rendered into MetricValue. fmtRaw(true) === "true".
-    expect(container.textContent).toContain("true");
+    // Boolean hero from health (reachable=true) renders as a truthy state —
+    // the capitalized "Reachable" label, shown only when the health-sourced
+    // value resolved truthy (a bare "true" would format differently).
+    expect(container.textContent).toContain("Reachable");
     // Secondary cells (Ports, Host) still resolve from stats.
     expect(container.textContent).toContain("192.168.0.1");
 
@@ -223,9 +237,7 @@ describe("ServiceTile metric source resolution", () => {
     currentRenderer = {
       displayName: "Bitcoin",
       kind: "bitcoin",
-      summary: [
-        { key: "blocks", label: "Blocks", format: fmtNumber(0) },
-      ],
+      summary: [{ key: "blocks", label: "Blocks", format: fmtNumber(0) }],
       tone: () => "ok" as const,
       subtitle: undefined,
       detail: [],
@@ -253,7 +265,12 @@ describe("ServiceTile metric source resolution", () => {
       displayName: "Router",
       kind: "router",
       summary: [
-        { key: "reachable", label: "Reachable", source: "health", format: fmtRaw },
+        {
+          key: "reachable",
+          label: "Reachable",
+          source: "health",
+          format: fmtRaw,
+        },
       ],
       tone: () => "ok" as const,
       subtitle: undefined,

@@ -2,9 +2,9 @@
 title: Dialog Primitive
 type: component
 status: active
-date: 2026-04-18
-tags: [primitive, dialog, modal, interactive, radix]
-description: Accessible modal dialog wrapper around Radix Dialog
+date: 2026-06-13
+tags: [primitive, dialog, modal, interactive, radix, glass, liquid-glass]
+description: Accessible modal dialog wrapper around Radix Dialog. DialogContent uses glass-thick frosted material (ADR-028).
 aliases: [dialog, Dialog]
 ---
 
@@ -18,14 +18,14 @@ Display modal content with overlay, focus trap, and escape key handling.
 
 ## Components
 
-| Component | Element | Purpose |
-|-----------|---------|---------|
-| `Dialog` | `Root` | Container, manages open/close state |
-| `DialogTrigger` | `Trigger` | Opens dialog on click |
-| `DialogContent` | `Content` + overlay | Dialog box with backdrop |
-| `DialogTitle` | `Title` | Semantic heading |
-| `DialogDescription` | `Description` | Helper text (optional) |
-| `DialogClose` | Custom close button | Closes dialog |
+| Component           | Element             | Purpose                             |
+| ------------------- | ------------------- | ----------------------------------- |
+| `Dialog`            | `Root`              | Container, manages open/close state |
+| `DialogTrigger`     | `Trigger`           | Opens dialog on click               |
+| `DialogContent`     | `Content` + overlay | Dialog box with backdrop            |
+| `DialogTitle`       | `Title`             | Semantic heading                    |
+| `DialogDescription` | `Description`       | Helper text (optional)              |
+| `DialogClose`       | Custom close button | Closes dialog                       |
 
 ## Props
 
@@ -75,7 +75,7 @@ import {
 ## Styling Details
 
 - **Overlay**: Backdrop blur with dark overlay
-- **Content**: `--surface-2` background, `--elev-3` shadow
+- **Content**: `glass-thick` frosted material (ADR-028) — replaces the previous `--surface-2` opaque background. Translucent gradient + inset specular highlight + `backdrop-filter: blur(24px) saturate(180%)`. Falls back to near-opaque surface under `prefers-reduced-transparency` or when `backdrop-filter` is unsupported.
 - **Animation**: Fade + scale via `sheet-enter` motion
 - **Focus**: Auto-focus on title; trap within dialog
 - **Escape**: Close on Escape key
@@ -91,7 +91,9 @@ import {
 
 ## Related
 
-- [[docs/components/primitives/sheet|Sheet]] — Slide-out drawer variant
-- [[docs/components/primitives/surface|Surface]] — Container with elevation
+- [[docs/components/primitives/sheet|Sheet]] — Slide-out drawer variant (`glass-thick`)
+- [[docs/components/primitives/surface|Surface]] — Container with elevation and `material="glass"` variant
+- [[apps/frontend/src/styles/glass.css|glass.css]] — Glass utility classes
 - [[https://www.radix-ui.com/docs/primitives/components/dialog|Radix Dialog Docs]]
 - [[apps/frontend/src/components/primitives/Dialog.tsx|Dialog.tsx]]
+- [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]] — `glass-thick` material on `DialogContent`

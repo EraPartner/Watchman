@@ -52,8 +52,9 @@
   --r-pill: 999px;
 
   /* ── Typography ───────────────────────────────────────────────── */
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --fs-mono: 12px;
   --fs-label: 11px;
@@ -85,15 +86,37 @@
   --dur-slow: 420ms;
 
   /* ── Elevation (layered, not generic) ─────────────────────────── */
-  --elev-1:
-    inset 0 0 0 1px var(--hairline),
-    0 1px 2px oklch(0% 0 0 / 0.35);
+  --elev-1: inset 0 0 0 1px var(--hairline), 0 1px 2px oklch(0% 0 0 / 0.35);
   --elev-2:
-    inset 0 0 0 1px var(--hairline),
-    0 4px 16px -4px oklch(0% 0 0 / 0.5);
+    inset 0 0 0 1px var(--hairline), 0 4px 16px -4px oklch(0% 0 0 / 0.5);
   --elev-3:
     inset 0 0 0 1px var(--hairline-strong),
     0 10px 40px -10px oklch(0% 0 0 / 0.6);
+
+  /* ── Glass materials (liquid-glass, gold-tuned · OKLCH) ────────
+   * Apple-inspired frosted panels. Translucent so the atmosphere wash
+   * refracts through; saturate() (see glass.css) makes it glow rather
+   * than fog. Consumed by .glass-* utilities in styles/glass.css. */
+  --glass-tint: oklch(80% 0.13 85); /* cold-gold sheen */
+  --glass-spec: oklch(96% 0.03 90 / 0.12); /* specular highlight */
+  /* On a near-black canvas a frosted panel must read LIGHTER than the page,
+   * not transparent — these compute to ~20-24% L over surface-0 (14% L). */
+  --glass-bg-thin: oklch(22% 0.012 270 / 0.66);
+  --glass-bg-1: oklch(27% 0.014 270 / 0.74);
+  --glass-bg-2: oklch(24% 0.012 270 / 0.76);
+  --glass-bg-3: oklch(21% 0.01 270 / 0.8);
+  --glass-bg-thick: oklch(26% 0.014 270 / 0.9);
+  --glass-fallback: oklch(22% 0.012 270 / 0.98); /* reduced-transparency */
+  --glass-blur-thin: 14px;
+  --glass-blur: 20px;
+  --glass-blur-thick: 30px;
+  --glass-saturate: 150%;
+
+  /* ── Atmosphere (static gold wash + blueprint grid) ───────────── */
+  --atmo-wash: oklch(82% 0.14 85 / 0.16); /* top gold glow */
+  --atmo-corner: oklch(64% 0.09 250 / 0.11); /* cool counter, low-left */
+  --grid-line: oklch(70% 0.02 250 / 0.05); /* faint technical grid */
+  --grain-alpha: 0.025;
 }
 
 @media (prefers-reduced-motion: reduce) {

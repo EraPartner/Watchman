@@ -32,34 +32,17 @@ export default function BentoDashboard() {
 
   const configuredKinds = data?.instances ?? {};
   const entries = BENTO_LAYOUT.filter(
-    (e) => getRenderer(e.kind) && (configuredKinds[e.kind]?.count ?? 0) > 0,
+    (e) => getRenderer(e.kind) && (configuredKinds[e.kind]?.count ?? 0) > 0
   );
 
   const openCreate = () => setEditor({ mode: "create" });
 
   return (
     <TooltipProvider>
-      <div className="relative min-h-screen bg-[var(--surface-0)] text-[var(--text-hi)]">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
-          style={{
-            background:
-              "radial-gradient(ellipse at top, oklch(80% 0.13 85 / 0.06) 0%, transparent 60%)",
-          }}
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.025] mix-blend-overlay"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
-          }}
-        />
-
+      <div className="relative min-h-screen text-[var(--text-hi)]">
         <TopNav onAddService={openCreate} />
 
-        <main className="relative mx-auto max-w-screen-2xl px-s-8 py-s-10">
+        <main className="relative z-10 mx-auto max-w-screen-2xl px-s-8 py-s-10">
           <header className="mb-s-10 flex items-end justify-between gap-s-6">
             <div className="space-y-s-3">
               <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -93,7 +76,7 @@ export default function BentoDashboard() {
           </header>
 
           {!isLoading && entries.length === 0 ? (
-            <div className="rounded-r-3 border border-[var(--hairline)] bg-[var(--surface-1)] p-s-12 text-center">
+            <div className="glass-regular relative overflow-hidden rounded-r-3 p-s-12 text-center">
               <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--accent)]">
                 empty observatory
               </p>
