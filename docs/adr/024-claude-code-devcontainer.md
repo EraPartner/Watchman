@@ -1,22 +1,32 @@
 ---
 title: "ADR-024: Hardened Devcontainer for Claude CLI in --dangerously-skip-permissions Mode"
 type: adr
-status: Accepted
+status: Superseded
 date: 2026-05-19
 tags: [adr, devcontainer, security, docker, claude, tooling, firewall, auth]
 description: Debian-based devcontainer with iptables default-deny egress, non-root user, Keychain-backed auth, and host ssh-agent forwarding for running Claude CLI in --dangerously-skip-permissions mode without exposing the host.
-aliases: [adr-024, devcontainer adr, claude devcontainer, hardened container, skip-permissions container]
+aliases:
+  [
+    adr-024,
+    devcontainer adr,
+    claude devcontainer,
+    hardened container,
+    skip-permissions container,
+  ]
 ---
 
 # ADR-024: Hardened Devcontainer for Claude CLI in --dangerously-skip-permissions Mode
+
+> **Superseded by [[docs/adr/030-devcontainer-apple-container-runtime|ADR-030]]** (apple/container migration, 2026-06-24). The Docker / Docker-Compose / devcontainer-CLI **runtime** described below is no longer used; the sandbox now runs on Apple's native `container` runtime. The hardening rationale and threat model remain accurate. Retained as historical record.
 
 > [!abstract] Summary
 > A hardened Docker devcontainer isolates Claude CLI's `--dangerously-skip-permissions` mode from the host OS using a non-root Debian container, iptables default-deny egress, macOS Keychain-backed auth, volume-isolated `~/.claude`, and host ssh-agent forwarding for commit signing.
 
 ## Status
 
-- **Status**: Accepted
+- **Status**: Superseded
 - **Date**: 2026-05-19
+- **Superseded by**: [[docs/adr/030-devcontainer-apple-container-runtime|ADR-030]] (apple/container runtime, 2026-06-24)
 
 ## Context
 
@@ -42,13 +52,13 @@ A `.devcontainer/` directory at the repo root provides a complete hardened dev e
 `debian:bookworm-slim` (pinned by `@sha256` digest) with a `dev` user at UID 1000. The container runs with **`--security-opt=no-new-privileges`** and **`sudo` is not installed** — `dev` has no path to root at all. All privileged setup happens up-front in a **root `ENTRYPOINT`** (`/usr/local/sbin/watchman-entrypoint`, run via `containerUser=root`), which repairs volume/socket permissions, starts the egress proxy, and applies the firewall, then drops to a keep-alive PID 1. Interactive/`exec`/lifecycle sessions use `remoteUser=dev`.
 
 > [!important] Why the entrypoint, not sudo
-> `no-new-privileges` blocks setuid escalation, so `sudo` cannot gain root anyway. Rather than keep a neutered (and attack-surface) `sudo`, the privileged work moves to a root entrypoint that runs *before* any dev session. Image-baked scripts (`watchman-firewall`, `watchman-perms-fix`, `watchman-entrypoint`) live in `/usr/local/sbin` (root-owned, not writable from the container), so a rewrite of the repo copies cannot affect the running container — closing a root-escalation path.
+> `no-new-privileges` blocks setuid escalation, so `sudo` cannot gain root anyway. Rather than keep a neutered (and attack-surface) `sudo`, the privileged work moves to a root entrypoint that runs _before_ any dev session. Image-baked scripts (`watchman-firewall`, `watchman-perms-fix`, `watchman-entrypoint`) live in `/usr/local/sbin` (root-owned, not writable from the container), so a rewrite of the repo copies cannot affect the running container — closing a root-escalation path.
 
 ### Egress: in-container SNI proxy + UID-locked firewall
 
 Egress is enforced in two layers:
 
-1. **`squid` (peek+splice) hostname allowlist.** squid peeks the TLS ClientHello SNI and, for allowed names, *splices* (tunnels without decrypting — end-to-end TLS is preserved, no MITM, no CA injection). Disallowed names are terminated. This is stronger than an IP allowlist: it can't be bypassed by an exfil endpoint co-hosted on an allowed CDN IP, and it defeats the `CONNECT`-host ≠ real-SNI domain-fronting trick (both verified in testing).
+1. **`squid` (peek+splice) hostname allowlist.** squid peeks the TLS ClientHello SNI and, for allowed names, _splices_ (tunnels without decrypting — end-to-end TLS is preserved, no MITM, no CA injection). Disallowed names are terminated. This is stronger than an IP allowlist: it can't be bypassed by an exfil endpoint co-hosted on an allowed CDN IP, and it defeats the `CONNECT`-host ≠ real-SNI domain-fronting trick (both verified in testing).
 2. **`iptables` egress lock.** Outbound is allowed only for the `proxy` UID (squid). Every other process — dev sessions, a malicious npm postinstall — must use the proxy on `127.0.0.1:3128`; a direct connection is dropped because its socket UID isn't `proxy`. IPv6 is default-deny; a rate-limited LOG-then-DROP chain gives egress visibility (`dmesg | grep watchman-deny`). `NET_RAW` is dropped (only `NET_ADMIN` is granted).
 
 Allowlist: Anthropic API + `claude.ai` + `platform.claude.com` + `downloads.claude.ai` (auto-updater), Claude Code endpoints, npm registry, GitHub, PyPI, Debian apt mirrors, nodejs.org, VS Code marketplace, Playwright CDNs, `malware-list.aikido.dev` (safe-chain). `statsig`/`sentry` are intentionally excluded (covert-exfil surface, suppressed via `DISABLE_TELEMETRY=1` + `DISABLE_ERROR_REPORTING=1`). Auto-update is intentionally left **on** (`downloads.claude.ai` allowlisted), so Claude self-updates to the latest version.
@@ -63,7 +73,7 @@ Allowlist: Anthropic API + `claude.ai` + `platform.claude.com` + `downloads.clau
 
 The container manages its own writable `~/.claude` in a named Docker volume (`watchman-claude-<devcontainerId>`), seeded from a **sanitized staging copy** of the host config — never from a raw bind of `~/.claude`.
 
-Rationale: a live bind of the full `~/.claude` both (a) corrupts JSON when host and container claude write simultaneously and (b) exposes everything in the host config dir to the container, including `.credentials.json`, MCP server tokens, and pasted secrets in history — the rsync `--exclude`s only apply at copy time, not to a raw bind. So the host wrapper (`bin/claude`) stages a sanitized copy into `~/.claude-watchman-stage` *before* `devcontainer up`: it drops secrets + volatile state and strips active code-exec config (`hooks`, `mcpServers`, `enabledPlugins`) so a compromised host config can't silently auto-run hooks/MCP servers/plugins inside the container. Only that staging dir is bind-mounted (read-only) at `/home/dev/.claude-stage`. `post-start.sh` does an `rsync --update` pull from the stage on every start; the reverse (container → host) is a manual `watchman-claude-sync push`.
+Rationale: a live bind of the full `~/.claude` both (a) corrupts JSON when host and container claude write simultaneously and (b) exposes everything in the host config dir to the container, including `.credentials.json`, MCP server tokens, and pasted secrets in history — the rsync `--exclude`s only apply at copy time, not to a raw bind. So the host wrapper (`bin/claude`) stages a sanitized copy into `~/.claude-watchman-stage` _before_ `devcontainer up`: it drops secrets + volatile state and strips active code-exec config (`hooks`, `mcpServers`, `enabledPlugins`) so a compromised host config can't silently auto-run hooks/MCP servers/plugins inside the container. Only that staging dir is bind-mounted (read-only) at `/home/dev/.claude-stage`. `post-start.sh` does an `rsync --update` pull from the stage on every start; the reverse (container → host) is a manual `watchman-claude-sync push`.
 
 ### Keychain-backed authentication (Claude + gh)
 
@@ -79,15 +89,15 @@ The host ssh-agent socket (`/run/host-services/ssh-auth.sock`) is bind-mounted i
 
 ### Watchman-specific deltas from the Vision pattern
 
-| Aspect | Vision | Watchman |
-|---|---|---|
-| Database | Postgres container | DuckDB embedded — no separate service |
-| Runtime | bun | npm (workspaces) |
-| Python tooling | Alembic migrations | None |
-| Frontend port | 8080 | 5173 (Vite) |
-| Backend port | 3002 | 3001 (Fastify) |
-| LAN allowlist examples | yahoo-finance domains | None (Watchman LAN CIDRs) |
-| Keychain service name | vision-claude-code-token | watchman-claude-code-token |
+| Aspect                 | Vision                   | Watchman                              |
+| ---------------------- | ------------------------ | ------------------------------------- |
+| Database               | Postgres container       | DuckDB embedded — no separate service |
+| Runtime                | bun                      | npm (workspaces)                      |
+| Python tooling         | Alembic migrations       | None                                  |
+| Frontend port          | 8080                     | 5173 (Vite)                           |
+| Backend port           | 3002                     | 3001 (Fastify)                        |
+| LAN allowlist examples | yahoo-finance domains    | None (Watchman LAN CIDRs)             |
+| Keychain service name  | vision-claude-code-token | watchman-claude-code-token            |
 
 ## Consequences
 
@@ -118,13 +128,13 @@ The host ssh-agent socket (`/run/host-services/ssh-auth.sock`) is bind-mounted i
 
 ## Alternatives Considered
 
-| Alternative | Why Rejected |
-|---|---|
-| Docker-in-Docker | Significantly higher complexity; Claude would still have access to the DinD daemon socket, expanding the blast radius rather than reducing it. |
-| Host-only with permission prompts | Interrupts unattended flows; defeats the purpose of `--dangerously-skip-permissions` mode. Does not address `~/.claude` corruption or LAN exposure. |
+| Alternative                        | Why Rejected                                                                                                                                                                  |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker-in-Docker                   | Significantly higher complexity; Claude would still have access to the DinD daemon socket, expanding the blast radius rather than reducing it.                                |
+| Host-only with permission prompts  | Interrupts unattended flows; defeats the purpose of `--dangerously-skip-permissions` mode. Does not address `~/.claude` corruption or LAN exposure.                           |
 | Bind-mounting `~/.claude` directly | Causes JSON corruption when host claude and container claude write simultaneously. Observed in production on the Vision project. Rejected in favor of volume + explicit sync. |
-| Env-var-only auth (no Keychain) | Token lands in `~/.config/fish/fish_variables` or shell history as plaintext. Acceptable fallback but not the recommended posture. |
-| Allow all egress (no firewall) | Simpler but does not address LAN probing or credential exfiltration over the network. |
+| Env-var-only auth (no Keychain)    | Token lands in `~/.config/fish/fish_variables` or shell history as plaintext. Acceptable fallback but not the recommended posture.                                            |
+| Allow all egress (no firewall)     | Simpler but does not address LAN probing or credential exfiltration over the network.                                                                                         |
 
 ## References
 

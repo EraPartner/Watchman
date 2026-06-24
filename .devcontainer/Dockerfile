@@ -1,10 +1,10 @@
 # Watchman sandbox image — devcontainer-FREE (built by `container build`).
 #
-# This is the self-contained twin of ./Dockerfile. The devcontainer build relied
-# on devcontainer FEATURES (node:1, anthropics/claude-code:1.0) layered on top of
-# Dockerfile by the devcontainer CLI; compose has no feature system, so this file
-# installs Node + the Claude CLI itself. Everything else (hardening, egress
-# proxy, baked privileged scripts) is identical to Dockerfile.
+# Self-contained image (no separate root Dockerfile). The former devcontainer-CLI
+# build relied on devcontainer FEATURES (node:1, anthropics/claude-code:1.0)
+# layered on by the CLI; apple/container has no feature system, so this file
+# installs Node + the Claude CLI itself. Hardening, the egress proxy, and the
+# baked privileged scripts are unchanged from that build.
 #
 # Hardened for Claude CLI in --dangerously-skip-permissions mode:
 #   - no privilege escalation: setuid/setgid bits stripped, no sudo (apple/container has no --security-opt)

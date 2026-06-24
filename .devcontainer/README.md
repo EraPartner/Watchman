@@ -6,31 +6,37 @@ frontend — runs natively inside this container; no Docker-in-Docker.
 
 ## What's inside
 
-| Component | Where it runs | Port |
-| --- | --- | --- |
-| Backend (Node/Fastify + DuckDB embedded) | `npm run dev:backend` (tsx watch) | `3001` published to `127.0.0.1` |
-| Frontend (Vite + React) | `npm run dev:frontend` | `5173` published to `127.0.0.1` |
-| Frontend preview (built bundle) | `npm run preview` | `4173` published to `127.0.0.1` |
-| GitHub CLI (`gh`) | apt | — |
-| Claude Code | Installed via the official `claude-code` devcontainer feature | — |
+| Component                                | Where it runs                                               | Port                            |
+| ---------------------------------------- | ----------------------------------------------------------- | ------------------------------- |
+| Backend (Node/Fastify + DuckDB embedded) | `npm run dev:backend` (tsx watch)                           | `3001` published to `127.0.0.1` |
+| Frontend (Vite + React)                  | `npm run dev:frontend`                                      | `5173` published to `127.0.0.1` |
+| Frontend preview (built bundle)          | `npm run preview`                                           | `4173` published to `127.0.0.1` |
+| GitHub CLI (`gh`)                        | apt                                                         | —                               |
+| Node.js 24                               | Static build into `/usr/local`                              | —                               |
+| Claude Code                              | `npm i -g @anthropic-ai/claude-code` (baked into the image) | —                               |
 
-The base image is plain `debian:bookworm-slim`. The container user is
-`dev` (UID 1000). Watchman is a pure Node/TypeScript monorepo using
-DuckDB embedded, so there's no separate database service to manage.
+The base image is plain `debian:bookworm-slim` (pinned by `@sha256` digest).
+The container user is `dev` (UID 1000). Watchman is a pure Node/TypeScript
+monorepo using DuckDB embedded, so there's no separate database service to manage.
 
 ## How to use — CLI only
 
-This sandbox runs on **Docker Compose** (no devcontainer CLI). Prerequisite:
-Docker Desktop with Compose v2 (`docker compose version`).
+This sandbox runs on **[apple/container](https://github.com/apple/container)** —
+Apple's native macOS container runtime. There is no Docker, no docker-compose, and
+no devcontainer CLI / Dev Containers extension; there is no `compose.yaml` and no
+`devcontainer.json`. Prerequisite: `container` installed and the system VM started
+(`container system start`).
 
 A host launcher at `.devcontainer/bin/claude` forwards every invocation into the
-container: it stages a sanitized `~/.claude`, runs an idempotent `docker compose
-up -d --build`, replays the post-create (once) / post-start (every start)
-lifecycle as `dev`, forwards the Claude token from the Keychain, and auto-syncs
-`~/.claude` back to the host on session exit.
+container: it stages a sanitized `~/.claude`, runs an idempotent `container build`
 
-The fish function `watchman-claude` (in `~/.config/fish/functions/`) walks up
-from `$PWD` to the repo (matching `.devcontainer/compose.yaml`), falls back to
+- `container run` (reusing a running container, starting a stopped one, else
+  creating it), replays the post-create (once) / post-start (every start) lifecycle
+  as `dev`, runs a launch-integrity gate, and forwards the Claude token from the
+  Keychain.
+
+The fish function `watchman-claude` (in `~/.config/fish/functions/`) walks up from
+`$PWD` to the repo (matching `.devcontainer/Dockerfile`), falls back to
 `$WATCHMAN_HOME`, then runs that launcher. Use it anywhere:
 
 ```sh
@@ -38,15 +44,27 @@ watchman-claude --dangerously-skip-permissions
 ```
 
 To drop into a shell instead of Claude:
+
 ```sh
-docker compose -f .devcontainer/compose.yaml exec -u dev app bash
+container exec -it --user dev watchman-dev bash
 ```
+
+To force a full rebuild (e.g. after changing the Dockerfile or allowlist) — this
+rebuilds the image **and** recreates the container:
+
+```sh
+WATCHMAN_REBUILD=1 watchman-claude --dangerously-skip-permissions
+```
+
+By default the launcher powers the container's VM down on session exit so it stops
+pinning its 4 GB. Set `WATCHMAN_STOP_ON_EXIT=0` to keep it warm for instant reuse.
 
 ## Browser access from the host
 
-`compose.yaml` publishes `5173`, `3001`, and `4173` to
-`127.0.0.1`. Once Claude (or you) runs `npm run dev` inside the
-container, the host can reach:
+The container publishes `127.0.0.1:5173:5173`, `127.0.0.1:3001:3001`, and
+`127.0.0.1:4173:4173` (via `-p` flags on `container run`; the same port set is
+baked into `/etc/egress/inbound-ports` so the firewall accepts inbound on them).
+Once Claude (or you) runs `npm run dev` inside the container, the host can reach:
 
 - `http://localhost:5173` — frontend (Vite dev)
 - `http://localhost:4173` — frontend preview (built bundle)
@@ -60,18 +78,20 @@ Egress is enforced in two layers by the root entrypoint on every start:
 
 1. **In-container SNI proxy** (`squid`, peek+splice). All outbound
    HTTP(S) must traverse `squid` on `127.0.0.1:3128`. squid peeks the
-   TLS SNI and *splices* allowed hostnames (tunnels without decrypting —
-   end-to-end TLS preserved, no MITM) and terminates the rest. Hostname
-   enforcement can't be bypassed by an exfil endpoint sharing an allowed
-   CDN IP, and it defeats `CONNECT`-host ≠ SNI domain-fronting.
-2. **`iptables` egress lock**: only the `proxy` UID may originate
-   outbound packets; everything else must use the proxy or be dropped.
-   IPv6 is default-deny; denied egress is rate-limited-logged
-   (`dmesg | grep watchman-deny`).
+   TLS SNI and _splices_ allowed hostnames (tunnels without decrypting —
+   end-to-end TLS preserved, no MITM) and terminates the rest. Enforcement
+   is by **hostname**, so it can't be bypassed by an exfil endpoint sharing
+   an allowed CDN IP, and it defeats `CONNECT`-host ≠ SNI domain-fronting.
+2. **`iptables` egress lock** (`init-firewall.sh`): default-deny, then only
+   the `proxy` UID may originate outbound packets; everything else must use the
+   proxy or be dropped. IPv6 is default-deny; denied egress is
+   rate-limited-logged (`dmesg | grep watchman-deny`).
 
-Allowlist (in `squid.conf`): Anthropic + `claude.ai` + Claude Code,
-`registry.npmjs.org`, GitHub (+ `*.githubusercontent.com`, `ghcr.io`),
-PyPI, Debian apt, `nodejs.org`, `*.visualstudio.com`.
+The allowlist is **baked into the image** at `/etc/squid/allowlist.txt`. It is
+generated by `devcontainer-egress/sync.sh` as the shared `base-allowlist.txt`
+(Anthropic + Claude Code, `registry.npmjs.org`, GitHub, PyPI, Debian apt,
+`nodejs.org`, `malware-list.aikido.dev`, …) plus Watchman's own
+`allowlist.extra.txt`.
 
 > **Everything routes through the proxy.** `HTTP(S)_PROXY` is set, and
 > `NODE_USE_ENV_PROXY=1` makes Node ≥24's global `fetch` honor it too —
@@ -79,13 +99,16 @@ PyPI, Debian apt, `nodejs.org`, `*.visualstudio.com`.
 > squid. App calls to **allowlisted** hosts work; **LAN stays unreachable**
 > (not allowlisted), so pollers still can't hit home-lab devices here.
 
-To change the allowlist, edit `squid.conf` and **rebuild** (it's baked
-into the image). `dev` can't re-run the firewall (no sudo) — restart the
-container to re-apply. squid is supervised by the entrypoint: if it
-crashes, it's restarted (egress stays denied while down — fail-closed).
+To change the allowlist, edit Watchman's `allowlist.extra.txt` (or the shared
+`base-allowlist.txt`), re-run `devcontainer-egress/sync.sh` to regenerate
+`.devcontainer/allowlist.txt`, and **rebuild** (`WATCHMAN_REBUILD=1
+watchman-claude`) so it's re-baked into the image. `dev` can't re-run the
+firewall (no sudo) — a rebuild recreates the container and re-applies it. squid is
+supervised by the entrypoint: if it crashes, it's restarted (egress stays denied
+while down — fail-closed).
 
 **Supply-chain scanning.** `post-create` installs Aikido safe-chain and
-`BASH_ENV` wires it into every shell, so `npm`/`bun`/`pip` installs are
+`BASH_ENV` wires it into every shell, so `npm`/`pip` installs are
 screened against `malware-list.aikido.dev` before running. Defense-in-depth
 on top of the sandbox.
 
@@ -93,50 +116,58 @@ on top of the sandbox.
 `CONNECT 403` — that's the policy denying it. The definitive log is
 `/var/log/squid/access.log` (`dev`-readable; `TCP_DENIED`/`NONE` = blocked).
 `dmesg | grep watchman-deny` catches proxy-bypass attempts but needs root.
-Run `.devcontainer/bin/doctor` for a one-shot readiness check.
+Run `bash .devcontainer/bin/doctor` inside the box for a one-shot readiness check.
 
 **Not covered:** WebSearch/WebFetch run Anthropic-side, not through the
 proxy. ECH (encrypted SNI) destinations fail closed (no SNI → terminated).
 
-**Caps:** drops all Linux caps, re-adds only `NET_ADMIN, CHOWN,
-DAC_OVERRIDE, FOWNER, SETUID, SETGID, SETPCAP` (entrypoint iptables/perms/
-privilege-drops). Add to `runArgs` if new tooling needs more.
+**Launch-integrity gate.** The image bakes `watchman-verify-pins`, which records a
+SHA-256 of `node`, `npm`, `claude`, `gh`, `git`, and `python3` at build time. The
+launcher runs it on every start and **aborts fail-closed** on fingerprint drift or
+if the checker is missing (a stale pre-pin image) — rebuild to re-pin
+(`WATCHMAN_REBUILD=1 watchman-claude`).
 
-**Prereqs / portability:** Docker Desktop VM needs ≥4 GB. **macOS/Docker-Desktop
-only** — the Keychain auth doesn't exist on Linux/Colima/OrbStack; export
-`CLAUDE_CODE_OAUTH_TOKEN` there instead. No git credential or ssh-agent is
-forwarded (see "Git" below), so `~/.ssh` and a `*-gh-token` are no longer needed.
+**Isolation.** The container runs as the non-root `dev` user with **no sudo** and
+all setuid/setgid bits stripped image-wide. Caps: `--cap-drop ALL`, then re-add
+only `NET_ADMIN, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID` (entrypoint
+iptables/perms-fix + squid privilege-drops). apple/container has **no
+`--security-opt`** mechanism — there is no `no-new-privileges` flag; the per-container
+**VM boundary** is the isolation control instead. The container is allocated 4 GB
+RAM and 4 CPUs (`-m 4g -c 4`), with `--tmpfs /tmp` and `--tmpfs /var/tmp`.
+
+**Prereqs / portability:** **macOS / apple-container only** — the Keychain auth
+doesn't exist on Linux; export `CLAUDE_CODE_OAUTH_TOKEN` there instead. No git
+credential or ssh-agent is forwarded (see "Git" below), so `~/.ssh` and a
+`*-gh-token` are not needed.
 
 ## Persistence
 
-| Source | Container path | Type | Holds |
-| --- | --- | --- | --- |
-| `.devcontainer` (host) | `/workspaces/Watchman/.devcontainer` | bind **RO** | Overlay on the rw workspace so the sandbox config + host launcher can't be rewritten from inside (see Safety note) |
-| `watchman-claude-<id>` | `/home/dev/.claude` | named volume | Container's writable Claude config — seeded from the sanitized stage on first create |
-| `~/.claude-sandbox/stage/watchman` (host) | `/home/dev/.claude-stage` | bind **RO** | Sanitized staging copy the wrapper produces (secrets + `hooks`/`mcpServers`/`enabledPlugins` stripped). The raw host `~/.claude` is **never** mounted. |
-| (container fs) | `/home/dev/.claude.json` | regular file | Container's writable global config, seeded from `…/claude.json` in the stage |
+| Source                                    | Container path                       | Type         | Holds                                                                                                                                                   |
+| ----------------------------------------- | ------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$PROJECT_ROOT` (host)                    | `/workspaces/Watchman`               | bind **RW**  | The Watchman repo — edits appear on the host immediately                                                                                                |
+| `$PROJECT_ROOT/.git` (host)               | `/workspaces/Watchman/.git`          | bind **RO**  | Git history is readable but immutable from inside (see "Git")                                                                                           |
+| `.devcontainer` (host)                    | `/workspaces/Watchman/.devcontainer` | bind **RO**  | Overlay on the rw workspace so the sandbox config + host launcher can't be rewritten from inside (see Safety note)                                      |
+| `watchman-claude`                         | `/home/dev/.claude`                  | named volume | Container's writable Claude config — seeded from the sanitized stage on first create                                                                    |
+| `~/.claude-sandbox/stage/watchman` (host) | `/home/dev/.claude-stage`            | bind **RO**  | Sanitized staging copy the launcher produces (secrets + `hooks`/`mcpServers`/`enabledPlugins` stripped). The raw host `~/.claude` is **never** mounted. |
+| (container fs)                            | `/home/dev/.claude.json`             | regular file | Container's writable global config, seeded from `…/claude.json` in the stage                                                                            |
 
-The Watchman repo is bind-mounted at `/workspaces/Watchman`, so edits
-appear on the host immediately. The Claude config is **not** live-shared
-(that corrupts `~/.claude.json` under concurrent writes, and a raw bind
-would expose host secrets): the container gets its own writable copy
-seeded from the sanitized stage, refreshed read-only on each start. No
-`gh`/git token is forwarded at all — git inside the container is read-only
+`watchman-claude` is a **native apple/container named volume** — the root
+entrypoint can `chown` its mountpoint so a fresh volume inherits `dev` ownership.
+The Claude config is **not** live-shared (a raw bind corrupts `~/.claude.json`
+under concurrent writes and exposes host secrets): the container gets its own
+writable copy seeded from the sanitized stage, refreshed read-only on each start.
+No `gh`/git token is forwarded at all — git inside the container is read-only
 (see "Git").
 
 ## Syncing Claude config between host and container
 
-A fish function `watchman-claude-sync` (drop in
-`~/.config/fish/functions/watchman-claude-sync.fish`) can propagate
-Claude config (settings, rules, plugins, agents, slash commands, hooks,
-MCP server definitions, session history) between your host `~/.claude`
-and the container's `~/.claude`. Use the Vision project's
-`vision-claude-sync.fish` as a template; swap project name and
-container-volume reference.
+The fish function `watchman-claude-sync` propagates Claude config (settings,
+rules, plugins, agents, slash commands, hooks, MCP server definitions, session
+history) between your host `~/.claude` and the container's `~/.claude`.
 
 ```sh
 watchman-claude-sync pull     # refresh container from host (also auto-runs on launch)
-watchman-claude-sync push     # propagate container changes back to host (also auto-runs on session exit)
+watchman-claude-sync push     # propagate container changes back to host
 watchman-claude-sync status   # show what differs
 ```
 
@@ -148,7 +179,7 @@ removed on one side stay on the other until manually cleaned up.
 
 ### Auto-pull on container start
 
-The `watchman-claude` wrapper re-stages a sanitized copy of host
+The `watchman-claude` launcher re-stages a sanitized copy of host
 `~/.claude` into `~/.claude-sandbox/stage/watchman` on every invocation, and
 `post-start.sh` runs `rsync --update` from `/home/dev/.claude-stage` into
 `/home/dev/.claude` on every container start. So host-side config changes
@@ -161,15 +192,18 @@ there's no write race against a host-side claude session.
 
 ### Push on session exit (automatic)
 
-The reverse (container → host) now runs automatically. The `watchman-claude`
-wrapper no longer `exec`s the session — it stays the parent process and, on
-**session exit** (normal or Ctrl-C), runs `watchman-claude-sync push` against
-the exact container it launched. So if Claude inside the container modifies its
-own config — adds an agent, edits a rule, registers an MCP, writes a memory —
-those changes land back on the host with no manual step. Pushing only after the
-session ends keeps a single writer, so it can't race a live host-side claude on
-`~/.claude.json`. Disable with `WATCHMAN_AUTOSYNC=0`; `watchman-claude-sync push`
-remains the manual fallback.
+The reverse (container → host) runs automatically. The `watchman-claude`
+launcher stays the parent process and, on **session exit** (normal or Ctrl-C),
+pushes the container's config back against the exact container it launched. So if
+Claude inside the container modifies its own config — adds an agent, edits a rule,
+registers an MCP, writes a memory — those changes land back on the host with no
+manual step. Pushing only after the session ends keeps a single writer, so it can't
+race a live host-side claude on `~/.claude.json`. Disable per session with
+`WATCHMAN_AUTOSYNC=0`; `watchman-claude-sync push` remains the manual fallback (e.g.
+after a crash, or to retry a failed auto-push).
+
+Repo-level config (`CLAUDE.md`, `.claude/skills/`, `.claude/agents/`) lives in the
+mounted workspace and needs **no** sync.
 
 **Files excluded from sync** (volatile runtime state, not portable):
 `.credentials.json`, `backups/`, `cache/`, `paste-cache/`, `daemon.log`,
@@ -182,7 +216,7 @@ ACL-protected, prompts on access). The in-container browser login is
 broken upstream (redirect URI gets double-encoded as
 `oauth%2Fcode/callback` and the OAuth provider rejects it). To avoid
 writing any long-lived credential to a plaintext file on disk, we
-store the container's token in Keychain too, and the wrapper retrieves
+store the container's token in Keychain too, and the launcher retrieves
 it at exec time and forwards it as an env var to the container —
 credentials only ever land in Keychain or in container process memory,
 never in a file.
@@ -194,17 +228,17 @@ never in a file.
 claude setup-token
 # → prints a token starting with sk-ant-…   copy it
 
-# 2) Store it in Keychain under a service name the wrapper looks for.
+# 2) Store it in Keychain under a service name the launcher looks for.
 security add-generic-password \
   -s "watchman-claude-code-token" \
   -a "$USER" \
   -w   # prompts you to paste the token (won't echo)
 ```
 
-That's it. The `watchman-claude` wrapper now does
+That's it. The `watchman-claude` launcher now does
 `security find-generic-password -s watchman-claude-code-token -w` on
 every invocation and forwards the result to the container via
-`docker compose exec -e CLAUDE_CODE_OAUTH_TOKEN=…`. No plaintext
+`container exec -e CLAUDE_CODE_OAUTH_TOKEN=…`. No plaintext
 file, no fish universal var, no `.credentials.json` in `~/.claude`.
 
 **The Keychain "Always Allow" decision.** The first time `security`
@@ -231,8 +265,8 @@ security delete-generic-password -s "watchman-claude-code-token"
 # then re-run the two-step setup above with a fresh `claude setup-token`
 ```
 
-**Fallback paths (still supported by the wrapper).** If you'd rather
-skip the Keychain dance, the wrapper also picks up
+**Fallback paths (still supported by the launcher).** If you'd rather
+skip the Keychain dance, the launcher also picks up
 `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN`
 straight from your shell env. Worse posture (plaintext in
 `~/.config/fish/fish_variables`), but functional.
@@ -244,54 +278,62 @@ is bind-mounted **read-only**, no git credential (`GH_TOKEN`/`GITHUB_TOKEN`) is
 forwarded, and the host ssh-agent is **not** forwarded. So a compromised agent
 can't rewrite history, push, or sign/authenticate as you over SSH.
 
-| Operation | Works? | Notes |
-| --- | --- | --- |
-| `git status` / `diff` / `log` / `show` | ✅ | Read-only on the bind-mounted repo (`safe.directory` is set) |
-| `git commit` / `rebase` / `reset` / `amend` | ❌ | `.git` is read-only — fails with EROFS, by design |
-| `git push` / `gh pr create` | ❌ | No credential in the container; `git push` errors with "could not read Username" |
-| commit signing (ssh-agent) | ❌ (n/a) | No ssh-agent forwarded; nothing to sign with — commits happen on the host |
+| Operation                                   | Works?   | Notes                                                                            |
+| ------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `git status` / `diff` / `log` / `show`      | ✅       | Read-only on the bind-mounted repo (`safe.directory` is set)                     |
+| `git commit` / `rebase` / `reset` / `amend` | ❌       | `.git` is read-only — fails with EROFS, by design                                |
+| `git push` / `gh pr create`                 | ❌       | No credential in the container; `git push` errors with "could not read Username" |
+| commit signing (ssh-agent)                  | ❌ (n/a) | No ssh-agent forwarded; nothing to sign with — commits happen on the host        |
 
 **Workflow:** make changes inside the container (they appear on the host via the
 bind mount immediately), then **commit and push from your host** where your
 gitconfig, signing key, and gh auth live. There is no in-container git auth to
 set up.
 
-so the key auto-loads on first use and survives reboots.
+## Project memory
+
+The host's per-project Claude memory is bind-mounted **read-only** at
+`~/.claude-memory-seed` and mirrored (`rsync --delete`) into the container's
+per-project memory path on every start, so the box always reads current host
+memory and anything a prior headless / prompt-injected run wrote is wiped. On exit
+from an **interactive** session, the launcher pushes that session's new memory
+edits (layered on the clean seed) back to the host.
 
 ## Known limitations
 
 - **Electron desktop build (`npm run dist`)** — needs macOS native tools;
   run on the host, not in this container.
 - **Live LAN polling** — unreachable; only the proxy's allowlisted
-  hostnames resolve, and LAN hosts aren't allowlisted. App `fetch` *does*
+  hostnames resolve, and LAN hosts aren't allowlisted. App `fetch` _does_
   route through the proxy (`NODE_USE_ENV_PROXY=1`), so calls to allowlisted
   hosts work — LAN just isn't one of them. The devcontainer is for code editing.
-- **Changing the egress allowlist** — edit `squid.conf` and rebuild
-  (it's baked into the image, not read from the workspace).
-- **Host Ollama via `host.docker.internal`** — blocked; add it to the
-  `squid.conf` allowlist and rebuild if you want it through.
+- **Changing the egress allowlist** — edit `allowlist.extra.txt`, re-run
+  `devcontainer-egress/sync.sh`, and rebuild (it's baked into the image, not read
+  from the workspace).
+- **Host Ollama** — blocked; add the host's address to the allowlist and rebuild
+  if you want it through.
 
 ## Safety note
 
 The container runs as a non-root user (`dev`), so the CLI accepts
 `--dangerously-skip-permissions`. Anthropic still warns: a malicious
 project can exfiltrate anything inside the container, including the
-`~/.claude` credentials volume. Treat this as *"host is isolated from
-Claude,"* not *"Claude is isolated from a hostile repo."* Only enable
+`~/.claude` credentials volume. Treat this as _"host is isolated from
+Claude,"_ not _"Claude is isolated from a hostile repo."_ Only enable
 for trusted repositories.
 
 **Why `.devcontainer` is mounted read-only.** The repo is bind-mounted
 read-write at `/workspaces/Watchman` so the agent can edit source — but that
 same mount would otherwise expose the sandbox's own definition
-(`compose.yaml`, `Dockerfile`) and the **host-side launcher**
+(`Dockerfile`, the launcher run args) and the **host-side launcher**
 (`bin/claude`, `bin/doctor`), which run on your **Mac** with your shell and
-Keychain. A compromised in-container agent could add a privileged option or a
-`docker.sock` mount to `compose.yaml`, or just edit `bin/claude`,
-and the next `claude` invocation (which calls `docker compose up` and re-execs
-the launcher) would run it on the host — a trivial full escape. To close that,
-`.devcontainer` is re-mounted **read-only on top of** the read-write workspace,
-so it is immutable from inside. The container cannot lift this: it has
-`cap-drop=ALL` (no `CAP_SYS_ADMIN`, so no remount/unmount), `no-new-privileges`,
-and `.devcontainer` is a busy mountpoint that can't be replaced — the protection
-re-applies on every `docker compose up`. **Edit `.devcontainer` on the host only,**
-then rebuild.
+Keychain. A compromised in-container agent could edit `bin/claude` or the
+`Dockerfile`, and the next `claude` invocation (which calls `container build`
+and re-execs the launcher) would run it on the host — a trivial full escape.
+To close that, `.devcontainer` is re-mounted **read-only on top of** the
+read-write workspace, so it is immutable from inside. The container cannot lift
+this: it has `--cap-drop ALL` (no `CAP_SYS_ADMIN`, so no remount/unmount), and
+`.devcontainer` is a busy mountpoint that can't be replaced — the protection
+re-applies on every `container run`. `bin/doctor` proves it live by attempting a
+write (a stale container booted before the change would be caught). **Edit
+`.devcontainer` on the host only,** then rebuild.
