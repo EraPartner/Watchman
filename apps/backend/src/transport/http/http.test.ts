@@ -240,3 +240,52 @@ describe("http routes", () => {
     await app.close();
   });
 });
+
+describe("origin + host guards", () => {
+  it("rejects a cross-origin request whose Origin is not allow-listed", async () => {
+    const app = await makeApp(new ServiceRegistry());
+    const res = await app.inject({
+      method: "GET",
+      url: "/meta/health",
+      headers: { host: "localhost:3001", origin: "http://evil.example" },
+    });
+    expect(res.statusCode).toBe(403);
+    await app.close();
+  });
+
+  it("allows a genuine same-origin request even off the CORS list (LAN deploy)", async () => {
+    const app = await makeApp(new ServiceRegistry());
+    const res = await app.inject({
+      method: "GET",
+      url: "/meta/health",
+      headers: {
+        host: "192.168.1.50:3001",
+        origin: "http://192.168.1.50:3001",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("rejects a request with an unrecognised Host (DNS rebinding)", async () => {
+    const app = await makeApp(new ServiceRegistry());
+    const res = await app.inject({
+      method: "GET",
+      url: "/meta/health",
+      headers: { host: "attacker.example" },
+    });
+    expect(res.statusCode).toBe(403);
+    await app.close();
+  });
+
+  it("allows a normal loopback request with no Origin", async () => {
+    const app = await makeApp(new ServiceRegistry());
+    const res = await app.inject({
+      method: "GET",
+      url: "/meta/health",
+      headers: { host: "localhost:3001" },
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+});

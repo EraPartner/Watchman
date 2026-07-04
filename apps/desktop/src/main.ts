@@ -28,6 +28,25 @@ import {
 let mainWindow: BrowserWindow | null = null;
 let backend: BackendHandle | null = null;
 
+// Only hand safe web schemes to the OS. The renderer displays attacker-
+// influenceable data (Tor relay contact strings, service names/URLs); without
+// this guard a crafted `file:`/custom-scheme link handed to shell.openExternal
+// would be opened by the OS. Anything that isn't http(s)/mailto is dropped.
+function openExternalSafe(url: string): void {
+  try {
+    const { protocol } = new URL(url);
+    if (
+      protocol === "https:" ||
+      protocol === "http:" ||
+      protocol === "mailto:"
+    ) {
+      void shell.openExternal(url);
+    }
+  } catch {
+    // not a parseable URL — drop it
+  }
+}
+
 // Backend connection details handed to the renderer's preload synchronously
 // (see ipcMain 'watchman:get-config'). Empty until the backend is healthy —
 // the splash document does not need them.
@@ -164,7 +183,7 @@ function createWindow(): void {
 
   // External links open in the system browser, never in-app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openExternalSafe(url);
     return { action: "deny" };
   });
 
@@ -181,7 +200,7 @@ function createWindow(): void {
         target.hostname === "localhost";
       if (!allowed) {
         event.preventDefault();
-        shell.openExternal(url);
+        openExternalSafe(url);
       }
     } catch {
       event.preventDefault();

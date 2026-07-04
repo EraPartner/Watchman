@@ -22,8 +22,10 @@ import { createTorControlClient } from "./infra/tor/controlClient.js";
 import { roonConnect } from "./infra/roon/roonClientImpl.js";
 import { zmqConnect } from "./infra/zmq/zmqSubscriberImpl.js";
 import { wsPlugin } from "./transport/ws/wsPlugin.js";
+import { hostname } from "node:os";
 import {
   createOriginPolicy,
+  createHostPolicy,
   parseOriginList,
 } from "./transport/originPolicy.js";
 import { mkdir } from "node:fs/promises";
@@ -99,7 +101,7 @@ async function main(): Promise<void> {
   await profileStore.ensureBootstrap(logger);
 
   const masterKey = loadOrCreateMasterKey(dataDir, env.WATCHMAN_MASTER_KEY);
-  const encryptor = loadEncryptorFromEnv(masterKey);
+  const encryptor = loadEncryptorFromEnv(masterKey, dataDir);
   const store = createConfigStore(dbPool, encryptor, bus, logger, {
     resolveDefaultProfileId: () => profileStore.getActiveProfileId(),
   });
@@ -176,9 +178,9 @@ async function main(): Promise<void> {
   });
   bus.on("service.error", (p) => metrics.recordServiceError(p.id));
 
-  const isOriginAllowed = createOriginPolicy(
-    parseOriginList(env.CORS_ALLOWED_ORIGINS)
-  );
+  const corsOrigins = parseOriginList(env.CORS_ALLOWED_ORIGINS);
+  const isOriginAllowed = createOriginPolicy(corsOrigins);
+  const isHostAllowed = createHostPolicy(corsOrigins, hostname());
 
   const app = await buildServer({
     logger,
@@ -199,6 +201,7 @@ async function main(): Promise<void> {
     setup: { store, http: infra.http },
     trustProxy: env.TRUST_PROXY,
     isOriginAllowed,
+    isHostAllowed,
   });
 
   await app.register(wsPlugin, {

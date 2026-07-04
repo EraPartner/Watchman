@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { createOriginPolicy, parseOriginList } from "./originPolicy.js";
+import {
+  createOriginPolicy,
+  createHostPolicy,
+  parseOriginList,
+} from "./originPolicy.js";
 
 describe("parseOriginList", () => {
   it("returns empty for undefined or blank", () => {
@@ -46,5 +50,37 @@ describe("createOriginPolicy", () => {
   it("rejects malformed origins", () => {
     const policy = createOriginPolicy(["https://watchman.example"]);
     expect(policy("not a url")).toBe(false);
+  });
+});
+
+describe("createHostPolicy (DNS-rebinding guard)", () => {
+  it("allows loopback names and IP literals (with or without port)", () => {
+    const policy = createHostPolicy();
+    expect(policy("localhost:3001")).toBe(true);
+    expect(policy("127.0.0.1:3001")).toBe(true);
+    expect(policy("[::1]:3001")).toBe(true);
+    expect(policy("192.168.1.50:3001")).toBe(true); // LAN IP access
+    expect(policy(undefined)).toBe(true); // non-browser client
+  });
+
+  it("rejects an unknown DNS name (the rebinding vector)", () => {
+    const policy = createHostPolicy();
+    expect(policy("attacker.com")).toBe(false);
+    expect(policy("attacker.com:3001")).toBe(false);
+  });
+
+  it("allows this host's own name and its .local form", () => {
+    const policy = createHostPolicy([], "macmini");
+    expect(policy("macmini:3001")).toBe(true);
+    expect(policy("macmini.local:3001")).toBe(true);
+    expect(policy("MacMini")).toBe(true); // case-insensitive
+    expect(policy("other-host")).toBe(false);
+  });
+
+  it("allows hosts of configured CORS origins", () => {
+    const policy = createHostPolicy(["https://watchman.example:8443"]);
+    expect(policy("watchman.example:8443")).toBe(true);
+    expect(policy("watchman.example")).toBe(true); // any port on the allowed name
+    expect(policy("evil.example")).toBe(false);
   });
 });

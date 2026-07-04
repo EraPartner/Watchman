@@ -49,6 +49,10 @@ LIB="$DC/launcher-common.sh"
 # shellcheck source=/dev/null
 source "$LIB"
 sandbox_stage_claude_config watchman
+# Lock host-executed git paths (.git + relocated core.hooksPath, e.g. .githooks)
+# :ro over the RW workspace — an in-container agent must not plant a hook the HOST
+# git runs on commit/push. Populates GIT_RO_MOUNTS; see launcher-common.sh.
+sandbox_git_ro_mounts "$PROJECT_ROOT" /workspaces/Watchman
 
 # --- 2) Build (cached → fast) ------------------------------------------------
 container build -t "$IMAGE" "$DC" >/dev/null
@@ -90,7 +94,7 @@ else
     -e NO_PROXY=localhost,127.0.0.1,::1 \
     -e no_proxy=localhost,127.0.0.1,::1 \
     -v "$PROJECT_ROOT:/workspaces/Watchman" \
-    -v "$PROJECT_ROOT/.git:/workspaces/Watchman/.git:ro" \
+    ${GIT_RO_MOUNTS[@]+"${GIT_RO_MOUNTS[@]}"} \
     -v "$DC:/workspaces/Watchman/.devcontainer:ro" \
     -v watchman-claude:/home/dev/.claude \
     -v "$HOME/.claude-sandbox/stage/watchman:/home/dev/.claude-stage:ro" \

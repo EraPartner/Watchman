@@ -13,7 +13,13 @@ import { requestTimeoutPlugin } from "./plugins/requestTimeout.js";
 import { logSamplingPlugin } from "./plugins/logSampling.js";
 import type { ListInstances } from "../../application/ListInstances.js";
 import type { MetricsRegistry } from "../../core/metrics.js";
-import { createOriginPolicy, type OriginPredicate } from "../originPolicy.js";
+import { hostname } from "node:os";
+import {
+  createOriginPolicy,
+  createHostPolicy,
+  type OriginPredicate,
+  type HostPredicate,
+} from "../originPolicy.js";
 
 export interface BuildServerDeps {
   logger: Logger;
@@ -27,6 +33,19 @@ export interface BuildServerDeps {
   healthLogSampleRate?: number | undefined;
   trustProxy?: boolean | undefined;
   isOriginAllowed?: OriginPredicate | undefined;
+  isHostAllowed?: HostPredicate | undefined;
+}
+
+// True when the request's Origin denotes the same host:port as its Host header,
+// i.e. a genuine same-origin request (never cross-site regardless of the CORS
+// allow-list). `URL.host` includes a non-default port, matching the Host header.
+function isSameOrigin(origin: string, host: string | undefined): boolean {
+  if (!host) return false;
+  try {
+    return new URL(origin).host.toLowerCase() === host.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 export async function buildServer(deps: BuildServerDeps) {
@@ -38,8 +57,21 @@ export async function buildServer(deps: BuildServerDeps) {
   });
 
   const isOriginAllowed = deps.isOriginAllowed ?? createOriginPolicy();
+  const isHostAllowed = deps.isHostAllowed ?? createHostPolicy([], hostname());
 
   app.addHook("onRequest", async (request, reply) => {
+    // DNS-rebinding guard (see createHostPolicy): reject unrecognised Host
+    // headers before doing anything else. This closes the same-origin rebind
+    // path that the Origin check below cannot see.
+    const host = request.headers.host;
+    if (!isHostAllowed(host)) {
+      request.log.warn(
+        { host },
+        "rejected request with disallowed Host header (possible DNS rebinding)"
+      );
+      return reply.code(403).send();
+    }
+
     const origin = request.headers.origin;
     if (typeof origin === "string") {
       if (isOriginAllowed(origin)) {
@@ -57,7 +89,15 @@ export async function buildServer(deps: BuildServerDeps) {
         if (request.method === "OPTIONS") {
           return reply.code(204).send();
         }
-      } else if (request.method === "OPTIONS") {
+      } else if (!isSameOrigin(origin, host)) {
+        // Disallowed AND cross-origin: reject outright, not just the preflight.
+        // Previously a non-OPTIONS cross-origin request fell through and executed
+        // (the browser was merely blocked from reading the response), so a
+        // malicious page could still drive state changes on this no-auth API.
+        // A genuine same-origin request (Origin host === Host) is allowed even
+        // when the origin isn't on the CORS list — that can't be cross-site, and
+        // the Host guard above has already rejected rebinding — so this never
+        // 403s a legitimate same-origin write on a LAN (0.0.0.0) deployment.
         return reply.code(403).send();
       }
     } else if (request.method === "OPTIONS") {
