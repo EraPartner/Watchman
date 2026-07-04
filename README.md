@@ -181,13 +181,16 @@ npm run generate:types       # regenerate TypeScript types from openapi.yaml
 ```text
 Watchman/
 ├── apps/
-│   ├── frontend/        # React + TypeScript + Vite app
-│   └── backend/         # Node.js + Fastify API + WebSocket
+│   ├── frontend/        # React + TypeScript + Vite app (Playwright e2e in tests/)
+│   ├── backend/         # Node.js + Fastify API + WebSocket
+│   └── desktop/         # Electron desktop wrapper
 ├── docs/                # Knowledge base and project documentation
-├── packages/            # Shared packages (workspace-ready)
-├── tests/               # Additional integration/e2e tests
-└── tools/               # Development and maintenance scripts
+├── packaging/           # Electron release / packaging assets
+├── scripts/             # Repo maintenance scripts (git hooks, …)
+└── tools/               # Development and maintenance tooling
 ```
+
+> `packages/*` is a reserved npm-workspace glob for future shared packages; no shared packages exist yet.
 
 ## API and Security
 
