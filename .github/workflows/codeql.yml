@@ -28,7 +28,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [javascript-typescript]
+        # The app code (JS/TS) plus the CI workflows themselves (actions —
+        # script injection, unpinned actions, permission misconfig). Both use
+        # build-mode: none, so the single build-mode below covers each job.
+        language: [javascript-typescript, actions]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
 
