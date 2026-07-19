@@ -64,7 +64,7 @@
     "audit-ci": "^7.1.0",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
-    "lint-staged": "^17.0.8",
+    "lint-staged": "^17.1.0",
     "openapi-typescript": "^7.4.4",
     "prettier": "^3.9.5"
   }
