@@ -1,0 +1,11 @@
+{
+  "skills": ["add-service"],
+  "query": "The user has two Bitcoin nodes they want monitored separately, not merged into one entry. How should the config for the second instance be named?",
+  "files": [],
+  "expected_behavior": [
+    "Uses the documented multi-instance pattern {SERVICE}_{N}_* (e.g. BITCOIN_1_URL, BITCOIN_2_URL), matching the QBITTORRENT_1_URL/QBITTORRENT_2_URL example in the skill",
+    "Does not invent a different naming scheme (e.g. BITCOIN_URL_2, BITCOIN_SECONDARY_URL)",
+    "Notes that new env vars need to be documented in docs/reference/environment-variables.md",
+    "Correctly notes config actually lives in the DuckDB config store via the /config API, with env vars only imported once on first boot per the project's broader architecture"
+  ]
+}

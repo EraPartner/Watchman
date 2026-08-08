@@ -1,0 +1,11 @@
+{
+  "skills": ["add-service"],
+  "query": "I added a new GET /api/services/plex/streams endpoint to expose active stream count separately from the main stats payload. What's left to do?",
+  "files": [],
+  "expected_behavior": [
+    "Identifies that apps/backend/openapi.yaml (the API source of truth) needs to be updated for the new endpoint",
+    "Runs or instructs to run npm run generate:types so apps/frontend/src/types/generated.ts stays in sync",
+    "Flags the verification tier for a service-integration/API change: health check, timeout/retry/circuit-breaker behavior, auth/rate-limit, multi-instance implications",
+    "Recommends invoking the watchman-kb-updater subagent before marking the work complete, per CLAUDE.md's mandatory after-code-changes step"
+  ]
+}

@@ -70,9 +70,16 @@ coverage*
 .DS_Store
 Thumbs.db
 
-# Agent/IDE configs (local only)
+# Agent/IDE configs
+# Shareable Claude config is tracked so cloud sessions and routines pick it up
+# (they start from a fresh clone). Host-specific bits live in CLAUDE.local.md.
 .obsidian/
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/rules/
+!.claude/settings.json
 .opencode/
 AGENTS.*
 CLAUDE.*
+!CLAUDE.md

@@ -1,0 +1,12 @@
+{
+  "skills": ["add-service"],
+  "query": "Add monitoring support for a new Plex media server instance — health check and basic stats (active streams, library count).",
+  "files": [],
+  "expected_behavior": [
+    "Reads docs/guides/adding-services.md and the relevant docs/integrations/ spec before writing code, per the skill's mandate",
+    "Creates a new class in apps/backend/src/domain/services/ that extends BaseService and implements checkHealth() and getStats()",
+    "Registers the new service in ServiceRegistry.ts",
+    "Uses existing src/infra/ building blocks (http/cache/circuitBreaker/scheduler) rather than hand-rolling transport or polling logic",
+    "Does not skip updating docs/reference/environment-variables.md if new env vars are introduced"
+  ]
+}
