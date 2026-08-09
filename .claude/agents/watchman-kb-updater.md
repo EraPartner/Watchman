@@ -137,5 +137,4 @@ If you add or move components, also keep any callouts about the visualizer (in `
 - Summary of what docs and/or OpenAPI spec were changed/added
 - Which architecture diagrams were updated (and which files they live in) — or an explicit note that no diagram change was warranted
 - Whether `docs/flow-visualizer.html` (components / baseEdges / flows JSON) was updated — or an explicit note that no flow / package change was warranted
-- Whether Obsidian MCP was used (or fallback method used and why)
 - Any gaps that need human attention

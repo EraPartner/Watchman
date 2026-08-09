@@ -1,6 +1,6 @@
 ---
 name: add-service
-description: Add or modify a monitored service integration in Watchman — new service type, new instance support, health checks, polling, service stats. Use when the user wants to monitor something new, add/change a service integration, or touch BaseService/ServiceRegistry/service env vars.
+description: Add or modify a monitored service integration in Watchman — new service type, new instance support, health checks, polling, service stats. Use when the user wants to monitor something new, add/change a service integration, or touch BaseService/ServiceRegistry/service config.
 ---
 
 # Adding / changing a service integration
@@ -15,8 +15,11 @@ Read first: `docs/guides/adding-services.md` and the relevant `docs/integrations
 2. Register it in `ServiceRegistry.ts` (registers + routes all service instances).
 3. Use `src/infra/` building blocks (`http`, `ssh`, `snmp`, `net`, `gpio`, `roon`, `cache`,
    `circuitBreaker`, `scheduler`) — don't hand-roll transport or polling.
-4. Config via env vars; **multi-instance pattern is `{SERVICE}_{N}_*`** (e.g. `QBITTORRENT_1_URL`,
-   `QBITTORRENT_2_URL`). Document new vars in `docs/reference/environment-variables.md`.
+4. Service config — including multi-instance — lives in the **DuckDB config store**, managed
+   through the `/config` API or the UI. Legacy `{SERVICE}_{N}_*` env vars are imported once on
+   first boot and ignored after that, so adding a new one has no runtime effect. Only genuinely
+   process-level settings belong in env; document those in
+   `docs/reference/environment-variables.md`.
 5. API surface changed? Update `apps/backend/openapi.yaml` (the API source of truth) and run
    `npm run generate:types` so `apps/frontend/src/types/generated.ts` stays in sync.
 6. Frontend: components in `apps/frontend/src/components/`, data via React Query +
