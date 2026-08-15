@@ -71,8 +71,8 @@ coverage*
 Thumbs.db
 
 # Agent/IDE configs
-# Shareable Claude config is tracked so cloud sessions and routines pick it up
-# (they start from a fresh clone). Host-specific bits live in CLAUDE.local.md.
+# Shareable agent guidance and skills are tracked so fresh clones receive them.
+# Tool-specific adapters are tracked; host-specific files use the *.local.md suffix.
 .obsidian/
 .claude/*
 !.claude/skills/
@@ -80,6 +80,6 @@ Thumbs.db
 !.claude/rules/
 !.claude/settings.json
 .opencode/
-AGENTS.*
+AGENTS.local.md
 CLAUDE.*
 !CLAUDE.md

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Watchman Docs"
+  short_description: "Keep the Watchman knowledge base synchronized"
+  default_prompt: "Use $update-watchman-docs to synchronize Watchman documentation with these code changes."

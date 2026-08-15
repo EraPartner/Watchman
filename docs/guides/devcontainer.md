@@ -2,7 +2,7 @@
 title: Devcontainer Guide
 type: guide
 status: active
-date: 2026-06-24
+date: 2026-08-15
 tags:
   [
     guide,
@@ -129,7 +129,7 @@ watchman-claude-sync status   # show what differs
 Both `pull` and `push` use `rsync --update` (per-file newer-wins) and a `jq` recursive merge for `.claude.json`. Files excluded from sync: `.credentials.json`, `backups/`, `cache/`, `paste-cache/`, `daemon.log`, `debug/`, `telemetry/`, `session-env/`, `shell-snapshots/`.
 
 > [!info] Config sync is bidirectional and automatic
-> `post-start.sh` runs `rsync --update` from the read-only host stage into the container volume on every container start, so host-side changes (new agents, edited rules, added MCP servers) propagate automatically. The reverse — container → host — **also runs automatically on session exit** (push-on-exit), so config Claude writes inside the box lands back on the host with no manual step. Disable per session with `WATCHMAN_AUTOSYNC=0`; `watchman-claude-sync push` remains the manual fallback (e.g. after a crash). Repo-level config (`CLAUDE.md`, `.claude/skills/`, `.claude/agents/`) lives in the mounted workspace and needs no sync.
+> `post-start.sh` runs `rsync --update` from the read-only host stage into the container volume on every container start, so host-side changes (new agents, edited rules, added MCP servers) propagate automatically. The reverse — container → host — **also runs automatically on session exit** (push-on-exit), so config Claude writes inside the box lands back on the host with no manual step. Disable per session with `WATCHMAN_AUTOSYNC=0`; `watchman-claude-sync push` remains the manual fallback (e.g. after a crash). Repo-level guidance (`AGENTS.md`), shared skills (`.agents/skills/`), and Claude compatibility adapters (`CLAUDE.md`, `.claude/skills/`) live in the mounted workspace and need no sync.
 
 ## Network Policy
 

@@ -30,3 +30,6 @@ logs
 .obsidian
 .idea
 .vscode
+
+# Obsidian Markdown uses wikilink pipes that Prettier treats as table separators.
+docs/**/*.md

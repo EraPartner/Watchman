@@ -2,7 +2,7 @@
 
 Run before proposing, committing, or opening a PR. Encodes the review knowledge that
 lives in the maintainer's head as a checklist so review catches issues automatically;
-`CLAUDE.md` / `CONTRIBUTING.md` carry the _why_. Every box below maps to a real gate in
+`AGENTS.md` / `CONTRIBUTING.md` carry the _why_. Every box below maps to a real gate in
 this repo (git hooks, the `CI` workflow, or a documented invariant) — not a wish list.
 
 ## Secrets & safety
@@ -40,5 +40,5 @@ this repo (git hooks, the `CI` workflow, or a documented invariant) — not a wi
 
 - [ ] Signed commit (`commit.gpgsign=true`, SSH format) with a Conventional Commit message
       (`type(scope): subject`, enforced by the `commit-msg` hook) — what changed and why.
-- [ ] Branched off `main` (never commit to `main` directly); scope kept tight, unrelated cleanup logged as a follow-up.
-- [ ] Behavior changed? Affected `docs/` pages updated (run `watchman-kb-updater`) and frontmatter dates bumped.
+- [ ] Commit directly to `main` unless the task requests a branch; scope kept tight and unrelated cleanup logged as a follow-up.
+- [ ] Behavior changed? Affected `docs/` pages updated with the `update-watchman-docs` skill and frontmatter dates bumped.

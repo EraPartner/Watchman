@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add Watchman Service"
+  short_description: "Add or change a monitored Watchman service"
+  default_prompt: "Use $add-service to implement this Watchman service integration."

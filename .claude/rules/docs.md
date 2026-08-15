@@ -5,6 +5,8 @@ paths:
 
 # docs/ conventions (Obsidian vault)
 
+`docs/AGENTS.md` is canonical. Read and follow it before editing any file under `docs/`.
+
 - YAML frontmatter on every page: `title`, `type`, `status`, `date`, `tags`, `description`,
   `aliases`. Bump dates when editing.
 - Internal links as `[[docs/path|Display]]` wikilinks; preserve frontmatter/wikilinks when editing.
