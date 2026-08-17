@@ -26,6 +26,9 @@ this repo (git hooks, the `CI` workflow, or a documented invariant) — not a wi
       registered in `bootstrap/registerServices.ts`; verified health check, timeout/circuit-breaker,
       secret handling, and multi-instance behavior. Config goes through the `/config` API (DuckDB), not new env vars.
 - [ ] Architectural decision recorded as a new append-only ADR in `docs/adr/` (next free number, from `template.md`).
+- [ ] Behavior, API, architecture, service, configuration, security, package, build, deployment, or
+      workflow changed? Ran `update-watchman-docs` after the implementation diff stabilized and
+      updated every stale surface, or recorded why no documentation change was warranted.
 
 ## Tests & validation
 
@@ -35,10 +38,11 @@ this repo (git hooks, the `CI` workflow, or a documented invariant) — not a wi
 - [ ] `npm run build` (frontend + backend) succeeds for anything touching build/runtime surface.
 - [ ] `npx audit-ci --config .audit-ci.json` clean (no un-allowlisted HIGH/CRITICAL deps).
 - [ ] CI (`CI` workflow → required check `CI Complete`) expected green.
+- [ ] Final validation ran after documentation and generated artifacts were synchronized; any
+      implementation change made during validation triggered another documentation check.
 
 ## Hygiene
 
 - [ ] Signed commit (`commit.gpgsign=true`, SSH format) with a Conventional Commit message
       (`type(scope): subject`, enforced by the `commit-msg` hook) — what changed and why.
 - [ ] Commit directly to `main` unless the task requests a branch; scope kept tight and unrelated cleanup logged as a follow-up.
-- [ ] Behavior changed? Affected `docs/` pages updated with the `update-watchman-docs` skill and frontmatter dates bumped.

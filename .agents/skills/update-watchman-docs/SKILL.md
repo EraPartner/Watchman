@@ -1,12 +1,30 @@
 ---
 name: update-watchman-docs
-description: Synchronize the Watchman Obsidian knowledge base, OpenAPI specification, inline PlantUML diagrams, and interactive flow visualizer with implementation changes. Use after behavior, API, architecture, service integration, configuration, security, workflow, package, route, service, middleware, page, hook, store, WebSocket, or other project knowledge changes that affect docs/.
+description: Synchronize the Watchman Obsidian knowledge base, OpenAPI specification, inline PlantUML diagrams, and interactive flow visualizer. Use after the implementation diff stabilizes and before final validation whenever behavior, APIs, architecture, services, configuration, security, packages, builds, workflows, routes, middleware, pages, hooks, stores, WebSockets, or other project knowledge may become stale.
 ---
 
 # Update Watchman documentation
 
 Inspect the implementation diff first. Update only documentation made stale by the change, but
 follow every connected surface through OpenAPI, indexes, diagrams, backlinks, and the visualizer.
+
+## When to run
+
+1. Before implementation, read the relevant docs to establish intent. Do not edit historical ADRs.
+2. During implementation, keep coupled contracts synchronized. API work includes OpenAPI, route
+   docs, generated types, and hand-maintained client types in the same implementation pass.
+3. Once the implementation diff is stable, run this skill before final validation for any change
+   that could make project knowledge stale. The trigger is impact, not diff size.
+4. Update every affected surface, or record why no documentation change is warranted.
+5. Run final tests, lint, typecheck, build, generated-artifact checks, and documentation validation
+   after the docs update. If those checks change implementation behavior or contracts, repeat this
+   documentation pass.
+6. Before committing, inspect the complete diff and confirm `REVIEW.md` is satisfied.
+
+Typical triggers include behavior, API, architecture, service integration, configuration,
+security, dependency or package, build or deployment, workflow, route, middleware, page, hook,
+store, and WebSocket changes. Comment-only, formatting-only, and internal test refactors do not
+require documentation changes unless they expose existing drift.
 
 ## Documentation routing and graph integrity
 
@@ -63,3 +81,8 @@ annotations. Keep counts and category callouts accurate in `docs/INDEX.md`,
 Report docs and OpenAPI changes, diagram changes or why none were needed, flow-visualizer changes or
 why none were needed, index/backlink/Dataview checks, validation, and remaining gaps. Confirm claims
 against code and tests; never document intended behavior as implemented.
+
+Create a session note only when the work changes multiple modules or documentation surfaces, or
+changes architecture, API contracts, security, persistence, service integrations, configuration
+workflows, or build/deployment behavior. Isolated mechanical and comment-only edits do not need a
+session note unless the user requests one.

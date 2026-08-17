@@ -74,9 +74,18 @@ encrypted in DuckDB. Never log tokens or personal data; preserve Pino redaction.
 
 ## Required synchronization and verification
 
-- Before any direct `docs/` edit, read `docs/AGENTS.md`. Update affected docs and use the
-  `update-watchman-docs` skill for non-trivial code changes.
-- API change: update OpenAPI, generate types, update route docs, and state compatibility.
+- Before implementation, search the relevant project documentation and verify it against code.
+- During an API change, update OpenAPI and route docs with the implementation, generate types, keep
+  the hand-maintained client types aligned, and state compatibility.
+- Once the implementation diff is stable and before final validation, use the
+  `update-watchman-docs` skill for any behavior, API, architecture, service, configuration,
+  security, package, build, or workflow change that could make project knowledge stale. Change
+  size does not determine whether documentation is required.
+- Update every affected documentation surface, or explicitly report why no documentation change
+  is warranted. Before any direct `docs/` edit, read `docs/AGENTS.md`.
+- Run final tests, lint, typecheck, build, generated-artifact checks, and documentation validation
+  after documentation and generated files are synchronized. If validation changes the
+  implementation, repeat the documentation check.
 - Service change: verify health, timeout, retry, circuit-breaker behavior, secret handling, and
   multi-instance behavior.
 - Isolated edit: targeted test and lint.
@@ -93,4 +102,8 @@ configuration, preserve the configured Pino secret redaction, and audit new depe
 adding them.
 
 At the end of a substantial work session, summarize the work as an Obsidian note in `docs/` for
-the project vault. Follow `docs/AGENTS.md` and use the `update-watchman-docs` skill for the note.
+the project vault. A session is substantial when it changes multiple modules or documentation
+surfaces, or changes architecture, API contracts, security, persistence, service integrations,
+configuration workflows, or build/deployment behavior. Skip the note for isolated mechanical or
+comment-only edits unless the user requests one. Follow `docs/AGENTS.md` and use the
+`update-watchman-docs` skill for the note.

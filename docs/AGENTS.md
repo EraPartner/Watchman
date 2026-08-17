@@ -10,3 +10,6 @@ These files form an Obsidian knowledge base.
 - Use plain repository file tools in the dev container. The Obsidian CLI and Defuddle require host
   applications or network access.
 - Keep docs aligned with code, but do not rewrite historical ADRs. Add a superseding ADR.
+- Synchronize affected docs after the implementation diff is stable and before final validation.
+  Run documentation and generated-artifact checks after the docs update. If validation changes the
+  implementation, check the docs again.

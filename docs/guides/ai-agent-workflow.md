@@ -2,7 +2,7 @@
 title: AI Agent Workflow
 type: guide
 status: active
-date: 2026-08-15
+date: 2026-08-17
 tags: [guide, ai-agent, workflow, development, automation, skills]
 description: Model-neutral workflow for coding agents working on the Watchman project
 aliases: [ai-agent-guide, agent workflow, ai assistant, copilot]
@@ -34,10 +34,11 @@ graph TD
     B --> C[Search project documentation]
     C --> D[Verify documentation against code]
     D --> E[Make the scoped change]
-    E --> F[Add or update tests]
-    F --> G[Run the required checks]
-    G --> H[Update affected documentation]
-    H --> I[Review the final diff]
+    E --> F[Update coupled contracts and tests]
+    F --> G[Inspect the stable implementation diff]
+    G --> H[Run update-watchman-docs]
+    H --> I[Run final verification]
+    I --> J[Review the complete diff]
 ```
 
 ### 1. Load Project Guidance
@@ -61,9 +62,21 @@ touches the stale surface.
 ### 3. Use Project Skills
 
 Use the `add-service` skill for monitored-service integrations. Use the
-`update-watchman-docs` skill after changes that affect behavior, architecture, configuration,
-security, APIs, packages, or workflows. Skill bodies live in `.agents/skills/` and use the open
-Agent Skills format.
+`update-watchman-docs` skill whenever behavior, architecture, configuration, security, APIs,
+packages, builds, deployment, or workflows could make project knowledge stale. Change size does
+not determine whether documentation is required. Skill bodies live in `.agents/skills/` and use
+the open Agent Skills format.
+
+Apply documentation updates at these points:
+
+1. Read relevant docs before implementation.
+2. Keep coupled API contracts and generated types synchronized during implementation.
+3. After the implementation diff stabilizes, run `update-watchman-docs` before final validation.
+4. Update affected docs, diagrams, indexes, backlinks, and visualizer data, or report why none are
+   warranted.
+5. Run final checks after docs and generated files change. If validation changes the
+   implementation, repeat the docs check.
+6. Confirm documentation completeness in `REVIEW.md` before committing.
 
 ### 4. Keep Scope and Safety Explicit
 
@@ -75,6 +88,8 @@ Agent Skills format.
 - Explain destructive operations and obtain confirmation before running them.
 
 ### 5. Verify in Proportion to Risk
+
+Final verification happens after documentation and generated artifacts are synchronized.
 
 | Change                                       | Minimum verification                                                        |
 | -------------------------------------------- | --------------------------------------------------------------------------- |
@@ -101,8 +116,10 @@ npm run generate:types
 ## Documentation Completion
 
 Update only pages made stale by the implementation. Preserve frontmatter, wikilinks, callouts,
-diagrams, and the interactive flow visualizer when relevant. At the end of a substantial session,
-write a concise session note under `docs/` and link it to related project documentation.
+diagrams, and the interactive flow visualizer when relevant. Write a concise session note under
+`docs/` when work changes multiple modules or documentation surfaces, or changes architecture, API
+contracts, security, persistence, service integrations, configuration workflows, or
+build/deployment behavior. Isolated mechanical and comment-only edits do not need a session note.
 
 ## Related
 
