@@ -107,3 +107,10 @@ surfaces, or changes architecture, API contracts, security, persistence, service
 configuration workflows, or build/deployment behavior. Skip the note for isolated mechanical or
 comment-only edits unless the user requests one. Follow `docs/AGENTS.md` and use the
 `update-watchman-docs` skill for the note.
+
+## Cloud sessions
+
+Run `bash .codex/cloud/setup.sh` as the Codex cloud environment setup command. Keep cloud secrets
+disposable and non-production. Cloud sessions cannot validate host containers, macOS integration,
+hardware-backed signing, or local service state; report those checks as skipped and leave them for
+a local session.
