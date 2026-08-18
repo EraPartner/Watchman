@@ -1,0 +1,5 @@
+name = "watchman-kb-updater"
+description = "Documentation-only Watchman maintainer that synchronizes docs and OpenAPI after a stable implementation diff."
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+developer_instructions = "Before doing any other work, read `.agents/roles/watchman-kb-updater.md` in full and follow it as the provider-neutral canonical role. Do not delegate or spawn another agent."

@@ -49,6 +49,21 @@ npx vitest run src/path/to/x.test.ts
 npx vitest run --testNamePattern="name"
 ```
 
+## Provider and host behavior
+
+These obligations are tracked here because Codex does not auto-load `AGENTS.local.md` when this
+root file exists. `AGENTS.local.md` may add machine-specific convenience, but it cannot weaken or
+replace these rules.
+
+- In the devcontainer, Codex uses isolated container state. Codex authentication and configuration
+  do not synchronize with the host. Never copy `~/.codex/auth.json` into the container. Treat
+  changes under container `~/.codex/` as ephemeral and report them before the session ends; tracked
+  repository files under `.agents/` and `.codex/` persist through the workspace mount.
+- Codex browser tooling is the supported replacement for Claude's Playwright plugin. There is no
+  Codex TypeScript-LSP plugin in this project; `npm run typecheck` and the relevant build/test
+  commands are the authoritative diagnostics and must not be skipped because editor diagnostics
+  appear clean.
+
 ## Architecture and invariants
 
 - Backend entry: `apps/backend/src/index.ts`.
@@ -113,4 +128,5 @@ comment-only edits unless the user requests one. Follow `docs/AGENTS.md` and use
 Run `bash .codex/cloud/setup.sh` as the Codex cloud environment setup command. Keep cloud secrets
 disposable and non-production. Cloud sessions cannot validate host containers, macOS integration,
 hardware-backed signing, or local service state; report those checks as skipped and leave them for
-a local session.
+a local session. In cloud sessions, do not commit, sign, tag, push, configure Git credentials, or
+create a pull request with `gh`; leave the diff for Codex's **Open pull request** action.
