@@ -14,6 +14,8 @@ frontend — runs natively inside this container; no Docker-in-Docker.
 | GitHub CLI (`gh`)                        | apt                                                         | —                               |
 | Node.js 24                               | Static build into `/usr/local`                              | —                               |
 | Claude Code                              | `npm i -g @anthropic-ai/claude-code` (baked into the image) | —                               |
+| OpenAI Codex CLI                         | `npm i -g @openai/codex` (baked and pinned)                 | —                               |
+| Bubblewrap (`bwrap`)                     | apt; required by Codex and fingerprinted at build time      | —                               |
 
 The base image is plain `debian:bookworm-slim` (pinned by `@sha256` digest).
 The container user is `dev` (UID 1000). Watchman is a pure Node/TypeScript
@@ -126,7 +128,8 @@ Run `bash .devcontainer/bin/doctor` inside the box for a one-shot readiness chec
 proxy. ECH (encrypted SNI) destinations fail closed (no SNI → terminated).
 
 **Launch-integrity gate.** The image bakes `watchman-verify-pins`, which records a
-SHA-256 of `node`, `npm`, `claude`, `gh`, `git`, and `python3` at build time. The
+SHA-256 of `node`, `npm`, `claude`, `codex`, `bwrap`, `gh`, `git`, and `python3`
+at build time. The
 launcher runs it on every start and **aborts fail-closed** on fingerprint drift or
 if the checker is missing (a stale pre-pin image) — rebuild to re-pin
 (`WATCHMAN_REBUILD=1 watchman-claude`).
