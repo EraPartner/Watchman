@@ -1,8 +1,8 @@
 # Watchman devcontainer
 
-Hardened dev environment for working on Watchman with the Claude CLI in
-`--dangerously-skip-permissions` mode. The whole dev stack — backend and
-frontend — runs natively inside this container; no Docker-in-Docker.
+Hardened dev environment for working on Watchman with Claude Code or OpenAI
+Codex. The whole dev stack — backend and frontend — runs natively inside this
+container; no Docker-in-Docker.
 
 ## What's inside
 

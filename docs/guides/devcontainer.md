@@ -2,24 +2,26 @@
 title: Devcontainer Guide
 type: guide
 status: active
-date: 2026-08-15
+date: 2026-08-18
 tags:
   [
     guide,
     devcontainer,
     apple-container,
     claude,
+    codex,
     security,
     tooling,
     firewall,
     setup,
   ]
-description: How to use the hardened apple/container dev sandbox for running the Claude CLI in --dangerously-skip-permissions mode safely inside an isolated, egress-locked environment.
+description: How to use the hardened apple/container development sandbox with isolated Claude Code or OpenAI Codex state.
 aliases:
   [
     devcontainer,
     apple container,
     claude devcontainer,
+    codex devcontainer,
     skip-permissions setup,
     hardened container setup,
   ]
@@ -28,7 +30,7 @@ aliases:
 # Devcontainer Guide
 
 > [!abstract] Overview
-> The Watchman devcontainer is an **optional** hardened sandbox for running the Claude CLI in `--dangerously-skip-permissions` mode. It runs on **[apple/container](https://github.com/apple/container)** — Apple's native macOS container runtime — not Docker. It is not required for normal development — use it when you want unattended agentic workflows without exposing your host OS, LAN, or credentials.
+> The Watchman devcontainer is an **optional** hardened sandbox for running Claude Code or OpenAI Codex with provider-isolated state. It runs on **[apple/container](https://github.com/apple/container)** — Apple's native macOS container runtime — not Docker. It is not required for normal development — use it when you want agentic workflows without exposing your host OS, LAN, or credentials.
 >
 > See [[docs/adr/030-devcontainer-apple-container-runtime|ADR-030]] for the runtime decision, and [[docs/adr/024-claude-code-devcontainer|ADR-024]] for the original hardening rationale and threat model (Docker-era, superseded by ADR-030).
 
@@ -45,6 +47,8 @@ aliases:
 | GitHub CLI (`gh`)                   | pre-installed                                               | —                               |
 | Node.js 24                          | pre-installed (static build)                                | —                               |
 | Claude Code                         | `npm i -g @anthropic-ai/claude-code` (baked into the image) | —                               |
+| OpenAI Codex CLI                    | `npm i -g @openai/codex` (baked and pinned)                 | —                               |
+| Bubblewrap (`bwrap`)                | required by Codex and fingerprinted at build time           | —                               |
 
 Base image: `debian:bookworm-slim` (pinned by `@sha256` digest). Container user: `dev` (UID 1000, non-root). No Postgres, no separate database — Watchman is a pure Node/TypeScript monorepo with DuckDB embedded.
 
@@ -55,9 +59,10 @@ Base image: `debian:bookworm-slim` (pinned by `@sha256` digest). Container user:
 | [apple/container](https://github.com/apple/container) | Apple's native macOS container runtime. Install it, then run `container system start` once before launching the sandbox. The launcher checks both and exits with a clear message if either is missing. |
 | macOS (Apple Silicon)                                 | apple/container is macOS-native; there is no Linux/Windows path for this launcher.                                                                                                                     |
 | macOS Keychain (recommended)                          | For Claude OAuth token storage; see [One-time credential setup](#one-time-credential-setup-macos).                                                                                                     |
+| Codex account                                          | Codex performs device-code login inside its private container volume on first launch.                                                                                                                  |
 
 > [!note] No Docker, no compose, no devcontainer CLI
-> This sandbox does **not** use Docker, docker-compose, or the devcontainer CLI / Dev Containers VS Code extension. There is no `compose.yaml` and no `devcontainer.json` anywhere in the repo. The single entry point is the host launcher at `.devcontainer/bin/claude`, invoked via the `watchman-claude` fish function.
+> This sandbox does **not** use Docker, docker-compose, or the devcontainer CLI / Dev Containers VS Code extension. There is no `compose.yaml` and no `devcontainer.json` anywhere in the repo. Use `.devcontainer/bin/claude` (`watchman-claude`) or `.devcontainer/bin/codex` (`watchman-codex`).
 
 ## First-Time Setup
 
@@ -81,6 +86,11 @@ The `watchman-claude` launcher calls `security find-generic-password -s watchman
 
 **Linux / no-Keychain fallback**: not applicable — apple/container is macOS-only. (The launcher also accepts `CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` from your shell env, but storing a token in your shell config is plaintext at rest.)
 
+Codex does not import host `~/.codex` state. Run `watchman-codex` and complete its
+device-code login once; credentials persist only in the `watchman-codex` named
+volume. The agent can read that container-local state, so use it only for this
+trusted repository.
+
 > [!note] No GitHub token, no ssh-agent inside the container
 > Git inside the sandbox is **read-only**: the repo's `.git` is bind-mounted read-only, no `gh`/git token is forwarded, and the host ssh-agent is **not** forwarded. There is no `watchman-gh-token` to set up. Commit and push **from the host**, where your gitconfig, signing key, and gh auth live. See [Git Operations Inside the Container](#git-operations-inside-the-container).
 
@@ -88,18 +98,24 @@ The `watchman-claude` launcher calls `security find-generic-password -s watchman
 
 ```sh
 watchman-claude --dangerously-skip-permissions
+watchman-codex
 ```
 
-On first run, the launcher builds the image (cached after that), creates the `watchman-dev` container, runs `post-create.sh` once (`npm install` + safe-chain), then `post-start.sh` on every start. To drop into a shell instead of Claude:
+On first run, the selected launcher builds the shared image, creates `watchman-dev`
+or `watchman-codex`, runs `post-create.sh` once (`npm install` + safe-chain), then
+runs `post-start.sh` on every start. Claude state is seeded only for Claude; Codex
+uses its private `~/.codex` volume. To open a shell, select the matching container:
 
 ```sh
 container exec -it --user dev watchman-dev bash
+container exec -it --user dev watchman-codex bash
 ```
 
 To force a full rebuild (rebuild the image **and** recreate the container — e.g. after a Dockerfile or allowlist change):
 
 ```sh
 WATCHMAN_REBUILD=1 watchman-claude --dangerously-skip-permissions
+WATCHMAN_REBUILD=1 watchman-codex
 ```
 
 By default the launcher powers the VM down on session exit (it stops pinning 4 GB). Set `WATCHMAN_STOP_ON_EXIT=0` to keep it warm for instant reuse across sessions.
@@ -113,6 +129,12 @@ These fish functions are installed on the maintainer's machine. Document them he
 Location: `~/.config/fish/functions/watchman-claude.fish`
 
 Wraps `.devcontainer/bin/claude` — walks up from `$PWD` to find the project root (matching `.devcontainer/Dockerfile`), falls back to `$WATCHMAN_HOME`, then calls the launcher. Accepts all the same flags as `claude`. A shell abbreviation expands `watchman-claude` to append `--dangerously-skip-permissions` automatically.
+
+### `watchman-codex`
+
+Wraps `.devcontainer/bin/codex`, selects the separate `watchman-codex` container
+and credential volume, and forwards arguments to Codex. It shares the image,
+network policy, workspace mount, and read-only Git boundary with Claude.
 
 ### `watchman-claude-sync`
 
@@ -182,10 +204,13 @@ Run `bash .devcontainer/bin/doctor` inside the container for a one-shot readines
 | `$PROJECT_ROOT/.git` (host)               | `/workspaces/Watchman/.git`          | bind **read-only**  | Git history readable but immutable from inside                                                                                                               |
 | `.devcontainer` (host)                    | `/workspaces/Watchman/.devcontainer` | bind **read-only**  | Anti-tamper overlay so the sandbox definition + host launcher can't be rewritten from inside                                                                 |
 | `watchman-claude`                         | `/home/dev/.claude`                  | named volume        | Container's writable Claude config — seeded from the sanitized stage on first create                                                                         |
+| `watchman-codex`                          | `/home/dev/.codex`                   | named volume        | Container-local Codex authentication and configuration; host `~/.codex` is never mounted                                                                      |
 | `~/.claude-sandbox/stage/watchman` (host) | `/home/dev/.claude-stage`            | bind **read-only**  | Sanitized staging copy the launcher produces (secrets + `hooks`/`mcpServers`/`enabledPlugins` stripped). The raw host `~/.claude` is **never** bind-mounted. |
 | Container filesystem                      | `/home/dev/.claude.json`             | regular file        | Container's writable global config (seeded from `…/claude.json` in the stage)                                                                                |
 
-`watchman-claude` is a **native apple/container named volume** — the root entrypoint can `chown` its mountpoint so a fresh volume inherits `dev` ownership. No `gh` token is persisted anywhere; none is forwarded.
+`watchman-claude` and `watchman-codex` are native apple/container named volumes.
+The root entrypoint gives a fresh provider volume to `dev`. No `gh` token is
+persisted or forwarded.
 
 ## Container Permissions Model
 
@@ -210,7 +235,8 @@ Run `bash .devcontainer/bin/doctor` inside the container for a one-shot readines
 | `BACKEND_V2_PORT`                               | `3001`                                        | Backend port                                                                                         |
 | `VITE_FRONTEND_PORT`                            | `5173`                                        | Vite dev server port                                                                                 |
 | `VITE_PREVIEW_PORT`                             | `4173`                                        | Vite preview server port                                                                             |
-| `DISABLE_TELEMETRY` / `DISABLE_ERROR_REPORTING` | `1`                                           | Opt out of telemetry + error reporting (so Claude doesn't call blocked `statsig`/`sentry` endpoints) |
+| `DISABLE_TELEMETRY` / `DISABLE_ERROR_REPORTING` | `1`                                           | Opt out of telemetry and error reporting to blocked endpoints                                      |
+| `SANDBOX_AGENT`                                | `claude` or `codex`                           | Selects provider-specific post-create initialization                                                |
 | `NODE_USE_ENV_PROXY`                            | `1`                                           | Makes Node ≥24 global `fetch` honor `HTTP(S)_PROXY` (so app `fetch` egresses via squid)              |
 | `HTTP(S)_PROXY` / `http(s)_proxy`               | `http://127.0.0.1:3128`                       | Routes all tool egress through the in-container SNI proxy                                            |
 | `NO_PROXY` / `no_proxy`                         | `localhost,127.0.0.1,::1`                     | Loopback bypasses the proxy                                                                          |
@@ -240,7 +266,10 @@ Git inside the sandbox is **read-only**: `.git` is bind-mounted read-only, no `g
 ## Safety Note
 
 > [!warning] Trust boundary
-> The container runs as a non-root user, so the CLI accepts `--dangerously-skip-permissions`. Anthropic's warning still applies: a malicious project can exfiltrate anything _inside_ the container, including the `~/.claude` credentials volume. Treat this as "host is isolated from Claude" — not "Claude is isolated from a hostile repo." Only enable for trusted repositories.
+> The container runs as a non-root user and isolates each provider's credentials
+> from the host and the other provider. A malicious project can still exfiltrate
+> anything available _inside_ its selected container. Treat this as host isolation,
+> not protection of the agent from a hostile repository. Use only trusted repositories.
 
 ## Related
 
