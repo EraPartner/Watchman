@@ -16,6 +16,7 @@ container; no Docker-in-Docker.
 | Claude Code                              | `npm i -g @anthropic-ai/claude-code` (baked into the image) | —                               |
 | OpenAI Codex CLI                         | `npm i -g @openai/codex` (baked and pinned)                 | —                               |
 | Bubblewrap (`bwrap`)                     | apt; required by Codex and fingerprinted at build time      | —                               |
+| safe-chain                               | npm (baked at reviewed version; screens npm/pip installs)   | —                               |
 
 The base image is plain `debian:bookworm-slim` (pinned by `@sha256` digest).
 The container user is `dev` (UID 1000). Watchman is a pure Node/TypeScript
@@ -113,10 +114,14 @@ firewall (no sudo) — a rebuild recreates the container and re-applies it. squi
 supervised by the entrypoint: if it crashes, it's restarted (egress stays denied
 while down — fail-closed).
 
-**Supply-chain scanning.** `post-create` installs Aikido safe-chain and
-`BASH_ENV` wires it into every shell, so `npm`/`pip` installs are
-screened against `malware-list.aikido.dev` before running. Defense-in-depth
-on top of the sandbox.
+**Supply-chain scanning.** The image bakes Aikido safe-chain at a reviewed
+version in the root-owned npm prefix. `post-create` only wires its wrappers, and
+fails if that local setup cannot complete. `BASH_ENV` loads them into every shell,
+so `npm`/`pip` installs are screened against `malware-list.aikido.dev` before
+running. npm denies Git dependencies by default; post-create verifies that the
+Roon transport is the only Git dependency and is pinned to the reviewed commit
+before temporarily enabling Git for that exact install. Defense-in-depth on top
+of the sandbox.
 
 **Observability.** Blocked egress shows as a TLS/cert error or
 `CONNECT 403` — that's the policy denying it. The definitive log is
@@ -128,7 +133,8 @@ Run `bash .devcontainer/bin/doctor` inside the box for a one-shot readiness chec
 proxy. ECH (encrypted SNI) destinations fail closed (no SNI → terminated).
 
 **Launch-integrity gate.** The image bakes `watchman-verify-pins`, which records a
-SHA-256 of `node`, `npm`, `claude`, `codex`, `bwrap`, `gh`, `git`, and `python3`
+SHA-256 of `node`, `npm`, `claude`, `codex`, `bwrap`, `gh`, `git`, `python3`, and
+`safe-chain`
 at build time. The
 launcher runs it on every start and **aborts fail-closed** on fingerprint drift or
 if the checker is missing (a stale pre-pin image) — rebuild to re-pin
@@ -309,7 +315,8 @@ edits (layered on the clean seed) back to the host.
 ## Known limitations
 
 - **Electron desktop build (`npm run dist`)** — needs macOS native tools;
-  run on the host, not in this container.
+  run on the host, not in this container. The first-run dependency install
+  therefore covers only the monorepo root, backend, and frontend workspaces.
 - **Live LAN polling** — unreachable; only the proxy's allowlisted
   hostnames resolve, and LAN hosts aren't allowlisted. App `fetch` _does_
   route through the proxy (`NODE_USE_ENV_PROXY=1`), so calls to allowlisted

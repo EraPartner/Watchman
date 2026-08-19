@@ -2,7 +2,7 @@
 title: Devcontainer Guide
 type: guide
 status: active
-date: 2026-08-18
+date: 2026-08-19
 tags:
   [
     guide,
@@ -49,6 +49,7 @@ aliases:
 | Claude Code                         | `npm i -g @anthropic-ai/claude-code` (baked into the image) | —                               |
 | OpenAI Codex CLI                    | `npm i -g @openai/codex` (baked and pinned)                 | —                               |
 | Bubblewrap (`bwrap`)                | required by Codex and fingerprinted at build time           | —                               |
+| Aikido safe-chain                   | baked at a reviewed version and fingerprinted               | —                               |
 
 Base image: `debian:bookworm-slim` (pinned by `@sha256` digest). Container user: `dev` (UID 1000, non-root). No Postgres, no separate database — Watchman is a pure Node/TypeScript monorepo with DuckDB embedded.
 
@@ -102,7 +103,8 @@ watchman-codex
 ```
 
 On first run, the selected launcher builds the shared image, creates `watchman-dev`
-or `watchman-codex`, runs `post-create.sh` once (`npm install` + safe-chain), then
+or `watchman-codex`, runs `post-create.sh` once (safe-chain setup plus a scoped
+root/backend/frontend `npm ci`), then
 runs `post-start.sh` on every start. Claude state is seeded only for Claude; Codex
 uses its private `~/.codex` volume. To open a shell, select the matching container:
 
@@ -172,11 +174,20 @@ To change the allowlist or proxy behavior, edit `allowlist.extra.txt` (or the sh
 
 ### Supply-chain scanning (safe-chain)
 
-`post-create` installs [Aikido safe-chain](https://github.com/AikidoSec/safe-chain) and `BASH_ENV` sources its wrappers into every bash session, so `npm`/`pip` installs Claude runs mid-session are screened against the malware list at `malware-list.aikido.dev` before executing. The project's own pinned deps are installed plain (already vetted via the lockfile). This is defense-in-depth on top of the sandbox — a malicious package still couldn't escalate or exfiltrate (egress-locked, no host access, no sudo, setuid stripped).
+[Aikido safe-chain](https://github.com/AikidoSec/safe-chain) is baked into the root-owned image at
+a reviewed version. `post-create` fails closed if wrapper setup fails, and `BASH_ENV` sources the
+wrappers into later bash sessions so agent-triggered `npm`/`pip` installs are screened against
+`malware-list.aikido.dev`. The first-run npm install excludes the Electron workspace, verifies the
+sole reviewed Roon Git dependency before temporarily allowing Git, and installs only the root,
+backend, and frontend workspaces. This is defense-in-depth on top of the sandbox.
 
 ### Launch-integrity gate
 
-The image bakes `watchman-verify-pins`, which records a SHA-256 of `node`, `npm`, `claude`, `gh`, `git`, and `python3` at build time. The launcher runs it on every start and **aborts fail-closed** on fingerprint drift, or if the checker is missing (a stale pre-pin image). A legitimate tool upgrade changes these fingerprints — rebuild to re-pin (`WATCHMAN_REBUILD=1 watchman-claude`).
+The image bakes `watchman-verify-pins`, which records a SHA-256 of `node`, `npm`, `claude`, `codex`,
+`bwrap`, `gh`, `git`, `python3`, and `safe-chain` at build time. The launcher runs it on every start
+and **aborts fail-closed** on fingerprint drift, or if the checker is missing (a stale pre-pin
+image). A legitimate tool upgrade changes these fingerprints — rebuild to re-pin
+(`WATCHMAN_REBUILD=1 watchman-claude`).
 
 ### Observability: what's blocked and why
 
@@ -259,6 +270,8 @@ Git inside the sandbox is **read-only**: `.git` is bind-mounted read-only, no `g
 
 - **Live LAN polling** is blocked — only the proxy's allowlisted hostnames resolve, and LAN hosts aren't in the allowlist. The devcontainer is for code editing, not exercising pollers against home-lab devices. (Node `fetch` _does_ route through the proxy via `NODE_USE_ENV_PROXY=1`, so app calls to allowlisted hosts work — LAN just isn't allowlisted.)
 - **Electron desktop build (`npm run dist`)** requires macOS native tools; run on the host.
+- **Electron dependencies are not installed in the agent container.** Run desktop packaging on the
+  host after `npm run deps:ci`.
 - **Changing the egress allowlist** means editing `allowlist.extra.txt`, re-running `LockBox/sync.sh`, and rebuilding (it's baked into the image).
 - **macOS / apple-container only.** The Keychain-backed auth in `bin/claude` is macOS-specific, and apple/container is a macOS-native runtime — there is no Linux or Windows path for this launcher.
 - **Reduced Linux capabilities.** The container drops all caps and re-adds only `NET_ADMIN, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID` (what the entrypoint's iptables/perms/privilege-drops need). If you add tooling that needs another cap, add it to the launcher's `container run` args.

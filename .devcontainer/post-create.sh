@@ -26,35 +26,30 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-# Supply-chain protection: install Aikido safe-chain so package installs are
-# screened against its malware list (malware-list.aikido.dev, allowlisted in
-# squid). `safe-chain setup` writes shell wrappers; BASH_ENV (set at container run)
-# sources them into every bash session so npm/bun/pip installs Claude runs
-# mid-session are screened. The project's own pinned deps below are installed
-# plain (already vetted via the lockfile) to avoid first-boot fragility.
-echo "[post-create] Installing safe-chain (supply-chain protection)..."
-sc_ok=0
-for attempt in 1 2 3; do
-  if npm install -g @aikidosec/safe-chain >/dev/null 2>&1 && command -v safe-chain >/dev/null 2>&1; then
-    sc_ok=1; break
-  fi
-  echo "[post-create] safe-chain install attempt $attempt failed; retrying..." >&2
-  sleep $(( attempt * 2 ))
-done
-if (( sc_ok )); then
-  safe-chain setup >/dev/null 2>&1 || true
-  echo "[post-create] safe-chain installed (screens npm/bun/pip in later sessions)."
-else
-  echo "[post-create] ⚠ WARN: safe-chain install FAILED after retries — package installs are NOT" >&2
-  echo "[post-create]   supply-chain screened. \`.devcontainer/bin/doctor\` will flag this." >&2
+# Supply-chain protection is baked into the root-owned image at a reviewed
+# version. This step only writes its shell wrappers; it performs no network
+# install and cannot replace the pinned agent binaries.
+if ! command -v safe-chain >/dev/null 2>&1; then
+  echo "[post-create] ABORT: safe-chain is missing from the image; rebuild it." >&2
+  exit 1
 fi
+if ! safe-chain setup >/dev/null 2>&1; then
+  echo "[post-create] ABORT: safe-chain wrapper setup failed; package installs are not screened." >&2
+  exit 1
+fi
+echo "[post-create] safe-chain wired up (baked pin, no runtime fetch)."
 
 # Install JS deps (npm honors HTTPS_PROXY → squid → registry.npmjs.org).
 # `npm ci` is the reproducible install: it builds strictly from package-lock.json
-# and fails loudly on a stale lock (the signal we want, matching the pinned
-# base image / devcontainer-lock).
-echo "[post-create] npm ci..."
-npm ci
+# and fails loudly on a stale lock. The Linux sandbox cannot run the Electron
+# desktop workspace, so omit that large dependency tree just as cloud setup does.
+echo "[post-create] npm ci (root + backend + frontend)..."
+node scripts/verify-git-dependencies.mjs
+npm ci \
+  --allow-git=all \
+  --workspace=apps/backend \
+  --workspace=apps/frontend \
+  --include-workspace-root
 
 # Local .env — only generated if missing. The master key is intentionally left
 # unset: fill it in via a container-only mechanism if needed (this file lives on

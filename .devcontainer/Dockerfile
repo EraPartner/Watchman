@@ -44,7 +44,7 @@ RUN install -d -m 0755 /etc/apt/keyrings \
 # The feature installed Node 24 via nvm under /usr/local/share/nvm; we install
 # the same version it resolved (24.15.0) from the official static build into
 # /usr/local, plus a dev-OWNED global npm prefix so the `dev` user can still
-# `npm i -g` at runtime (safe-chain in post-create) — the equivalent of the
+# install new global tools at runtime — the equivalent of the
 # feature's group-writable nvm dir. Bump NODE_VERSION deliberately to update.
 ARG NODE_VERSION=24.15.0
 RUN set -eux; \
@@ -94,14 +94,14 @@ ENV CC=gcc CXX=g++
 # claude install below) so the unprivileged dev user can't overwrite the pinned
 # claude/npm binaries post-launch (the verify-pins gate fingerprints these paths).
 # Use the ENV var, NOT /etc/npmrc: npm's real "global" config is $PREFIX/etc/npmrc,
-# so a plain /etc/npmrc is ignored. Runtime `npm i -g` (safe-chain) uses a SEPARATE
+# so a plain /etc/npmrc is ignored. Runtime ad-hoc `npm i -g` uses a SEPARATE
 # dev-owned prefix, /home/dev/.npm-global, set after the install. Root prefix is
 # FIRST on PATH so claude resolves to the pinned copy.
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/opt/python/bin:/usr/local/bin:$PATH
+ENV PATH=/usr/local/share/npm-global/bin:/opt/python/bin:/usr/local/bin:$PATH:/home/dev/.npm-global/bin
 # Login shells (bash -l) reset PATH via /etc/profile, dropping the ENV above;
 # re-add the tool dirs so node/npm/claude/safe-chain resolve in login shells too.
-RUN printf 'export PATH="/usr/local/share/npm-global/bin:/home/dev/.npm-global/bin:/opt/python/bin:/usr/local/bin:$PATH"\n' \
+RUN printf 'export PATH="/usr/local/share/npm-global/bin:/opt/python/bin:/usr/local/bin:$PATH:/home/dev/.npm-global/bin"\n' \
       > /etc/profile.d/00-npm-global.sh
 
 # --- Claude Code CLI (replaces the `anthropics/claude-code:1.0` feature) -----
@@ -150,7 +150,16 @@ RUN set -eux; \
     echo "codex pin: want=$want got=$got"; \
     test "$want" = "$got"; \
     codex --version
-# Runtime global installs (safe-chain in post-create) go to a SEPARATE dev-owned
+
+# safe-chain is baked at a reviewed version before the npm prefix becomes
+# dev-writable. Its transitive dependency closure is not hash-pinned.
+ARG SAFE_CHAIN_VERSION=1.5.12
+RUN npm install -g --no-fund --no-audit "@aikidosec/safe-chain@${SAFE_CHAIN_VERSION}" \
+  && command -v safe-chain
+# Version output is diagnostic only; install/presence failures above stay fatal.
+RUN safe-chain --version 2>/dev/null || true
+
+# Runtime ad-hoc global installs go to a SEPARATE dev-owned
 # prefix, so they never need write access to the pinned root prefix above.
 RUN install -d -o dev -g dev -m 0755 /home/dev/.npm-global
 ENV NPM_CONFIG_PREFIX=/home/dev/.npm-global
@@ -192,7 +201,7 @@ RUN set -eux; \
     pinfile=/usr/local/share/watchman/binary-pins.txt; \
     mkdir -p /usr/local/share/watchman; \
     : > "$pinfile"; \
-    for b in node npm claude codex bwrap gh git python3; do \
+    for b in node npm claude codex bwrap gh git python3 safe-chain; do \
       p="$(command -v "$b")"; \
       h="$(sha256sum "$p" | awk '{print $1}')"; \
       printf '%s\t%s\t%s\n' "$b" "$p" "$h" >> "$pinfile"; \
