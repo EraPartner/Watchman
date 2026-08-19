@@ -62,13 +62,13 @@
     "esbuild": "^0.28.1"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.1",
+    "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.0.2",
     "audit-ci": "^7.1.0",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
-    "lint-staged": "^17.0.8",
+    "lint-staged": "^17.3.0",
     "openapi-typescript": "^7.4.4",
-    "prettier": "^3.9.5"
+    "prettier": "^3.9.6"
   }
 }
