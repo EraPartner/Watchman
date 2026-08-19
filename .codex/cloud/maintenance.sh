@@ -17,4 +17,4 @@ grep -Fqx 'export CODEX_SESSION_ENV=cloud' "$HOME/.bashrc" || \
 
 watchman_install_dependencies
 
-printf '%s\n' 'Watchman cloud setup complete. Service secrets and host checks remain separate.'
+printf '%s\n' 'Watchman cloud maintenance complete. Service secrets and host checks remain separate.'

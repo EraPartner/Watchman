@@ -31,7 +31,7 @@ Search `docs/` before changing code. Treat docs as intent and code as current be
 ## Commands
 
 ```bash
-npm install
+npm run deps:ci:portable
 npm run dev
 npm run dev:backend
 npm run dev:frontend
@@ -77,7 +77,7 @@ replace these rules.
   `apps/frontend/src/services/apiClient/types.ts` aligned.
 - Backend uses ES2022+ ESM and `undefined` rather than `null`. Prefer functions; service classes are
   the deliberate exception.
-- Frontend uses functional components, React Query, React Router v6, Tailwind, and
+- Frontend uses functional components, React Query, React Router v7, Tailwind, and
   `class-variance-authority`. Its TypeScript configuration is intentionally relaxed.
 
 ## Security model
@@ -128,5 +128,10 @@ comment-only edits unless the user requests one. Follow `docs/AGENTS.md` and use
 Run `bash .codex/cloud/setup.sh` as the Codex cloud environment setup command. Keep cloud secrets
 disposable and non-production. Cloud sessions cannot validate host containers, macOS integration,
 hardware-backed signing, or local service state; report those checks as skipped and leave them for
-a local session. In cloud sessions, do not commit, sign, tag, push, configure Git credentials, or
-create a pull request with `gh`; leave the diff for Codex's **Open pull request** action.
+a local session. In cloud sessions, do not publish with shell Git commands, configure Git
+credentials, or create a pull request with `gh`. The platform-managed **Open pull request** action
+may create a pull request, and the connected GitHub integration may update the same branch for
+pull-request-linked follow-ups. When the user explicitly requests it, that integration may merge
+the pull request after all required checks and approvals pass and no blocking review remains. Do
+not use an admin bypass or directly update a default or protected branch outside that approved
+merge.
