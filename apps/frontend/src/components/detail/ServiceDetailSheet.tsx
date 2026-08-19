@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ExternalLink, Check, X } from "lucide-react";
 import { EventLog, type ServiceEvent } from "./EventLog";
 import { ChartsPanel } from "./ChartsPanel";
@@ -25,7 +25,7 @@ import {
   Sparkline,
 } from "@/components/primitives";
 import { useMetricSeries } from "@/lib/metricHistory";
-import { serviceIcon, heroState } from "@/lib/serviceVisuals";
+import { ServiceIcon, heroState } from "@/lib/serviceVisuals";
 import { useServiceHealth, useServiceStats } from "@/hooks/useServiceHealth";
 import {
   useServices,
@@ -97,8 +97,7 @@ export function ServiceDetailSheet({
 
   const statsSnapshot = stats.data;
   const statsMetrics = statsSnapshot?.metrics as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
 
   const healthRaw = health.data;
   const hostHealth = healthRaw?.host;
@@ -109,10 +108,7 @@ export function ServiceDetailSheet({
       healthRaw
         ? {
             status: (healthRaw.reachable ? "online" : "offline") as
-              | "online"
-              | "offline"
-              | "warning"
-              | "loading",
+              "online" | "offline" | "warning" | "loading",
             error: healthRaw.message,
           }
         : undefined,
@@ -133,12 +129,16 @@ export function ServiceDetailSheet({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const serviceKey = instanceId ?? kind ?? "";
 
-  useEffect(() => {
-    if (!open) {
-      setView("detail");
-      setConfirmDelete(false);
-    }
-  }, [open]);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        setView("detail");
+        setConfirmDelete(false);
+      }
+      onOpenChange(nextOpen);
+    },
+    [onOpenChange]
+  );
 
   const handleWsEvent = useCallback(
     (ev: WsEvent) => {
@@ -179,7 +179,6 @@ export function ServiceDetailSheet({
     primary?.key ?? ""
   );
   const heroData = useMemo(() => heroSeries.map((s) => s.v), [heroSeries]);
-  const HeroIcon = serviceIcon(kind);
   const { isBool: heroIsBool, truthy: heroTruthy } = heroState(
     primary ? primaryValue : undefined
   );
@@ -204,7 +203,7 @@ export function ServiceDetailSheet({
     if (!service) return;
     await deleteMut.mutateAsync(service.id);
     setConfirmDelete(false);
-    onOpenChange(false);
+    handleOpenChange(false);
   };
 
   const quickLinkUrl =
@@ -215,7 +214,7 @@ export function ServiceDetailSheet({
       : undefined;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent aria-describedby={undefined}>
         {renderer ? (
           <>
@@ -321,7 +320,8 @@ export function ServiceDetailSheet({
                 <>
                   {primary ? (
                     <div className="glass-regular relative mb-s-6 overflow-hidden rounded-r-3 p-s-5">
-                      <HeroIcon
+                      <ServiceIcon
+                        kind={kind}
                         aria-hidden
                         size={148}
                         strokeWidth={1}
@@ -484,7 +484,7 @@ export function ServiceDetailSheet({
                     </Button>
                   </>
                 ) : null}
-                <Button variant="tonal" onClick={() => onOpenChange(false)}>
+                <Button variant="tonal" onClick={() => handleOpenChange(false)}>
                   Close
                 </Button>
               </SheetFooter>

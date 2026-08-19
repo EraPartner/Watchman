@@ -121,7 +121,7 @@ You don't need this release to run Watchman — from a clone of the repo:
 ```sh
 ./install.sh         # builds Watchman.app and installs it to /Applications
 # or, for development:
-npm install && npm run electron:dev
+npm run deps:ci && npm run electron:dev
 ```
 
 ## Source code & issues

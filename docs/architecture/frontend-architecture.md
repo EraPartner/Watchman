@@ -2,7 +2,7 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-06-13
+date: 2026-08-19
 tags:
   [
     architecture,
@@ -171,7 +171,7 @@ See [[docs/services/renderers/index|Renderer Registry Documentation]] for comple
 
 ## Routing
 
-React Router v6 with the following structure:
+React Router v7 with the following structure:
 
 - `/` → Dashboard (Index page)
 - `*` → Not Found page

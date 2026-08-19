@@ -36,7 +36,7 @@
     "fastify-plugin": "^5.1.0",
     "lru-cache": "^10.4.3",
     "net-snmp": "^3.26.1",
-    "node-roon-api-transport": "github:RoonLabs/node-roon-api-transport",
+    "node-roon-api-transport": "github:RoonLabs/node-roon-api-transport#2ee60008a4cdb90c34ff3de58bb4b949067f1d20",
     "pigpio-client": "^1.5.2",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

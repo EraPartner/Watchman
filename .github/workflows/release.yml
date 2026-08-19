@@ -47,7 +47,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci
 
       - name: Check version tag matches package.json
         run: |
@@ -132,14 +132,16 @@ jobs:
           cache: npm
 
       - name: Install workspace dependencies
-        run: npm ci
+        run: npm run deps:ci
 
       # electron-builder's extraResources copies apps/backend/node_modules into
       # the bundled app. npm workspaces hoist deps to the root, so we install
       # backend deps in-place (production only) to materialize that directory.
       - name: Install backend runtime deps in-tree (for electron-builder bundling)
-        run: npm install --omit=dev --no-save --workspaces=false
-        working-directory: apps/backend
+        run: |
+          npm run verify:git-dependencies
+          cd apps/backend
+          npm install --allow-git=all --omit=dev --no-save --workspaces=false
 
       - name: Build backend
         run: npm run build:backend

@@ -2,7 +2,7 @@
 title: Deployment Guide
 type: guide
 status: active
-date: 2026-05-12
+date: 2026-08-19
 tags: [guide, deployment, production, startup-flows]
 description: Step-by-step guide to deploying Watchman in production (Option B — Production Server)
 aliases: [deploy, production, hosting, nginx, option b, server]
@@ -28,7 +28,7 @@ aliases: [deploy, production, hosting, nginx, option b, server]
 ## Quick Start
 
 ```bash
-npm install && npm run build && npm run start
+npm run deps:ci:portable && npm run build && npm run start
 ```
 
 This:
@@ -228,7 +228,7 @@ participant "Target Server" as Target
 participant "Nginx" as Nginx
 participant "PM2" as PM2
 
-Deployer -> Build : npm install --production
+Deployer -> Build : npm run deps:ci:portable
 
 Deployer -> Build : npm run build:frontend
 Build --> Build : Vite optimized build

@@ -87,10 +87,10 @@ if [ "$NODE_MAJOR" -lt 22 ]; then
   exit 1
 fi
 
-# ── npm install (workspaces) ──────────────────────────────────────────────────
+# ── Verified npm install (workspaces) ─────────────────────────────────────────
 echo "==> Installing workspace dependencies..."
 cd "$REPO_PATH"
-npm install
+npm run deps:ci
 
 # ── Build .app ────────────────────────────────────────────────────────────────
 echo "==> Building Watchman.app (this takes a minute)..."

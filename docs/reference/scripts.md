@@ -2,7 +2,7 @@
 title: Scripts Reference
 type: reference
 status: active
-date: 2026-04-19
+date: 2026-08-19
 tags: [reference, scripts, development]
 description: Reference of all npm scripts and commands for the Watchman project
 aliases: [scripts, npm scripts, commands, build commands]
@@ -14,6 +14,14 @@ aliases: [scripts, npm scripts, commands, build commands]
 > All available npm scripts for the Watchman project.
 
 ## Root Scripts
+
+### Dependencies
+
+| Command                           | Description                                                        |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `npm run deps:ci`                 | Verify the Git pin, then install all workspaces including Electron |
+| `npm run deps:ci:portable`        | Verify the Git pin, then install root, backend, and frontend only  |
+| `npm run verify:git-dependencies` | Reject added, moved, or unpinned Git dependencies before npm runs  |
 
 ### Development
 

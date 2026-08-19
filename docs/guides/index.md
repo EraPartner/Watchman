@@ -2,7 +2,7 @@
 title: Guides
 type: index
 status: active
-date: 2026-08-18
+date: 2026-08-19
 tags: [guide, index, setup-wizard]
 description: Index of all how-to guides for the Watchman project
 aliases: [guides index, how-to, tutorials]
@@ -66,7 +66,7 @@ participant "Testing" as Test
 participant "Documentation" as Docs
 participant "Deployment" as Deploy
 
-Dev -> Setup : npm install
+Dev -> Setup : npm run deps:ci:portable
 Dev -> Setup : Configure .env
 
 Dev -> DevEnv : npm run dev

@@ -14,7 +14,9 @@ import {
   CircuitBoard,
   Router as RouterIcon,
   type LucideIcon,
+  type LucideProps,
 } from "lucide-react";
+import { createElement } from "react";
 import type { ServiceKind } from "@/services/renderers/types";
 
 /** Per-service glyph, used as a faint background watermark on tiles + the
@@ -37,6 +39,13 @@ const KIND_ICON: Partial<Record<ServiceKind, LucideIcon>> = {
 
 export function serviceIcon(kind: ServiceKind | undefined): LucideIcon {
   return (kind && KIND_ICON[kind]) || Activity;
+}
+
+export function ServiceIcon({
+  kind,
+  ...props
+}: LucideProps & { kind: ServiceKind | undefined }) {
+  return createElement(serviceIcon(kind), props);
 }
 
 /** A formatted hero value that is a bare boolean reads better as a state

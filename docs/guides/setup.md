@@ -2,7 +2,7 @@
 title: Setup Guide
 type: guide
 status: active
-date: 2026-05-19
+date: 2026-08-19
 tags: [guide, setup, development, startup-flows]
 description: Step-by-step guide to setting up the Watchman development environment (Option C — Development mode)
 aliases: [setup, install, getting started, local development, option c, dev mode]
@@ -39,10 +39,11 @@ cd Watchman
 ### 2. Install Dependencies
 
 ```bash
-npm install
+npm run deps:ci:portable
 ```
 
-This installs dependencies for all workspaces (frontend, backend, shared packages).
+This verifies the sole reviewed Git dependency, then installs the exact lockfile for the root,
+frontend, and backend workspaces. Use `npm run deps:ci` when desktop packaging is also needed.
 
 ### 3. Configure Environment
 
@@ -173,7 +174,7 @@ start
 
 :cd Watchman;
 
-:npm install;
+:npm run deps:ci:portable;
 
 :Copy .env.example to .env.local;
 

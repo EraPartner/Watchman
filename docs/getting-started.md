@@ -2,7 +2,7 @@
 title: Getting Started
 type: map-of-content
 status: active
-date: 2026-05-16
+date: 2026-08-19
 tags: [getting-started, onboarding, moc, new-developer, ai-agent, startup-flows, architecture]
 description: Map of Content for new developers and AI agents to quickly navigate the Watchman knowledge base
 aliases: [start here, onboarding, new dev, beginner, setup, how to start]
@@ -35,7 +35,7 @@ npm run electron:prod
 Native backend + frontend on a server (Raspberry Pi, Linux VPS, etc.):
 
 ```bash
-npm install && npm run build && npm run start
+npm run deps:ci:portable && npm run build && npm run start
 ```
 
 → See [[docs/guides/deployment|Deployment Guide]]
@@ -45,7 +45,7 @@ npm install && npm run build && npm run start
 Full dev environment with hot reload:
 
 ```bash
-npm install && npm run dev
+npm run deps:ci:portable && npm run dev
 ```
 
 → See [[docs/guides/setup|Setup Guide]]
@@ -57,7 +57,7 @@ npm install && npm run dev
 Follow **Option C** above to get the full dev environment running:
 
 ```bash
-npm install && npm run dev
+npm run deps:ci:portable && npm run dev
 ```
 
 This starts:

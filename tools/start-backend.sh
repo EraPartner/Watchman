@@ -8,7 +8,7 @@ echo ""
 # Check if dependencies are installed
 if [ ! -d "node_modules" ]; then
     echo "📦 Installing dependencies (npm workspaces)..."
-    npm install
+    npm run deps:ci:portable
 fi
 
 echo "🚀 Starting backend server..."

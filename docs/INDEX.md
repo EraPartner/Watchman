@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-08-18
+date: 2026-08-19
 tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -22,8 +22,8 @@ Choose the path that matches your use case:
 | Startup Flow                    | Commands                              | Next Steps                                         |
 | ------------------------------- | ------------------------------------- | -------------------------------------------------- |
 | **Option A — macOS Desktop**    | `./install.sh && npm run electron:prod` | [[docs/guides/running-the-desktop-app | Desktop App Guide]] |
-| **Option B — Production Server** | `npm install && npm run build && npm run start` | [[docs/guides/deployment | Deployment Guide]] |
-| **Option C — Development**      | `npm install && npm run dev`          | [[docs/guides/setup | Setup Guide]]               |
+| **Option B — Production Server** | `npm run deps:ci:portable && npm run build && npm run start` | [[docs/guides/deployment | Deployment Guide]] |
+| **Option C — Development**      | `npm run deps:ci:portable && npm run dev`          | [[docs/guides/setup | Setup Guide]]               |
 
 Or jump to:
 

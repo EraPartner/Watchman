@@ -2,7 +2,7 @@
 title: Testing Strategy and Patterns
 type: doc
 status: active
-date: 2026-06-13
+date: 2026-08-19
 tags:
   [
     testing,
@@ -829,7 +829,7 @@ skinparam backgroundColor #F0F0F0
 partition "CI Pipeline" {
     start
 
-    :Install Dependencies\n(npm install)
+    :Verify Git Pin + Install\n(npm run deps:ci:portable)
 
     :Lint Code\n(ESLint)
 

@@ -40,14 +40,16 @@ describe("useIsMobile", () => {
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = false;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     document.body.innerHTML = "";
   });
 
   it("returns true below breakpoint and updates when viewport changes", async () => {
     const mql = createMqlMock();
-    const matchMediaSpy = vi
-      .spyOn(window, "matchMedia")
-      .mockImplementation(() => mql as unknown as MediaQueryList);
+    const matchMediaSpy = vi.fn(
+      () => mql as unknown as MediaQueryList
+    );
+    vi.stubGlobal("matchMedia", matchMediaSpy);
 
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
@@ -82,8 +84,9 @@ describe("useIsMobile", () => {
 
   it("removes media query listener on unmount", async () => {
     const mql = createMqlMock();
-    vi.spyOn(window, "matchMedia").mockImplementation(
-      () => mql as unknown as MediaQueryList
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => mql as unknown as MediaQueryList)
     );
 
     const container = document.createElement("div");

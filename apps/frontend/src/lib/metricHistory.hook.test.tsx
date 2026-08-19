@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createElement as h, useState } from "react";
+import { createElement as h } from "react";
 import {
   useMetricSeries,
   recordStats,
@@ -10,12 +10,16 @@ import {
 } from "./metricHistory";
 
 beforeEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 afterEach(() => {
   _resetMetricHistoryForTests();
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = false;
   document.body.innerHTML = "";
 });
 
@@ -66,7 +70,7 @@ describe("useMetricSeries", () => {
       return h("span", {}, String(captured.length));
     }
 
-    const { container, root } = await render(<Consumer />);
+    const { root } = await render(<Consumer />);
     const initialCount = renderCount;
     expect(captured).toHaveLength(0);
 

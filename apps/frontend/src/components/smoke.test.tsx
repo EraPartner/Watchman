@@ -82,12 +82,9 @@ import { Popover, PopoverTrigger, PopoverContent } from "./primitives/Popover";
 import {
   Sheet,
   SheetTrigger,
-  SheetContent,
   SheetHeader,
   SheetBody,
   SheetFooter,
-  SheetTitle,
-  SheetDescription,
 } from "./primitives/Sheet";
 import { KindCard } from "../pages/setup/KindCard";
 import { Server } from "lucide-react";

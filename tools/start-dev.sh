@@ -9,7 +9,7 @@ echo ""
 # Check if node_modules exists in root
 if [ ! -d "node_modules" ]; then
     echo "📦 Installing dependencies (npm workspaces)..."
-    npm install
+    npm run deps:ci:portable
 fi
 
 echo ""

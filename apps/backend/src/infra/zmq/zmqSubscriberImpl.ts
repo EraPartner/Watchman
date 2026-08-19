@@ -1,4 +1,8 @@
-import type { ZmqConnectFn, ZmqMessage, ZmqSubscriberHandle } from './zmqSubscriber.js';
+import type {
+  ZmqConnectFn,
+  ZmqMessage,
+  ZmqSubscriberHandle,
+} from "./zmqSubscriber.js";
 
 /** Zeromq v6+ Subscriber socket shape (subset used here). */
 type SubSocket = {
@@ -18,22 +22,21 @@ type ZeromqModule = { Subscriber: new () => SubSocket };
  * configured.
  *
  * Install:
- *   npm install zeromq
+ *   npm run deps:ci
  *   # Then verify the arm64 build on Pi passes the I6 gate:
  *   node -e "require('zeromq')"
  */
 export const zmqConnect: ZmqConnectFn = async (endpoint, topics) => {
   let zmqMod: ZeromqModule;
   try {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-expect-error — zeromq has no @types package; types resolved at runtime
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    zmqMod = (await import('zeromq')) as ZeromqModule;
+    zmqMod = (await import("zeromq")) as ZeromqModule;
   } catch (e) {
     throw new Error(
       `zeromq not installed — cannot connect to ${endpoint}. ` +
-        `Run: npm install zeromq  (then verify arm64 build on Pi with I6 gate). ` +
-        `Cause: ${String(e)}`,
+        `Run from the repository root: npm run deps:ci  ` +
+        `(then verify the arm64 build on Pi with the I6 gate). ` +
+        `Cause: ${String(e)}`
     );
   }
 

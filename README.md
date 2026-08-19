@@ -86,7 +86,7 @@ npm run electron:prod
 ```bash
 git clone https://github.com/EraPartner/Watchman.git
 cd Watchman
-npm install
+npm run deps:ci:portable
 cp apps/backend/.env.example apps/backend/.env.local   # set WATCHMAN_MASTER_KEY
 
 npm run build
@@ -103,7 +103,7 @@ npm run start
 ```bash
 git clone https://github.com/EraPartner/Watchman.git
 cd Watchman
-npm install
+npm run deps:ci:portable
 cp apps/backend/.env.example apps/backend/.env.local
 
 npm run dev

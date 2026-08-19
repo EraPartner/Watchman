@@ -19,9 +19,9 @@ REPO_ROOT=$(git rev-parse --show-toplevel) || exit 0
 CL="$REPO_ROOT/node_modules/.bin/commitlint"
 
 # Skip (don't fail) if deps aren't installed yet -- mirrors how pre-commit treats
-# a missing gitleaks, so a fresh clone can still commit before 'npm install'.
+# a missing gitleaks, so a fresh clone can still commit before 'npm run deps:ci'.
 if [ ! -x "$CL" ]; then
-  echo "[commit-msg] commitlint not installed (run 'npm install') -- skipping commit-message lint."
+  echo "[commit-msg] commitlint not installed (run 'npm run deps:ci') -- skipping commit-message lint."
   exit 0
 fi
 

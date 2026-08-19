@@ -15,6 +15,7 @@ export default [
       "backend/",
       "hardware/",
       "public/",
+      "coverage*/**",
     ],
   },
 
@@ -30,6 +31,7 @@ export default [
       "backend/",
       "hardware/",
       "public/",
+      "coverage*/**",
     ],
     languageOptions: {
       ecmaVersion: 2020,
@@ -85,6 +87,17 @@ export default [
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
       "no-undef": "off",
+    },
+  },
+  {
+    // These modules intentionally co-locate component primitives with their
+    // variants, Radix aliases, or companion hook.
+    files: [
+      "src/components/primitives/**/*.{ts,tsx}",
+      "src/providers/WebSocketProvider.tsx",
+    ],
+    rules: {
+      "react-refresh/only-export-components": "off",
     },
   },
 ];

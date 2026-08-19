@@ -100,9 +100,7 @@ export default function ServiceEditor({
   const [selectedKind, setSelectedKind] = useState<string>(
     existing?.kind ?? presetKind ?? ""
   );
-  const [instanceId, setInstanceId] = useState(
-    existing?.instanceId ?? "main"
-  );
+  const [instanceId, setInstanceId] = useState(existing?.instanceId ?? "main");
   const [enabled, setEnabled] = useState(existing?.enabled ?? true);
   const [cacheTtlMs, setCacheTtlMs] = useState<number>(DEFAULT_CACHE_TTL_MS);
   const [timeoutMs, setTimeoutMs] = useState<number>(DEFAULT_TIMEOUT_MS);
@@ -124,25 +122,33 @@ export default function ServiceEditor({
   const isRenaming =
     !!existing && existing.instanceId !== trimmedInstanceId && !instanceIdError;
 
+  // The schema arrives asynchronously. Reset the editable draft when the
+  // selected schema or existing service changes.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (kindSchema) {
       setValues(initialValues(kindSchema, existing));
       const cacheField = kindSchema.fields.find((f) => f.name === "cacheTtlMs");
-      const timeoutField = kindSchema.fields.find((f) => f.name === "timeoutMs");
+      const timeoutField = kindSchema.fields.find(
+        (f) => f.name === "timeoutMs"
+      );
       const existingCache = existing?.config?.cacheTtlMs;
       const existingTimeout = existing?.config?.timeoutMs;
       setCacheTtlMs(
         typeof existingCache === "number"
           ? existingCache
-          : (cacheField?.default as number | undefined) ?? DEFAULT_CACHE_TTL_MS
+          : ((cacheField?.default as number | undefined) ??
+              DEFAULT_CACHE_TTL_MS)
       );
       setTimeoutMs(
         typeof existingTimeout === "number"
           ? existingTimeout
-          : (timeoutField?.default as number | undefined) ?? DEFAULT_TIMEOUT_MS
+          : ((timeoutField?.default as number | undefined) ??
+              DEFAULT_TIMEOUT_MS)
       );
     }
   }, [kindSchema, existing]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (isLoading) return <p>Loading schemas…</p>;
   if (!kinds) return <p>No schemas available.</p>;
@@ -237,8 +243,8 @@ export default function ServiceEditor({
           </span>
         ) : (
           <span id="instance-id-help" className="text-xs text-muted-foreground">
-            Unique name for this instance. Lowercase letters, digits, dashes;
-            up to {INSTANCE_ID_MAX_LENGTH} characters. Default "main".
+            Unique name for this instance. Lowercase letters, digits, dashes; up
+            to {INSTANCE_ID_MAX_LENGTH} characters. Default "main".
           </span>
         )}
       </label>
@@ -274,7 +280,9 @@ export default function ServiceEditor({
         </summary>
         <div className="mt-3 space-y-3">
           <label className="block">
-            <span className="text-sm text-muted-foreground">Cache TTL (ms)</span>
+            <span className="text-sm text-muted-foreground">
+              Cache TTL (ms)
+            </span>
             <input
               type="number"
               className="mt-1 block w-full rounded border bg-transparent px-3 py-2 text-sm"

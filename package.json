@@ -30,7 +30,7 @@
     "dist": "npm run build:backend && npm run build:frontend && npm run package --workspace=apps/desktop",
     "electron:dev": "npm run build:backend && npm run build:frontend && cross-env NODE_ENV=development npm run dev --workspace=apps/desktop",
     "electron:prod": "npm run build:backend && npm run build:frontend && npm run start --workspace=apps/desktop",
-    "electron:clean": "npm run clean && npm install && npm run build:backend && npm run build:frontend && npm run start --workspace=apps/desktop",
+    "electron:clean": "npm run clean && npm run deps:ci && npm run build:backend && npm run build:frontend && npm run start --workspace=apps/desktop",
     "typecheck": "npm run typecheck --workspace=apps/backend && npm run typecheck --workspace=apps/frontend",
     "lint": "npm run lint --workspace=apps/frontend",
     "lint:frontend": "npm run lint --workspace=apps/frontend",
@@ -47,6 +47,9 @@
     "test:e2e:visual": "npm run test:e2e:visual --workspace=apps/frontend",
     "generate:types": "openapi-typescript apps/backend/openapi.yaml -o apps/frontend/src/types/generated.ts",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/out",
+    "deps:ci": "npm run verify:git-dependencies && npm ci --allow-git=all",
+    "deps:ci:portable": "npm run verify:git-dependencies && npm ci --allow-git=all --workspace=apps/backend --workspace=apps/frontend --include-workspace-root",
+    "verify:git-dependencies": "node scripts/verify-git-dependencies.mjs",
     "hooks:setup": "node scripts/setup-git-hooks.mjs",
     "prepare": "node scripts/setup-git-hooks.mjs"
   },

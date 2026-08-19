@@ -76,7 +76,8 @@ class FakeWebSocket {
   onmessage: SocketHandler<{ data: string }> = null;
   sent: string[] = [];
 
-  constructor(_url: string) {
+  constructor(url: string) {
+    void url;
     FakeWebSocket.instances.push(this);
   }
 

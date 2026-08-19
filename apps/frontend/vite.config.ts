@@ -96,15 +96,23 @@ export default defineConfig(({ mode }) => {
       // Improve chunk splitting for better caching
       rollupOptions: {
         output: {
-          manualChunks: {
-            // Vendor chunk for better caching
-            vendor: ["react", "react-dom", "react-router-dom"],
-            ui: [
-              "@radix-ui/react-dialog",
-              "@radix-ui/react-tabs",
-              "@radix-ui/react-tooltip",
-            ],
-            query: ["@tanstack/react-query"],
+          manualChunks(id) {
+            const moduleId = id.replaceAll("\\", "/");
+            if (
+              moduleId.includes("/node_modules/react/") ||
+              moduleId.includes("/node_modules/react-dom/") ||
+              moduleId.includes("/node_modules/react-router/") ||
+              moduleId.includes("/node_modules/react-router-dom/")
+            ) {
+              return "vendor";
+            }
+            if (moduleId.includes("/node_modules/@radix-ui/")) {
+              return "ui";
+            }
+            if (moduleId.includes("/node_modules/@tanstack/")) {
+              return "query";
+            }
+            return undefined;
           },
           // Security: Don't expose source paths in production
           ...(mode === "production" && {
@@ -133,11 +141,6 @@ export default defineConfig(({ mode }) => {
         "react-router-dom",
         "@tanstack/react-query",
       ],
-    },
-    // Enable esbuild for faster builds
-    esbuild: {
-      target: "esnext",
-      drop: mode === "production" ? ["console", "debugger"] : [],
     },
     // Performance optimizations
     worker: {

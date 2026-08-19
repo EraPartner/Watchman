@@ -207,7 +207,8 @@ export class ApiClientCore {
           (error.name === "TimeoutError" || error.name === "AbortError")
         ) {
           const timeoutError = new Error(
-            `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`
+            `Network error: request to ${endpoint} timed out after ${timeoutMs}ms`,
+            { cause: error }
           );
           (timeoutError as Error & { name: string }).name = "AbortError";
           throw timeoutError;
@@ -219,7 +220,8 @@ export class ApiClientCore {
           error.message.includes("fetch")
         ) {
           throw new Error(
-            `Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`
+            `Network error: Cannot connect to backend at ${this.baseUrl}. Please check if the backend is running.`,
+            { cause: error }
           );
         }
 

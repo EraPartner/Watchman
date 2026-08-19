@@ -57,7 +57,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci
 
       - name: Audit JS dependencies
         # Allowed advisories documented in .audit-ci.json
@@ -82,7 +82,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Lint frontend
         run: npm run lint:frontend
@@ -109,7 +109,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Type-check frontend
         run: npm run typecheck --workspace=apps/frontend
@@ -138,7 +138,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Type-check backend
         run: npm run typecheck --workspace=apps/backend
@@ -165,7 +165,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Regenerate OpenAPI types and check for drift
         run: |
@@ -196,7 +196,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Build frontend
         run: npm run build:frontend
@@ -222,7 +222,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Build backend
         run: npm run build:backend
@@ -247,7 +247,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Run frontend tests with coverage
         working-directory: apps/frontend
@@ -283,7 +283,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm run deps:ci:portable
 
       - name: Run backend tests with coverage
         working-directory: apps/backend

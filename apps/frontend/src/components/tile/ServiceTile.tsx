@@ -1,6 +1,6 @@
 import { useMemo, type KeyboardEvent, type MouseEvent } from "react";
 import { ExternalLink, Check, X } from "lucide-react";
-import { serviceIcon, heroState } from "@/lib/serviceVisuals";
+import { ServiceIcon, heroState } from "@/lib/serviceVisuals";
 import { Surface } from "@/components/primitives/Surface";
 import { StatusDot } from "@/components/primitives/StatusDot";
 import { MetricValue } from "@/components/primitives/MetricValue";
@@ -150,10 +150,7 @@ export function ServiceTile({
       healthRaw
         ? {
             status: (healthRaw.reachable ? "online" : "offline") as
-              | "online"
-              | "offline"
-              | "warning"
-              | "loading",
+              "online" | "offline" | "warning" | "loading",
             error: healthRaw.message,
           }
         : undefined,
@@ -162,8 +159,7 @@ export function ServiceTile({
 
   const statsSnapshot = stats.data;
   const statsMetrics = statsSnapshot?.metrics as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
 
   const tone = useMemo<Tone>(() => {
     if (!renderer) return "neutral";
@@ -259,7 +255,6 @@ export function ServiceTile({
 
   const loading = stats.isLoading && !statsMetrics;
 
-  const Icon = serviceIcon(kind);
   const accentColor =
     tone === "crit"
       ? "var(--crit)"
@@ -303,7 +298,8 @@ export function ServiceTile({
       />
 
       {/* service glyph watermark — fills the upper field with identity */}
-      <Icon
+      <ServiceIcon
+        kind={kind}
         aria-hidden
         size={watermarkSize}
         strokeWidth={1}

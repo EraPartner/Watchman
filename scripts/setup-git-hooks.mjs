@@ -2,7 +2,7 @@
 /**
  * Point git at the version-controlled .githooks/ directory.
  *
- * Runs from the root `prepare` lifecycle script on `npm install`, and can be run
+ * Runs from the root `prepare` lifecycle script on `npm run deps:ci`, and can be run
  * by hand: `npm run hooks:setup`. Idempotent and best-effort -- it never fails an
  * install. A no-op when there is no git work tree to configure (CI shallow
  * checkouts that skip hooks, tarball installs), so it is safe to leave wired into
@@ -29,6 +29,12 @@ function git(args) {
 }
 
 function main() {
+  // Codex cloud tasks leave publication and host hook policy outside the
+  // environment. npm still runs dependency lifecycle scripts, so make the
+  // tracked root prepare hook an explicit no-op there without suppressing
+  // native dependency install scripts such as esbuild and ssh2.
+  if (process.env.CODEX_SESSION_ENV === "cloud") return;
+
   try {
     if (git(["rev-parse", "--is-inside-work-tree"]) !== "true") return;
   } catch {

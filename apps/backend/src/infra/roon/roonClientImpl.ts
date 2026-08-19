@@ -1,5 +1,10 @@
-import { createRequire } from 'module';
-import type { RoonConnectFn, RoonConnectOptions, RoonHandle, RoonZone } from './roonClient.js';
+import { createRequire } from "module";
+import type {
+  RoonConnectFn,
+  RoonConnectOptions,
+  RoonHandle,
+  RoonZone,
+} from "./roonClient.js";
 
 const _require = createRequire(import.meta.url);
 
@@ -9,7 +14,7 @@ const _require = createRequire(import.meta.url);
 // and the SDK throws `this.ws.on is not a function`. Force the global to `ws` —
 // it's the long-standing Node WS lib and is a superset of the WHATWG API, so
 // other call sites that use `addEventListener` keep working.
-(globalThis as { WebSocket?: unknown }).WebSocket = _require('ws');
+(globalThis as { WebSocket?: unknown }).WebSocket = _require("ws");
 
 // ─── Minimal types for @roonlabs/node-roon-api (no @types package) ───────────
 
@@ -31,7 +36,7 @@ interface RoonCore {
     _subscribe_helper(
       svcname: string,
       reqname: string,
-      cb: (cmd: string | false, body: unknown) => void,
+      cb: (cmd: string | false, body: unknown) => void
     ): { unsubscribe: (cb?: () => void) => void };
     transport: { close(): void };
   };
@@ -57,8 +62,7 @@ interface RoonApiInstance {
 
 type RoonApiConstructor = new (opts: RoonApiOptions) => RoonApiInstance;
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const RoonApiCtor = _require('@roonlabs/node-roon-api') as RoonApiConstructor;
+const RoonApiCtor = _require("@roonlabs/node-roon-api") as RoonApiConstructor;
 
 // ─── Raw zone shape from Roon transport:2 subscription ───────────────────────
 
@@ -85,20 +89,22 @@ interface ZonesBody {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const VALID_STATES = new Set(['playing', 'paused', 'loading', 'stopped']);
+const VALID_STATES = new Set(["playing", "paused", "loading", "stopped"]);
 
-function normaliseState(raw: string): RoonZone['state'] {
-  return VALID_STATES.has(raw) ? (raw as RoonZone['state']) : 'stopped';
+function normaliseState(raw: string): RoonZone["state"] {
+  return VALID_STATES.has(raw) ? (raw as RoonZone["state"]) : "stopped";
 }
 
 function parseZone(raw: RoonZoneRaw): RoonZone {
   const nowPlaying = raw.now_playing
     ? {
-        oneLine: raw.now_playing.one_line?.line1 ?? '',
+        oneLine: raw.now_playing.one_line?.line1 ?? "",
         ...(raw.now_playing.seek_position !== undefined
           ? { seekPosition: raw.now_playing.seek_position }
           : {}),
-        ...(raw.now_playing.length !== undefined ? { length: raw.now_playing.length } : {}),
+        ...(raw.now_playing.length !== undefined
+          ? { length: raw.now_playing.length }
+          : {}),
       }
     : undefined;
 
@@ -116,14 +122,14 @@ function parseZone(raw: RoonZoneRaw): RoonZone {
 function applyZoneUpdate(
   cmd: string | false,
   body: ZonesBody,
-  zones: Map<string, RoonZone>,
+  zones: Map<string, RoonZone>
 ): void {
-  if (cmd === 'Subscribed') {
+  if (cmd === "Subscribed") {
     zones.clear();
     for (const z of body.zones ?? []) zones.set(z.zone_id, parseZone(z));
     return;
   }
-  if (cmd !== 'Changed') return;
+  if (cmd !== "Changed") return;
   for (const z of body.zones_added ?? []) zones.set(z.zone_id, parseZone(z));
   for (const z of body.zones_changed ?? []) zones.set(z.zone_id, parseZone(z));
   for (const id of body.zones_removed ?? []) zones.delete(id);
@@ -141,7 +147,9 @@ function applyZoneUpdate(
  * approves the extension (first time) or the saved token is accepted
  * (subsequent restarts).
  */
-export const roonConnect: RoonConnectFn = (opts: RoonConnectOptions): Promise<RoonHandle> => {
+export const roonConnect: RoonConnectFn = (
+  opts: RoonConnectOptions
+): Promise<RoonHandle> => {
   const zones = new Map<string, RoonZone>();
   let paired = false;
   let subscription: { unsubscribe: (cb?: () => void) => void } | undefined;
@@ -150,20 +158,20 @@ export const roonConnect: RoonConnectFn = (opts: RoonConnectOptions): Promise<Ro
   const roon = new RoonApiCtor({
     extension_id: opts.extensionId,
     display_name: opts.displayName,
-    display_version: '1.0.0',
-    publisher: 'Watchman',
-    email: 'watchman@localhost',
-    log_level: 'none',
+    display_version: "1.0.0",
+    publisher: "Watchman",
+    email: "watchman@localhost",
+    log_level: "none",
 
     core_paired(core: RoonCore): void {
       paired = true;
       subscription = core.moo._subscribe_helper(
-        'com.roonlabs.transport:2',
-        'zones',
+        "com.roonlabs.transport:2",
+        "zones",
         (cmd, body) => {
           applyZoneUpdate(cmd, body as ZonesBody, zones);
           opts.onZonesChanged?.(Array.from(zones.values()));
-        },
+        }
       );
     },
 
@@ -180,7 +188,11 @@ export const roonConnect: RoonConnectFn = (opts: RoonConnectOptions): Promise<Ro
     },
   });
 
-  roon.init_services({ required_services: [], optional_services: [], provided_services: [] });
+  roon.init_services({
+    required_services: [],
+    optional_services: [],
+    provided_services: [],
+  });
 
   const moo = roon.ws_connect({
     host: opts.host,

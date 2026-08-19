@@ -18,7 +18,7 @@ live in [`docs/`](./docs/) (start at [`docs/INDEX.md`](./docs/INDEX.md));
 git clone git@github.com:EraPartner/Watchman.git
 cd Watchman
 nvm use                 # or ensure Node 22+
-npm install             # installs all workspaces + wires git hooks (.githooks via core.hooksPath)
+npm run deps:ci:portable # verifies the Git pin; installs root, backend, and frontend; wires hooks
 
 # Backend + frontend env (never commit these)
 cp apps/backend/.env.example  apps/backend/.env.local
@@ -69,7 +69,7 @@ Patterns and conventions: [`docs/reference/code-patterns.md`](./docs/reference/c
 
 ## Git hooks
 
-`npm install` runs `scripts/setup-git-hooks.mjs`, which points
+`npm run deps:ci:portable` runs `scripts/setup-git-hooks.mjs` through npm's `prepare` lifecycle, which points
 `core.hooksPath` at the version-controlled `.githooks/` directory (the same
 mechanism Vision and VaultLens use — no husky). Re-run by hand with
 `npm run hooks:setup`.

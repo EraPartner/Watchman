@@ -2,7 +2,7 @@
 title: Common Tasks
 type: reference
 status: active
-date: 2026-05-16
+date: 2026-08-19
 tags: [reference, tasks, quick-reference, startup-flows, single-user, architecture]
 description: Task-oriented quick reference for common Watchman development operations
 aliases: [common tasks, quick reference, cheat sheet]
@@ -27,7 +27,7 @@ Installs to `/Applications/Watchman.app`. Backend auto-spawns on loopback port.
 ### Option B — Production Self-Host (Server)
 
 ```bash
-npm install && npm run build && npm run start
+npm run deps:ci:portable && npm run build && npm run start
 ```
 
 Builds production artifacts and runs concurrently (suitable for Raspberry Pi, VPS, etc.).
@@ -35,7 +35,7 @@ Builds production artifacts and runs concurrently (suitable for Raspberry Pi, VP
 ### Option C — Development
 
 ```bash
-npm install && npm run dev
+npm run deps:ci:portable && npm run dev
 ```
 
 Starts Vite (5173) + Fastify (3001) with hot reload. See [[docs/guides/setup|Setup Guide]].
@@ -136,7 +136,7 @@ npm run format:check    # Check formatting without changes
 
 ### Frontend Won't Build
 
-- Check Node.js version and npm cache: `npm cache clean --force && npm install`
+- Check Node.js version and npm cache: `npm cache clean --force && npm run deps:ci:portable`
 - If Vite errors, delete `apps/frontend/dist/` and rebuild: `npm run build`
 
 ### Desktop App Won't Launch (Option A)
@@ -174,7 +174,7 @@ box "Development"
     participant "Frontend" as FE
 end box
 
-Dev -> Term : npm install && npm run dev
+Dev -> Term : npm run deps:ci:portable && npm run dev
 
 par
     Term -> BE : npm run dev:backend\n(Fastify on :3001)

@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createElement as h, useContext, createContext } from "react";
+import { createElement as h } from "react";
 
 vi.mock("@/hooks/useWebSocket", () => ({
   useWebSocket: vi.fn(() => ({
@@ -17,11 +17,15 @@ vi.mock("@/hooks/useWebSocket", () => ({
 import { WebSocketProvider, useWebSocketContext } from "./WebSocketProvider";
 
 beforeEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 afterEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = false;
   document.body.innerHTML = "";
 });
 
@@ -45,7 +49,8 @@ describe("WebSocketProvider", () => {
   });
 
   it("provides context to children via useWebSocketContext", async () => {
-    let captured: { isConnected: boolean; reconnectAttempts: number } | null = null;
+    let captured: { isConnected: boolean; reconnectAttempts: number } | null =
+      null;
 
     function Consumer() {
       captured = useWebSocketContext();
@@ -65,7 +70,8 @@ describe("WebSocketProvider", () => {
 
 describe("useWebSocketContext (outside provider)", () => {
   it("returns default values when no provider is present", async () => {
-    let captured: { isConnected: boolean; reconnectAttempts: number } | null = null;
+    let captured: { isConnected: boolean; reconnectAttempts: number } | null =
+      null;
 
     function Standalone() {
       captured = useWebSocketContext();
