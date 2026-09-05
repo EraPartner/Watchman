@@ -98,9 +98,10 @@ encrypted in DuckDB. Never log tokens or personal data; preserve Pino redaction.
   size does not determine whether documentation is required.
 - Update every affected documentation surface, or explicitly report why no documentation change
   is warranted. Before any direct `docs/` edit, read `docs/AGENTS.md`.
-- Run final tests, lint, typecheck, build, generated-artifact checks, and documentation validation
-  after documentation and generated files are synchronized. If validation changes the
-  implementation, repeat the documentation check.
+- After documentation and generated files are synchronized, run the checks appropriate to the
+  changed surfaces below, plus applicable generated-artifact and documentation checks. If
+  validation changes the implementation, repeat the documentation check. Instruction-only and
+  documentation-only edits need relevant content and link checks, not the application suite.
 - Service change: verify health, timeout, retry, circuit-breaker behavior, secret handling, and
   multi-instance behavior.
 - Isolated edit: targeted test and lint.
@@ -110,18 +111,19 @@ encrypted in DuckDB. Never log tokens or personal data; preserve Pino redaction.
 - Explain destructive or irreversible commands and get confirmation first.
 
 Keep scope focused. Finish with changed files, checks run, skipped checks, residual risk, and
-follow-ups. Commit directly to `main` unless the user asks for a branch.
+follow-ups. In regular local development sessions, leave the reviewed working-tree diff for the
+LockBox `git-agent`; do not stage, sign, commit, or push. Only an explicitly authorized LockBox
+`git-agent` publication session may commit directly to `main` unless the user asks for a branch.
+Cloud publication follows the rules below.
 
 Validate every external input with server-side Zod schemas. Use least-privilege service
 configuration, preserve the configured Pino secret redaction, and audit new dependencies before
 adding them.
 
-At the end of a substantial work session, summarize the work as an Obsidian note in `docs/` for
-the project vault. A session is substantial when it changes multiple modules or documentation
-surfaces, or changes architecture, API contracts, security, persistence, service integrations,
-configuration workflows, or build/deployment behavior. Skip the note for isolated mechanical or
-comment-only edits unless the user requests one. Follow `docs/AGENTS.md` and use the
-`update-watchman-docs` skill for the note.
+Create a session note in `docs/` only when it adds durable decisions, rationale, unresolved issues,
+or operational lessons that are not already captured in the updated project documentation, or
+when the user requests one. Do not duplicate the change summary merely because multiple files or
+modules changed. Follow `docs/AGENTS.md` and use the `update-watchman-docs` skill for the note.
 
 ## Cloud sessions
 
