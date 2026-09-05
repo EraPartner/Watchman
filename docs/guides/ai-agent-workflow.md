@@ -29,9 +29,11 @@ agent receives the same project rules.
 ## Cloud tooling validation
 
 The CI workflow includes a **Cloud Tooling** job. It checks Bash syntax for cloud scripts and
-runs every `.codex/cloud/tests/*.test.sh` mocked regression suite without installing application
-dependencies or starting services. Quality Gate explicitly requires this job to succeed. The
-workflow's existing documentation path exclusions still apply to documentation-only changes.
+runs every `.codex/cloud/tests/*.test.sh` mocked regression suite. It also rejects drift between
+the vendored `.devcontainer` controls and LockBox's canonical `main` branch. These checks do not
+install application dependencies or start services. Quality Gate explicitly requires this job to
+succeed. The workflow's existing documentation path exclusions still apply to documentation-only
+changes.
 
 Run the same regression suites locally with:
 
