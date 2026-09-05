@@ -20,6 +20,22 @@ concurrency:
 permissions: {}
 
 jobs:
+  cloud-tooling:
+    name: Cloud Tooling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+      - name: Check generated cloud agreement
+        run: python3 .codex/cloud/check-instructions.py
+      - name: Check cloud shell syntax and mocked regressions
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' script; do bash -n "$script"; done < <(find .codex/cloud -name '*.sh' -print0)
+          for suite in .codex/cloud/tests/*.test.sh; do bash "$suite"; done
+
   # ─────────────────────────────────────────────────────────────────────────────
   # Secrets scan — gitleaks on push/PR diff range
   # ─────────────────────────────────────────────────────────────────────────────
@@ -355,6 +371,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - secrets-scan
+      - cloud-tooling
       - deps-audit
       - lint
       - typecheck
@@ -368,7 +385,10 @@ jobs:
     if: always()
     steps:
       - name: Check all gates passed
+        env:
+          CLOUD_TOOLING_RESULT: ${{ needs.cloud-tooling.result }}
         run: |
+          test "$CLOUD_TOOLING_RESULT" = success
           results='${{ toJson(needs.*.result) }}'
           if echo "$results" | grep -qE '"(failure|cancelled)"'; then
             echo "Quality gate failed. Job results: $results"

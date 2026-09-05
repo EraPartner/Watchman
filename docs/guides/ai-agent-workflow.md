@@ -2,7 +2,7 @@
 title: AI Agent Workflow
 type: guide
 status: active
-date: 2026-08-17
+date: 2026-09-05
 tags: [guide, ai-agent, workflow, development, automation, skills]
 description: Model-neutral workflow for coding agents working on the Watchman project
 aliases: [ai-agent-guide, agent workflow, ai assistant, copilot]
@@ -25,6 +25,19 @@ aliases: [ai-agent-guide, agent workflow, ai assistant, copilot]
 
 Do not copy shared guidance into a tool-specific file. Update the canonical file so every supported
 agent receives the same project rules.
+
+## Cloud tooling validation
+
+The CI workflow includes a **Cloud Tooling** job. It checks Bash syntax for cloud scripts and
+runs every `.codex/cloud/tests/*.test.sh` mocked regression suite without installing application
+dependencies or starting services. Quality Gate explicitly requires this job to succeed. The
+workflow's existing documentation path exclusions still apply to documentation-only changes.
+
+Run the same regression suites locally with:
+
+```bash
+for suite in .codex/cloud/tests/*.test.sh; do bash "$suite"; done
+```
 
 ## Workflow
 
