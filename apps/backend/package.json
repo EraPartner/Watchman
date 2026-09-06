@@ -47,15 +47,15 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@tsconfig/node18": "^18.2.6",
-    "@types/node": "^26.1.1",
-    "@types/ssh2": "^1.15.5",
-    "@vitest/coverage-v8": "^4.1.10",
-    "eslint": "^10.7.0",
-    "prettier": "^3.9.5",
-    "tsx": "^4.23.0",
+    "@tsconfig/node18": "^18.2.7",
+    "@types/node": "^26.4.1",
+    "@types/ssh2": "^1.15.6",
+    "@vitest/coverage-v8": "^5.0.0",
+    "eslint": "^10.9.1",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   },
   "overrides": {
     "qs": "^6.15.2",
