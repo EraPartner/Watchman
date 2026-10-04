@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-08-19
+date: 2026-10-04
 tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -191,8 +191,8 @@ Watchman/
 > [!info] Single-User Design
 > Watchman is a single-user home-lab monitoring application with no built-in authentication. Network isolation (firewall, VPN, or closed LAN) is the operator's responsibility. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
 
-> [!info] Devcontainer (optional)
-> A hardened apple/container sandbox at `.devcontainer/` lets contributors run Claude Code or OpenAI Codex without exposing the host. It uses iptables default-deny egress, a non-root container user, and separate provider credential volumes. See [[docs/guides/devcontainer|Devcontainer Guide]], [[docs/adr/024-claude-code-devcontainer|ADR-024]], and [[docs/adr/030-devcontainer-apple-container-runtime|ADR-030]].
+> [!info] Agent sandbox
+> Claude and Codex use their built-in sandboxes and the current host access policy. See [[docs/guides/ai-agent-workflow|AI Agent Workflow]] and [[docs/adr/031-built-in-agent-sandboxes|ADR-031]].
 
 > [!info] Rate Limiting Tiers
 >

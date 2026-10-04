@@ -2,7 +2,7 @@
 title: Setup Guide
 type: guide
 status: active
-date: 2026-08-19
+date: 2026-10-04
 tags: [guide, setup, development, startup-flows]
 description: Step-by-step guide to setting up the Watchman development environment (Option C — Development mode)
 aliases: [setup, install, getting started, local development, option c, dev mode]
@@ -18,8 +18,8 @@ aliases: [setup, install, getting started, local development, option c, dev mode
 > - Option B: Production Server
 > - Option C: Development (this guide)
 
-> [!tip] Running Claude CLI in --dangerously-skip-permissions mode?
-> Use the optional hardened devcontainer instead of running directly on your host. It isolates Claude from your host filesystem and LAN using iptables default-deny egress and a non-root container user. See [[docs/guides/devcontainer|Devcontainer Guide]] for setup instructions.
+> [!tip] Agent sandbox
+> Use Claude or Codex with its built-in sandbox and the current host access policy. See [[docs/guides/ai-agent-workflow|AI Agent Workflow]].
 
 ## Prerequisites
 

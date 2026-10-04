@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 type: index
 status: active
-date: 2026-06-13
+date: 2026-10-04
 tags: [adr, architecture, index, decision, design, startup-flows]
 description: Index of all Architecture Decision Records for the Watchman project - why design choices were made
 aliases: [adr index, decisions, architecture decisions, design decisions]
@@ -90,3 +90,7 @@ For small fixes or incremental improvements, documentation in code comments is s
 - [[docs/architecture/index|Architecture Overview]]
 - [[docs/guides/contributing|Contributing Guide]]
 - [[docs/guides/ai-agent-workflow|AI Agent Workflow]]
+
+## Current agent sandbox decision
+
+[[docs/adr/031-built-in-agent-sandboxes|ADR-031: Built-in Agent Sandboxes]] supersedes ADR-030.
