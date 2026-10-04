@@ -49,14 +49,13 @@ applicable code changes, record the results of the following checks and explain 
 ## Development handoff
 
 - [ ] Scope kept tight and unrelated cleanup logged as a follow-up.
-- [ ] Regular local development leaves a reviewed working-tree diff for the LockBox `git-agent`,
-      with changed files, validation results, skipped checks, and remaining risks. Do not stage,
-      sign, commit, or push in that session. Cloud publication follows `AGENTS.md`.
+- [ ] Leave a reviewed working-tree diff with changed files, validation results, skipped checks,
+      and remaining risks. Publication requires task authorization and the active host policy.
 
-## LockBox git-agent publication only
+## Authorized publication
 
-These checks apply only inside an explicitly authorized LockBox `git-agent` session. They do not
-block review of an uncommitted working-tree diff or authorize publication from a development session.
+These checks apply only when publication is explicitly authorized and the active environment
+permits it. They do not block review of an uncommitted working-tree diff.
 
 - [ ] `gitleaks git --staged --redact` clean (pre-commit runs it; CI `Secrets Scan` is the backstop).
 - [ ] Signed commit (`commit.gpgsign=true`, SSH format) with a Conventional Commit message
