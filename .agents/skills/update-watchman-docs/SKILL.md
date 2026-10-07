@@ -56,14 +56,15 @@ reciprocal links where useful and avoid orphan notes.
 Diagrams are fenced `plantuml` blocks inside `docs/architecture/*.md`. Update diagram and prose
 together.
 
-| Change                                        | Architecture document                      |
-| --------------------------------------------- | ------------------------------------------ |
-| Backend service, middleware, route, or schema | `backend-architecture.md`                  |
-| React page, hook, store, or context           | `frontend-architecture.md`                 |
-| End-to-end or WebSocket flow                  | `data-flow.md`                             |
-| Auth, rate limit, real-time, or IP control    | `core-systems.md`                          |
-| Cross-cutting capability                      | Matching diagram in `index.md`             |
-| Integration                                   | Data-flow diagram and its integration page |
+| Change                                        | Architecture document                          |
+| --------------------------------------------- | ---------------------------------------------- |
+| Backend service, middleware, route, or schema | `backend-architecture.md`                      |
+| React page, hook, store, or context           | `frontend-architecture.md`                     |
+| End-to-end or WebSocket flow                  | `data-flow.md`                                 |
+| Origin policy or network-security middleware  | `backend-architecture.md` and `docs/security/` |
+| Event bus or service lifecycle (prose only)   | `core-systems.md`                              |
+| Cross-cutting capability                      | Matching diagram in `index.md`                 |
+| Integration                                   | Data-flow diagram and its integration page     |
 
 Update `docs/architecture/index.md` when adding a diagram.
 

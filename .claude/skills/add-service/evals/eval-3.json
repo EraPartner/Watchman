@@ -4,8 +4,8 @@
   "files": [],
   "expected_behavior": [
     "Identifies that apps/backend/openapi.yaml (the API source of truth) needs to be updated for the new endpoint",
-    "Runs or instructs to run npm run generate:types so apps/frontend/src/types/generated.ts stays in sync",
-    "Flags the verification tier for a service-integration/API change: health check, timeout/retry/circuit-breaker behavior, auth/rate-limit, multi-instance implications",
+    "Runs or instructs to run npm run generate:types and keeps the hand-maintained API client types aligned",
+    "Verifies health, timeout, retry, circuit-breaker behavior, secrets handling and multi-instance implications",
     "Uses the shared update-watchman-docs skill before marking documentation work complete"
   ]
 }
