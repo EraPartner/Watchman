@@ -108,8 +108,10 @@ jobs:
           node-version: 24
           cache: npm
 
+      # Full install (not :portable) so apps/desktop gets its own TypeScript and
+      # Electron type declarations for the desktop check below.
       - name: Install dependencies
-        run: npm run deps:ci:portable
+        run: npm run deps:ci
 
       - name: Type-check frontend
         run: npm run typecheck --workspace=apps/frontend
@@ -146,7 +148,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Verify generated artifacts — the committed OpenAPI-derived TS types must
   # match apps/backend/openapi.yaml. Drift means someone edited openapi.yaml
-  # without running `npm run generate:types`. Cheap, high-signal — and CLAUDE.md
+  # without running `npm run generate:types`. Cheap, high-signal — and AGENTS.md
   # explicitly flags this sync risk.
   # ─────────────────────────────────────────────────────────────────────────────
   verify-generated:
