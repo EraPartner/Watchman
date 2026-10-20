@@ -2,7 +2,7 @@
 title: AI Agent Workflow
 type: guide
 status: active
-date: 2026-10-04
+date: 2026-10-20
 tags: [guide, ai-agent, workflow, development, automation, skills]
 description: Model-neutral workflow for coding agents working on the Watchman project
 aliases: [ai-agent-guide, agent workflow, ai assistant, copilot]
@@ -18,8 +18,8 @@ aliases: [ai-agent-guide, agent workflow, ai assistant, copilot]
 
 | Purpose                | Canonical location | Compatibility                                     |
 | ---------------------- | ------------------ | ------------------------------------------------- |
-| Repository guidance    | `AGENTS.md`        | `CLAUDE.md` imports it                            |
-| Documentation guidance | `docs/AGENTS.md`   | `docs/CLAUDE.md` imports it                       |
+| Repository guidance    | `AGENTS.md`        | Read directly; no `CLAUDE.md` shim                |
+| Documentation guidance | `docs/AGENTS.md`   | Read directly; no `docs/CLAUDE.md` shim           |
 | Project skills         | `.agents/skills/`  | `.claude/skills/` defers to the same instructions |
 | Host-only guidance     | `AGENTS.local.md`  | `CLAUDE.local.md` remains tool-specific           |
 

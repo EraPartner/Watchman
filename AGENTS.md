@@ -70,7 +70,7 @@ replace these rules.
   registered through `bootstrap/registerServices.ts` and `ServiceLifecycle`.
 - Reuse transport, cache, circuit-breaker, and scheduler code under `apps/backend/src/infra/`.
 - Service and multi-instance configuration belongs in the DuckDB store through `/config` or the
-  UI. Legacy `{SERVICE}_{N}_*` variables are imported once and then ignored.
+  UI. A legacy `WATCHMAN_SERVICES_CONFIG` value is imported once into an empty store and then ignored.
 - `apps/backend/openapi.yaml` is the API source of truth. After changing it, run
   `npm run generate:types`. Until the client migration is complete, also keep
   `apps/frontend/src/services/apiClient/types.ts` aligned.
@@ -126,3 +126,8 @@ Create a session note in `docs/` only when it adds durable decisions, rationale,
 or operational lessons that are not already captured in the updated project documentation, or
 when the user requests one. Do not duplicate the change summary merely because multiple files or
 modules changed. Follow `docs/AGENTS.md` and use the `update-watchman-docs` skill for the note.
+
+## Claude Code notes
+
+Project skills are maintained in `.agents/skills/`. The entries under `.claude/skills/` defer to
+those same canonical instructions.
