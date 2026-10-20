@@ -2,7 +2,7 @@
 title: Service Monitoring
 type: feature
 status: active
-date: 2026-05-07
+date: 2026-10-20
 tags: [feature, monitoring, backend, frontend, services, two-tier, health-check, icmp, timeseries, phase-0a, status-dots]
 description: Core service monitoring feature - two-tier health checks (ICMP + protocol) with persistence to time-series store, real-time WebSocket updates, and frontend two-tier status rendering (Phase 0a F1 + F2)
 aliases: [monitoring, health checks, service status, two-tier health]
@@ -48,10 +48,10 @@ See [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019]], [[apps/bac
 
 ### BackgroundPoller
 
-The `apps/backend/src/infra/scheduler/BackgroundPoller.ts` (BackgroundPoller) orchestrates all services:
+The background poller (`createBackgroundPoller` in `apps/backend/src/infra/scheduler/poller.ts`) orchestrates all services:
 
-1. Tracks registered services from `ServiceRegistry`
-2. Polls each service on a configurable interval (default 15 seconds with ±2 second jitter)
+1. Tracks services that `ServiceLifecycle` brings up
+2. Polls each service on its `pollPolicy` (defaults: health 10 s, stats 30 s, 10% jitter)
 3. Emits `service.health.updated` and `service.stats.updated` events on status change
 4. Broadcaster publishes events (including snapshots) to WebSocket clients
 5. TimeSeriesWriter persists both stats and health metrics to DuckDB (Phase 0a+)
@@ -60,21 +60,21 @@ The `apps/backend/src/infra/scheduler/BackgroundPoller.ts` (BackgroundPoller) or
 ### Health Check Flow
 
 ```
-Frontend → GET /services/{id}/health
+Frontend → GET /services/{kind}/health?instance={id}
   → Fastify route handler
-  → BackgroundPoller cached result
-  → Circuit breaker state
-  → Return JSON { data: { status, ... } }
+  → SnapshotCache latest health (written by the poller)
+  → live checkHealth() through the circuit breaker only if no snapshot exists yet
+  → Return JSON { data: HealthSnapshot }
 ```
 
 ### Stats Flow
 
 ```
-Frontend → GET /services/{id}/stats
+Frontend → GET /services/{kind}/stats?instance={id}
   → Fastify route handler
-  → SWR cache (TTL configurable)
-  → service.getStats()
-  → Return JSON { data: { ... } }
+  → SnapshotCache stats cache (TTL cacheTtlMs)
+  → service.getStats() through the circuit breaker on a miss
+  → Return JSON { data: StatsSnapshot }
 ```
 
 ## Supported Services
@@ -83,17 +83,17 @@ See [[docs/integrations/index|Service Integrations]] for per-service documentati
 
 ## Caching
 
-- **Health checks**: 30s TTL
-- **Statistics**: 60s TTL
-- Cache invalidation on write endpoints that mutate monitored state (for example, cache clear and AdGuard protection toggle)
+- **Health**: served from the latest snapshot written by the background poller (`SnapshotCache`)
+- **Statistics**: per-instance stats cache with TTL `cacheTtlMs` (default 10 s)
+- **Poll interval**: per-instance `pollPolicy` (defaults: health 10 s, stats 30 s, 10% jitter)
 
 ## Circuit Breaker
 
-Services use circuit breaker pattern to prevent cascading failures:
+Each instance has separate breakers for health and stats (`apps/backend/src/index.ts`, `infra/circuitBreaker/`):
 
 - **Failure threshold**: 5 consecutive failures
-- **Reset timeout**: 30 seconds
-- **Request timeout**: 5 seconds
+- **Reset timeout**: 60 seconds, then one half-open trial call
+- **Request timeout**: per-instance `timeoutMs` (default 5 seconds)
 
 ## Frontend Coverage Notes (Monitoring UI)
 
@@ -147,14 +147,12 @@ This allows users to distinguish at both dashboard and detail view levels:
 
 ### Other Monitoring UI Tests
 
-- Dashboard query-orchestration coverage in `apps/frontend/src/components/dashboard/useDashboardQueries.test.ts` for `apps/frontend/src/components/dashboard/useDashboardQueries.ts` now includes:
-  - selective refetching for enabled service queries
-  - always-refetched aggregate `servicesHealth`
-  - expanded enablement branches for `frontendConfig` and `qbittorrent`
-- Shared monitoring UI coverage now includes:
-  - `apps/frontend/src/components/UpdateBadge.test.tsx` for update-check + click behavior in `apps/frontend/src/components/UpdateBadge.tsx`
-  - [[apps/frontend/src/components/ServiceLink.test.tsx]] for host-only link display and click behavior in [[apps/frontend/src/components/ServiceLink.tsx]]
-  - `apps/frontend/src/components/ServerStatusBadge.test.tsx` for status variant rendering in `apps/frontend/src/components/ServerStatusBadge.tsx`
+- Dashboard coverage: `apps/frontend/src/components/dashboard/BentoDashboard.smoke.test.tsx` and `dashboardData.test.ts`
+- Detail view coverage: `apps/frontend/src/components/detail/detail.smoke.test.tsx`
+- Hook coverage: `useServiceHealth.test.ts`, `useAggregatedHealth.test.ts`, and `useServiceInstances.test.ts` under `apps/frontend/src/hooks/`
+
+> [!note] Removed tests
+> The former `useDashboardQueries`, `UpdateBadge`, `ServiceLink`, and `ServerStatusBadge` components and their tests no longer exist in `apps/frontend/src/components/`.
 
 ## PlantUML Diagrams
 
@@ -166,46 +164,36 @@ This allows users to distinguish at both dashboard and detail view levels:
 
 actor "Frontend" as FE
 participant "Backend" as BE
-participant "Health Limiter" as RateLimit
-participant "Service Enabled" as SvcEnabled
-participant "Health Cache" as Cache
-participant "ServiceManager" as SvcMgr
+participant "ServiceRegistry" as Reg
+participant "SnapshotCache" as Cache
 participant "Circuit Breaker" as CB
 participant "Service" as Svc
 
-FE -> BE : GET /api/{service}/status
-BE -> RateLimit : Check rate limit
-alt Rate Exceeded
-    BE --> FE : 429 Too Many Requests
-else OK
-    BE -> SvcEnabled : Check service enabled
-    alt Not Enabled
-        BE --> FE : 404 Service Not Found
-    else Enabled
-        BE -> Cache : Check cache (30s TTL)
-        alt Cache Hit
-            Cache --> BE : Cached response
-        else Cache Miss
-            BE -> SvcMgr : getServiceHealth(serviceId)
-            SvcMgr -> CB : Check circuit state
-            alt Circuit Closed
-                CB -> Svc : checkHealth()
-                Svc --> CB : Result
-                CB --> SvcMgr : Result
-                SvcMgr -> Cache : Cache result
-                SvcMgr --> BE : Result
-            else Circuit Open
-                CB --> SvcMgr : Error: Circuit Open
-                SvcMgr --> BE : 503 Service Unavailable
-            end
+FE -> BE : GET /services/{kind}/health?instance={id}
+BE -> Reg : getByKind(kind, instance)
+alt Unknown kind or instance
+    BE --> FE : 404 { error: { code: NOT_FOUND } }
+else Found
+    BE -> Cache : latestHealth(id)
+    alt Snapshot present (written by poller)
+        Cache --> BE : HealthSnapshot
+    else No snapshot yet
+        BE -> CB : checkHealth()
+        alt Circuit Closed
+            CB -> Svc : checkHealth(signal)
+            Svc --> CB : ok(HealthSnapshot)
+            CB --> BE : Result
+            BE -> Cache : setHealth(id, result)
+        else Circuit Open
+            CB --> BE : CIRCUIT_OPEN error
         end
-        BE --> FE : JSON Response\n{status, timestamp, data}
     end
+    BE --> FE : 200 { data: HealthSnapshot }\nor { error: { code, message } }
 end
 @enduml
 ```
 
-### Stats Flow (Authenticated)
+### Stats Flow
 
 ```plantuml
 @startuml
@@ -213,28 +201,25 @@ end
 
 actor "Frontend" as FE
 participant "Backend" as BE
-participant "Auth Middleware" as Auth
-participant "Stats Cache" as Cache
-participant "ServiceManager" as SvcMgr
-participant "Service" as Svc
+participant "ServiceRegistry" as Reg
+participant "SnapshotCache\n(stats cache)" as Cache
+participant "Service\n(breaker-wrapped)" as Svc
 
-FE -> BE : GET /api/{service}/stats
-BE -> Auth : Validate JWT
-alt Invalid Token
-    BE --> FE : 401 Unauthorized
-else Valid Token
-    BE -> Cache : Check cache (60s TTL)
-    alt Cache Hit
-        Cache --> BE : Cached response
-    else Cache Miss
-        BE -> SvcMgr : getServiceStats(serviceId)
-        SvcMgr -> Svc : getStats()
-        Svc --> SvcMgr : Result
-        SvcMgr -> Cache : Cache result
-        SvcMgr --> BE : Result
-    end
-    BE --> FE : JSON Response\n{data, timestamp}
+FE -> BE : GET /services/{kind}/stats?instance={id}
+BE -> Reg : getByKind(kind, instance)
+BE -> Cache : stats(service, signal)
+alt Fresh entry (cacheTtlMs)
+    Cache --> BE : StatsSnapshot
+else Missing or stale
+    Cache -> Svc : getStats(signal)
+    Svc --> Cache : Result
+    Cache --> BE : Result
 end
+BE --> FE : 200 { data: StatsSnapshot }\nor { error: { code, message } }
+
+note right of BE
+  No authentication (ADR-017).
+end note
 @enduml
 ```
 
@@ -257,7 +242,7 @@ state Open {
     [*] --> Open
     note "Service unavailable" as n2
     Open : Requests fail fast
-    Open --> HalfOpen : 30 second timeout
+    Open --> HalfOpen : 60 second timeout
 }
 
 state HalfOpen {

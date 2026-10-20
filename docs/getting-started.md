@@ -2,7 +2,7 @@
 title: Getting Started
 type: map-of-content
 status: active
-date: 2026-08-19
+date: 2026-10-20
 tags: [getting-started, onboarding, moc, new-developer, ai-agent, startup-flows, architecture]
 description: Map of Content for new developers and AI agents to quickly navigate the Watchman knowledge base
 aliases: [start here, onboarding, new dev, beginner, setup, how to start]
@@ -62,7 +62,7 @@ npm run deps:ci:portable && npm run dev
 
 This starts:
 - Frontend: Vite dev server on `http://localhost:5173`
-- Backend: Fastify server on `http://localhost:3001` (with nodemon auto-reload)
+- Backend: Fastify server on `http://localhost:3001` (with `tsx watch` auto-reload)
 
 See [[docs/guides/setup|Setup Guide]] for full details.
 

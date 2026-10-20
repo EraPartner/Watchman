@@ -2,7 +2,7 @@
 title: Running the Watchman Desktop Application
 type: guide
 status: active
-date: 2026-06-13
+date: 2026-10-20
 tags: [guide, desktop, electron, distribution, setup]
 description: How to build, run, and deploy the Watchman Electron desktop application
 aliases: [desktop app, electron, desktop guide]
@@ -154,13 +154,9 @@ npm run dev
 
 The frontend will connect to `http://localhost:3001` (or your configured backend URL).
 
-### Override Backend Node Path
+### Backend Runtime
 
-If your system `node` is not in `PATH`, specify it explicitly:
-
-```bash
-WATCHMAN_BACKEND_NODE=/usr/local/bin/node npm run electron:dev
-```
+The desktop app runs the backend with Electron's own binary (`ELECTRON_RUN_AS_NODE=1`). It does not use the system `node`, and there is no variable to override the runtime path.
 
 ### Override Frontend Dev URL
 
@@ -244,34 +240,36 @@ Outputs:
 
 ### Desktop-Specific
 
-| Variable                      | Description                                 | Default            |
-| ----------------------------- | ------------------------------------------- | ------------------ |
-| `WATCHMAN_BACKEND_NODE`       | Path to `node` executable for backend spawn | `node` (from PATH) |
-| `WATCHMAN_SKIP_BACKEND_SPAWN` | Skip backend auto-spawn; attach externally  | `0` (auto-spawn)   |
-| `WATCHMAN_DEV_URL`            | Frontend URL override (dev mode only)       | `watchman://app/`  |
+| Variable                      | Description                                                                                                         | Default           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `WATCHMAN_SKIP_BACKEND_SPAWN` | `1` skips the backend auto-spawn and attaches to a backend on `127.0.0.1:${BACKEND_V2_PORT:-3001}` (unpackaged only) | unset (auto-spawn) |
+| `WATCHMAN_DEV_URL`            | Frontend URL override (dev mode only)                                                                               | `watchman://app/` |
 
-### Inherited from Backend
+The backend child process runs with Electron's own binary (`ELECTRON_RUN_AS_NODE=1`), not a separate `node` from `PATH`.
 
-The desktop app respects standard backend env vars:
+### Set for the Backend by the Desktop App
 
-| Variable              | Description                                    | Default          |
-| --------------------- | ---------------------------------------------- | ---------------- |
-| `PORT`                | Backend port (will be overridden to free port) | `3001`           |
-| `NODE_ENV`            | Node environment (defaults to `production`)    | `production`     |
-| `DATA_DIR`            | Data directory (auto-set to `<userData>/data`) | `./data`         |
-| `WATCHMAN_MASTER_KEY` | Master key (auto-provisioned if missing)       | (auto-generated) |
+The main process (`apps/desktop/src/backend.ts`) spawns the backend with these values; other backend variables pass through from the environment:
+
+| Variable              | Value set by the desktop app                                         |
+| --------------------- | -------------------------------------------------------------------- |
+| `BACKEND_V2_PORT`     | The port chosen by the main process                                  |
+| `BACKEND_V2_HOST`     | `127.0.0.1`                                                          |
+| `DATA_DIR`            | `<userData>/data`                                                    |
+| `NODE_ENV`            | `production` when packaged; otherwise inherited or `development`     |
+| `WATCHMAN_MASTER_KEY` | Not set; the backend auto-provisions `{DATA_DIR}/master.key` if unset |
 
 > [!note] Not Applicable
-> Server config like `FRONTEND_URL`, `AUTH_*`, and service env vars are managed via the Setup Wizard when the desktop app starts for the first time.
+> There are no authentication variables (`AUTH_*`, `JWT_SECRET`) and no `FRONTEND_URL`; they were removed (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]). Service connections are configured in the Setup Wizard and stored in DuckDB, not in environment variables.
 
 ## Troubleshooting
 
 ### Backend Fails to Start
 
-1. Check that `node --version` works in your terminal (system Node.js must be available)
+1. Check the backend build exists (`npm run build:backend`) when running from the repository
 2. Verify the free port acquisition: backend logs should show the allocated port
 3. Check for port conflicts: is another service using the selected free port?
-4. Review `WATCHMAN_BACKEND_NODE` — ensure it points to a valid Node.js binary
+4. Check that `<userData>/data` is writable and `master.key` there is not empty
 
 ### Frontend Can't Connect to Backend
 
@@ -341,7 +339,7 @@ Backend -> Electron: /meta/health OK
 
 Electron -> Frontend: Load watchman://app/
 Frontend -> Frontend: Detect window.__WATCHMAN__\n(isDesktop=true)
-Frontend -> Backend: Fetch /api/services
+Frontend -> Backend: Fetch /services
 Backend -> Frontend: JSON response
 Frontend -> User: Render dashboard
 

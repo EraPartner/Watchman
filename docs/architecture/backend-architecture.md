@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-06-13
+date: 2026-10-20
 tags:
   [
     architecture,
@@ -340,7 +340,7 @@ const pool = createSshPool();
 
 // Execute on first call — establishes persistent connection
 const result1 = await pool.exec({
-  host: "192.168.1.100",
+  host: "192.0.2.100",
   port: 22,
   user: "pi",
   privateKeyPath: "/home/user/.ssh/id_rsa",
@@ -350,7 +350,7 @@ const result1 = await pool.exec({
 
 // Reuses connection from result1
 const result2 = await pool.exec({
-  host: "192.168.1.100",
+  host: "192.0.2.100",
   port: 22,
   user: "pi",
   privateKeyPath: "/home/user/.ssh/id_rsa",
@@ -671,8 +671,8 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`, plus share
 
 ### Bootstrap Configuration
 
-- `[[apps/backend/src/config/env.ts]]` – Zod schema for required env vars (ports, auth, master key, etc.)
-- CORS allowlist precomputed from `FRONTEND_URL` during bootstrap
+- `[[apps/backend/src/config/env.ts]]` – Zod schema for process env vars (`NODE_ENV`, `BACKEND_V2_PORT`, `BACKEND_V2_HOST`, `LOG_LEVEL`, `DATA_DIR`, `WATCHMAN_MASTER_KEY`, `CORS_ALLOWED_ORIGINS`, `TRUST_PROXY`); all have defaults or are optional, and there are no auth variables
+- Origin allow-list and Host-header allow-list built once at bootstrap from `CORS_ALLOWED_ORIGINS` (plus the always-allowed `watchman://` and loopback origins) and shared by HTTP CORS and the WebSocket upgrade
 - `TRUST_PROXY` applied to Fastify configuration per deployment
 
 ### Service Configuration (UI-Driven, v2.2+)

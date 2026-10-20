@@ -2,7 +2,7 @@
 title: Setup Guide
 type: guide
 status: active
-date: 2026-10-04
+date: 2026-10-20
 tags: [guide, setup, development, startup-flows]
 description: Step-by-step guide to setting up the Watchman development environment (Option C — Development mode)
 aliases: [setup, install, getting started, local development, option c, dev mode]
@@ -23,8 +23,8 @@ aliases: [setup, install, getting started, local development, option c, dev mode
 
 ## Prerequisites
 
-- **Node.js 18+** - Runtime environment
-- **npm** - Package manager
+- **Node.js 22+** - Runtime environment (CI uses Node 24)
+- **npm 10+** - Package manager
 - **Git** - Version control
 
 ## Installation
@@ -45,34 +45,31 @@ npm run deps:ci:portable
 This verifies the sole reviewed Git dependency, then installs the exact lockfile for the root,
 frontend, and backend workspaces. Use `npm run deps:ci` when desktop packaging is also needed.
 
-### 3. Configure Environment
+### 3. Configure Environment (optional)
 
-Copy the example environment file:
+The backend loads `.env.local` from its working directory with `dotenv`, and falls back to `.env`
+for anything still unset. Real environment variables override both. Under `npm run dev` the
+working directory is `apps/backend/`. Every variable has a default, so this step is optional for
+local development:
 
 ```bash
 cp apps/backend/.env.example apps/backend/.env.local
 ```
 
-Edit `.env.local` and set required values:
+Useful values:
 
 ```bash
-# Required
-AUTH_USERNAME=admin
-AUTH_PASSWORD_HASH=$2b$10$your_password_hash_here
-JWT_SECRET=your-super-secret-jwt-key-min-32-characters
-FRONTEND_URL=http://localhost:5173
-
-# Optional - add service configs as needed
-ADGUARD_MAIN_URL=http://192.0.2.1
-ADGUARD_MAIN_AUTH=your-adguard-auth-token
+NODE_ENV=development
+LOG_LEVEL=debug
+# Optional. If unset, the backend creates {DATA_DIR}/master.key on first start.
+WATCHMAN_MASTER_KEY=
 ```
 
-> [!tip] Generating Password Hash
-> Use bcrypt to generate a password hash:
->
-> ```bash
-> node -e "console.log(require('bcrypt').hashSync('yourpassword', 10))"
-> ```
+There are no authentication variables. Watchman is single-user and has no login (see
+[[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]).
+
+> [!info] Service configuration
+> Do not put service URLs or credentials in the env file. Configure services in the UI: the Setup Wizard at `/setup` or **Settings → Services** at `/settings/services`. They are stored in DuckDB under `DATA_DIR` (default `apps/backend/data/`), with secrets encrypted. See [[docs/reference/environment-variables|Environment Variables]].
 
 ### 4. Start Development Server
 
@@ -82,15 +79,15 @@ npm run dev
 
 This starts both frontend and backend concurrently with hot reload:
 
-- **Frontend (Vite)**: `http://localhost:5173` — Hot Module Reload (HMR) enabled, instant feedback on code changes
-- **Backend (Fastify)**: `http://localhost:3001` — Auto-restart via nodemon on file changes
-- **API Docs (Swagger)**: `http://localhost:3001/api/docs` — Interactive OpenAPI documentation
+- **Frontend (Vite)**: `http://localhost:5173` — Hot Module Reload (HMR) enabled. Vite proxies the backend route prefixes and `/ws` to port 3001.
+- **Backend (Fastify)**: `http://localhost:3001` — Restarts on file changes via `tsx watch`
+
+There is no Swagger UI. The API contract is `apps/backend/openapi.yaml`; see [[docs/reference/openapi-spec|OpenAPI Spec]].
 
 ### 5. Verify Setup
 
-- Open `http://localhost:5173` in your browser
-- Check `http://localhost:3001/health` for backend status
-- Visit `http://localhost:3001/api/docs` for interactive API docs
+- Open `http://localhost:5173` in your browser. With no services configured, the dashboard redirects to the Setup Wizard.
+- Check `http://localhost:3001/meta/health` for backend status
 
 ## Development Workflow
 
@@ -145,11 +142,10 @@ npm run test:e2e
 Watchman/
 ├── apps/
 │   ├── frontend/           # React + TypeScript + Vite
-│   └── backend/            # Node.js + Express
-├── packages/
-│   └── shared/             # Shared packages
-├── docs/                   # Documentation
-├── tests/                  # Integration/E2E tests
+│   ├── backend/            # Node.js + TypeScript + Fastify 5
+│   └── desktop/            # Electron shell
+├── docs/                   # Documentation (Obsidian knowledge base)
+├── scripts/                # Repository scripts (Git hooks, dependency checks)
 ├── tools/                  # Dev scripts
 └── package.json            # Root workspace config
 ```
@@ -176,23 +172,20 @@ start
 
 :npm run deps:ci:portable;
 
-:Copy .env.example to .env.local;
-
-:Edit .env.local;
+:Optional: copy .env.example to apps/backend/.env.local;
 
 note right
-  Required:
-  - AUTH_USERNAME
-  - AUTH_PASSWORD_HASH
-  - JWT_SECRET
-  - FRONTEND_URL
+  No variable is required.
+  No authentication variables.
+  WATCHMAN_MASTER_KEY is
+  auto-created if unset.
 end note
-
-:Generate password hash;
 
 :npm run dev;
 
 :Open http://localhost:5173;
+
+:Configure services in the Setup Wizard;
 
 stop
 @enduml
@@ -214,23 +207,24 @@ package "Frontend" {
 }
 
 package "Backend" {
-    [nodemon] as Nodemon
-    [Express Server] as Express
+    [tsx watch] as Watch
+    [Fastify Server] as Fastify
 }
 
 Conc --> Vite : Port 5173
-Conc --> Nodemon : Port 3001
+Conc --> Watch : Port 3001
 
 Vite --> HMR : Hot reload
-Nodemon --> Express : Auto-restart
+Vite --> Fastify : Proxy backend prefixes + /ws
+Watch --> Fastify : Auto-restart
 
 note right of Vite
   HMR: Instant feedback
   on code changes
 end note
 
-note right of Nodemon
-  Auto-restart:
+note right of Watch
+  tsx watch:
   Backend restarts
   on file changes
 end note

@@ -2,7 +2,7 @@
 title: Data Flow
 type: architecture
 status: active
-date: 2026-05-16
+date: 2026-10-20
 tags: [architecture, backend, frontend, data-flow, two-tier, health, websocket-snapshots, setup-wizard, no-auth, configstore, electron, phase-0b, task-b5, event-subscription]
 description: Data flow documentation for setup wizard, service monitoring (two-tier health model), real-time updates with full snapshot payloads, encrypted ConfigStore lifecycle, and Tor ControlPort event subscription lifecycle (Task B5)
 aliases: [data flow, request flow, communication patterns]
@@ -79,7 +79,7 @@ aliases: [data flow, request flow, communication patterns]
 ### Stats Flow
 
 ```
-1. Frontend requests stats → GET /api/services/{kind}/stats?instance={id}
+1. Frontend requests stats → GET /services/{kind}/stats?instance={id}
 2. Fastify request timeout attaches AbortSignal
 3. GetServiceStatus.stats(kind, instance, signal) is invoked
 4. ServiceRegistry resolves `${kind}:${instanceId}` → BaseService
@@ -127,7 +127,7 @@ All `service_update` messages now include optional `snapshot` field:
 2. createDuckDbPool() + runConfigMigrations() prepare the on-disk store
 3. loadOrCreateMasterKey(dataDir, WATCHMAN_MASTER_KEY) ensures key material
 4. createConfigStore(dbPool, encryptor, bus) wires encrypted reads/writes
-5. migrateEnvServicesIfNeeded() one-shot imports legacy ENABLED_SERVICES env
+5. migrateEnvServicesIfNeeded() one-shot imports legacy WATCHMAN_SERVICES_CONFIG (only when the store is empty)
 6. ServiceLifecycle.start() iterates StoredService rows:
    - bringUp(stored) for each enabled service
    - svc.onStart() if present (e.g. Tor onStart spins up ControlPort event
@@ -199,7 +199,7 @@ participant "BaseService" as Svc
 participant "PingProber" as Ping
 database "External Service" as ExtSvc
 
-FE -> API : GET /api/services/{kind}/health?instance={id}
+FE -> API : GET /services/{kind}/health?instance={id}
 API -> API : log sampling + request timeout (AbortSignal)
 API -> App : health(kind, instance, signal)
 App -> Reg : lookup `${kind}:${instanceId}`

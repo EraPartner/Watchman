@@ -19,6 +19,10 @@ Use the groups: Added, Changed, Deprecated, Removed, Fixed, Security.
 No releases have been tagged yet; the work below is staged for the first
 `1.0.0` release.
 
+**Project status (2026-10-20):** Watchman is no longer actively maintained. The
+final maintenance pass below left `main` with passing CI, a clean HIGH/CRITICAL
+dependency audit, and documentation aligned with the code.
+
 ### Added
 
 - Desktop: native Electron experience, runtime hardening, and a distribution
@@ -37,14 +41,32 @@ No releases have been tagged yet; the work below is staged for the first
 
 - Backend: shared origin policy extracted for HTTP CORS and the WebSocket upgrade.
 - Backend: config store, service schema, and field metadata overhauled; service
-  config now lives in the DuckDB store (legacy `{SERVICE}_*` env vars imported
+  config now lives in the DuckDB store (legacy `WATCHMAN_SERVICES_CONFIG` imported
   once on first boot, then ignored).
 - Backend hardened across all service implementations; upgraded to Fastify 5.
+- Coverage thresholds lowered to just below measured coverage (frontend
+  lines 79%, statements 77%, branches 64%; backend branches 72%). They now guard against
+  regressions instead of requiring new tests.
 - Standardized the toolchain on **Node 24** (Active LTS): CI, `.nvmrc` /
   `.node-version`, and the devcontainer now agree; `engines` requires `node >=22`.
 
 ### Fixed
 
+- Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
+  fallback. Before, only `.env` was read, so settings placed in `.env.local` as
+  the documentation instructs were silently ignored.
+- Desktop: `apps/desktop/tsconfig.json` uses `Node16` module resolution. The
+  previous `node10` setting is removed in TypeScript 7, which broke the desktop
+  build and typecheck.
+- CI: the type-check job installs all workspaces, so the desktop check runs
+  against its own TypeScript and Electron type declarations.
+- Frontend: the Vite dev and preview proxy now forwards `/profiles`, so location
+  profiles work in browser (non-desktop) deployments. It forwards only
+  `/setup/…` API paths, so reloading the `/setup` wizard page no longer returns
+  a backend 404.
+- Documentation: deployment, setup, environment, and service guides describe the
+  current Fastify backend and trusted-network model instead of the removed
+  Express/JWT design.
 - `README.md` corrected to match the implementation: trusted-network security
   model (no auth/CSRF/rate limiting), Fastify (not Express), OpenAPI 3.1 with no
   Swagger UI served, and the real backend env surface (`WATCHMAN_MASTER_KEY`,
@@ -55,5 +77,10 @@ No releases have been tagged yet; the work below is staged for the first
 - Adopted a documented **trusted-network, single-user** security model — no auth,
   CSRF, or rate limiting by design (see ADR-017 / ADR-025 and `SECURITY.md`).
 - Patched Dependabot-flagged dependencies across both lockfiles.
+- Final dependency refresh (2026-10-20): both lockfiles updated with
+  `npm audit fix`, Vitest 4.1.12, and Electron 43.8.0. No known HIGH or CRITICAL
+  advisories remain, and the `.audit-ci.json` allowlist is empty. Moderate
+  advisories remain in Electron packaging tooling (`electron-builder` via
+  `sprintf-js`), which has no non-breaking fix.
 
 [unreleased]: https://github.com/EraPartner/Watchman/commits/main

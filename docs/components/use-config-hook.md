@@ -2,7 +2,7 @@
 title: "Hook: useFrontendConfig (replaces useConfig)"
 type: component
 status: superseded
-date: 2026-06-13
+date: 2026-10-20
 tags: [hook, frontend, react, config]
 description: React Query frontend configuration hook; legacy useConfig hook removed
 aliases: [use frontend config, use config, config hook]
@@ -10,8 +10,11 @@ aliases: [use frontend config, use config, config hook]
 
 # Hook: useFrontendConfig (replaces useConfig)
 
+> [!danger] Superseded — No Longer Implemented
+> Neither `useConfig` nor `useFrontendConfig` exists in `apps/frontend/src`, and the backend has no `GET /api/config/frontend` route. Service configuration is read through the `/config/*` API (see [[docs/api/config|Configuration API]]). Content retained for archival reference only.
+
 > [!abstract] Overview
-> Frontend configuration is now fetched via `useFrontendConfig`, a React Query hook. The legacy `useConfig` hook (`use-config.tsx`) has been removed.
+> Historical: frontend configuration was fetched via `useFrontendConfig`, a React Query hook that replaced the older `useConfig` hook (`use-config.tsx`).
 
 ## Purpose
 

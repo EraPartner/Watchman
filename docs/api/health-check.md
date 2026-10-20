@@ -2,29 +2,31 @@
 title: "API: Health Check"
 type: api
 status: active
-date: 2026-05-07
+date: 2026-10-20
 tags: [api, health, backend, endpoints, two-tier]
-description: GET /health - Backend server health check endpoint
+description: GET /meta/health - Backend server liveness probe
 aliases: [health endpoint, health check, ping]
 ---
 
 # Health Check Endpoint
 
 > [!abstract] Overview
-> Lightweight health check to verify the backend server is running and responsive. No authentication required.
+> Lightweight liveness probe to verify the backend process is running and responsive. Watchman has no authentication (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]).
 >
 > Related: [[docs/api/services-health|Services Health]] covers per-service health snapshots with two-tier reachability model.
 
 ## Endpoint
 
-| Property   | Value                      |
-| ---------- | -------------------------- |
-| **Method** | `GET`                      |
-| **Path**   | `/health`                  |
-| **Auth**   | None                       |
-| **Rate**   | `healthLimiter`            |
-| **Cache**  | None                       |
-| **Source** | `apps/backend/server.js` |
+| Property   | Value                                              |
+| ---------- | -------------------------------------------------- |
+| **Method** | `GET`                                              |
+| **Path**   | `/meta/health`                                     |
+| **Auth**   | None                                               |
+| **Rate**   | No rate limit                                      |
+| **Cache**  | None                                               |
+| **Source** | `apps/backend/src/transport/http/routes/meta.ts`   |
+
+The backend starts listening before services are brought up, so this endpoint answers even while a slow service is still connecting.
 
 ## Request
 
@@ -36,38 +38,50 @@ No parameters or body required.
 
 ```json
 {
-  "status": "ok",
-  "timestamp": "2026-04-02T12:00:00.000Z",
-  "service": "watchman-backend",
-  "version": "1.0.0"
+  "ok": true,
+  "service": "watchman-backend-v2",
+  "uptime": 1234.56,
+  "timestamp": "2026-10-20T12:00:00.000Z"
 }
 ```
 
-| Field       | Type     | Description                       |
-| ----------- | -------- | --------------------------------- |
-| `status`    | `string` | Always `"ok"` when healthy        |
-| `timestamp` | `string` | ISO 8601 timestamp                |
-| `service`   | `string` | Service identifier                |
-| `version`   | `string` | Backend version from package.json |
+| Field       | Type      | Description                   |
+| ----------- | --------- | ----------------------------- |
+| `ok`        | `boolean` | Always `true` when responding |
+| `service`   | `string`  | `"watchman-backend-v2"`       |
+| `uptime`    | `number`  | Seconds since process start   |
+| `timestamp` | `string`  | ISO 8601 timestamp            |
 
-> [!note] Response Standardization
-> This endpoint **opts out** of the standard API response wrapper (`res.locals.skipStandardization = true`) to keep the response minimal for monitoring tools.
+The response is not wrapped in a `{ data }` envelope.
+
+> [!note] Log sampling
+> The `logSamplingPlugin` logs only 1 in 20 `/meta/health` requests, so frequent probes do not flood the logs.
+
+## Version Endpoint
+
+`GET /meta/version` returns `{ "version": string, "node": string }`. `version` comes from `npm_package_version`, so it is `"dev"` when the backend runs as `node dist/index.js` outside an npm script.
 
 ## Usage
 
 ### curl
 
 ```bash
-curl http://localhost:3001/health
+curl -f http://localhost:3001/meta/health
+# or, in apps/backend/:
+npm run health-check
 ```
 
 ### Frontend
 
 ```typescript
-// Used by LiveServerDashboard to verify backend connectivity
-const response = await fetch(`${API_BASE}/health`);
-const data = await response.json();
+// apps/frontend/src/services/apiClient/endpoints.ts (exposed on apiClient;
+// no dashboard component calls it at present)
+const health = await apiClient.getHealth(); // GET /meta/health
 ```
+
+### Desktop
+
+The Electron main process polls `/meta/health` until the spawned backend is ready, then uses it as a post-startup watchdog (`apps/desktop/src/backend.ts`).
 
 ## Related
 
@@ -84,20 +98,18 @@ const data = await response.json();
 !theme plain
 
 participant "Monitoring Tool" as Monitor
-participant "Backend" as BE
-participant "Express" as Express
+participant "Fastify onRequest\n(Host + Origin checks)" as Gate
+participant "metaRoutes" as Meta
 
-Monitor -> BE : GET /health
-BE -> Express : Route to handler
+Monitor -> Gate : GET /meta/health
+Gate -> Meta : Allowed
+Meta --> Monitor : 200 OK\n{ ok, service, uptime, timestamp }
 
-Express --> BE : { status: "ok", timestamp, service, version }
-
-BE --> Monitor : 200 OK\n{minimal JSON}
-
-note right of BE
-  No auth required
-  No rate limit penalty
-  No response wrapping
+note right of Meta
+  No auth
+  No rate limit
+  No response envelope
+  Logged 1 in 20
 end note
 @enduml
 ```
