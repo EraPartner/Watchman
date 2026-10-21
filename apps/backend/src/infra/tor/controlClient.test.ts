@@ -127,6 +127,19 @@ describe('createTorControlClient', () => {
     await handle.close();
   });
 
+  it('undoes dot-escaping in multi-line GETINFO data', async () => {
+    serverHandler = torResponder({
+      'AUTHENTICATE': '250 OK\r\n',
+      'GETINFO config-text': '250+config-text=\r\n..hidden\r\nplain\r\n...\r\n.\r\n250 OK\r\n',
+      'QUIT': '250 Closing connection\r\n',
+    });
+    const client = createTorControlClient();
+    const handle = await client.connect({ ...OPTS, port, password: '' }, new AbortController().signal);
+    const info = await handle.getinfo(['config-text'], new AbortController().signal);
+    expect(info.get('config-text')).toBe('.hidden\nplain\n..');
+    await handle.close();
+  });
+
   it('throws UnauthorizedError on 515 auth response', async () => {
     serverHandler = (socket) => {
       socket.setEncoding('utf8');
