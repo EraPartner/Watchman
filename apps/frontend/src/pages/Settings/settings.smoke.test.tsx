@@ -196,6 +196,20 @@ describe("BackupRestore page", () => {
     act(() => root.unmount());
   });
 
+  it("warns that services which fail to load are left out of the backup", async () => {
+    vi.mocked(useQuery).mockReturnValueOnce({
+      data: [{ id: "x", kind: "adguard", instanceId: "broken", message: "bad" }],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useQuery>);
+    const { container, root } = await render(<BackupRestore />);
+    expect(container.textContent).toContain(
+      "1 service(s) fail to load and will not be in the backup"
+    );
+    expect(container.textContent).toContain("adguard/broken");
+    act(() => root.unmount());
+  });
+
   it("does not leak an unhandled rejection when export fails", async () => {
     const failing = {
       mutateAsync: vi.fn(async () => {

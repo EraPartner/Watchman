@@ -70,10 +70,21 @@ export interface TestConnectionResult {
 export interface AuditEntry {
   id: number;
   ts: string;
-  action: "create" | "update" | "delete" | "import" | "export" | "rename";
-  targetKind: string;
-  targetId: string;
-  diff: Record<string, unknown>;
+  action:
+    | "create"
+    | "update"
+    | "delete"
+    | "import"
+    | "export"
+    | "rename"
+    | "profile.create"
+    | "profile.update"
+    | "profile.delete"
+    | "profile.switch";
+  /** Null for import/export rows, which have no single target. */
+  targetKind: string | null;
+  targetId: string | null;
+  diff: Record<string, unknown> | null;
   actor: string | null;
 }
 
