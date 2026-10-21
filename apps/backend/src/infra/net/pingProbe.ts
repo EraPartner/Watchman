@@ -22,9 +22,18 @@ const ATTEMPTS: ReadonlyArray<{ cmd: string; args: (host: string, count: number)
   { cmd: 'ping6', args: (h, c) => ['-c', String(c), h] },
 ];
 
+/**
+ * `new URL(...).hostname` keeps the brackets of an IPv6 literal ("[fe80::1]"),
+ * which ping rejects as an unknown host.
+ */
+export function pingTarget(host: string): string {
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+}
+
 export function createPingProber(): PingProber {
   return {
-    async probe({ host, timeoutMs, count, signal }) {
+    async probe({ host: rawHost, timeoutMs, count, signal }) {
+      const host = pingTarget(rawHost);
       for (const attempt of ATTEMPTS) {
         try {
           const out = await runOnce(attempt.cmd, attempt.args(host, count), timeoutMs, signal);
