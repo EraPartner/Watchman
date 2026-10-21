@@ -2,7 +2,7 @@
 title: ErrorBoundary Component
 type: component
 status: active
-date: 2026-04-09
+date: 2026-10-21
 tags: [component, frontend, react, error-handling, class-component]
 description: React class component error boundary that catches rendering errors and displays a fallback UI with reset capability
 aliases: [error boundary, error handler, fallback ui]
@@ -27,6 +27,7 @@ aliases: [error boundary, error handler, fallback ui]
 | ---------- | ------------------------ | ---------------------------------------------------- |
 | `children` | `ReactNode`              | Component tree to protect                            |
 | `fallback` | `ReactNode \| undefined` | Custom fallback UI (overrides default error display) |
+| `resetKey` | `unknown`                | Clears a caught error when it changes                |
 
 ## Behavior
 
@@ -51,6 +52,8 @@ aliases: [error boundary, error handler, fallback ui]
 ### Reset
 
 The `handleReset` method clears the error state, allowing the component tree to re-render. This is useful for transient errors.
+
+When `resetKey` changes while an error is shown, the boundary resets itself. `App.tsx` wraps the routes in `RouteErrorBoundary`, which passes the current route path as `resetKey`, so navigating away from a crashed page (back button, desktop menu) shows the new page instead of keeping the error screen until a reload.
 
 ## Usage
 

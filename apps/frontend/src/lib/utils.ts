@@ -26,11 +26,16 @@ export function formatBytes(
   decimals: number = 1
 ): string {
   if (bytes === null || bytes === undefined) return "N/A";
-  if (!Number.isFinite(bytes) || bytes === 0) return "0 B";
-  const b = Math.max(0, bytes);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const b = bytes;
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(Math.floor(Math.log(b) / Math.log(k)), sizes.length - 1);
+  // Clamp to [0, last]: values below 1 (fractional byte rates) give a
+  // negative log and must stay in bytes.
+  const i = Math.max(
+    0,
+    Math.min(Math.floor(Math.log(b) / Math.log(k)), sizes.length - 1)
+  );
   return `${parseFloat((b / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
 }
 

@@ -85,7 +85,10 @@ export function pickError(
   if (!agg) return undefined;
   const id = instanceId ?? "main";
   const exact = agg.byKey.get(aggregatedKey(kind, id));
-  const entry = exact ?? agg.entries.find((e) => e.kind === kind);
+  // Same fallback rule as pickHealth: a pinned instance must never show
+  // another instance's error.
+  const entry =
+    exact ?? (instanceId ? undefined : agg.entries.find((e) => e.kind === kind));
   if (entry && !entry.result.ok) return entry.result.error;
   return undefined;
 }

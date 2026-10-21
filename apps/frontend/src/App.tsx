@@ -1,7 +1,13 @@
 import { Toaster } from "sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import { useSetupStatus } from "./pages/Settings/useConfigQueries";
 import { useSetupDismissal } from "./hooks/useSetupDismissal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -60,6 +66,13 @@ function SetupGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// Without a reset key the boundary stays on the error screen after the user
+// navigates away (back button, desktop menu) until a full reload.
+function RouteErrorBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>;
+}
+
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-[var(--surface-0)]">
     <div className="text-center text-[var(--text-md)]">
@@ -75,7 +88,7 @@ function App() {
       <WebSocketProvider>
         <Toaster theme="dark" position="top-right" />
         <BrowserRouter>
-          <ErrorBoundary>
+          <RouteErrorBoundary>
             <DesktopChrome />
             <div aria-hidden className="atmosphere" />
             <div className="relative z-10">
@@ -110,7 +123,7 @@ function App() {
                 </Routes>
               </Suspense>
             </div>
-          </ErrorBoundary>
+          </RouteErrorBoundary>
         </BrowserRouter>
       </WebSocketProvider>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}

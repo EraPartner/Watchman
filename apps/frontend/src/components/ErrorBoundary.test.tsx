@@ -118,4 +118,40 @@ describe("ErrorBoundary", () => {
 
     act(() => root.unmount());
   });
+  it("clears the error when resetKey changes (navigating away)", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <ErrorBoundary resetKey="/settings/audit">
+          <Thrower />
+        </ErrorBoundary>
+      );
+    });
+    expect(container.textContent).toContain("Something went wrong");
+
+    // Same key: the error screen stays.
+    act(() => {
+      root.render(
+        <ErrorBoundary resetKey="/settings/audit">
+          <div>Other page</div>
+        </ErrorBoundary>
+      );
+    });
+    expect(container.textContent).toContain("Something went wrong");
+
+    act(() => {
+      root.render(
+        <ErrorBoundary resetKey="/">
+          <div>Other page</div>
+        </ErrorBoundary>
+      );
+    });
+    expect(container.textContent).toContain("Other page");
+    expect(container.textContent).not.toContain("Something went wrong");
+
+    act(() => root.unmount());
+  });
 });

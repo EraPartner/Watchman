@@ -103,6 +103,14 @@ describe("pickError", () => {
     const err = pickError(agg, "bitcoin", undefined);
     expect(err?.code).toBe("UNAVAILABLE");
   });
+
+  it("does not report another instance's error for a pinned instance", () => {
+    // e.g. a newly added "node2" not yet in the aggregated poll while
+    // "node1" of the same kind is down.
+    const agg = makeAgg([makeErrEntry("bitcoin", "node1")]);
+    expect(pickError(agg, "bitcoin", "node2")).toBeUndefined();
+    expect(pickHealth(agg, "bitcoin", "node2")).toBeUndefined();
+  });
 });
 
 // ─── useAggregatedHealth hook wiring ─────────────────────────────────────────
