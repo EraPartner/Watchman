@@ -227,11 +227,13 @@ paths:
               properties:
                 host:
                   type: string
-                  description: IP or hostname of the Hue bridge
+                  description: IP address or hostname of the Hue bridge, without scheme, port or path
                 timeoutMs:
                   type: integer
+                  minimum: 1
+                  maximum: 12000
                   default: 10000
-                  description: Request timeout in milliseconds
+                  description: Timeout in milliseconds for each of the cert probe and the pair request (max 12000)
       responses:
         "200":
           description: Pairing successful
@@ -252,7 +254,7 @@ paths:
                         type: string
                         description: SHA-256 fingerprint of the bridge TLS certificate (hex)
         "400":
-          description: Missing host or link button not pressed
+          description: Invalid host or timeoutMs, or link button not pressed
           content:
             application/json:
               schema:
