@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -101,6 +101,20 @@ describe("loadEncryptorFromEnv (passphrase KDF + migration)", () => {
     const ct = loadEncryptorFromEnv("passphrase", dir).encrypt("v");
     // second load in the same data dir must derive the same scrypt key
     expect(loadEncryptorFromEnv("passphrase", dir).decrypt(ct)).toBe("v");
+  });
+
+  it("refuses to replace an empty or corrupt salt file", () => {
+    // Regression: an empty salt file was silently overwritten with a new salt,
+    // so every record encrypted under the old one stopped decrypting.
+    for (const contents of ["", "not-a-salt"]) {
+      const dir = freshDir();
+      const saltFile = join(dir, "master.key.salt");
+      writeFileSync(saltFile, contents);
+      expect(() => loadEncryptorFromEnv("passphrase", dir)).toThrow(
+        /salt file is empty or corrupt/
+      );
+      expect(readFileSync(saltFile, "utf8")).toBe(contents);
+    }
   });
 
   it("uses a 32-byte base64 key directly (no scrypt, no salt file)", () => {

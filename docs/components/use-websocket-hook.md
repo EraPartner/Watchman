@@ -2,7 +2,7 @@
 title: useWebSocket Hook
 type: component
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags: [hook, frontend, react, websocket, real-time, singleton]
 description: Global singleton WebSocket hook with automatic reconnection, exponential backoff, connection throttling, and batched targeted React Query invalidation
 aliases: [websocket hook, real-time hook, ws hook]
@@ -37,7 +37,7 @@ The hook uses module-level globals to maintain a single connection:
 | Constant                   | Value    | Description                                    |
 | -------------------------- | -------- | ---------------------------------------------- |
 | `CONNECTION_THROTTLE_MS`   | 5,000ms  | Minimum time between connection attempts       |
-| `MAX_RECONNECT_ATTEMPTS`   | 5        | Maximum reconnection attempts before giving up |
+| `MAX_RECONNECT_ATTEMPTS`   | 5        | Attempts before the one-time failure toast; retries continue every 30s after it |
 | `INITIAL_RECONNECT_DELAY`  | 1,000ms  | Initial delay before first reconnect           |
 | `MAX_RECONNECT_DELAY`      | 30,000ms | Maximum delay between reconnect attempts       |
 | `INVALIDATION_DEBOUNCE_MS` | 150ms    | Debounce time for batched cache invalidations  |
@@ -115,7 +115,7 @@ Coverage now includes focused hook tests in [[apps/frontend/src/hooks/useWebSock
 - Tor invalidation family coverage (`queryKeys.torRelay()`) during relevant service updates
 - Router invalidation family coverage (`queryKeys.routerArp(...)`) for `router` instance update paths
 - metrics invalidation + connection toast behavior coverage (`queryKeys.metrics()` and `connection` message handling)
-- max reconnect attempts error-path coverage (stops retry loop and surfaces terminal reconnect failure behavior)
+- max reconnect attempts: the failure toast shows once, and retries continue at the 30s cap
 - test cleanup stability coverage for singleton/global WebSocket state reset between tests
 
 ## Return Value
@@ -151,7 +151,9 @@ function Dashboard() {
 - **Global singleton** — Prevents multiple WebSocket connections across React component re-renders and multiple hook usages
 - **Subscriber pattern** — Components subscribe to global state changes rather than each managing their own connection
 - **Debounced + targeted invalidation** — Prevents React Query thrashing while keeping base and instance service keys in sync
-- **Connection throttling** — Prevents rapid-fire connection attempts that could overwhelm the server
+- **Connection throttling** — Prevents rapid-fire connection attempts that could overwhelm the server. An attempt inside the 5s window is deferred to the end of the window, not dropped, so a reconnect during a short backend outage still retries
+- **Catch-up on reconnect** — After a reconnect (not the first connect), invalidates `profiles`, `activeProfile`, `currentNetwork`, `servicesInstances` and `servicesHealth`, since frames sent while disconnected are lost
+- **Instance on events** — Republishes each frame's `instanceId` on the `wsEventBus`, so per-instance consumers (the detail sheet event log, via `isEventForInstance`) can ignore sibling instances
 - **Clean close detection** — Only reconnects if the close wasn't intentional (code !== 1000)
 - **Derived WebSocket URL** — Uses `getWebSocketUrl()` to choose `ws`/`wss` based on environment and backend URL settings (`[[apps/frontend/src/lib/backendUrl.ts]]`)
 

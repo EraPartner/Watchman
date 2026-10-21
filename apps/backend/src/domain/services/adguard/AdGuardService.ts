@@ -178,10 +178,12 @@ export class AdGuardService extends BaseService {
       ]);
 
       const totalQueries = stats.num_dns_queries ?? 0;
+      // Safe-search hits are rewritten to the engine's safe endpoint and still
+      // answered, so they are not blocks (AdGuard lists them separately as
+      // "enforced safe search"); safebrowsing/parental hits are blocked.
       const blockedQueries =
         (stats.num_blocked_filtering ?? 0) +
         (stats.num_replaced_safebrowsing ?? 0) +
-        (stats.num_replaced_safesearch ?? 0) +
         (stats.num_replaced_parental ?? 0);
       const allowedQueries = totalQueries - blockedQueries;
       const blockingRate =
@@ -209,7 +211,8 @@ export class AdGuardService extends BaseService {
           blockedQueries,
           allowedQueries,
           blockingRate,
-          avgProcessingTime: stats.avg_processing_time ?? 0,
+          // AdGuard reports seconds; the metric is documented in ms
+          avgProcessingTime: secondsToMs(stats.avg_processing_time) ?? 0,
           topBlockedDomain: topKey(stats.top_blocked_domains),
           topQueriedDomain: topKey(stats.top_queried_domains),
           topClient: topKey(stats.top_clients),
@@ -273,6 +276,11 @@ function topKey(arr: Array<Record<string, number>> | undefined): string {
   if (!first) return "N/A";
   const key = Object.keys(first)[0];
   return key ?? "N/A";
+}
+
+function secondsToMs(value: number | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.round(value * 1000 * 100) / 100;
 }
 
 /** Average response time (seconds → ms) of the top upstream, when the

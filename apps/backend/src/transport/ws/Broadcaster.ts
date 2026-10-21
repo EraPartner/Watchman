@@ -83,6 +83,16 @@ export class Broadcaster {
           type: "profile_network_unrecognized",
           signature: p.signature,
         });
+      }),
+      // Service ids are kind:instanceId (BaseService.id). Once an instance is
+      // gone its error state must go too, or a later instance with the same
+      // id has its first failure suppressed and its first success announced
+      // as a recovery.
+      this.deps.bus.on("config:service.deleted", (p) => {
+        this.erroredIds.delete(`${p.kind}:${p.instanceId}`);
+      }),
+      this.deps.bus.on("config:service.renamed", (p) => {
+        this.erroredIds.delete(`${p.kind}:${p.oldInstanceId}`);
       })
     );
   }

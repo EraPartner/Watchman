@@ -2,7 +2,7 @@
 title: qBittorrent Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -72,7 +72,7 @@ QB1 implements efficient state synchronization using qBittorrent's incremental m
 
 - **`/api/v2/sync/maindata?rid={rid}`** — Server returns `full_update: true` on init or state reset; delta otherwise. On full update, service replaces cached state. On delta, service merges `server_state` and merges each torrent **field-wise** (deltas carry only changed fields per torrent), removing entries from `torrents_removed`. Transfer speeds and session totals come from `server_state` inside maindata — `/api/v2/transfer/info` is no longer fetched.
 - **`activeTorrents`** — derived from the synced maindata cache (no extra `/torrents/info` fetch per poll): torrents with non-zero combined dl+ul speed, sorted by combined speed, top 20. Each entry carries hash, name, state, progress, dlspeed, upspeed, size, downloaded, uploaded, eta, category.
-- **`/api/v2/log/main?type=12&last_known_id={lastLogId}`** — Log entries of type warning (4) and critical (8). Persisted cursor (lastLogId) prevents re-fetch.
+- **`/api/v2/log/main?normal=false&info=false&warning=true&critical=true&last_known_id={lastLogId}`** — Warning (type 4) and critical (type 8) log entries. Persisted cursor (lastLogId) prevents re-fetch; the newest 20 of each are kept across polls.
 
 Steady-state polling therefore requires only **2 outbound requests per cycle**: incremental maindata + log cursor.
 
@@ -103,8 +103,8 @@ Steady-state polling therefore requires only **2 outbound requests per cycle**: 
 | `dhtNodes`            | number        | Number of DHT nodes                                                                                     |
 | `freeSpaceOnDisk`     | number        | Free disk space (bytes)                                                                                 |
 | `activeTorrents`      | TorrentInfo[] | Top 20 torrents by combined dl+ul speed                                                                 |
-| `recentErrors`        | string[]      | Critical log messages since last poll                                                                   |
-| `recentWarnings`      | string[]      | Warning log messages since last poll                                                                    |
+| `recentErrors`        | string[]      | Newest 20 critical log messages, newest first (kept across polls)                                       |
+| `recentWarnings`      | string[]      | Newest 20 warning log messages, newest first (kept across polls)                                        |
 
 > [!note] Removed: `uptime`
 > The `uptime` field has been removed. qBittorrent's `sync/maindata` `server_state` has no uptime field — the value was always 0 and carried no diagnostic information.

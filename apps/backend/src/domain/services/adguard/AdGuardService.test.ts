@@ -74,7 +74,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
         num_replaced_safebrowsing: 10,
         num_replaced_safesearch: 5,
         num_replaced_parental: 0,
-        avg_processing_time: 1.5,
+        avg_processing_time: 0.0758,
         top_blocked_domains: [{ "ads.example.com": 50 }],
         top_queried_domains: [{ "good.example.com": 200 }],
         top_clients: [{ "192.168.1.10": 500 }],
@@ -264,9 +264,11 @@ describe("AdGuardService", () => {
     if (res.ok) {
       expect(res.value.metrics).toMatchObject({
         totalQueries: 1000,
-        blockedQueries: 115,
-        allowedQueries: 885,
-        blockingRate: 11.5,
+        // 100 filtering + 10 safebrowsing + 0 parental; the 5 safe-search
+        // rewrites are answered, not blocked
+        blockedQueries: 110,
+        allowedQueries: 890,
+        blockingRate: 11,
         topBlockedDomain: "ads.example.com",
         topQueriedDomain: "good.example.com",
         topClient: "192.168.1.10",
@@ -347,7 +349,7 @@ describe("AdGuardService", () => {
     if (res.ok) {
       // Core metrics intact
       expect(res.value.metrics.totalQueries).toBe(1000);
-      expect(res.value.metrics.blockingRate).toBe(11.5);
+      expect(res.value.metrics.blockingRate).toBe(11);
       // Optional metrics fall back to null/0
       expect(res.value.metrics.filteringEnabled).toBeNull();
       expect(res.value.metrics.filterCount).toBe(0);
@@ -374,6 +376,22 @@ describe("AdGuardService", () => {
         "https://dns.cloudflare.com/dns-query"
       );
       expect(res.value.metrics.topUpstreamAvgMs).toBe(12.3);
+    }
+  });
+
+  it("getStats converts avg_processing_time from seconds to ms", async () => {
+    // AdGuard Home reports avg_processing_time in seconds (e.g. 0.0758);
+    // the metric and the "Avg proc (ms)" tile are in milliseconds
+    const svc = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.avgProcessingTime).toBe(75.8);
     }
   });
 

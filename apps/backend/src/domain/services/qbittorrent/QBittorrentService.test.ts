@@ -26,6 +26,13 @@ let state: {
   transferInfoCalls: number;
   versionCalls: number;
   preferencesCalls: number;
+  lastLogQuery: string;
+  extraLogEntries: Array<{
+    id: number;
+    message: string;
+    timestamp: number;
+    type: number;
+  }>;
 };
 
 const TORRENT_LIST = [
@@ -154,7 +161,10 @@ function handler(req: IncomingMessage, res: ServerResponse) {
       parsed.searchParams.get("last_known_id") ?? "-1",
       10
     );
-    const filtered = LOG_ENTRIES.filter((e) => e.id > lastKnownId);
+    state.lastLogQuery = parsed.search.replace(/^\?/, "");
+    const filtered = [...LOG_ENTRIES, ...state.extraLogEntries].filter(
+      (e) => e.id > lastKnownId
+    );
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(filtered));
   } else {
@@ -193,6 +203,8 @@ beforeEach(() => {
     transferInfoCalls: 0,
     versionCalls: 0,
     preferencesCalls: 0,
+    lastLogQuery: "",
+    extraLogEntries: [],
   };
 });
 
@@ -402,7 +414,7 @@ describe("QBittorrentService", () => {
     }
   });
 
-  it("log entries only fetched after last known id", async () => {
+  it("log entries only fetched after last known id, recent list persists", async () => {
     const svc = new QBittorrentService({
       http: createHttpClient(),
       ping: fakePing(),
@@ -422,7 +434,8 @@ describe("QBittorrentService", () => {
       expect(recentWarnings).toHaveLength(1);
     }
 
-    // Second call: last_known_id=2 → no new entries
+    // Second call: last_known_id=2 → no new entries, but the recent
+    // warnings/errors stay visible instead of vanishing after one poll
     const res2 = await svc.getStats(new AbortController().signal);
     expect(res2.ok).toBe(true);
     if (res2.ok) {
@@ -430,8 +443,49 @@ describe("QBittorrentService", () => {
         recentErrors: string[];
         recentWarnings: string[];
       };
-      expect(recentErrors).toHaveLength(0);
-      expect(recentWarnings).toHaveLength(0);
+      expect(recentErrors).toEqual(["Disk write error"]);
+      expect(recentWarnings).toEqual(["Tracker warning"]);
+    }
+    expect(state.lastLogQuery).toContain("last_known_id=2");
+  });
+
+  it("log/main requests only warning and critical entries", async () => {
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    await svc.getStats(new AbortController().signal);
+    // qBittorrent's log/main filters with normal/info/warning/critical
+    // booleans; there is no `type` parameter
+    const q = new URLSearchParams(state.lastLogQuery);
+    expect(q.get("normal")).toBe("false");
+    expect(q.get("info")).toBe("false");
+    expect(q.get("warning")).toBe("true");
+    expect(q.get("critical")).toBe("true");
+    expect(q.has("type")).toBe(false);
+  });
+
+  it("recent errors are newest first and capped", async () => {
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    state.extraLogEntries = Array.from({ length: 25 }, (_, i) => ({
+      id: 10 + i,
+      message: `err ${i}`,
+      timestamp: 1_700_000_010 + i,
+      type: 8,
+    }));
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const { recentErrors } = res.value.metrics as { recentErrors: string[] };
+      expect(recentErrors).toHaveLength(20);
+      expect(recentErrors[0]).toBe("err 24");
     }
   });
 

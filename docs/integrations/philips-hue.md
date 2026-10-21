@@ -129,7 +129,7 @@ When `applicationKey` is set, `getStats` returns:
 }
 ```
 
-Light counts are served from the live SSE map (no HTTP fetch) when the eventstream is healthy and seeded; otherwise they fall back to `GET /clip/v2/resource/light`. The Zigbee, battery, device, and room values are fetched via slow-lane TTL-memoized calls (`/resource/zigbee_connectivity`, `/resource/device_power`, `/resource/device`, `/resource/room`) that refresh every 5 minutes.
+Light counts are served from the live SSE map (no HTTP fetch) when the eventstream is healthy and seeded by a full light fetch; otherwise they fall back to `GET /clip/v2/resource/light`, which rebuilds the map. SSE `delete` events remove lights, and an eventstream error forces a re-seed on the next poll. The Zigbee, battery, device, and room values are fetched via slow-lane TTL-memoized calls (`/resource/zigbee_connectivity`, `/resource/device_power`, `/resource/device`, `/resource/room`) that refresh every 5 minutes.
 
 ### Charts (X3 Task)
 
