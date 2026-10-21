@@ -221,7 +221,7 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
     kind: "albyHub",
     label: "Alby Hub",
     description:
-      "Alby Hub Lightning service. Probes legacy candidate paths by default; switch to NWC for deterministic /api/info + /api/apps polling.",
+      "Alby Hub Lightning service. Polls the deterministic NWC API (/api/info + /api/apps) by default; enable legacy probe mode for hubs without it.",
     schema: AlbyHubInstanceSchema,
     fields: withCommon([
       { name: "baseUrl", label: "Base URL", type: "url", required: true },
@@ -230,7 +230,7 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
         name: "legacyProbe",
         label: "Legacy probe mode",
         type: "boolean",
-        default: true,
+        default: false,
         help: "On: probe a list of candidate paths to discover endpoints (backward-compatible). Off: use deterministic NWC API (/api/info + /api/apps) for richer stats (connected, setupCompleted, backendType, appCount).",
       },
     ]),
