@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { SERVER_VERSION } from '../../../version.js';
 
 export const metaRoutes: FastifyPluginAsync = async (app) => {
   app.get('/meta/health', async () => ({
@@ -8,8 +9,10 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
     timestamp: new Date().toISOString(),
   }));
 
+  // Not npm_package_version: it is only set under npm scripts, so the desktop
+  // app and `node dist/index.js` reported "dev".
   app.get('/meta/version', async () => ({
-    version: process.env.npm_package_version ?? 'dev',
+    version: SERVER_VERSION,
     node: process.version,
   }));
 };

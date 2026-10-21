@@ -1549,8 +1549,8 @@
               {
                 "from": "app.bootstrap",
                 "to": "app.shutdown",
-                "payload": "registerShutdown({ close: poller.stop → lifecycle.stop → dbPool.close → app.close })",
-                "annotation": "SIGTERM/SIGINT chain — every service's onStop runs before DuckDB and Fastify close."
+                "payload": "registerShutdown({ close: app.close → networkWatcher.stop → poller.stop → lifecycle.stop → snapshots.stop → dbPool.close })",
+                "annotation": "SIGTERM/SIGINT/SIGHUP chain — Fastify drains requests first, every service's onStop runs, DuckDB closes last. Forced exit after 10 s."
               }
             ]
           },
@@ -2674,7 +2674,7 @@
             "id": "graceful-shutdown",
             "name": "Graceful shutdown",
             "category": "Lifecycle",
-            "summary": "SIGTERM/SIGINT chain: poller stops, lifecycle stops every service, DuckDB and Fastify close cleanly.",
+            "summary": "SIGTERM/SIGINT/SIGHUP chain: Fastify drains, poller stops, lifecycle stops every service, DuckDB closes last; forced exit after 10 s.",
             "steps": [
               {
                 "from": "electron",
@@ -2687,6 +2687,18 @@
                 "to": "app.shutdown",
                 "payload": "process receives SIGTERM",
                 "annotation": "registerShutdown wires SIGTERM + SIGINT to the same chain."
+              },
+              {
+                "from": "app.shutdown",
+                "to": "be.cors",
+                "payload": "app.close()",
+                "annotation": "Fastify drains open connections; wsPlugin onClose hook closes every WS with 1001 server_shutdown."
+              },
+              {
+                "from": "be.cors",
+                "to": "fe.api",
+                "payload": "client connections drained",
+                "annotation": "Frontend ApiClient sees a clean disconnect — useWebSocket queues a reconnect attempt."
               },
               {
                 "from": "app.shutdown",
@@ -2710,19 +2722,7 @@
                 "from": "app.shutdown",
                 "to": "data.duckdb",
                 "payload": "dbPool.close()",
-                "annotation": "DuckDB pool drained before Fastify; ensures audit rows from in-flight writes are flushed."
-              },
-              {
-                "from": "app.shutdown",
-                "to": "be.cors",
-                "payload": "app.close()",
-                "annotation": "Fastify drains open connections; wsPlugin onClose hook closes every WS with 1001 server_shutdown."
-              },
-              {
-                "from": "be.cors",
-                "to": "fe.api",
-                "payload": "client connections drained",
-                "annotation": "Frontend ApiClient sees a clean disconnect — useWebSocket queues a reconnect attempt."
+                "annotation": "Last step, so no request or service still uses a connection: close() force-closes borrowed connections and releases the file lock. A failing earlier step does not skip it."
               }
             ]
           },

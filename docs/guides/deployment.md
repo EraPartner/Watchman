@@ -149,7 +149,7 @@ server {
 
 ## Process Management
 
-Run the backend from `apps/backend/` so that `dotenv` finds `.env.local` (or `.env`) there and a relative `DATA_DIR` resolves to `apps/backend/data`. The backend shuts down cleanly on `SIGTERM`, `SIGINT`, and `SIGHUP`.
+Run the backend from `apps/backend/` so that `dotenv` finds `.env.local` (or `.env`) there and a relative `DATA_DIR` resolves to `apps/backend/data`. The backend shuts down cleanly on `SIGTERM`, `SIGINT`, and `SIGHUP`: it stops the HTTP/WebSocket server first, then the services, and closes DuckDB last. If that takes longer than 10 seconds it exits with code 1.
 
 ### systemd
 

@@ -59,7 +59,7 @@ The response is not wrapped in a `{ data }` envelope.
 
 ## Version Endpoint
 
-`GET /meta/version` returns `{ "version": string, "node": string }`. `version` comes from `npm_package_version`, so it is `"dev"` when the backend runs as `node dist/index.js` outside an npm script.
+`GET /meta/version` returns `{ "version": string, "node": string }`. `version` is `SERVER_VERSION` from `apps/backend/src/version.ts` (kept equal to the backend `package.json` version by a test), the same value the WebSocket `connection` frame reports.
 
 ## Usage
 
