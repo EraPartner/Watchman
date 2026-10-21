@@ -287,8 +287,7 @@ Same as `GET /config/services/{id}` below. Also emits `config:service.created` e
 
 **Error Codes:**
 
-- `400 VALIDATION` — Config missing required fields or invalid per kind schema
-- `409 CONFLICT` — Duplicate name or kind+instanceId already exists
+- `400 VALIDATION` — Config missing required fields or invalid per kind schema, unknown `profileId`, or kind+instanceId already exists
 
 ---
 
@@ -326,6 +325,7 @@ Fetch a single service instance.
 **Error Codes:**
 
 - `404 NOT_FOUND` — Service instance not found
+- `409 CONFLICT` — The stored row fails to load (it is listed in `GET /config/load-errors`); delete it and add the service again
 
 ---
 

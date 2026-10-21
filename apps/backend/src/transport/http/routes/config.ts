@@ -4,6 +4,7 @@ import type { ServiceLifecycle } from "../../../application/ServiceLifecycle.js"
 import type { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
 import type { ProfileStore } from "../../../config/store/ProfileStore.js";
 import { KIND_META, SERVICE_KINDS } from "../../../config/schemas/index.js";
+import { isDomainError } from "../../../core/errors.js";
 
 export interface ConfigRouteDeps {
   store: ConfigStore;
@@ -51,7 +52,22 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
     app.get<{ Params: { id: string } }>(
       "/config/services/:id",
       async (req, reply) => {
-        const s = await store.get(req.params.id);
+        let s: Awaited<ReturnType<ConfigStore["get"]>>;
+        try {
+          s = await store.get(req.params.id);
+        } catch (e) {
+          // A row listed in /config/load-errors (e.g. secrets that no longer
+          // decrypt) can't be parsed; that is a state problem, not a 500.
+          if (isDomainError(e)) throw e;
+          return reply.status(409).send({
+            error: {
+              code: "CONFLICT",
+              message: `stored service fails to load (${
+                e instanceof Error ? e.message : String(e)
+              }); delete it under Settings > Services and add it again`,
+            },
+          });
+        }
         if (!s)
           return reply
             .status(404)

@@ -353,6 +353,7 @@ paths:
                 properties:
                   data: { $ref: "#/components/schemas/ServiceInstance" }
         "404": { $ref: "#/components/responses/DomainError" }
+        "409": { $ref: "#/components/responses/DomainError" }
     put:
       tags: [config]
       summary: |

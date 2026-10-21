@@ -258,6 +258,28 @@ describe("GET /config/services/:id", () => {
     expect(res.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
   });
 
+  it("returns 409 CONFLICT, not 500, for a row that fails to load", async () => {
+    const store = makeFakeStore({
+      get: vi.fn(async () => {
+        throw new Error("Unsupported state or unable to authenticate data");
+      }),
+    });
+    const app = await makeApp(store);
+    const res = await app.inject({
+      method: "GET",
+      url: "/config/services/bad-row",
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "CONFLICT",
+        message: expect.stringContaining("fails to load"),
+      },
+    });
+  });
+
   it("returns redacted service when found", async () => {
     const stored = makeStoredService();
     const redacted = makeRedacted();

@@ -665,6 +665,7 @@ export interface paths {
                     };
                 };
                 404: components["responses"]["DomainError"];
+                409: components["responses"]["DomainError"];
             };
         };
         /**
