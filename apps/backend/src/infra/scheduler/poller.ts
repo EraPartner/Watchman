@@ -23,6 +23,10 @@ export interface Poller {
 
 type Task = { cancel: () => void };
 
+// Aborted when the task is cancelled (untrack/stop), so an in-flight probe is
+// cut short and its late result is not published for a torn-down service.
+type Runner = (taskSignal: AbortSignal) => Promise<void>;
+
 export function createBackgroundPoller(opts: PollerOptions): Poller {
   const { clock, bus, logger } = opts;
   const timeoutMs = opts.defaultTimeoutMs ?? 10_000;
@@ -38,17 +42,18 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
   const schedule = (
     svc: BaseService,
     intervalMs: number,
-    runner: () => Promise<void>
+    runner: Runner
   ): Task => {
     let cancelled = false;
     let cancelTimer: (() => void) | null = null;
+    const controller = new AbortController();
     const ratio = svc.pollPolicy.jitterRatio ?? 0.1;
 
     const tick = async (): Promise<void> => {
       if (cancelled) return;
       if (!paused) {
         try {
-          await runner();
+          await runner(controller.signal);
         } catch (e) {
           logger.error({ err: e, id: svc.id }, "poller tick failed");
         }
@@ -73,6 +78,7 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
       cancel: () => {
         cancelled = true;
         cancelTimer?.();
+        controller.abort(new Error(`poller task cancelled: ${svc.id}`));
       },
     };
   };
@@ -81,50 +87,60 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
     track(svc) {
       if (tasks.has(svc.id)) return;
       services.set(svc.id, svc);
-      const healthTask = schedule(svc, svc.pollPolicy.healthMs, async () => {
-        const signal = withTimeout(timeoutMs);
-        const res = await svc.checkHealth(signal);
-        if (res.ok) {
-          bus.emit("service.health.updated", {
-            id: svc.id,
-            kind: svc.kind,
-            instanceId: svc.instanceId,
-            at: clock.now(),
-            snapshot: res.value,
-          });
-        } else {
-          bus.emit("service.error", {
-            id: svc.id,
-            kind: svc.kind,
-            instanceId: svc.instanceId,
-            scope: "health",
-            error: res.error,
-            at: clock.now(),
-          });
+      const healthTask = schedule(
+        svc,
+        svc.pollPolicy.healthMs,
+        async (taskSignal) => {
+          const signal = withTimeout(timeoutMs, taskSignal);
+          const res = await svc.checkHealth(signal);
+          if (taskSignal.aborted) return;
+          if (res.ok) {
+            bus.emit("service.health.updated", {
+              id: svc.id,
+              kind: svc.kind,
+              instanceId: svc.instanceId,
+              at: clock.now(),
+              snapshot: res.value,
+            });
+          } else {
+            bus.emit("service.error", {
+              id: svc.id,
+              kind: svc.kind,
+              instanceId: svc.instanceId,
+              scope: "health",
+              error: res.error,
+              at: clock.now(),
+            });
+          }
         }
-      });
-      const statsTask = schedule(svc, svc.pollPolicy.statsMs, async () => {
-        const signal = withTimeout(timeoutMs);
-        const res = await svc.getStats(signal);
-        if (res.ok) {
-          bus.emit("service.stats.updated", {
-            id: svc.id,
-            kind: svc.kind,
-            instanceId: svc.instanceId,
-            at: clock.now(),
-            snapshot: res.value,
-          });
-        } else {
-          bus.emit("service.error", {
-            id: svc.id,
-            kind: svc.kind,
-            instanceId: svc.instanceId,
-            scope: "stats",
-            error: res.error,
-            at: clock.now(),
-          });
+      );
+      const statsTask = schedule(
+        svc,
+        svc.pollPolicy.statsMs,
+        async (taskSignal) => {
+          const signal = withTimeout(timeoutMs, taskSignal);
+          const res = await svc.getStats(signal);
+          if (taskSignal.aborted) return;
+          if (res.ok) {
+            bus.emit("service.stats.updated", {
+              id: svc.id,
+              kind: svc.kind,
+              instanceId: svc.instanceId,
+              at: clock.now(),
+              snapshot: res.value,
+            });
+          } else {
+            bus.emit("service.error", {
+              id: svc.id,
+              kind: svc.kind,
+              instanceId: svc.instanceId,
+              scope: "stats",
+              error: res.error,
+              at: clock.now(),
+            });
+          }
         }
-      });
+      );
       tasks.set(svc.id, [healthTask, statsTask]);
     },
     untrack(id) {

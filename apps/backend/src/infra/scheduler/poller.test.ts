@@ -19,7 +19,9 @@ class Stub extends BaseService {
   ) {
     super();
   }
-  checkHealth(): Promise<HealthResult> {
+  lastHealthSignal: AbortSignal | undefined;
+  checkHealth(signal: AbortSignal): Promise<HealthResult> {
+    this.lastHealthSignal = signal;
     return this.healthImpl();
   }
   getStats(): Promise<StatsResult> {
@@ -89,5 +91,66 @@ describe('BackgroundPoller', () => {
     poller.track(svc);
     poller.track(svc);
     expect(poller.isRunning(svc.id)).toBe(true);
+  });
+
+  it('does not publish a result that lands after untrack, and aborts the probe', async () => {
+    const clock = createFakeClock();
+    const bus = createEventBus();
+    const health = vi.fn();
+    const errors = vi.fn();
+    bus.on('service.health.updated', health);
+    bus.on('service.error', errors);
+    let release!: (r: HealthResult) => void;
+    const svc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, async () =>
+      new Promise<HealthResult>((r) => {
+        release = r;
+      }),
+    );
+    const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
+    poller.track(svc);
+    clock.advance(110);
+    await new Promise((r) => setImmediate(r));
+    expect(svc.lastHealthSignal?.aborted).toBe(false);
+
+    // Edit/delete tears the service down while its probe is still in flight.
+    poller.untrack(svc.id);
+    expect(svc.lastHealthSignal?.aborted).toBe(true);
+    release(ok({ reachable: true, at: 0 }));
+    await new Promise((r) => setImmediate(r));
+
+    expect(health).not.toHaveBeenCalled();
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('a re-tracked service only publishes its own results, not the old instance\'s', async () => {
+    const clock = createFakeClock();
+    const bus = createEventBus();
+    const seen: Array<boolean> = [];
+    bus.on('service.health.updated', (p) => {
+      seen.push(p.snapshot!.reachable);
+    });
+    let releaseOld!: (r: HealthResult) => void;
+    const oldSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, async () =>
+      new Promise<HealthResult>((r) => {
+        releaseOld = r;
+      }),
+    );
+    const newSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, async () =>
+      ok({ reachable: true, at: 0 }),
+    );
+    const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
+    poller.track(oldSvc);
+    clock.advance(110);
+    await new Promise((r) => setImmediate(r));
+
+    poller.untrack(oldSvc.id);
+    poller.track(newSvc);
+    clock.advance(110);
+    await new Promise((r) => setImmediate(r));
+    releaseOld(ok({ reachable: false, at: 0 }));
+    await new Promise((r) => setImmediate(r));
+
+    expect(seen).toEqual([true]);
+    await poller.stop();
   });
 });
