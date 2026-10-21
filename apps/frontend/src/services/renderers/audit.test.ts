@@ -137,6 +137,7 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> =
       "host",
       "cpuLoad",
       "cpuTemp",
+      "cpuUsagePercent",
       "cpuUser",
       "cpuSys",
       "cpuIdle",
