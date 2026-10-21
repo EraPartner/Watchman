@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { DuckDBConnection } from "@duckdb/node-api";
 import type { DuckDbPool } from "../../infra/db/DuckDbPool.js";
 import { toTs } from "../../infra/db/DuckDbPool.js";
-import { ValidationError } from "../../core/errors.js";
+import { NotFoundError, ValidationError } from "../../core/errors.js";
 
 const NAME_MAX_LENGTH = 64;
 
@@ -41,6 +41,7 @@ export interface ProfileStore {
   listProfiles(): Promise<ReadonlyArray<Profile>>;
   getProfile(id: string): Promise<Profile | undefined>;
   createProfile(input: ProfileInput, actor?: string): Promise<Profile>;
+  /** Throws NotFoundError for an unknown id, ValidationError for bad input. */
   updateProfile(
     id: string,
     patch: ProfileInput,
@@ -268,7 +269,7 @@ export function createProfileStore(
       actor?: string
     ): Promise<Profile> {
       const existing = await this.getProfile(id);
-      if (!existing) throw new ValidationError(`profile not found: ${id}`);
+      if (!existing) throw new NotFoundError(`profile not found: ${id}`);
       const name =
         patch.name === undefined ? existing.name : normalizeName(patch.name);
       const description =

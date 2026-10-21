@@ -68,6 +68,15 @@ dependency audit, and documentation aligned with the code.
 - Setup wizard: pressing Finish after adding a service sent you back to the
   wizard, because the dashboard gate used the cached "needs setup" answer.
   Adding, deleting or importing services now clears that cached answer.
+- Profiles: a manual profile switch is no longer undone when one network check
+  misses the gateway's MAC address or finds no default route on an unchanged
+  LAN.
+- Profiles: a failed automatic switch is retried on the next network check
+  instead of being recorded as done.
+- Profiles: shutdown waits for a network check in progress, so it cannot switch
+  profiles after services have stopped.
+- Profiles: clearing a profile's description in Settings now saves. Renaming a
+  profile to a name that contains "not found" returns 400, not 404.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.

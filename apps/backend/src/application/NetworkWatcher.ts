@@ -51,55 +51,75 @@ export function createNetworkWatcher(
     opts.clearInterval ?? ((h) => clearInterval(h as NodeJS.Timeout));
 
   let handle: unknown;
-  let running = false;
+  let inFlight: Promise<void> | undefined;
+
+  async function runTick(): Promise<void> {
+    const sig = await detector.detect();
+    const last = await profiles.getLastSignature();
+    // Unchanged network → do nothing. This is also what makes a manual switch
+    // "stick": a manual switch leaves lastSignature alone, so the watcher won't
+    // revert it until the LAN actually changes.
+    if (signaturesEqual(sig, last)) return;
+    // A missing reading is not a network change: no default route at all, or
+    // the same gateway IP whose MAC the ARP lookup missed this time. Recording
+    // it would make the next full reading look like a change and revert a
+    // manual switch on an unchanged LAN.
+    if (!sig.gatewayIp && !sig.gatewayMac) return;
+    if (
+      !sig.gatewayMac &&
+      last?.gatewayMac &&
+      sig.gatewayIp === last.gatewayIp
+    ) {
+      return;
+    }
+
+    if (!sig.gatewayMac) {
+      // Can't reliably identify the network; never auto-switch on a weak signal.
+      logger.debug(
+        { signature: sig },
+        "network changed but no gateway MAC; not auto-switching"
+      );
+      await profiles.setLastSignature(sig);
+      return;
+    }
+
+    const list = await profiles.listProfiles();
+    const matchId = matchProfileId(list, sig.gatewayMac);
+    const activeId = await profiles.getActiveProfileId();
+
+    if (!matchId) {
+      logger.info(
+        { signature: redact(sig) },
+        "network unrecognized; staying on current profile"
+      );
+      await profiles.setLastSignature(sig);
+      bus.emit("profile.network.unrecognized", { signature: sig });
+      return;
+    }
+
+    const autoSwitch = await profiles.getAutoSwitch();
+    if (autoSwitch && matchId !== activeId) {
+      logger.info(
+        { from: activeId, to: matchId, signature: redact(sig) },
+        "auto-switching active profile for detected network"
+      );
+      await lifecycle.switchActiveProfile(matchId, "auto");
+    }
+    // Record the signature only once it has been acted on, so a failed switch
+    // is retried on the next tick instead of being treated as handled.
+    await profiles.setLastSignature(sig);
+  }
 
   async function tick(): Promise<void> {
-    if (running) return; // never overlap detection cycles
-    running = true;
-    try {
-      const sig = await detector.detect();
-      const last = await profiles.getLastSignature();
-      // Unchanged network → do nothing. This is also what makes a manual switch
-      // "stick": a manual switch leaves lastSignature alone, so the watcher won't
-      // revert it until the LAN actually changes.
-      if (signaturesEqual(sig, last)) return;
-      await profiles.setLastSignature(sig);
-
-      if (!sig.gatewayMac) {
-        // Can't reliably identify the network; never auto-switch on a weak signal.
-        logger.debug(
-          { signature: sig },
-          "network changed but no gateway MAC; not auto-switching"
-        );
-        return;
-      }
-
-      const list = await profiles.listProfiles();
-      const matchId = matchProfileId(list, sig.gatewayMac);
-      const activeId = await profiles.getActiveProfileId();
-
-      if (!matchId) {
-        logger.info(
-          { signature: redact(sig) },
-          "network unrecognized; staying on current profile"
-        );
-        bus.emit("profile.network.unrecognized", { signature: sig });
-        return;
-      }
-
-      const autoSwitch = await profiles.getAutoSwitch();
-      if (autoSwitch && matchId !== activeId) {
-        logger.info(
-          { from: activeId, to: matchId, signature: redact(sig) },
-          "auto-switching active profile for detected network"
-        );
-        await lifecycle.switchActiveProfile(matchId, "auto");
-      }
-    } catch (err) {
-      logger.warn({ err }, "network detection tick failed");
-    } finally {
-      running = false;
-    }
+    if (inFlight) return; // never overlap detection cycles
+    inFlight = runTick()
+      .catch((err: unknown) => {
+        logger.warn({ err }, "network detection tick failed");
+      })
+      .finally(() => {
+        inFlight = undefined;
+      });
+    await inFlight;
   }
 
   return {
@@ -115,6 +135,9 @@ export function createNetworkWatcher(
         clearIntervalFn(handle);
         handle = undefined;
       }
+      // Let an in-flight tick finish so it cannot switch profiles (and bring
+      // services back up) after shutdown has moved on.
+      await inFlight;
     },
     tick,
   };
