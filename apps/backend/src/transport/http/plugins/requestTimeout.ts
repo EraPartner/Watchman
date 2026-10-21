@@ -21,7 +21,9 @@ const plugin: FastifyPluginAsync<RequestTimeoutOptions> = async (app, opts) => {
     const ac = new AbortController();
     req.abortController = ac;
     const timer = setTimeout(() => {
-      if (reply.sent) return;
+      // headersSent: a streamed payload has begun but not finished
+      // (reply.sent is still false); writing a 504 then would collide with it.
+      if (reply.sent || reply.raw.headersSent) return;
       ac.abort(new Error("request timed out"));
       void reply
         .status(504)

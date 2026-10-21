@@ -12,8 +12,14 @@ info:
 
     **CORS**: `watchman://` (Electron desktop) and loopback dev origins are
     always allowed; additional web origins are configured via the
-    `CORS_ALLOWED_ORIGINS` env var (comma-separated). Preflights from
-    disallowed origins are rejected with 403.
+    `CORS_ALLOWED_ORIGINS` env var (comma-separated). A request whose
+    `Origin` is neither allowed nor same-origin (Origin host equals the `Host`
+    header) is rejected with 403, preflight or not. Requests without an
+    `Origin` header are allowed.
+
+    **Host guard** (DNS rebinding): a request whose `Host` header is not
+    loopback, an IP literal, this machine's hostname (or its `.local` form),
+    or the host of a `CORS_ALLOWED_ORIGINS` entry is rejected with 403.
 
     **WebSocket** (`GET /ws`, not expressible in OpenAPI): browser-compatible
     upgrade gated by the same origin policy; no token is required (an optional
@@ -23,7 +29,9 @@ info:
     `service_update` (`scope: health|stats`, `kind`, `instanceId`, `snapshot?`),
     `service_config_changed` (`kind`, `instanceId`, `action: created|updated|deleted`),
     `alert` (`level: info|warning|error`, `message`, `service`/`kind`/`instanceId`;
-    emitted on a service's first poll failure and on recovery).
+    emitted on a service's first poll failure and on recovery),
+    `profile_switched` (`profileId`, `reason`),
+    `profile_network_unrecognized` (`signature`).
   version: 2.2.0
   license:
     name: AGPL-3.0-only
@@ -37,6 +45,7 @@ tags:
   - name: metrics
   - name: config
   - name: setup
+  - name: profiles
 paths:
   /meta/health:
     get:
@@ -439,7 +448,7 @@ paths:
         - name: limit
           in: query
           required: false
-          schema: { type: integer, minimum: 1, maximum: 500 }
+          schema: { type: integer, minimum: 1, maximum: 1000 }
       responses:
         "200":
           description: OK
@@ -715,6 +724,11 @@ components:
                 - TIMEOUT
                 - CIRCUIT_OPEN
                 - VALIDATION
+                - INTERNAL
+                - NOT_LIVE
+                - CONFLICT
+                - NO_NETWORK
+                - LINK_BUTTON_NOT_PRESSED
             message: { type: string }
     HostHealth:
       type: object
@@ -885,7 +899,17 @@ components:
         label: { type: string }
         type:
           type: string
-          enum: [string, number, boolean, secret, url, enum]
+          enum:
+            [
+              text,
+              password,
+              number,
+              url,
+              boolean,
+              select,
+              stringArray,
+              numberArray,
+            ]
         required: { type: boolean }
         secret: { type: boolean }
         placeholder: { type: string }
@@ -893,9 +917,10 @@ components:
         options:
           type: array
           items: { type: string }
+        default: { description: Default value for the field }
     KindSchema:
       type: object
-      required: [kind, label, fields]
+      required: [kind, label, fields, secretFields]
       properties:
         kind: { type: string }
         label: { type: string }
@@ -903,6 +928,10 @@ components:
         fields:
           type: array
           items: { $ref: "#/components/schemas/FieldMeta" }
+        secretFields:
+          type: array
+          items: { type: string }
+          description: Names of fields stored encrypted and returned as "***"
     ServiceInstance:
       type: object
       required:
@@ -1018,26 +1047,45 @@ components:
         rpcPort: 8332
     TestConnectionResult:
       type: object
-      required: [ok]
+      required: [ok, latencyMs]
       properties:
         ok: { type: boolean }
         latencyMs: { type: number }
-        error: { type: string }
+        snapshot:
+          $ref: "#/components/schemas/HealthSnapshot"
+          description: Health snapshot (present when ok is true)
+        error:
+          type: object
+          description: Probe failure (present when ok is false)
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
     AuditEntry:
       type: object
-      required: [id, ts, action, targetKind, targetId]
+      required: [id, ts, action, targetKind, targetId, diff, actor]
       properties:
         id: { type: integer }
         ts: { type: string, format: date-time }
         action:
           type: string
-          enum: [create, update, delete, import, export]
-        targetKind: { type: string }
-        targetId: { type: string }
-        actor: { type: string }
-        diff:
-          type: object
-          additionalProperties: true
+          enum:
+            [
+              create,
+              update,
+              delete,
+              import,
+              export,
+              rename,
+              profile.create,
+              profile.update,
+              profile.delete,
+              profile.switch,
+            ]
+        targetKind: { type: [string, "null"] }
+        targetId: { type: [string, "null"] }
+        actor: { type: [string, "null"] }
+        diff: { description: JSON change payload, or null }
     ExportBundle:
       type: object
       required: [version, exportedAt, payload]

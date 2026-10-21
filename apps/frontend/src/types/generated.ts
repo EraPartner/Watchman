@@ -1434,7 +1434,7 @@ export interface components {
         DomainError: {
             error: {
                 /** @enum {string} */
-                code: "NOT_FOUND" | "UNAVAILABLE" | "UNAUTHORIZED" | "TIMEOUT" | "CIRCUIT_OPEN" | "VALIDATION";
+                code: "NOT_FOUND" | "UNAVAILABLE" | "UNAUTHORIZED" | "TIMEOUT" | "CIRCUIT_OPEN" | "VALIDATION" | "INTERNAL" | "NOT_LIVE" | "CONFLICT" | "NO_NETWORK" | "LINK_BUTTON_NOT_PRESSED";
                 message: string;
             };
         };
@@ -1559,18 +1559,22 @@ export interface components {
             name: string;
             label: string;
             /** @enum {string} */
-            type: "string" | "number" | "boolean" | "secret" | "url" | "enum";
+            type: "text" | "password" | "number" | "url" | "boolean" | "select" | "stringArray" | "numberArray";
             required?: boolean;
             secret?: boolean;
             placeholder?: string;
             help?: string;
             options?: string[];
+            /** @description Default value for the field */
+            default?: unknown;
         };
         KindSchema: {
             kind: string;
             label: string;
             description?: string;
             fields: components["schemas"]["FieldMeta"][];
+            /** @description Names of fields stored encrypted and returned as "***" */
+            secretFields: string[];
         };
         ServiceInstance: {
             id: string;
@@ -1667,21 +1671,26 @@ export interface components {
         };
         TestConnectionResult: {
             ok: boolean;
-            latencyMs?: number;
-            error?: string;
+            latencyMs: number;
+            /** @description Health snapshot (present when ok is true) */
+            snapshot?: components["schemas"]["HealthSnapshot"];
+            /** @description Probe failure (present when ok is false) */
+            error?: {
+                code: string;
+                message: string;
+            };
         };
         AuditEntry: {
             id: number;
             /** Format: date-time */
             ts: string;
             /** @enum {string} */
-            action: "create" | "update" | "delete" | "import" | "export";
-            targetKind: string;
-            targetId: string;
-            actor?: string;
-            diff?: {
-                [key: string]: unknown;
-            };
+            action: "create" | "update" | "delete" | "import" | "export" | "rename" | "profile.create" | "profile.update" | "profile.delete" | "profile.switch";
+            targetKind: string | null;
+            targetId: string | null;
+            actor: string | null;
+            /** @description JSON change payload, or null */
+            diff: unknown;
         };
         ExportBundle: {
             /** @enum {integer} */
