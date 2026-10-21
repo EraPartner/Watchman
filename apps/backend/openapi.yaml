@@ -1084,7 +1084,7 @@ components:
         targetKind: { type: [string, "null"] }
         targetId: { type: [string, "null"] }
         actor: { type: [string, "null"] }
-        diff: { description: JSON change payload, or null }
+        diff: { description: "JSON change payload, or null" }
     ExportBundle:
       type: object
       required: [version, exportedAt, payload]
