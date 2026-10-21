@@ -113,18 +113,18 @@ export class PiStatsCollector {
     }
 
     try {
-      const [revRes, verRes, tickRes] = await Promise.allSettled([
+      // pigpio's current tick is not an uptime source: it is an unsigned
+      // 32-bit microsecond counter that wraps every ~71.6 minutes. Uptime
+      // comes from /proc/uptime (direct SSH) or the relay's boot time.
+      const [revRes, verRes] = await Promise.allSettled([
         handle.getHardwareRevision(),
         handle.getPigpioVersion(),
-        handle.getCurrentTick(),
       ]);
       if (revRes.status === "fulfilled") {
         snapshot.hwRevision = revRes.value;
         snapshot.piModel = getPiModel(revRes.value);
       }
       if (verRes.status === "fulfilled") snapshot.pigpioVersion = verRes.value;
-      if (tickRes.status === "fulfilled")
-        snapshot.uptime = Math.floor(tickRes.value / 1_000_000);
     } finally {
       await handle.end().catch(() => undefined);
     }
@@ -184,6 +184,7 @@ export class PiStatsCollector {
     if (info.load !== null) snapshot.load = info.load;
     if (info.swap !== null) snapshot.swap = info.swap;
     if (info.memory !== null) snapshot.memory = info.memory;
+    if (info.uptime !== null) snapshot.uptime = info.uptime;
     if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
     if (info.processor !== null) snapshot.processor = info.processor;
     if (info.isRpi) snapshot.isRpi = true;
