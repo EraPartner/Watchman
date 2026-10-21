@@ -77,6 +77,21 @@ dependency audit, and documentation aligned with the code.
   profiles after services have stopped.
 - Profiles: clearing a profile's description in Settings now saves. Renaming a
   profile to a name that contains "not found" returns 400, not 404.
+- Frontend: the dashboard shows a "Couldn't load services" error with a Retry
+  button when `/instances` fails, instead of the "No services configured yet"
+  empty state.
+- Frontend: a tile for a specific instance no longer shows another instance's
+  error while its own health entry is missing from `/services`.
+- Frontend: navigating to another route clears the app error screen; before, it
+  stayed until a full reload.
+- Frontend: the console logger no longer leaks a secret that also appears in its
+  key (e.g. `password=pass`), and data fields named `level`, `message` or
+  `timestamp` no longer overwrite the log entry's own fields.
+- Frontend: the API client no longer retries a 503 whose error code is
+  `UNAVAILABLE` or `CIRCUIT_OPEN`, so a down service shows its error after one
+  request instead of after up to four retried calls per fetch.
+- Frontend: `formatBytes` returns `0 B` for negative values and keeps values
+  below 1 in bytes, instead of `NaN undefined` or a missing unit.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.
