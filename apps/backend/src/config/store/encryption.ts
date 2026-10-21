@@ -5,14 +5,8 @@ import {
   createHash,
   scryptSync,
 } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { readOrCreateSecretFile } from "../secretFile.js";
 
 const ALGO = "aes-256-gcm";
 const IV_LEN = 12;
@@ -169,25 +163,16 @@ function loadOrCreateSalt(dataDir: string): Buffer {
     ? dataDir
     : resolve(process.cwd(), dataDir);
   const saltFile = join(absoluteDir, SALT_FILE);
-  if (existsSync(saltFile)) {
-    // Never silently replace an existing salt: every passphrase-encrypted
-    // record depends on it. Fail loudly, like an empty master.key does.
-    const raw = readFileSync(saltFile, "utf8").trim();
-    const salt = Buffer.from(raw, "base64");
-    if (salt.length !== SALT_LEN) {
-      throw new Error(
-        `Master key salt file is empty or corrupt (expected ${SALT_LEN} bytes): ${saltFile}`
-      );
-    }
-    return salt;
-  }
-  mkdirSync(absoluteDir, { recursive: true });
-  const salt = randomBytes(SALT_LEN);
-  writeFileSync(saltFile, salt.toString("base64"), { mode: 0o600 });
-  try {
-    chmodSync(saltFile, 0o600);
-  } catch {
-    // ignore chmod failure on platforms without POSIX perms
+  // Never silently replace an existing salt: every passphrase-encrypted
+  // record depends on it. Fail loudly, like an empty master.key does.
+  const raw = readOrCreateSecretFile(saltFile, () =>
+    randomBytes(SALT_LEN).toString("base64")
+  ).trim();
+  const salt = Buffer.from(raw, "base64");
+  if (salt.length !== SALT_LEN) {
+    throw new Error(
+      `Master key salt file is empty or corrupt (expected ${SALT_LEN} bytes): ${saltFile}`
+    );
   }
   return salt;
 }
