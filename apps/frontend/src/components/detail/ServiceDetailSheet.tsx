@@ -422,7 +422,14 @@ export function ServiceDetailSheet({
                                   {m.label}
                                 </dt>
                                 <dd className="truncate font-mono tabular-nums text-[var(--text-hi)]">
-                                  {m.format(dotGet(statsMetrics, m.key))}
+                                  {m.format(
+                                    dotGet(
+                                      m.source === "health"
+                                        ? healthRaw
+                                        : statsMetrics,
+                                      m.key
+                                    )
+                                  )}
                                 </dd>
                               </div>
                             ))}
