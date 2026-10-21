@@ -27,6 +27,13 @@ import type {
  */
 const CONTROL_PORT_FALLBACK_COOLDOWN_MS = 5 * 60 * 1000;
 
+/**
+ * Tor emits a BW event every second. With no event for this long the
+ * subscription is dead (never opened, or the socket dropped), so the rates
+ * are reported as unknown and the subscription is reopened.
+ */
+const BW_STALE_MS = 30 * 1000;
+
 export interface TorDeps {
   http: HttpClient;
   ping: PingProber;
@@ -84,6 +91,12 @@ export class TorService extends BaseService {
   private subAbort: AbortController | undefined;
   private bwRead = 0;
   private bwWritten = 0;
+  /** Time of the last BW event; null = none since the last subscribe */
+  private lastBwAt: number | null = null;
+  /** Time the current subscription was opened; null = no subscription */
+  private subscribedAt: number | null = null;
+  private resubscribing = false;
+  private stopped = false;
   /** Cumulative traffic/read from last poll; -1 = no baseline yet */
   private lastTrafficRead = -1;
   /** Cumulative traffic/written from last poll; -1 = no baseline yet */
@@ -112,8 +125,14 @@ export class TorService extends BaseService {
   }
 
   async onStart(): Promise<void> {
+    this.stopped = false;
+    await this.subscribe();
+  }
+
+  private async subscribe(): Promise<void> {
     if (!this.useControlPort || !this.eventSubFactory) return;
     this.subAbort = new AbortController();
+    this.lastBwAt = null;
     const sub = await this.eventSubFactory.create(
       {
         host: this.host,
@@ -127,16 +146,58 @@ export class TorService extends BaseService {
     sub.on("BW", (_event, args) => {
       this.bwRead = parseInt(args[0] ?? "0", 10);
       this.bwWritten = parseInt(args[1] ?? "0", 10);
+      this.lastBwAt = this.now();
     });
     await sub.setevents(["BW"], this.subAbort.signal);
+    if (this.stopped) {
+      await sub.close().catch(() => undefined);
+      return;
+    }
     this.subscription = sub;
+    this.subscribedAt = this.now();
+  }
+
+  /** True when a BW event arrived recently enough to trust bwRead/bwWritten. */
+  private bwFresh(): boolean {
+    return this.lastBwAt !== null && this.now() - this.lastBwAt <= BW_STALE_MS;
+  }
+
+  /** Reopen the BW subscription when it failed at start or has gone quiet.
+   *  Best-effort and in the background, so a stats poll never waits on it. */
+  private maybeResubscribe(): void {
+    if (!this.useControlPort || !this.eventSubFactory) return;
+    if (this.resubscribing || this.stopped || this.bwFresh()) return;
+    // a fresh subscription gets BW_STALE_MS to deliver its first event
+    if (
+      this.subscription &&
+      this.subscribedAt !== null &&
+      this.now() - this.subscribedAt <= BW_STALE_MS
+    ) {
+      return;
+    }
+    this.resubscribing = true;
+    void (async () => {
+      try {
+        this.subAbort?.abort();
+        await this.subscription?.close().catch(() => undefined);
+        this.subscription = undefined;
+        this.subscribedAt = null;
+        await this.subscribe();
+      } catch {
+        // tor still unreachable; retried on the next stats poll
+      } finally {
+        this.resubscribing = false;
+      }
+    })();
   }
 
   async onStop(): Promise<void> {
+    this.stopped = true;
     this.subAbort?.abort();
     await this.subscription?.close().catch(() => undefined);
     this.subscription = undefined;
     this.subAbort = undefined;
+    this.subscribedAt = null;
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
@@ -348,6 +409,8 @@ export class TorService extends BaseService {
         const localCountry = countryInfo.get(`ip-to-country/${address}`) ?? "";
 
         const enriched = await this.enrich(signal);
+        const bwFresh = this.bwFresh();
+        this.maybeResubscribe();
         const country = localCountry !== "" ? localCountry : enriched.country;
         const consensusWeight = nsEntry.bandwidth ?? enriched.consensusWeight;
 
@@ -361,8 +424,9 @@ export class TorService extends BaseService {
             trafficWritten,
             trafficDeltaRead,
             trafficDeltaWritten,
-            bwRead: this.bwRead,
-            bwWritten: this.bwWritten,
+            // null = no live BW subscription, not "0 bytes/s"
+            bwRead: bwFresh ? this.bwRead : null,
+            bwWritten: bwFresh ? this.bwWritten : null,
             version: coreInfo.get("version/current") ?? "",
             dormant: coreInfo.get("dormant") === "1",
             descriptorLimit: parseIntMetric(
@@ -469,6 +533,8 @@ export class TorService extends BaseService {
   }
 
   private async searchRelay(signal: AbortSignal): Promise<OnionooRelay | null> {
+    // an empty search would return every relay, so never query without one
+    if (this.relayNickname.trim() === "") return null;
     const url = `${this.onionooBaseUrl}/details?search=${encodeURIComponent(this.relayNickname)}`;
     const res = await this.http.send({
       url,
@@ -482,10 +548,16 @@ export class TorService extends BaseService {
     });
     const data = await this.parseOnionoo(res);
     const relays = data.relays ?? [];
-    if (relays.length === 0) return null;
-    const nick = this.relayNickname.toLowerCase();
+    // Onionoo search also matches nickname prefixes and other fields, so only
+    // accept an exact nickname or fingerprint — anything else is a different
+    // relay
+    const term = this.relayNickname.trim();
+    const nick = term.toLowerCase();
+    const fp = term.replace(/^\$/, "").toUpperCase();
     return (
-      relays.find((r) => r.nickname.toLowerCase() === nick) ?? relays[0] ?? null
+      relays.find((r) => r.nickname?.toLowerCase() === nick) ??
+      relays.find((r) => r.fingerprint?.toUpperCase() === fp) ??
+      null
     );
   }
 

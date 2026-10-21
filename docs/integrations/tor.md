@@ -170,8 +170,8 @@ process/descriptor-limit → max open file descriptors
 accounting/bytes       → total bytes in current accounting period
 accounting/bytes-left  → bytes remaining in period
 
-bwRead                 → realtime bytes read/sec from BW events (Phase 0b+, Task B5)
-bwWritten              → realtime bytes written/sec from BW events (Phase 0b+, Task B5)
+bwRead                 → realtime bytes read/sec from BW events (Phase 0b+, Task B5); null when no BW event in the last 30 s
+bwWritten              → realtime bytes written/sec from BW events (Phase 0b+, Task B5); null when no BW event in the last 30 s
 
 country                → relay country (from Onionoo enrichment, Task B7, optional)
 consensusWeight        → relay consensus weight (from Onionoo enrichment, Task B7, optional)
@@ -184,8 +184,9 @@ consensusWeightFraction → relay fractional consensus weight (from Onionoo enri
 When `useControlPort=true`, `TorService.onStart()` creates an event subscription that:
 
 - Subscribes to `BW` (bandwidth) events via `SETEVENTS BW`
-- Parses `650 BW read=<bytes> written=<bytes>` async events
+- Parses `650 BW <bytes read> <bytes written>` async events (positional, one per second)
 - Updates instance fields `bwRead` and `bwWritten` for inclusion in next stats poll
+- If no BW event has arrived for 30 s (subscription failed at start or the socket dropped), stats report `bwRead`/`bwWritten` as `null` and the subscription is reopened in the background
 - Closes gracefully on `TorService.onStop()`
 
 **Traffic Deltas** (Task B6):
@@ -251,7 +252,7 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
   - `probeCircuit()` — TCP ControlPort connect → GETINFO status/circuit-established
   - `getStatsControlPort()` — Reads traffic, version, accounting, dormant state; computes deltas (B6); calls `enrich()` for Onionoo supplemental metrics (B7)
   - `enrich()` — Private helper: best-effort Onionoo enrichment returning country, consensusWeight, asName, consensusWeightFraction; swallows errors (B7)
-  - `searchRelay()` — Onionoo HTTP lookup (shared between Onionoo path and B7 enrichment)
+  - `searchRelay()` — Onionoo HTTP lookup (shared between Onionoo path and B7 enrichment). Accepts only an exact nickname (case-insensitive) or exact fingerprint (optional `$`) match from the results; Onionoo's prefix matches are other relays and yield not found. An empty `relayNickname` never queries Onionoo.
 
 - `TorManager` — Tor proxy management (`apps/backend/src/domain/services/tor/TorManager.ts`)
 
