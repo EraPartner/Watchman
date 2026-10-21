@@ -170,8 +170,16 @@ function loadOrCreateSalt(dataDir: string): Buffer {
     : resolve(process.cwd(), dataDir);
   const saltFile = join(absoluteDir, SALT_FILE);
   if (existsSync(saltFile)) {
+    // Never silently replace an existing salt: every passphrase-encrypted
+    // record depends on it. Fail loudly, like an empty master.key does.
     const raw = readFileSync(saltFile, "utf8").trim();
-    if (raw.length > 0) return Buffer.from(raw, "base64");
+    const salt = Buffer.from(raw, "base64");
+    if (salt.length !== SALT_LEN) {
+      throw new Error(
+        `Master key salt file is empty or corrupt (expected ${SALT_LEN} bytes): ${saltFile}`
+      );
+    }
+    return salt;
   }
   mkdirSync(absoluteDir, { recursive: true });
   const salt = randomBytes(SALT_LEN);

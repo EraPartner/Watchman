@@ -2,9 +2,9 @@
 title: OpenAPI Specification
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-10-21
 tags: [reference, openapi, swagger, api-spec, endpoint, documentation]
-description: Complete reference for the Watchman OpenAPI 3.0 specification - how to read, use, and extend the API spec
+description: Complete reference for the Watchman OpenAPI 3.1 specification - how to read, use, and extend the API spec
 aliases:
   [openapi, swagger, api specification, api docs, swagger ui, openapi spec]
 ---
@@ -12,278 +12,123 @@ aliases:
 # OpenAPI Specification
 
 > [!abstract] Overview
-> Watchman uses **OpenAPI 3.0** (formerly known as Swagger) to document its REST API. This reference explains how to read the spec, use the interactive documentation, and extend it when adding new endpoints.
+> Watchman documents its REST API in **OpenAPI 3.1** (`openapi: 3.1.0`). The YAML file is the API source of truth. This reference explains how to read the spec, generate types from it, and extend it when adding endpoints.
 
 ## Spec Location
 
-| File          | Path                           | Description                        |
-| ------------- | ------------------------------ | ---------------------------------- |
-| **Main Spec** | [[apps/backend/openapi.yaml]]  | Complete OpenAPI 3.0 specification |
-| **Symlink**   | `apps/backend/api-docs.yaml` | Symlink for easy access            |
+| File               | Path                                       | Description                                   |
+| ------------------ | ------------------------------------------ | --------------------------------------------- |
+| **Main Spec**      | [[apps/backend/openapi.yaml]]              | Complete OpenAPI 3.1 specification            |
+| **Generated types** | `apps/frontend/src/types/generated.ts`    | Output of `npm run generate:types`            |
+| **Client types**   | `apps/frontend/src/services/apiClient/types.ts` | Hand-maintained; keep aligned with the spec |
 
-## Interactive Documentation
+## No Interactive Documentation
 
-When the backend is running, access the interactive Swagger UI:
-
-```
-http://localhost:3001/api/docs
-```
-
-This provides:
-
-- Interactive API testing
-- Request/response examples
-- Schema documentation
-- Authentication configuration
+The backend does **not** serve a Swagger UI or any `/api/docs` route. Open `apps/backend/openapi.yaml` in an OpenAPI-aware editor or viewer, or load it into a local tool of your choice.
 
 ## Spec Structure
 
-### OpenAPI Document Sections
-
 ```yaml
-openapi: 3.0.3
-info: # API metadata
-  title: Watchman API
-  version: 1.0.0
-  description: ...
-
-servers: # Server URLs
+openapi: 3.1.0
+info: # Title, description, version
+servers:
   - url: http://localhost:3001
-
-paths: # API endpoints (THE MOST IMPORTANT SECTION)
-  /health:
-    get: ...
-  /api/auth/login:
-    post: ...
-
-components: # Reusable schemas
-  schemas: ...
-  securitySchemes: ...
-
-security: # Global security requirements
-  - bearerAuth: []
+tags: [meta, services, instances, metrics, config, setup]
+paths: # Routes are mounted at the root; there is no /api prefix
+  /meta/health: ...
+  /services/{kind}/health: ...
+components:
+  schemas: # DomainError, HostHealth, Kind, Instance, ...
 ```
+
+There is no `securitySchemes` section. Watchman has no authentication (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]).
+
+### Current Paths
+
+| Prefix        | Paths                                                                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/meta`       | `/meta/health`, `/meta/version`                                                                                                                               |
+| `/services`   | `/services`, `/services/{kind}/health`, `/services/{kind}/stats`                                                                 |
+| `/instances`  | `/instances`, `/instances/{kind}`                                                                                                                             |
+| `/kinds`      | `/kinds`                                                                                                                                                      |
+| `/metrics`    | `/metrics`                                                                                                                                                    |
+| `/setup`      | `/setup/status`, `/setup/philips-bridge/pair`                                                                                                                 |
+| `/config`     | `/config/kinds`, `/config/load-errors`, `/config/services`, `/config/services/{id}`, `/config/services/{id}/test`, `/config/services/{id}/profile`, `/config/audit`, `/config/export`, `/config/import` |
+| `/profiles`   | `/profiles`, `/profiles/active`, `/profiles/settings`, `/profiles/current-network`, `/profiles/{id}`, `/profiles/{id}/capture-network`                         |
+
+The WebSocket endpoint `/ws` is not described in the spec. See [[docs/features/real-time-updates|Real-Time Updates]].
 
 ## Reading the Spec
-
-### Path Item Object
-
-Each path in `paths` defines endpoints:
-
-```yaml
-paths:
-  /health: # The URL path
-    get: # HTTP method
-      summary: ... # Short description
-      operationId: ... # Unique identifier
-      responses: ... # Response definitions
-```
 
 ### Operation Object
 
 ```yaml
-get:
-  summary: Backend health check
-  description: |
-    Returns the health status of the backend server.
-    Does not require authentication.
-  tags: [Health]
-  parameters: [] # Query/path parameters
-  responses: # Possible responses
-    "200":
-      description: Server is healthy
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/HealthResponse"
+/meta/health:
+  get:
+    tags: [meta]
+    summary: Liveness probe
+    responses:
+      "200":
+        description: Service is alive
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ok, service, uptime, timestamp]
 ```
 
-### Schema Object
+### Per-Instance Paths
 
-Define request/response body structures:
+Service routes take the kind as a path parameter and the instance as an optional `instance` query parameter, through shared parameter components:
 
 ```yaml
-components:
-  schemas:
-    ServiceStatus:
-      type: object
-      properties:
-        status:
-          type: string
-          enum: [online, offline, degraded]
-        timestamp:
-          type: string
-          format: date-time
-        service:
-          type: string
-```
-
-## Adding New Endpoints
-
-When adding a new API endpoint:
-
-### 1. Define the Path
-
-```yaml
-paths:
-  /api/new-service/status:
-    get:
-      summary: Get service status
-      tags: [Services]
-      responses:
-        "200":
-          description: Service status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ServiceStatus"
-```
-
-### 2. Add Schema
-
-```yaml
-components:
-  schemas:
-    ServiceStatus:
-      type: object
-      required:
-        - status
-        - timestamp
-      properties:
-        status:
-          type: string
-          enum: [online, offline]
-        timestamp:
-          type: string
-          format: date-time
-```
-
-### 3. Add Security (if needed)
-
-```yaml
-paths:
-  /api/new-service/stats:
-    get:
-      # ... other fields
-      security:
-        - bearerAuth: []
-```
-
-### 4. Document in Wiki
-
-Create or update API doc in `docs/api/`:
-
-```markdown
-### New Service
-
-| Endpoint                  | Method | Description    | Auth |
-| ------------------------- | ------ | -------------- | ---- |
-| `/api/new-service/status` | GET    | Service status | No   |
-| `/api/new-service/stats`  | GET    | Service stats  | Yes  |
-```
-
-## Common Patterns
-
-### Authentication
-
-JWT authentication is defined globally:
-
-```yaml
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-```
-
-Endpoints requiring auth add:
-
-```yaml
-security:
-  - bearerAuth: []
-```
-
-### Rate Limiting
-
-Document in the endpoint description:
-
-```yaml
-get:
-  summary: Get service health
-  description: |
-    Rate limit: 100 requests per 15 minutes per IP
-  responses: ...
+/services/{kind}/health:
+  get:
+    parameters:
+      - $ref: "#/components/parameters/Kind"
+      - $ref: "#/components/parameters/Instance"
 ```
 
 ### Error Responses
 
-Standard error schema:
+Errors use the `DomainError` envelope:
 
 ```yaml
-components:
-  schemas:
-    Error:
+DomainError:
+  type: object
+  required: [error]
+  properties:
+    error:
       type: object
+      required: [code, message]
       properties:
-        success:
-          type: boolean
-          example: false
-        error:
-          type: object
-          properties:
-            code:
-              type: string
-            message:
-              type: string
-            statusCode:
-              type: integer
+        code:
+          type: string
+          enum: [NOT_FOUND, UNAVAILABLE, UNAUTHORIZED, TIMEOUT, CIRCUIT_OPEN, VALIDATION]
+        message: { type: string }
 ```
 
-### Multi-Instance Paths
+Most successful responses are wrapped as `{ "data": ... }`. Exceptions include `/meta/*`, `/metrics`, and the `/config/export` download bundle; check each path in the spec.
 
-Use path parameters for dynamic paths:
+## Changing the API
 
-```yaml
-paths:
-  /api/{serviceId}/status:
-    get:
-      parameters:
-        - name: serviceId
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^\\w+_\\d+$' # e.g., qbittorrent_1
-          example: qbittorrent_1
-```
+1. Implement the route under `apps/backend/src/transport/http/routes/` with server-side Zod validation.
+2. Update `apps/backend/openapi.yaml` in the same change.
+3. Run `npm run generate:types` and align `apps/frontend/src/services/apiClient/types.ts`.
+4. If you add a new top-level prefix, add it to `BACKEND_PREFIXES` in `apps/frontend/vite.config.ts` and to the reverse proxy example in [[docs/guides/deployment|Deployment Guide]].
+5. Update the matching page in `docs/api/` and state compatibility.
+
+A new service kind does not need new paths; see [[docs/guides/adding-services|Adding Services Guide]].
 
 ## Tools
 
-### Validation
-
 ```bash
-# Validate spec (requires OpenAPI CLI)
-npx @redocly/cli lint openapi.yaml
+# Generate frontend types from the spec
+npm run generate:types
+
+# Optional: lint the spec with a third-party CLI (not a project dependency)
+npx @redocly/cli lint apps/backend/openapi.yaml
 ```
-
-### Code Generation
-
-Generate client SDKs:
-
-```bash
-# Generate TypeScript client
-npx openapi-generator generate -i openapi.yaml -g typescript-axios -o ./generated
-
-# Generate Python client
-npx openapi-generator generate -i openapi.yaml -g python -o ./generated
-```
-
-### Import to Postman
-
-1. Open `http://localhost:3001/api/docs`
-2. Click "Export" → "OpenAPI v3"
-3. Import into Postman
 
 ## Related
 
@@ -310,70 +155,42 @@ package "openapi.yaml" as Spec {
     }
 
     package "paths" as Paths {
-        [/health]
-        [/api/auth/login]
-        [/api/auth/logout]
-        [/api/auth/me]
-        [/api/services/health]
-        [/api/services/instances]
-        [/api/{service}/status]
-        [/api/{service}/stats]
-        [/api/{service}/updates]
-        [/api/config/frontend]
-        [/api/cache/clear]
+        [/meta/health, /meta/version]
+        [/services, /services/{kind}/*]
+        [/instances, /kinds, /metrics]
+        [/setup/*]
+        [/config/*]
+        [/profiles/*]
     }
 
     package "components" as Components {
         [schemas]
-        [securitySchemes]
-        [responses]
     }
 }
 
 note right of Paths
-  Most important section
-  All endpoint definitions
-end note
-
-note right of Components
-  Reusable definitions
-  Shared across endpoints
+  Mounted at the root.
+  No /api prefix, no auth.
 end note
 @enduml
 ```
 
-### Spec to Documentation Flow
+### Spec to Code and Documentation Flow
 
 ```plantuml
 @startuml
 !theme plain
 
 participant "Developer" as Dev
+participant "routes/*.ts" as Routes
 participant "openapi.yaml" as Spec
-participant "Swagger UI" as UI
+participant "generated.ts" as Gen
 participant "docs/api/" as Docs
 
-Dev -> Spec : Add new endpoint definition
-
-note over Spec
-  Define:
-  - Path and method
-  - Parameters
-  - Request body
-  - Responses
-  - Security
-end note
-
-Dev -> UI : Start backend server
-UI -> Spec : Load spec
-UI --> Dev : Interactive docs
-
-Dev -> Docs : Update wiki documentation
-
-note over Docs
-  - Endpoint details
-  - Examples
-  - Related docs
-end note
+Dev -> Routes : Implement route\n(Zod validation)
+Dev -> Spec : Describe path, parameters,\nresponses
+Dev -> Gen : npm run generate:types
+Dev -> Dev : Align apiClient/types.ts
+Dev -> Docs : Update API page
 @enduml
 ```

@@ -206,6 +206,35 @@ describe("ConfigPanel", () => {
     expect(toast.success).toHaveBeenCalled();
     act(() => root.unmount());
   });
+
+  it("shows the failed test's error message, not [object Object]", async () => {
+    const { toast } = await import("sonner");
+    const { useTestService } = await import("@/pages/Settings/useConfigQueries");
+    vi.mocked(useTestService).mockReturnValueOnce({
+      mutateAsync: vi.fn(async () => ({
+        ok: false,
+        latencyMs: 12,
+        error: { code: "UNAVAILABLE", message: "connection refused" },
+      })),
+      isPending: false,
+    } as unknown as ReturnType<typeof useTestService>);
+    const service = {
+      id: "tor:main",
+      kind: "tor",
+      instanceId: "main",
+      enabled: true,
+      config: {},
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    };
+    const { container, root } = await render(<ConfigPanel service={service} />);
+    const testBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Test connection")
+    );
+    await act(async () => { testBtn?.click(); });
+    expect(toast.error).toHaveBeenCalledWith("Connection failed: connection refused");
+    act(() => root.unmount());
+  });
 });
 
 // ─── RawStatsPanel ────────────────────────────────────────────────────────────

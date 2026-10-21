@@ -11,8 +11,11 @@ const BACKEND_PREFIXES: ReadonlyArray<string> = [
   "/instances",
   "/kinds",
   "/metrics",
-  "/setup",
+  // Trailing slash: "/setup" alone is also the SPA setup-wizard route, which
+  // must stay with Vite so a reload on that page does not hit the backend.
+  "/setup/",
   "/config",
+  "/profiles",
 ];
 
 function backendProxyRules(): Record<string, ProxyOptions> {

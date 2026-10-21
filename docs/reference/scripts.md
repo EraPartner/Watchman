@@ -2,7 +2,7 @@
 title: Scripts Reference
 type: reference
 status: active
-date: 2026-08-19
+date: 2026-10-20
 tags: [reference, scripts, development]
 description: Reference of all npm scripts and commands for the Watchman project
 aliases: [scripts, npm scripts, commands, build commands]
@@ -120,7 +120,7 @@ aliases: [scripts, npm scripts, commands, build commands]
 
 | Command                | Description                    |
 | ---------------------- | ------------------------------ |
-| `npm run dev`          | Start with nodemon/auto-reload |
+| `npm run dev`          | Start with tsx watch auto-reload |
 | `npm run start`        | Start production server        |
 | `npm run build`        | Build for production           |
 | `npm run lint`         | ESLint check                   |
@@ -149,7 +149,7 @@ participant "Backend" as BE
 Dev -> NPM : npm run dev
 
 NPM -> FE : npm run dev:frontend\n(Vite :5173)
-NPM -> BE : npm run dev:backend\n(nodemon :3001)
+NPM -> BE : npm run dev:backend\n(tsx watch :3001)
 
 note over FE
   Hot module reloading

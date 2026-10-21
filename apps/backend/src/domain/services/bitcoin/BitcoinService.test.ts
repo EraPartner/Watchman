@@ -139,7 +139,6 @@ beforeEach(() => {
         verificationprogress: 0.999,
         initialblockdownload: false,
         size_on_disk: 500_000_000_000,
-        networkhashps: 500e18,
       },
       getnetworkinfo: {
         version: 270000,
@@ -158,7 +157,7 @@ beforeEach(() => {
       },
       uptime: 12345,
       getnettotals: { totalbytesrecv: 100_000_000, totalbytessent: 50_000_000 },
-      getmininginfo: { networkhashps: 0, pooledtx: 50 },
+      getmininginfo: { networkhashps: 500e18, pooledtx: 50 },
       getindexinfo: { txindex: { synced: true, best_block_height: 850000 } },
       // BTC/kvB → 10 sat/vB, 2 sat/vB, 1 sat/vB
       "estimatesmartfee:1": { feerate: 0.0001, blocks: 1 },
@@ -399,7 +398,10 @@ describe("BitcoinService", () => {
         peerCount: 10,
         totalBytesRecv: 100_000_000,
         totalBytesSent: 50_000_000,
-        hashesPerSec: 0,
+        hashesPerSec: 500e18,
+        // regression: networkHashPs was read from getblockchaininfo, which
+        // has no such field, so it was always 0
+        networkHashPs: 500e18,
         txIndexSynced: true,
         txIndexHeight: 850000,
       });

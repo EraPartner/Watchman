@@ -6,7 +6,11 @@ import type {
   ServiceInstance,
   ServiceInstanceInput,
 } from "../../services/configApi";
-import { useKinds, useTestService } from "./useConfigQueries";
+import {
+  useKinds,
+  usePairPhilipsBridge,
+  useTestService,
+} from "./useConfigQueries";
 
 interface ServiceEditorProps {
   existing?: ServiceInstance;
@@ -54,6 +58,10 @@ function defaultFor(f: FieldMeta): FormValue {
   return "";
 }
 
+function isArrayField(f: FieldMeta): boolean {
+  return f.type === "stringArray" || f.type === "numberArray";
+}
+
 function initialValues(
   kind: KindSchema,
   existing?: ServiceInstance
@@ -62,11 +70,21 @@ function initialValues(
   for (const f of kind.fields) {
     if (COMMON_FIELD_NAMES.has(f.name)) continue;
     const current = existing?.config?.[f.name];
-    if (current !== undefined && current !== null) {
-      values[f.name] = current as FormValue;
-    } else {
-      values[f.name] = defaultFor(f);
+    // A saved secret comes back redacted as "***". Start the field blank so
+    // the "leave blank to keep" placeholder shows; prefilling "***" meant any
+    // typing was appended to it and saved as "***<new secret>".
+    if (f.secret && current === "***") {
+      values[f.name] = "";
+      continue;
     }
+    const value =
+      current !== undefined && current !== null
+        ? (current as FormValue)
+        : defaultFor(f);
+    // List fields are edited as raw comma-separated text and parsed on submit.
+    // Parsing on every keystroke dropped the trailing comma, so a second item
+    // could never be typed.
+    values[f.name] = isArrayField(f) ? arrayToCsv(value) : value;
   }
   return values;
 }
@@ -96,6 +114,8 @@ export default function ServiceEditor({
 }: ServiceEditorProps) {
   const { data: kinds, isLoading } = useKinds();
   const testMut = useTestService();
+  const pairMut = usePairPhilipsBridge();
+  const [pairResult, setPairResult] = useState<string | null>(null);
 
   const [selectedKind, setSelectedKind] = useState<string>(
     existing?.kind ?? presetKind ?? ""
@@ -161,7 +181,10 @@ export default function ServiceEditor({
 
     const config: Record<string, unknown> = {};
     for (const f of renderedFields) {
-      const v = values[f.name];
+      const raw = values[f.name];
+      const v = isArrayField(f)
+        ? parseCsv(arrayToCsv(raw), f.type === "numberArray")
+        : raw;
       if (f.secret && (v === "" || v === "***")) continue;
       if (v === "" && !f.required) continue;
       if (Array.isArray(v) && v.length === 0 && !f.required) continue;
@@ -179,6 +202,28 @@ export default function ServiceEditor({
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
+    }
+  };
+
+  // The Hue key and cert pin can't be typed in by hand in practice; get them
+  // from the bridge after the operator presses its link button.
+  const handlePair = async () => {
+    const host = String(values["host"] ?? "").trim();
+    if (!host) {
+      setPairResult("Enter the bridge host first");
+      return;
+    }
+    setPairResult("Pairing… (press the bridge's link button first)");
+    try {
+      const res = await pairMut.mutateAsync(host);
+      setValues((prev) => ({
+        ...prev,
+        applicationKey: res.applicationKey,
+        certHash: res.certHash,
+      }));
+      setPairResult("Paired. Save to keep the key.");
+    } catch (err) {
+      setPairResult(err instanceof Error ? err.message : "Pairing failed");
     }
   };
 
@@ -269,6 +314,24 @@ export default function ServiceEditor({
           }
         />
       ))}
+
+      {selectedKind === "philipsBridge" && (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handlePair}
+            disabled={pairMut.isPending}
+          >
+            Pair with bridge
+          </Button>
+          {pairResult && (
+            <span className="text-sm" data-testid="pair-result">
+              {pairResult}
+            </span>
+          )}
+        </div>
+      )}
 
       <details
         open={advancedOpen}
@@ -415,9 +478,7 @@ function FieldInput({
           className={base}
           value={arrayToCsv(value as FormValue)}
           placeholder={field.placeholder ?? "comma-separated"}
-          onChange={(e) =>
-            onChange(parseCsv(e.target.value, field.type === "numberArray"))
-          }
+          onChange={(e) => onChange(e.target.value)}
         />
         <span className="text-xs text-muted-foreground">
           {field.help ?? "Comma-separated list."}

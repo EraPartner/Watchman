@@ -179,4 +179,152 @@ describe("NetworkWatcher.tick", () => {
     await watcher.tick();
     expect(calls).toEqual([]);
   });
+
+  it("keeps a manual switch when the ARP lookup misses the gateway MAC for a tick", async () => {
+    // On the office LAN, the user manually moved to 'home'. One tick the ARP
+    // table lacks the gateway entry; the next tick it is back. The LAN never
+    // changed, so the watcher must not switch back to 'office'.
+    const state: FakeProfileState = {
+      active: "home",
+      autoSwitch: true,
+      lastSig: { gatewayMac: "office-mac", gatewayIp: "10.0.0.1" },
+      profiles: [
+        { id: "home", networkSigs: [{ gatewayMac: "home-mac" }] },
+        { id: "office", networkSigs: [{ gatewayMac: "office-mac" }] },
+      ],
+    };
+    const readings: NetworkSignature[] = [
+      { gatewayIp: "10.0.0.1" },
+      { gatewayMac: "office-mac", gatewayIp: "10.0.0.1" },
+    ];
+    const { lifecycle, calls } = makeLifecycle();
+    const watcher = createNetworkWatcher({
+      detector: { detect: async () => readings.shift()! },
+      profiles: makeProfiles(state),
+      lifecycle,
+      bus: createEventBus(),
+      logger: silentLogger,
+    });
+
+    await watcher.tick();
+    await watcher.tick();
+    expect(calls).toEqual([]);
+    expect(state.lastSig?.gatewayMac).toBe("office-mac");
+  });
+
+  it("keeps a manual switch across a tick with no default route", async () => {
+    const state: FakeProfileState = {
+      active: "home",
+      autoSwitch: true,
+      lastSig: { gatewayMac: "office-mac", gatewayIp: "10.0.0.1" },
+      profiles: [{ id: "office", networkSigs: [{ gatewayMac: "office-mac" }] }],
+    };
+    const readings: NetworkSignature[] = [
+      {},
+      { gatewayMac: "office-mac", gatewayIp: "10.0.0.1" },
+    ];
+    const { lifecycle, calls } = makeLifecycle();
+    const watcher = createNetworkWatcher({
+      detector: { detect: async () => readings.shift()! },
+      profiles: makeProfiles(state),
+      lifecycle,
+      bus: createEventBus(),
+      logger: silentLogger,
+    });
+
+    await watcher.tick();
+    await watcher.tick();
+    expect(calls).toEqual([]);
+  });
+
+  it("records a MAC-less signature on a different gateway without switching", async () => {
+    const state: FakeProfileState = {
+      active: "home",
+      autoSwitch: true,
+      lastSig: { gatewayMac: "home-mac", gatewayIp: "192.168.1.1" },
+      profiles: [{ id: "home", networkSigs: [{ gatewayMac: "home-mac" }] }],
+    };
+    const { lifecycle, calls } = makeLifecycle();
+    const watcher = createNetworkWatcher({
+      detector: makeDetector({ gatewayIp: "10.0.0.1" }),
+      profiles: makeProfiles(state),
+      lifecycle,
+      bus: createEventBus(),
+      logger: silentLogger,
+    });
+
+    await watcher.tick();
+    expect(calls).toEqual([]);
+    expect(state.lastSig).toEqual({ gatewayIp: "10.0.0.1" });
+  });
+
+  it("retries the switch on the next tick when it fails", async () => {
+    const state: FakeProfileState = {
+      active: "home",
+      autoSwitch: true,
+      lastSig: { gatewayMac: "home-mac" },
+      profiles: [{ id: "office", networkSigs: [{ gatewayMac: "office-mac" }] }],
+    };
+    let attempts = 0;
+    const lifecycle = {
+      switchActiveProfile: vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("reload failed");
+      }),
+    };
+    const watcher = createNetworkWatcher({
+      detector: makeDetector({ gatewayMac: "office-mac" }),
+      profiles: makeProfiles(state),
+      lifecycle,
+      bus: createEventBus(),
+      logger: silentLogger,
+    });
+
+    await watcher.tick();
+    expect(state.lastSig?.gatewayMac).toBe("home-mac");
+    await watcher.tick();
+    expect(attempts).toBe(2);
+    expect(state.lastSig?.gatewayMac).toBe("office-mac");
+  });
+});
+
+describe("NetworkWatcher.stop", () => {
+  it("waits for an in-flight tick before resolving", async () => {
+    const state: FakeProfileState = {
+      active: "home",
+      autoSwitch: true,
+      lastSig: { gatewayMac: "home-mac" },
+      profiles: [{ id: "office", networkSigs: [{ gatewayMac: "office-mac" }] }],
+    };
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const { lifecycle, calls } = makeLifecycle();
+    const watcher = createNetworkWatcher({
+      detector: {
+        detect: async () => {
+          await gate;
+          return { gatewayMac: "office-mac" };
+        },
+      },
+      profiles: makeProfiles(state),
+      lifecycle,
+      bus: createEventBus(),
+      logger: silentLogger,
+      setInterval: () => 1,
+      clearInterval: () => {},
+    });
+
+    watcher.start();
+    let stopped = false;
+    const stopP = watcher.stop().then(() => {
+      stopped = true;
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(stopped).toBe(false);
+    release();
+    await stopP;
+    expect(calls).toEqual([["office", "auto"]]);
+  });
 });

@@ -236,4 +236,21 @@ describe("ApiClientCore.request", () => {
     // attempt 0 + 3 retries = 4 fetch calls
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
+  it("does not retry a 503 that reports the service down or circuit open", async () => {
+    for (const code of ["UNAVAILABLE", "CIRCUIT_OPEN"]) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValue(
+        mockResponse({
+          status: 503,
+          statusText: "Service Unavailable",
+          json: { error: { code, message: "bitcoin unreachable" } },
+        })
+      );
+      const core = new ApiClientCore();
+      await expect(core.request("/services/bitcoin/stats")).rejects.toMatchObject(
+        { status: 503, message: `${code}: bitcoin unreachable` }
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
 });

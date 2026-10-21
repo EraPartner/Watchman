@@ -52,7 +52,9 @@ export function ConfigPanel({ service }: ConfigPanelProps) {
           }`
         );
       } else {
-        toast.error(`Connection failed${result.error ? `: ${result.error}` : ""}`);
+        toast.error(
+          `Connection failed${result.error ? `: ${result.error.message}` : ""}`
+        );
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Test failed");

@@ -4,10 +4,9 @@ import { buildServer } from "../server.js";
 import { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
 import { GetServiceStatus } from "../../../application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "../../../application/GetAggregatedHealth.js";
-import { ControlService } from "../../../application/ControlService.js";
 import { ListInstances } from "../../../application/ListInstances.js";
 import { createMetricsRegistry } from "../../../core/metrics.js";
-import { ValidationError } from "../../../core/errors.js";
+import { NotFoundError, ValidationError } from "../../../core/errors.js";
 import type { ConfigStore } from "../../../config/store/ConfigStore.js";
 import type {
   Profile,
@@ -62,6 +61,7 @@ function makeApp(opts: {
     idByStoredId: vi.fn(() => undefined),
     ...opts.lifecycle,
   } as unknown as ServiceLifecycle;
+  const profileStore = makeProfileStore(opts.profiles);
   const detector: NetworkDetector = opts.detector ?? {
     detect: vi.fn(async () => ({})),
   };
@@ -70,13 +70,12 @@ function makeApp(opts: {
     services: {
       getStatus: new GetServiceStatus({ registry }),
       aggregated: new GetAggregatedHealth(registry),
-      control: new ControlService(registry),
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
-    config: { store, lifecycle, registry },
+    config: { store, lifecycle, registry, profiles: profileStore },
     profiles: {
-      profiles: makeProfileStore(opts.profiles),
+      profiles: profileStore,
       store,
       lifecycle,
       detector,
@@ -232,5 +231,42 @@ describe("POST /profiles/:id/capture-network", () => {
     });
     await app.close();
     expect(res.statusCode).toBe(409);
+  });
+});
+
+describe("PUT /profiles/:id", () => {
+  it("returns 404 when the profile does not exist", async () => {
+    const app = await makeApp({
+      profiles: {
+        updateProfile: vi.fn(async () => {
+          throw new NotFoundError("profile not found: nope");
+        }),
+      },
+    });
+    const res = await app.inject({
+      method: "PUT",
+      url: "/profiles/nope",
+      payload: { name: "Office" },
+    });
+    await app.close();
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 400 for a duplicate name even when the name contains 'not found'", async () => {
+    const app = await makeApp({
+      profiles: {
+        updateProfile: vi.fn(async () => {
+          throw new ValidationError("profile name 'not found' already in use");
+        }),
+      },
+    });
+    const res = await app.inject({
+      method: "PUT",
+      url: "/profiles/p1",
+      payload: { name: "not found" },
+    });
+    await app.close();
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION");
   });
 });

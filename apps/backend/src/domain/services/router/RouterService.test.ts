@@ -160,6 +160,8 @@ const SNMP_OID = {
   ifDescr: "1.3.6.1.2.1.2.2.1.2",
   ifInOctets: "1.3.6.1.2.1.2.2.1.10",
   ifOutOctets: "1.3.6.1.2.1.2.2.1.16",
+  ifHCInOctets: "1.3.6.1.2.1.31.1.1.1.6",
+  ifHCOutOctets: "1.3.6.1.2.1.31.1.1.1.10",
   arpTable: "1.3.6.1.2.1.4.22.1.2",
   hrProcessorLoad: "1.3.6.1.2.1.25.3.3.1.2",
   hrStorageDescr: "1.3.6.1.2.1.25.2.3.1.3",
@@ -322,6 +324,77 @@ describe("RouterService SNMP stats (R1)", () => {
     if (res.ok) {
       expect(res.value.metrics.host).toBe("192.168.1.1");
       expect(res.value.metrics.sysUptime).toBeUndefined();
+    }
+  });
+
+  it("keeps other SNMP metrics when one subtree walk fails", async () => {
+    // regression: a missing HOST-RESOURCES-MIB or a timed-out ARP walk used
+    // to reject the whole Promise.all and drop every SNMP metric
+    const rows: Record<string, Array<{ oid: string; value: string }>> = {
+      [SNMP_OID.sysUpTime]: [
+        { oid: `${SNMP_OID.sysUpTime}.0`, value: "12345" },
+      ],
+      [SNMP_OID.ifDescr]: [{ oid: `${SNMP_OID.ifDescr}.1`, value: "eth0" }],
+      [SNMP_OID.ifInOctets]: [{ oid: `${SNMP_OID.ifInOctets}.1`, value: "10" }],
+      [SNMP_OID.ifOutOctets]: [
+        { oid: `${SNMP_OID.ifOutOctets}.1`, value: "20" },
+      ],
+    };
+    const snmp: SnmpGetter = {
+      get: async () => ({ values: [] }),
+      walk: async (req) => {
+        if (req.subtree === SNMP_OID.hrProcessorLoad)
+          throw new Error("timeout");
+        if (req.subtree === SNMP_OID.arpTable) throw new Error("timeout");
+        return { rows: rows[req.subtree] ?? [] };
+      },
+    };
+    const svc = new RouterService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      snmp,
+      config: snmpConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.sysUptime).toBe(12345);
+      expect(res.value.metrics.ifInOctets).toBe(10);
+      expect(res.value.metrics.ifOutOctets).toBe(20);
+      expect(res.value.metrics.cpuLoad).toBeUndefined();
+      // unknown, not "0 clients"
+      expect(res.value.metrics.connectedClients).toBeUndefined();
+    }
+  });
+
+  it("never reports NaN octets for undecodable counter values", async () => {
+    const snmp = fakeSnmp({
+      [SNMP_OID.ifDescr]: [
+        { oid: `${SNMP_OID.ifDescr}.1`, value: "eth0" },
+        { oid: `${SNMP_OID.ifDescr}.2`, value: "eth1" },
+      ],
+      [SNMP_OID.ifHCInOctets]: [
+        { oid: `${SNMP_OID.ifHCInOctets}.1`, value: "\u0001\u0002" },
+        { oid: `${SNMP_OID.ifHCInOctets}.2`, value: "5000000000" },
+      ],
+      [SNMP_OID.ifHCOutOctets]: [
+        { oid: `${SNMP_OID.ifHCOutOctets}.1`, value: "" },
+        { oid: `${SNMP_OID.ifHCOutOctets}.2`, value: "7000000000" },
+      ],
+    });
+    const svc = new RouterService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      snmp,
+      config: snmpConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.ifInOctets).toBe(5_000_000_000);
+      expect(res.value.metrics.ifOutOctets).toBe(7_000_000_000);
     }
   });
 });

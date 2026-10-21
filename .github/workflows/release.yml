@@ -108,7 +108,7 @@ jobs:
         run: npx vitest run
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # 1. Build mac .app + .dmg via electron-builder (arm64 + x64)
+  # 1. Build mac .app + .dmg via electron-builder (arm64 only; see electron-builder.yml)
   #    Ad-hoc signed (CSC_IDENTITY_AUTO_DISCOVERY=false) so the binaries load
   #    on macOS without an Apple Developer ID. Users still see Gatekeeper on
   #    first run and need right-click → Open once. README explains this.
@@ -134,24 +134,21 @@ jobs:
       - name: Install workspace dependencies
         run: npm run deps:ci
 
-      # electron-builder's extraResources copies apps/backend/node_modules into
-      # the bundled app. npm workspaces hoist deps to the root, so we install
-      # backend deps in-place (production only) to materialize that directory.
-      - name: Install backend runtime deps in-tree (for electron-builder bundling)
-        run: |
-          npm run verify:git-dependencies
-          cd apps/backend
-          npm install --allow-git=all --omit=dev --no-save --workspaces=false
-
       - name: Build backend
         run: npm run build:backend
+
+      # electron-builder's extraResources bundle apps/backend/.bundle (see
+      # apps/desktop/electron-builder.yml). npm workspaces hoist deps to the
+      # root, so stage-backend materializes a production-only install there.
+      - name: Stage backend runtime (for electron-builder bundling)
+        run: npm run stage:backend --workspace=apps/desktop
 
       - name: Build frontend
         run: npm run build:frontend
         env:
           CI: "1"
 
-      - name: Build Electron app (.dmg, arm64 + x64)
+      - name: Build Electron app (.dmg + .zip, arm64)
         working-directory: apps/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

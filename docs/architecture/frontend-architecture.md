@@ -2,7 +2,7 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-08-19
+date: 2026-10-21
 tags:
   [
     architecture,
@@ -85,7 +85,7 @@ App
 App
 ├── Router
 │   ├── BentoDashboard (Phase 3)
-│   │   ├── useServiceInstances (fetch /api/instances)
+│   │   ├── useServiceInstances (fetch /instances)
 │   │   ├── TooltipProvider
 │   │   ├── DashboardGrid (12-col)
 │   │   │   └── ServiceTile[] (filtered by renderer + configured instance count)
@@ -102,7 +102,7 @@ App
 │   └── NotFound
 ```
 
-**Note**: BentoDashboard dynamically filters tiles by checking both renderer availability and configured service instances via the `/api/instances` endpoint. If no instances exist, displays empty state.
+**Note**: BentoDashboard dynamically filters tiles by checking both renderer availability and configured service instances via the `/instances` endpoint. If no instances exist, displays empty state.
 
 ## Service Cards (Removed — Phase 3)
 
@@ -130,6 +130,7 @@ All 18 service-specific card components (`AdGuardCard`, `BitcoinCard`, `TorCard`
 ### Query Retry
 
 - React Query retry behavior in `[[apps/frontend/src/App.tsx]]` uses a predicate that avoids retries for 4xx responses while keeping capped retries for retryable failures
+- `ApiClientCore.request` (`[[apps/frontend/src/services/apiClient/core.ts]]`) retries idempotent requests on 408/429/5xx and timeouts, except a 503 whose error code is `UNAVAILABLE` or `CIRCUIT_OPEN`: the backend has already decided the service is down, so the error surfaces after one call
 
 ### Service Renderer Registry (Phase 3)
 
@@ -161,9 +162,11 @@ See [[docs/services/renderers/index|Renderer Registry Documentation]] for comple
 | `useSetupDismissal`   | Setup wizard dismissal state   | `[[apps/frontend/src/hooks/useSetupDismissal.ts]]`    |
 | `useServiceHealth`    | Single service health          | `[[apps/frontend/src/hooks/useServiceHealth.ts]]`     |
 | `useServiceInstances` | Multi-instance management      | `[[apps/frontend/src/hooks/useServiceInstances.tsx]]` |
-| `useEnabledServices`  | Enabled services config        | `[[apps/frontend/src/hooks/useEnabledServices.ts]]`   |
-| `useBackendReachable` | LAN backend reachability probe | `[[apps/frontend/src/hooks/useBackendReachable.ts]]`  |
+| `useAggregatedHealth` | Aggregate health (`GET /services`) | `[[apps/frontend/src/hooks/useAggregatedHealth.ts]]` |
+| `useBackendMetrics`   | Backend metrics (`GET /metrics`) | `[[apps/frontend/src/hooks/useBackendMetrics.ts]]`   |
+| `useDesktopChrome`    | Desktop bridge events (full screen, backend lost/restored, menu) | `[[apps/frontend/src/hooks/useDesktopChrome.ts]]`    |
 | `useWebSocket`        | Real-time WebSocket connection | `[[apps/frontend/src/hooks/useWebSocket.ts]]`         |
+| `useWebSocketEvent`   | Subscribe to one WebSocket event type | `[[apps/frontend/src/hooks/useWebSocketEvent.ts]]` |
 | `use-mobile`          | Mobile breakpoint              | `[[apps/frontend/src/hooks/use-mobile.tsx]]`          |
 
 > [!note] Removed (v2.3)
@@ -186,12 +189,15 @@ React Router v7 with the following structure:
 - **Service visuals** (`lib/serviceVisuals.ts`) - Per-service icon watermark map and `heroState()` bool-hero chip helper shared by `ServiceTile` and `ServiceDetailSheet`
 - **Primitives** - 14 typed components <150 LOC each (see [[docs/components/primitives/index|Primitives Index]])
 - **Tailwind CSS** - Utility-first CSS framework with extended token utilities
-- **shadcn/ui** - Component library (`[[apps/frontend/src/components/ui/]]`, legacy, scheduled for gradual replacement)
+- **Radix UI** - Headless dialog, popover, and scroll-area building blocks wrapped by the primitives in `apps/frontend/src/components/primitives/` (the former shadcn/ui `components/ui/` directory no longer exists)
 - **PostCSS** - CSS processing
 
 ## PlantUML Diagrams
 
 ### Component Hierarchy
+
+> [!warning] Legacy diagram
+> The router and card packages below show the removed v1 per-service `*Card` layout and `Login.tsx`. The current dashboard is `BentoDashboard` with `ServiceTile` and the renderer registry (see [[docs/components/bento-dashboard|BentoDashboard]]). Only the **Hooks** and **Services** packages reflect current code.
 
 ```plantuml
 @startuml
@@ -239,14 +245,13 @@ package "Service Cards" {
 }
 
 package "Hooks" {
-  [useAuth] as Auth
+  [useAggregatedHealth] as AggHealth
   [useServiceHealth] as SvcHealthOne
   [useServiceInstances] as SvcInst
-  [useEnabledServices] as Enabled
+  [useBackendMetrics] as Metrics
   [useWebSocket] as WS
-  [useFrontendConfig] as Config
+  [useWebSocketEvent] as WsEvent
   [useMobile] as Mobile
-  [useToast] as Toast
 }
 
 package "Services" {
@@ -284,13 +289,13 @@ Layout --> Router
 Layout --> SvcLink
 Layout --> Update
 
-Auth --> API : uses
+AggHealth --> API : uses
 SvcHealthOne --> API : uses
 SvcHealthOne --> QueryKeys : keys
 SvcInst --> API : uses
-Enabled --> API : uses
-Enabled --> QueryKeys : keys
-Config --> QueryKeys : keys
+Metrics --> API : uses
+Metrics --> QueryKeys : keys
+WsEvent --> WS : subscribes
 WS --> API : connects
 WS --> QueryKeys : invalidates
 @enduml
@@ -312,8 +317,8 @@ participant "Backend" as BE
 User -> Comp : Render component
 Comp -> Hook : call hook
 Hook -> Query : useQuery()
-Query -> API : fetch(service/status)
-API -> BE : GET /api/{service}/status
+Query -> API : fetch(/services/{kind}/health)
+API -> BE : GET /services/{kind}/health?instance={id}
 BE --> API : JSON Response
 API --> Query : data
 Query --> Hook : data

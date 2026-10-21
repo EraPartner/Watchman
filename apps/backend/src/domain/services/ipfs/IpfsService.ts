@@ -23,15 +23,23 @@ export interface IpfsDeps {
   now: () => number;
 }
 
+// Kubo diag/sys (core/commands/sysdiag.go): nested maps, lower-case keys.
+// The flat MemoryAlloc/GoNumGoroutine/NumCPU keys are kept as a fallback
+// but Kubo does not emit them.
 interface DiagSys {
+  runtime?: { numcpu?: number; numgoroutines?: number };
+  /** virt is the host's used memory in bytes (system-wide, not Kubo's own) */
+  memory?: { swap?: number; virt?: number };
   MemoryAlloc?: number;
   GoNumGoroutine?: number;
   NumCPU?: number;
 }
 
+// Kubo stats/dht (core/commands/stat_dht.go): one object per routing table,
+// with peers grouped by bucket
 interface DhtEntry {
   Name?: string;
-  Buckets?: number;
+  Buckets?: Array<{ LastRefresh?: string; Peers?: unknown[] }> | number;
   PeerInfos?: unknown[];
 }
 
@@ -161,7 +169,11 @@ export class IpfsService extends BaseService {
           : 0;
 
       const dhtPeers = dhtEntries.reduce(
-        (sum, e) => sum + (e.PeerInfos?.length ?? 0),
+        (sum, e) =>
+          sum +
+          (Array.isArray(e.Buckets)
+            ? e.Buckets.reduce((n, b) => n + (b.Peers?.length ?? 0), 0)
+            : (e.PeerInfos?.length ?? 0)),
         0
       );
       const pinnedCount = pinLs?.Keys ? Object.keys(pinLs.Keys).length : null;
@@ -169,6 +181,10 @@ export class IpfsService extends BaseService {
       const memAllocMb =
         diagSys?.MemoryAlloc != null
           ? Math.round(diagSys.MemoryAlloc / 1_048_576)
+          : null;
+      const sysMemUsedMb =
+        typeof diagSys?.memory?.virt === "number"
+          ? Math.round(diagSys.memory.virt / 1_048_576)
           : null;
 
       return ok({
@@ -185,8 +201,10 @@ export class IpfsService extends BaseService {
           bwRateIn: bw?.RateIn ?? null,
           bwRateOut: bw?.RateOut ?? null,
           memAllocMb,
-          goroutines: diagSys?.GoNumGoroutine ?? null,
-          numCPU: diagSys?.NumCPU ?? null,
+          sysMemUsedMb,
+          goroutines:
+            diagSys?.runtime?.numgoroutines ?? diagSys?.GoNumGoroutine ?? null,
+          numCPU: diagSys?.runtime?.numcpu ?? diagSys?.NumCPU ?? null,
           dhtPeers,
           pinnedCount,
           listenAddrCount,

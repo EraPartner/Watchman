@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { Client } from 'ssh2';
 import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/errors.js';
+import { expandHome } from '../../core/expandHome.js';
 import type { SshExecRequest, SshExecResult, SshExecutor } from './sshExecutor.js';
+import { exitResult } from './exitResult.js';
 
 export interface SshPool extends SshExecutor {
   /** Close all persistent connections and release resources. */
@@ -9,7 +11,7 @@ export interface SshPool extends SshExecutor {
 }
 
 type PoolKey = string;
-type PoolState = 'connecting' | 'ready' | 'reconnecting' | 'destroyed';
+type PoolState = 'connecting' | 'ready' | 'destroyed';
 
 interface PendingExec {
   req: SshExecRequest;
@@ -34,10 +36,12 @@ interface ConnectArgs {
   timeoutMs: number;
 }
 
-const RECONNECT_DELAY_MS = 2_000;
-
 function entryKey(req: SshExecRequest): PoolKey {
   return `${req.host}:${req.port ?? 22}:${req.user}:${req.privateKeyPath ?? ''}`;
+}
+
+function sameCredentials(args: ConnectArgs, req: SshExecRequest): boolean {
+  return args.password === req.password && args.passphrase === req.passphrase;
 }
 
 function execOnReady(client: Client, req: SshExecRequest): Promise<SshExecResult> {
@@ -46,6 +50,8 @@ function execOnReady(client: Client, req: SshExecRequest): Promise<SshExecResult
     const finish = (fn: () => void): void => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
+      req.signal?.removeEventListener('abort', onAbort);
       fn();
     };
 
@@ -54,44 +60,46 @@ function execOnReady(client: Client, req: SshExecRequest): Promise<SshExecResult
     }, req.timeoutMs);
 
     const onAbort = (): void => {
-      clearTimeout(timer);
       finish(() => reject(new TimeoutError('ssh exec aborted')));
     };
+    if (req.signal?.aborted) {
+      onAbort();
+      return;
+    }
     req.signal?.addEventListener('abort', onAbort, { once: true });
 
     client.exec(req.command, (err, stream) => {
       if (err) {
-        clearTimeout(timer);
-        req.signal?.removeEventListener('abort', onAbort);
         finish(() => reject(new UnavailableError(`ssh exec failed: ${err.message}`)));
         return;
       }
-      let stdout = '';
-      let stderr = '';
-      let code = 0;
-      stream.on('close', (exitCode: number | null) => {
-        clearTimeout(timer);
-        req.signal?.removeEventListener('abort', onAbort);
-        code = exitCode ?? 0;
-        finish(() => resolve({ stdout, stderr, code }));
+      // collect raw bytes so multi-byte UTF-8 split across chunks decodes intact
+      const out: Buffer[] = [];
+      const errOut: Buffer[] = [];
+      stream.on('close', (exitCode?: number | null, signalName?: string) => {
+        const result = exitResult(
+          Buffer.concat(out).toString('utf8'),
+          Buffer.concat(errOut).toString('utf8'),
+          exitCode,
+          signalName,
+        );
+        finish(() => (result instanceof Error ? reject(result) : resolve(result)));
       });
-      stream.on('data', (d: Buffer) => { stdout += d.toString('utf8'); });
-      stream.stderr.on('data', (d: Buffer) => { stderr += d.toString('utf8'); });
+      stream.on('data', (d: Buffer) => { out.push(d); });
+      stream.stderr.on('data', (d: Buffer) => { errOut.push(d); });
     });
   });
 }
 
+/**
+ * Persistent SSH connections keyed by host/port/user/key. A connection is
+ * opened on first use and reused while it stays up. When it fails or closes,
+ * queued execs are rejected and the entry is dropped; the next exec opens a
+ * fresh connection (with the credentials of that request), so a host that is
+ * down or no longer configured is not reconnected in the background.
+ */
 export function createSshPool(): SshPool {
   const entries = new Map<PoolKey, PoolEntry>();
-
-  function scheduleReconnect(key: PoolKey): void {
-    setTimeout(() => {
-      const entry = entries.get(key);
-      if (!entry || entry.state === 'destroyed') return;
-      entry.state = 'connecting';
-      doConnect(key, entry);
-    }, RECONNECT_DELAY_MS);
-  }
 
   async function doConnect(key: PoolKey, entry: PoolEntry): Promise<void> {
     const { connectArgs } = entry;
@@ -99,16 +107,14 @@ export function createSshPool(): SshPool {
     let privateKey: Buffer | undefined;
     if (connectArgs.privateKeyPath) {
       try {
-        privateKey = await readFile(connectArgs.privateKeyPath);
+        privateKey = await readFile(expandHome(connectArgs.privateKeyPath));
       } catch {
-        // Drain pending with auth error; don't retry — bad key path is config error
-        const error = new UnauthorizedError(`ssh: cannot read key at ${connectArgs.privateKeyPath}`);
-        entry.state = 'destroyed';
-        entries.delete(key);
-        drainPending(entry, error);
+        // Drain pending with auth error — bad key path is a config error
+        retire(key, entry, new UnauthorizedError(`ssh: cannot read key at ${connectArgs.privateKeyPath}`));
         return;
       }
     }
+    if (entry.state === 'destroyed') return;
 
     entry.client.connect({
       host: connectArgs.host,
@@ -128,10 +134,23 @@ export function createSshPool(): SshPool {
     }
   }
 
+  /** Take an entry out of service: reject its queue, close it, forget it. */
+  function retire(key: PoolKey, entry: PoolEntry, error: Error): void {
+    if (entry.state === 'destroyed') return;
+    entry.state = 'destroyed';
+    if (entries.get(key) === entry) entries.delete(key);
+    drainPending(entry, error);
+    try { entry.client.end(); } catch { /* ignore */ }
+  }
+
   function getOrCreateEntry(req: SshExecRequest): PoolEntry {
     const key = entryKey(req);
     const existing = entries.get(key);
-    if (existing) return existing;
+    if (existing && sameCredentials(existing.connectArgs, req)) return existing;
+    if (existing) {
+      // credentials were edited: never keep serving from the old login
+      retire(key, existing, new UnavailableError('ssh credentials changed'));
+    }
 
     const client = new Client();
     const connectArgs: ConnectArgs = {
@@ -153,6 +172,7 @@ export function createSshPool(): SshPool {
     entries.set(key, entry);
 
     client.on('ready', () => {
+      if (entry.state === 'destroyed') return;
       entry.state = 'ready';
       // Drain any queued execs
       const drained = entry.pending.splice(0);
@@ -161,27 +181,51 @@ export function createSshPool(): SshPool {
       }
     });
 
+    // ssh2 emits 'error' and then 'close' for one failure; retire() is idempotent
     client.on('error', (err: Error) => {
-      if (entry.state === 'destroyed') return;
       const msg = err.message || String(err);
       const error = /auth|permission|denied/i.test(msg)
         ? new UnauthorizedError(`ssh auth failed: ${msg}`)
         : new UnavailableError(`ssh connect failed: ${msg}`);
-      drainPending(entry, error);
-      entry.state = 'reconnecting';
-      scheduleReconnect(key);
+      retire(key, entry, error);
     });
 
     client.on('close', () => {
-      if (entry.state === 'destroyed') return;
-      entry.state = 'reconnecting';
-      scheduleReconnect(key);
+      retire(key, entry, new UnavailableError('ssh connection closed'));
     });
 
     // Kick off initial connection
     void doConnect(key, entry);
 
     return entry;
+  }
+
+  /** Queue until the connection is ready, still bounded by the request's own timeout and signal. */
+  function enqueue(entry: PoolEntry, req: SshExecRequest): Promise<SshExecResult> {
+    return new Promise<SshExecResult>((resolve, reject) => {
+      const leave = (): boolean => {
+        clearTimeout(timer);
+        req.signal?.removeEventListener('abort', onAbort);
+        const idx = entry.pending.indexOf(pending);
+        if (idx < 0) return false;
+        entry.pending.splice(idx, 1);
+        return true;
+      };
+      const timer = setTimeout(() => {
+        if (leave()) reject(new TimeoutError(`ssh connect timed out after ${req.timeoutMs}ms`));
+      }, req.timeoutMs);
+      const onAbort = (): void => {
+        if (leave()) reject(new TimeoutError('ssh exec aborted'));
+      };
+      const pending: PendingExec = {
+        req,
+        resolve: (r) => { leave(); resolve(r); },
+        reject: (e) => { leave(); reject(e); },
+      };
+      entry.pending.push(pending);
+      if (req.signal?.aborted) onAbort();
+      else req.signal?.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   return {
@@ -196,18 +240,12 @@ export function createSshPool(): SshPool {
         return execOnReady(entry.client, req);
       }
 
-      // Queue until ready (or fail on next connection error)
-      return new Promise<SshExecResult>((resolve, reject) => {
-        entry.pending.push({ req, resolve, reject });
-      });
+      return enqueue(entry, req);
     },
 
     destroy(): void {
       for (const [key, entry] of entries) {
-        entry.state = 'destroyed';
-        drainPending(entry, new UnavailableError('ssh pool destroyed'));
-        try { entry.client.end(); } catch { /* ignore */ }
-        entries.delete(key);
+        retire(key, entry, new UnavailableError('ssh pool destroyed'));
       }
     },
   };

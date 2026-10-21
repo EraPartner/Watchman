@@ -9,7 +9,12 @@ import {
 } from "electron";
 import * as path from "path";
 import { getFreePort } from "./freePort";
-import { startBackend, pingHealth, BackendHandle } from "./backend";
+import {
+  startBackend,
+  stopPendingBackend,
+  pingHealth,
+  BackendHandle,
+} from "./backend";
 import {
   registerFrontendScheme,
   handleFrontendProtocol,
@@ -244,6 +249,8 @@ async function loadFrontend(): Promise<void> {
 }
 
 function loadErrorPage(message: string): void {
+  // A start aborted by quitting is not a failure to report.
+  if (shuttingDown) return;
   if (!mainWindow || mainWindow.isDestroyed()) {
     dialog.showErrorBox("Watchman failed to start", message);
     return;
@@ -355,6 +362,12 @@ async function bootstrap(): Promise<void> {
           .catch((error) => {
             dialog.showErrorBox("Failed to reopen window", errorMessage(error));
           });
+      } else {
+        // macOS: the window was closed after a failed start. Without a new
+        // attempt the reopened window would sit on the splash indefinitely.
+        attemptBackendStart().catch((error) =>
+          loadErrorPage(errorMessage(error))
+        );
       }
     }
   });
@@ -368,14 +381,18 @@ app.on("window-all-closed", () => {
 
 let shuttingDown = false;
 app.on("before-quit", (event) => {
-  if (shuttingDown || !backend) {
+  if (shuttingDown) {
+    return;
+  }
+  // A quit while the backend is still starting must stop that child too.
+  const stopping = backend ? backend.stop() : stopPendingBackend();
+  if (!stopping) {
     return;
   }
   shuttingDown = true;
   event.preventDefault();
   stopWatchdog();
-  backend
-    .stop()
+  stopping
     .catch(() => {
       /* best-effort shutdown */
     })

@@ -2,7 +2,7 @@
 title: Logging Configuration
 type: reference
 status: active
-date: 2026-04-09
+date: 2026-10-20
 tags: [reference, logging, backend, configuration]
 description: Structured logging configuration for the Watchman backend - environment variables, log levels, and security features
 aliases: [logging, log level, logger, structured logging, logging configuration]
@@ -11,137 +11,63 @@ aliases: [logging, log level, logger, structured logging, logging configuration]
 # Logging Configuration
 
 > [!abstract] Overview
-> The Watchman backend includes a structured logging system with security-focused redaction. You can easily control logging behavior through environment variables.
+> The Watchman backend logs with **Pino** through Fastify (`apps/backend/src/core/logger.ts`). Logs go to stdout. Credentials are redacted. Two environment variables control the output: `LOG_LEVEL` and `NODE_ENV`.
+
+> [!info] Removed variables
+> `LOG_ENABLED` and `LOG_REQUESTS` belonged to the old Express backend. The current backend does not read them. (The frontend has its own `VITE_LOG_ENABLED` switch for browser console logging.)
 
 ## Environment Variables
-
-### LOG_ENABLED
-
-**Default:** `true`
-
-Completely disable all logging output.
-
-```bash
-# Disable all logging
-LOG_ENABLED=false
-
-# Enable all logging (default)
-LOG_ENABLED=true
-```
-
-### LOG_REQUESTS
-
-**Default:** `true`
-
-Disable verbose request/response logging while keeping other application logs.
-
-```bash
-# Disable request logging only
-LOG_REQUESTS=false
-
-# Enable request logging (default)
-LOG_REQUESTS=true
-```
 
 ### LOG_LEVEL
 
 **Default:** `info`
 
-Control the minimum log level to output. Available levels (in order of verbosity):
-
-- `error` - Only error messages
-- `warn` - Warnings and errors
-- `info` - Informational messages, warnings, and errors (default)
-- `debug` - All messages including debug information
+Minimum Pino level to output, validated by the Zod schema in `apps/backend/src/config/env.ts`. Levels, from least to most verbose: `fatal`, `error`, `warn`, `info`, `debug`, `trace`.
 
 ```bash
-# Only show errors
-LOG_LEVEL=error
-
-# Show warnings and errors
-LOG_LEVEL=warn
-
-# Show info, warnings, and errors (default)
-LOG_LEVEL=info
-
-# Show everything including debug logs
-LOG_LEVEL=debug
-```
-
-## Common Use Cases
-
-### Startup Severity Adjustment
-
-Startup background issues that do not block server boot (for example Homebridge background login failures) are logged at `warn` severity instead of startup/progress `info`, reducing noise while keeping degraded startup states visible.
-
-### Development - Minimal Logging
-
-For a cleaner console during development:
-
-```bash
-# In your .env.local file
-LOG_REQUESTS=false
+# In apps/backend/.env.local
 LOG_LEVEL=warn
 ```
 
-### Development - No Logging
+### NODE_ENV
 
-To completely silence all logs:
+**Default:** `development`
 
-```bash
-# In your .env.local file
-LOG_ENABLED=false
-```
+- `development`: human-readable, colorized output through `pino-pretty`
+- `production` or `test`: one JSON object per line on stdout
 
-### Production - Full Logging
+## Output and Volume
 
-For production environments with comprehensive logging:
-
-```bash
-# In your .env.local file
-LOG_ENABLED=true
-LOG_REQUESTS=true
-LOG_LEVEL=info
-```
-
-### Production - Errors Only
-
-For production with minimal output:
-
-```bash
-# In your .env.local file
-LOG_ENABLED=true
-LOG_REQUESTS=false
-LOG_LEVEL=error
-```
+- Logs go to stdout only. The backend writes no log files. Use your process manager to collect them (for example `journalctl` for systemd or `pm2 logs`). The desktop app captures the backend output in its own log file.
+- Fastify logs each request and response, with a request ID it generates per request.
+- `logSamplingPlugin` keeps volume down: only 1 in 20 `/meta/health` requests is logged, and requests from common health-checker user agents (`ELB-HealthChecker`, `kube-probe`, `GoogleHC`) are not logged.
+- Startup background issues that do not block server boot (for example Homebridge background login failures) are logged at `warn`.
 
 ## Security Features
 
-The logger automatically redacts sensitive information from logs:
+The Pino `redact` configuration replaces these values with `[redacted]` at every log level:
 
-- Passwords
-- Tokens
-- Secrets
-- Authorization headers
-- Bearer tokens
-- Email addresses
+- Request headers `authorization` and `cookie`, and the response `set-cookie` header
+- Fields named `password`, `passwd`, `token`, `secret`, `apiKey`, `authHeader`, and every service secret field (`authToken`, `rpcPassword`, `controlPassword`, `dsmPassword`, `applicationKey`, `snmpCommunity`, `snmpAuthKey`, `snmpPrivKey`, `sshPassphrase`, `macMiniSshPassphrase`), at the top level and one level deep (`*.<field>`). The list is `REDACTED_LOG_KEYS` in `logger.ts`; `logger.test.ts` fails if a kind's `secretFields` entry is missing from it
+- Nested `*.headers.authorization` and `*.headers.cookie`
 
-This happens regardless of the logging level, ensuring sensitive data is never written to logs.
+Redaction is path-based. It does not scan free text (for example email addresses inside a message string), so never put secrets or personal data in log messages.
 
-## Request ID Generation
-
-- `requestIdMiddleware` in `apps/backend/middleware/logger.js` generates IDs with `crypto.randomUUID()` when an incoming request does not provide one.
-- `generateRequestId()` in `apps/backend/middleware/performanceMonitor.js` also uses `crypto.randomUUID()` for consistent request/metric correlation IDs.
-
-## Quick Start
-
-To disable extensive logging right now, add this to your `.env.local` file:
+## Common Use Cases
 
 ```bash
-LOG_REQUESTS=false
+# Quieter development console
+LOG_LEVEL=warn
+
+# Troubleshooting a service integration
+LOG_LEVEL=debug
+
+# Production: JSON lines, errors and warnings only
+NODE_ENV=production
+LOG_LEVEL=warn
 ```
 
-Then restart your backend server. This will keep error and warning logs but remove the verbose request/response logging.
+Restart the backend after changing these values.
 
 ## PlantUML Diagrams
 
@@ -151,46 +77,28 @@ Then restart your backend server. This will keep error and warning logs but remo
 @startuml
 !theme plain
 
-package "Logger Middleware" {
-    [requestLogger] as Logger
-    [requestIdMiddleware] as ReqID
-}
-
 package "Configuration" {
-    [LOG_ENABLED] as Enabled
-    [LOG_REQUESTS] as ReqLog
     [LOG_LEVEL] as Level
+    [NODE_ENV] as Env
 }
 
-package "Log Output" {
-    [Console] as Console
-    [File] as File
+package "Backend" {
+    [createLogger()\ncore/logger.ts] as Logger
+    [Fastify request logging] as Fastify
+    [logSamplingPlugin] as Sampling
+    [Pino redact paths] as Redact
 }
 
-ReqID -> Logger : Attach request ID
+package "Output" {
+    [stdout] as Out
+}
 
-Logger -> Enabled : Check enabled
-alt LOG_ENABLED=false
-    Logger -> Logger : Skip logging
-else LOG_ENABLED=true
-    Logger -> ReqLog : Check request logging
-    alt LOG_REQUESTS=false
-        Logger -> Logger : Log errors/warnings only
-    else LOG_REQUESTS=true
-        Logger -> Logger : Log all requests
-    end
-
-    Logger -> Level : Check level
-
-    alt debug
-    case error
-    case warn
-    case info
-    end
-
-    Logger -> Console : Write log
-    Logger -> File : Write to file (if configured)
-end
+Level --> Logger
+Env --> Logger : pino-pretty in development,\nJSON otherwise
+Logger --> Fastify : loggerInstance
+Sampling --> Fastify : silence most\n/meta/health logs
+Fastify --> Redact
+Redact --> Out
 @enduml
 ```
 
@@ -203,65 +111,53 @@ end
 skinparam rectangleBackgroundColor #FFFACD
 
 rectangle "LOG_LEVEL" as Level {
-    rectangle "debug" as Debug {
-        rectangle "info" as Info {
-            rectangle "warn" as Warn {
-                rectangle "error" as Error {
+    rectangle "trace" as Trace {
+        rectangle "debug" as Debug {
+            rectangle "info" as Info {
+                rectangle "warn" as Warn {
+                    rectangle "error" as Error {
+                        rectangle "fatal" as Fatal {
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-note right of Debug
+note right of Trace
   Most verbose
-  Shows everything
 end note
 
-note right of Error
+note right of Fatal
   Least verbose
-  Shows only errors
 end note
 
-Level -[hidden]-> Error
+Level -[hidden]-> Fatal
 @enduml
 ```
 
-### PII Redaction Flow
+### Redaction Flow
 
 ```plantuml
 @startuml
 !theme plain
 
-participant "Log Entry" as Entry
-participant "Redaction Filter" as Filter
-participant "PII Patterns" as Patterns
-participant "Sanitized Log" as Output
+participant "Log call" as Entry
+participant "Pino redact" as Filter
+participant "stdout" as Output
 
-Entry -> Filter : Raw log data
+Entry -> Filter : Log object
 
-Filter -> Patterns : Check for sensitive data
-
-alt Password Detected
-    Patterns --> Filter : Match: password
-    Filter -> Filter : Replace with [REDACTED]
+alt Field path matches redact list\n(password, token, secret, apiKey,\nauthorization/cookie headers, ...)
+    Filter -> Filter : Replace value with [redacted]
 end
 
-alt Token Detected
-    Patterns --> Filter : Match: token
-    Filter -> Filter : Replace with [REDACTED]
-end
-
-alt Email Detected
-    Patterns --> Filter : Match: email
-    Filter -> Filter : Replace with [REDACTED]
-end
-
-Filter -> Output : Sanitized log
+Filter -> Output : Sanitized log line
 
 note right of Output
-  Logs are always sanitized
-  regardless of LOG_LEVEL
+  Applied at every level.
+  Free text is not scanned.
 end note
 @enduml
 ```
@@ -273,29 +169,22 @@ end note
 !theme plain
 
 actor "Client" as Client
-participant "Express" as Express
-participant "Logger Middleware" as Logger
-participant "JSON Formatter" as Format
+participant "Fastify" as Fastify
+participant "logSamplingPlugin" as Sampling
+participant "Pino logger" as Logger
 
-Client -> Express : HTTP Request
-Express -> Logger : Request received
+Client -> Fastify : HTTP request
+Fastify -> Sampling : onRequest hook
 
-Logger -> Logger : Generate request ID
-Logger -> Logger : Create log entry
-
-alt LOG_REQUESTS=true
-    Logger -> Format : Format as JSON
-    Format --> Logger : Formatted entry
-    Logger -> Logger : Output to console
-
-else LOG_REQUESTS=false
-    Logger -> Logger : Skip request log
+alt /meta/health (19 of 20) or health-checker user agent
+    Sampling -> Fastify : Set request log level to silent
+else Other requests
+    Sampling -> Fastify : Keep level
 end
 
-note over Logger
-  Error and warning logs
-  are always output
-end note
+Fastify -> Logger : "incoming request" (with request ID)
+Fastify -> Logger : "request completed"
+Logger -> Logger : Redact, then write to stdout
 @enduml
 ```
 
@@ -303,4 +192,5 @@ end note
 
 - [[docs/architecture/backend-architecture|Backend Architecture]]
 - [[docs/reference/environment-variables|Environment Variables]]
-- `apps/backend/middleware/logger.js` (Logger Middleware)
+- [[apps/backend/src/core/logger.ts|logger.ts]]
+- `apps/backend/src/transport/http/plugins/logSampling.ts`

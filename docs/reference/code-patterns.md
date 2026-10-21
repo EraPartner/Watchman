@@ -2,7 +2,7 @@
 title: Code Patterns
 type: reference
 status: active
-date: 2026-04-19
+date: 2026-10-20
 tags: [reference, code-patterns, backend, frontend, configuration, zod, mutex]
 description: Standard code patterns and conventions used across the Watchman codebase
 aliases: [patterns, conventions, code style, best practices]
@@ -198,25 +198,15 @@ export function useServiceName() {
 ### API Client Pattern
 
 ```typescript
-const response = await apiClient.get("/api/service/status");
-return response.data;
+// Typed endpoint methods wrap the root-mounted routes (no /api prefix)
+const health = await apiClient.getServiceHealth("adguard", "main"); // GET /services/adguard/health?instance=main
+return health;
 ```
 
 ### DuckDB Time Conversion Pattern
 
-When passing JavaScript `Date` objects as bound parameters to DuckDB queries, use the `toTs()` helper to avoid int32 overflow on timestamp values:
-
-```typescript
-import { toTs } from "@/infra/timeseries/duckdbTime";
-
-const fromTime = toTs(new Date("2026-04-18T12:00:00Z"));
-const query = db.prepare(
-  "SELECT * FROM metric_raw WHERE ts >= ? AND ts < ?"
-);
-const rows = await query.run(fromTime, toTs(new Date()));
-```
-
-This pattern is defined in [[apps/backend/src/infra/timeseries/duckdbTime.ts|duckdbTime.ts]] and ensures correct handling of `DuckDBTimestampValue` when working with time-series data.
+> [!warning] Not in the current code
+> This pattern described a `toTs()` helper in `apps/backend/src/infra/timeseries/duckdbTime.ts` for binding `Date` values in time-series queries. That module and the `metric_raw` time-series table do not exist in the current backend. DuckDB access goes through `apps/backend/src/infra/db/DuckDbPool.ts` (`withConnection()`), used by `ConfigStore` and `ProfileStore`.
 
 ### Per-Kind Zod Schema + UI Field Metadata Pattern
 

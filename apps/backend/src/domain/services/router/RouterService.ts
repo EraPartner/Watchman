@@ -150,7 +150,29 @@ export class RouterService extends BaseService {
       const host = this.host;
       const timeoutMs = this.timeoutMs;
 
-      const emptyRows: ReadonlyArray<{ oid: string; value: string }> = [];
+      // Each subtree is optional on its own: many routers lack
+      // HOST-RESOURCES-MIB (CPU) or time out walking a large ARP table, and
+      // that must not discard the other metrics. Only a total failure
+      // (wrong community, agent down) yields no SNMP metrics.
+      const walk = (
+        subtree: string
+      ): Promise<ReadonlyArray<{ oid: string; value: string }> | null> =>
+        this.snmp!.walk({ host, subtree, v2c, timeoutMs, signal }).then(
+          (r) => r.rows,
+          () => null
+        );
+      const results = await Promise.all([
+        walk(OID.sysUpTime),
+        walk(OID.ifDescr),
+        walk(OID.ifInOctets),
+        walk(OID.ifOutOctets),
+        walk(OID.ifHCInOctets),
+        walk(OID.ifHCOutOctets),
+        walk(OID.arpTable),
+        walk(OID.hrProcessorLoad),
+      ] as const);
+      if (results.every((r) => r === null)) return {};
+      const none: ReadonlyArray<{ oid: string; value: string }> = [];
       const [
         uptimeRows,
         ifDescrRows,
@@ -160,77 +182,16 @@ export class RouterService extends BaseService {
         hcOutRows,
         arpRows,
         cpuRows,
-      ] = await Promise.all([
-        this.snmp!.walk({
-          host,
-          subtree: OID.sysUpTime,
-          v2c,
-          timeoutMs,
-          signal,
-        }).then((r) => r.rows),
-        this.snmp!.walk({
-          host,
-          subtree: OID.ifDescr,
-          v2c,
-          timeoutMs,
-          signal,
-        }).then((r) => r.rows),
-        this.snmp!.walk({
-          host,
-          subtree: OID.ifInOctets,
-          v2c,
-          timeoutMs,
-          signal,
-        }).then((r) => r.rows),
-        this.snmp!.walk({
-          host,
-          subtree: OID.ifOutOctets,
-          v2c,
-          timeoutMs,
-          signal,
-        }).then((r) => r.rows),
-        this.snmp!.walk({
-          host,
-          subtree: OID.ifHCInOctets,
-          v2c,
-          timeoutMs,
-          signal,
-        })
-          .then((r) => r.rows)
-          .catch(() => emptyRows),
-        this.snmp!.walk({
-          host,
-          subtree: OID.ifHCOutOctets,
-          v2c,
-          timeoutMs,
-          signal,
-        })
-          .then((r) => r.rows)
-          .catch(() => emptyRows),
-        this.snmp!.walk({
-          host,
-          subtree: OID.arpTable,
-          v2c,
-          timeoutMs,
-          signal,
-        }).then((r) => r.rows),
-        this.snmp!.walk({
-          host,
-          subtree: OID.hrProcessorLoad,
-          v2c,
-          timeoutMs,
-          signal,
-        }).then((r) => r.rows),
-      ]);
+      ] = results;
 
-      const sysUptime = uptimeRows[0]
-        ? parseInt(uptimeRows[0].value, 10)
-        : undefined;
+      const uptimeRaw = uptimeRows?.[0] ? Number(uptimeRows[0].value) : NaN;
+      const sysUptime = Number.isFinite(uptimeRaw) ? uptimeRaw : undefined;
 
-      const connectedClients = arpRows.length;
+      // a failed ARP walk is "unknown", not zero clients
+      const connectedClients = arpRows ? arpRows.length : undefined;
 
       const cpuLoad =
-        cpuRows.length > 0
+        cpuRows && cpuRows.length > 0
           ? Math.round(
               cpuRows.reduce((sum, r) => sum + parseInt(r.value, 10), 0) /
                 cpuRows.length
@@ -239,7 +200,7 @@ export class RouterService extends BaseService {
 
       // Build index → descr map, then apply optional interface filter
       const indexToDescr = new Map<string, string>();
-      for (const row of ifDescrRows) {
+      for (const row of ifDescrRows ?? none) {
         const idx = row.oid.split(".").at(-1) ?? "";
         indexToDescr.set(idx, row.value);
       }
@@ -259,16 +220,21 @@ export class RouterService extends BaseService {
         let total = 0;
         for (const row of rows) {
           const idx = row.oid.split(".").at(-1) ?? "";
-          if (activeIndexes.has(idx)) total += parseInt(row.value, 10);
+          const n = Number(row.value);
+          if (activeIndexes.has(idx) && Number.isFinite(n)) total += n;
         }
         return total;
       };
 
       // Prefer 64-bit HC counters (no 4 GiB wrap); fall back to 32-bit
       const ifInOctets =
-        hcInRows.length > 0 ? sumOctets(hcInRows) : sumOctets(ifInRows);
+        hcInRows && hcInRows.length > 0
+          ? sumOctets(hcInRows)
+          : sumOctets(ifInRows ?? none);
       const ifOutOctets =
-        hcOutRows.length > 0 ? sumOctets(hcOutRows) : sumOctets(ifOutRows);
+        hcOutRows && hcOutRows.length > 0
+          ? sumOctets(hcOutRows)
+          : sumOctets(ifOutRows ?? none);
 
       // Byte rates between polls; a negative delta (counter wrap or device
       // reboot) skips the rate for this cycle instead of reporting garbage
@@ -288,7 +254,7 @@ export class RouterService extends BaseService {
 
       return {
         ...(sysUptime !== undefined ? { sysUptime } : {}),
-        connectedClients,
+        ...(connectedClients !== undefined ? { connectedClients } : {}),
         ...(cpuLoad !== undefined ? { cpuLoad } : {}),
         ifInOctets,
         ifOutOctets,

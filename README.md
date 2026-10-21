@@ -7,6 +7,23 @@
 [![GitHub Issues](https://img.shields.io/github/issues/EraPartner/Watchman)](https://github.com/EraPartner/Watchman/issues)
 [![GitHub Last Commit](https://img.shields.io/github/last-commit/EraPartner/Watchman)](https://github.com/EraPartner/Watchman/commits/main)
 [![GitHub Stars](https://img.shields.io/github/stars/EraPartner/Watchman?style=social)](https://github.com/EraPartner/Watchman/stargazers)
+![Maintenance](https://img.shields.io/badge/maintenance-unmaintained-lightgrey)
+
+> [!WARNING]
+> **This project is no longer actively maintained (October 2026).**
+>
+> Watchman is left in a stable, working state: CI passes, known HIGH and CRITICAL dependency
+> advisories were resolved at that time, and the documentation matches the code. No new
+> features are planned.
+>
+> - Issues, pull requests, and security reports may not get a response.
+> - Dependency and security updates are not guaranteed. Advisories published after October 2026
+>   will not be fixed unless someone picks the project up.
+> - Dependabot still opens update pull requests, and patch and minor updates merge automatically
+>   when CI passes. Nobody reviews them.
+> - If you run it, keep it on a trusted network as described below, and review the dependencies
+>   yourself before you deploy.
+> - You are welcome to fork it under the terms of the AGPL-3.0-only license.
 
 Watchman is a full-stack dashboard for **monitoring self-hosted services** from one place.
 It combines a React + TypeScript frontend with a Node.js + Fastify backend and supports real-time status visibility across your stack.
@@ -23,7 +40,7 @@ If you run multiple services, Watchman gives you one dashboard instead of 10+ br
 | You need...                                 | Watchman gives you...                                                                                                                           |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Fast visibility across services             | Unified health + stats endpoints and cards in a single UI                                                                                       |
-| Support for multiple instances of a service | Numbered env-based multi-instance support (e.g. multiple qBittorrent/Synology instances)                                                        |
+| Support for multiple instances of a service | Multiple instances per service type, configured in the UI (e.g. several qBittorrent or Synology instances)                                      |
 | Live status updates                         | WebSocket-based real-time updates                                                                                                               |
 | A trusted-network security model            | Origin allow-list (CORS + WebSocket), service secrets encrypted at rest, PII-redacted logs — no auth/CSRF/rate-limiting by design (single-user) |
 | Extensibility                               | Factory-driven service integration architecture                                                                                                 |
@@ -79,7 +96,7 @@ After installation, double-click the `Launch Watchman.command` shortcut or run:
 npm run electron:prod
 ```
 
-> On first launch you'll need `apps/backend/.env.local` populated. The installer prints a copy hint if it's missing.
+> The desktop app needs no env file: it sets the backend port and data directory itself, and the backend generates a master key on first run. Services are configured in the UI.
 
 ### Option B — Native production self-host (any platform)
 
@@ -87,7 +104,7 @@ npm run electron:prod
 git clone https://github.com/EraPartner/Watchman.git
 cd Watchman
 npm run deps:ci:portable
-cp apps/backend/.env.example apps/backend/.env.local   # set WATCHMAN_MASTER_KEY
+cp apps/backend/.env.example apps/backend/.env.local   # optional; see Backend environment
 
 npm run build
 npm run start
@@ -116,11 +133,14 @@ npm run dev
 
 ### Backend environment
 
-| Variable                              | Why it matters                                                      |
-| ------------------------------------- | ------------------------------------------------------------------- |
-| `WATCHMAN_MASTER_KEY`                 | Encrypts stored service secrets at rest — required in practice      |
-| `CORS_ALLOWED_ORIGINS`                | Extra browser origins to allow (needed for non-loopback web access) |
-| `BACKEND_V2_PORT` / `BACKEND_V2_HOST` | Bind address — optional (defaults `3001` / `0.0.0.0`)               |
+Set these in `apps/backend/.env.local` (gitignored). `apps/backend/.env` is read as a fallback,
+and real environment variables take precedence over both. All of them are optional.
+
+| Variable                              | Why it matters                                                                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WATCHMAN_MASTER_KEY`                 | Encrypts stored service secrets at rest. Optional: if unset, a key file is generated in `DATA_DIR`. Back it up; without it, stored secrets are unrecoverable |
+| `CORS_ALLOWED_ORIGINS`                | Extra browser origins to allow (needed for non-loopback web access)                                                                                          |
+| `BACKEND_V2_PORT` / `BACKEND_V2_HOST` | Bind address — optional (defaults `3001` / `0.0.0.0`)                                                                                                        |
 
 Service connection details (hosts, tokens, etc.) are **not** env vars — they live
 in the DuckDB config store, managed via the `/config` API or the UI. Full surface:
@@ -221,15 +241,10 @@ Read more:
 
 ## Contributing
 
-Contributions are welcome.
-
-1. Fork the repository
-2. Create a focused feature/fix branch
-3. Add/update tests and docs with your changes
-4. Run lint/build/test locally
-5. Open a pull request with clear context
-
-Contribution guide: [`CONTRIBUTING.md`](./CONTRIBUTING.md) · Security policy: [`SECURITY.md`](./SECURITY.md)
+The project is not actively maintained, so pull requests and issues may stay unanswered. If you
+want to continue development, forking is the most reliable route. The development workflow and
+checks are still documented in [`CONTRIBUTING.md`](./CONTRIBUTING.md), and the security model
+and reporting channel are in [`SECURITY.md`](./SECURITY.md).
 
 ## License
 

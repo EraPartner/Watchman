@@ -31,8 +31,11 @@ currently designed for that.
 
 ## Supported versions
 
-This is a solo-maintained project. Security fixes target the **latest release**
-and the current `main` branch only. Older versions are not patched.
+**Watchman is no longer actively maintained (October 2026).** No versions receive guaranteed
+security fixes. The current `main` branch was last brought to a clean dependency audit
+(no known HIGH or CRITICAL advisories) in October 2026. Advisories published after that date
+are not tracked. Review the dependencies yourself before you deploy, and keep the deployment
+inside the trusted-network model above.
 
 ## Reporting a vulnerability
 
@@ -43,7 +46,8 @@ Use GitHub's **private vulnerability reporting**:
 on this repository. (If private reporting isn't enabled, open a minimal public
 issue asking for a private contact channel — without vulnerability details.)
 
-Because the project is solo-maintained, response is best-effort. Please include:
+Because the project is unmaintained, a report may not receive a response or a fix. If you
+still report one, please include:
 
 - affected component and version / commit,
 - a clear description and impact,

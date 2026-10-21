@@ -27,6 +27,19 @@ describe("torRenderer", () => {
     expect(torRenderer.quickLink?.({ config: undefined })).toBeUndefined();
   });
 
+  it("quickLink falls back to a metrics search for relayNickname", () => {
+    // regression: the tor config has no fingerprint key, so the link never showed
+    const url = torRenderer.quickLink?.({ config: { relayNickname: "MyRelay" } });
+    expect(url).toBe("https://metrics.torproject.org/rs.html#search/MyRelay");
+  });
+
+  it("detail shows ControlPort-mode metrics", () => {
+    const keys = torRenderer.detail.flatMap((g) => g.metrics.map((m) => m.key));
+    expect(keys).toEqual(
+      expect.arrayContaining(["bwRead", "bwWritten", "circuits.active"])
+    );
+  });
+
   it("quickLink returns metrics URL when fingerprint is present", () => {
     const url = torRenderer.quickLink?.({ config: { fingerprint: "ABCDEF1234" } });
     expect(url).toContain("metrics.torproject.org");

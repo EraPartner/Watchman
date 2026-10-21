@@ -82,6 +82,31 @@ describe("startSseStream", () => {
     activeRes = null;
   });
 
+  it("decodes multi-byte UTF-8 split across chunks", async () => {
+    mode = "stream";
+    const messages: string[] = [];
+    const abort = new AbortController();
+    startSseStream({
+      url: `http://127.0.0.1:${port}/events`,
+      onMessage: (d) => messages.push(d),
+      signal: abort.signal,
+    });
+
+    await waitFor(() => activeRes !== null);
+    const bytes = Buffer.from('data: {"name":"Küche"}\n\n', "utf8");
+    const split = bytes.indexOf(0xc3) + 1; // between the two bytes of "ü"
+    activeRes!.write(bytes.subarray(0, split));
+    await new Promise((r) => setTimeout(r, 20));
+    activeRes!.write(bytes.subarray(split));
+
+    await waitFor(() => messages.length >= 1);
+    expect(messages[0]).toBe('{"name":"Küche"}');
+
+    abort.abort();
+    activeRes?.end();
+    activeRes = null;
+  });
+
   it("reconnects after the server drops the stream", async () => {
     mode = "stream";
     connections = 0;

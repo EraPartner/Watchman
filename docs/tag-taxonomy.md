@@ -2,7 +2,7 @@
 title: Tag Taxonomy
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-10-20
 tags: [tags, taxonomy, reference, organization, categorization, classification]
 description: Controlled vocabulary of tags used across the Watchman knowledge base for consistent filtering and search
 aliases:
@@ -80,6 +80,7 @@ aliases:
 | `active`     | Current and maintained   | Default for completed docs |
 | `draft`      | Work in progress         | For docs being written     |
 | `deprecated` | Outdated, being replaced | For superseded docs        |
+| `paused`     | Plan halted; not being executed | For plans stopped before completion |
 | `template`   | Template for new docs    | Only for template files    |
 
 ### AI Agent Tags

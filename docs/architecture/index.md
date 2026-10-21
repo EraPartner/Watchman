@@ -2,7 +2,7 @@
 title: Architecture
 type: index
 status: active
-date: 2026-05-16
+date: 2026-10-21
 tags: [architecture, index, fastify, typescript, layered, duckdb, configuration, electron, single-user, roon-api, websocket, rn1, rn2]
 description: Index of all architecture documentation for the Watchman project - single-user client-server with TypeScript backend including Roon WebSocket API support
 aliases: [architecture index, system design, system architecture]
@@ -11,7 +11,7 @@ aliases: [architecture index, system design, system architecture]
 # Architecture
 
 > [!abstract] Overview
-> Watchman is a **single-user home-lab monitoring dashboard** with a React 18 frontend and TypeScript + Fastify 4 backend. No built-in authentication; security relies on network isolation. The backend uses a layered architecture (config → core → infra → domain → application → transport) with in-process LRU caching and croner-based background polling. The frontend is available as both a web app and as a standalone Electron desktop wrapper.
+> Watchman is a **single-user home-lab monitoring dashboard** with a React 18 frontend and TypeScript + Fastify 5 backend. No built-in authentication; security relies on network isolation. The backend uses a layered architecture (config → core → infra → domain → application → transport) with in-process LRU caching and croner-based background polling. The frontend is available as both a web app and as a standalone Electron desktop wrapper.
 
 > [!note]
 > The backend is bootstrapped from [[apps/backend/src/index.ts|index.ts]], which initializes the config, core, infra, and domain layers, then registers HTTP routes and WebSocket handlers via Fastify. The desktop app [[apps/desktop/src/main.ts|main.ts]] spawns the backend process and serves the frontend via a custom `watchman://` protocol.
@@ -54,12 +54,12 @@ Frontend and backend run on the same machine (macOS, Windows, or Linux) as a sta
                             │ HTTP (LAN)
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│            Backend API (Node.js + Fastify 4)                │
+│            Backend API (Node.js + Fastify 5)                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
 │  │  Middleware  │  │   Logging    │  │   API Routes │     │
-│  │  - CORS      │  │  - Audit     │  │  - /health   │     │
-│  │  - Timeout   │  │  - PII       │  │  - /api/*    │     │
-│  │  - Validation│  │  - redaction │  │  - /api/docs │     │
+│  │  - Origin    │  │  - Audit     │  │  - /meta/*   │     │
+│  │  - Timeout   │  │  - PII       │  │  - /services │     │
+│  │  - Validation│  │  - redaction │  │  - /config/* │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
@@ -85,7 +85,7 @@ Frontend and backend run on the same machine (macOS, Windows, or Linux) as a sta
 
 Walk every workflow step-by-step in a self-contained page:
 
-- [[docs/flow-visualizer.html|flow-visualizer.html]] — pick a flow (poll cycle, real-time broadcast, dashboard load, control action, setup wizard, Electron startup, …) and watch the data travel across packages with annotated payloads.
+- [[docs/flow-visualizer.html|flow-visualizer.html]] — pick a flow (poll cycle, real-time broadcast, dashboard load, setup wizard, Electron startup, …) and watch the data travel across packages with annotated payloads.
 
 ## Related
 
@@ -117,7 +117,7 @@ package "Frontend (React 18)" as FE {
     [WebSocketProvider]
 }
 
-package "Backend (TypeScript/Fastify 4)" as BE {
+package "Backend (TypeScript/Fastify 5)" as BE {
     package "Transport Layer" {
         [HTTP Routes]
         [WebSocket (4 classes)]
@@ -126,7 +126,6 @@ package "Backend (TypeScript/Fastify 4)" as BE {
     package "Application Layer" {
         [GetServiceStatus]
         [GetAggregatedHealth]
-        [ControlService]
         [ListInstances]
     }
 
@@ -189,7 +188,7 @@ note right of FE
 end note
 
 note right of BE
-  TypeScript + Fastify 4
+  TypeScript + Fastify 5
   Layered (config → core → infra →
   domain → application → transport)
   In-process LRU cache + jittered poller
@@ -211,11 +210,11 @@ note over FE, BE
   REST API Communication
 end note
 
-FE -> BE : GET /api/services/health
-BE --> FE : {services: {...}}
+FE -> BE : GET /services
+BE --> FE : {data: [aggregated health]}
 
-FE -> BE : GET /api/adguard/status
-BE --> FE : {status: "online", ...}
+FE -> BE : GET /services/adguard/health?instance=main
+BE --> FE : {data: {reachable, host, service, ...}}
 
 note over FE, BE
   WebSocket Communication

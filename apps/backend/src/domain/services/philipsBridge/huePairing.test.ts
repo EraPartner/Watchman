@@ -44,6 +44,36 @@ describe('pairBridge', () => {
     expect(body.generateclientkey).toBe(true);
   });
 
+  it('pairs over a client pinned to the probed cert when one is provided', async () => {
+    const strict = fakeHttp(200, [{ success: { username: 'unused' } }]);
+    const pinned = fakeHttp(200, [{ success: { username: 'pinned-key' } }]);
+    const httpForCert = vi.fn(() => pinned);
+    const result = await pairBridge('192.168.1.50', {
+      http: strict,
+      probeCertHash: fakeProbeCertHash,
+      httpForCert,
+    });
+    expect(httpForCert).toHaveBeenCalledWith(FAKE_CERT_HASH);
+    expect(strict.send).not.toHaveBeenCalled();
+    expect(result).toEqual({ applicationKey: 'pinned-key', certHash: FAKE_CERT_HASH });
+  });
+
+  it('throws UnavailableError when the bridge reply is not JSON', async () => {
+    const http: HttpClient = {
+      send: vi.fn(async () => ({
+        status: 200,
+        headers: {},
+        text: async () => '<html>',
+        json: async <T>(): Promise<T> => {
+          throw new SyntaxError('Unexpected token <');
+        },
+      })),
+    };
+    await expect(
+      pairBridge('192.168.1.50', { http, probeCertHash: fakeProbeCertHash }),
+    ).rejects.toThrow(UnavailableError);
+  });
+
   it('throws ValidationError when link button not pressed (error type 101)', async () => {
     const body = [{ error: { type: 101, description: 'link button not pressed' } }];
     await expect(

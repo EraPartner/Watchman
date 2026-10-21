@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { publishWsEvent, subscribeWsEvent } from "./wsEventBus";
+import {
+  isEventForInstance,
+  publishWsEvent,
+  subscribeWsEvent,
+} from "./wsEventBus";
 import type { WsEvent } from "./wsEventBus";
 
 function makeEvent(type: WsEvent["type"] = "connection"): WsEvent {
@@ -88,5 +92,28 @@ describe("publishWsEvent", () => {
 
     expect(received[0]).toEqual(ev);
     unsub();
+  });
+});
+
+describe("isEventForInstance", () => {
+  const alert = (extra: Partial<WsEvent>): WsEvent => ({
+    type: "alert",
+    timestamp: new Date().toISOString(),
+    ...extra,
+  });
+
+  it("rejects alerts for a sibling instance of the same kind", () => {
+    const ev = alert({ service: "bitcoin", instanceId: "backup" });
+    expect(isEventForInstance(ev, "bitcoin", "main")).toBe(false);
+    expect(isEventForInstance(ev, "bitcoin", "backup")).toBe(true);
+  });
+
+  it("rejects alerts for another kind", () => {
+    const ev = alert({ service: "tor", instanceId: "main" });
+    expect(isEventForInstance(ev, "bitcoin", "main")).toBe(false);
+  });
+
+  it("accepts events that name no service", () => {
+    expect(isEventForInstance(alert({}), "bitcoin", "main")).toBe(true);
   });
 });

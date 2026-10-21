@@ -7,6 +7,7 @@ import {
   type AuditEntry,
   type SetupStatus,
   type TestConnectionResult,
+  type HuePairResult,
   type ExportBundle,
   type ImportResult,
   type LoadError,
@@ -30,6 +31,15 @@ function invalidateDashboardQueries(
 ): void {
   qc.invalidateQueries({ queryKey: queryKeys.servicesInstances() });
   qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
+}
+
+// SetupGate on "/" redirects to /setup while needsSetup is true. The status
+// query is inactive while the operator is in the wizard or settings, so a plain
+// invalidate keeps the cached needsSetup: true and the gate acts on it before
+// the refetch lands (Finish bounced back to the wizard). Reset drops the cached
+// value so the gate waits for a fresh answer.
+function resetSetupStatus(qc: ReturnType<typeof useQueryClient>): void {
+  void qc.resetQueries({ queryKey: KEYS.setup });
 }
 
 export function useSetupStatus() {
@@ -87,6 +97,7 @@ export function useCreateService() {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
+      resetSetupStatus(qc);
     },
   });
 }
@@ -119,6 +130,7 @@ export function useDeleteService() {
       qc.invalidateQueries({ queryKey: KEYS.loadErrors });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
+      resetSetupStatus(qc);
     },
   });
 }
@@ -126,6 +138,12 @@ export function useDeleteService() {
 export function useTestService() {
   return useMutation<TestConnectionResult, Error, string>({
     mutationFn: (id: string) => configApi.testService(id),
+  });
+}
+
+export function usePairPhilipsBridge() {
+  return useMutation<HuePairResult, Error, string>({
+    mutationFn: (host: string) => configApi.pairPhilipsBridge(host),
   });
 }
 
@@ -143,6 +161,7 @@ export function useImportConfig() {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
+      resetSetupStatus(qc);
     },
   });
 }

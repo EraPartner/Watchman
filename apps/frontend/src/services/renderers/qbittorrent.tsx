@@ -160,7 +160,7 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
   displayName: "qBittorrent",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {
-      hostKeys: ["url", "host"],
+      hostKeys: ["baseUrl", "url", "host"],
       portKeys: ["port"],
       defaultPort: 8080,
     }),

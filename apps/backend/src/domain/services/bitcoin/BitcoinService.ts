@@ -43,7 +43,6 @@ interface BlockchainInfo {
   verificationprogress?: number;
   initialblockdownload?: boolean;
   size_on_disk?: number;
-  networkhashps?: number;
 }
 
 interface NetworkInfo {
@@ -285,7 +284,8 @@ export class BitcoinService extends BaseService {
           verificationProgress: chain.verificationprogress ?? 0,
           initialBlockDownload: Boolean(chain.initialblockdownload),
           blockchainSize: chain.size_on_disk ?? 0,
-          networkHashPs: chain.networkhashps ?? 0,
+          // getblockchaininfo has no networkhashps; getmininginfo does
+          networkHashPs: miningInfo?.networkhashps ?? 0,
           mempoolSize: mempool.size ?? 0,
           mempoolBytes: mempool.bytes ?? 0,
           mempoolUsage: mempool.usage ?? 0,

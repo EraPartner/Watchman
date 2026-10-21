@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ConfigStore } from '../../../config/store/ConfigStore.js';
 import type { HttpClient } from '../../../infra/http/client.js';
-import { probeCertFingerprint } from '../../../infra/http/pinnedClient.js';
+import { createPinnedClient, probeCertFingerprint } from '../../../infra/http/pinnedClient.js';
 import { pairBridge } from '../../../domain/services/philipsBridge/huePairing.js';
 import { ValidationError, UnavailableError } from '../../../core/errors.js';
 
@@ -41,7 +41,11 @@ export function setupRoutes(deps: SetupRouteDeps): FastifyPluginAsync {
         try {
           const result = await pairBridge(
             host,
-            { http: deps.http, probeCertHash: probeCertFingerprint },
+            {
+              http: deps.http,
+              probeCertHash: probeCertFingerprint,
+              httpForCert: createPinnedClient,
+            },
             timeoutMs,
           );
           return { data: result };

@@ -2,7 +2,7 @@
 title: Multi-Instance Support
 type: feature
 status: active
-date: 2026-04-02
+date: 2026-10-21
 tags: [feature, backend, services, configuration]
 description: Multi-instance service support - run multiple nodes of the same service type
 aliases: [multi-instance, multiple instances, service instances]
@@ -11,90 +11,61 @@ aliases: [multi-instance, multiple instances, service instances]
 # Multi-Instance Support
 
 > [!abstract] Overview
-> Watchman supports running multiple instances of the same service type, useful for monitoring several nodes of the same software.
+> Watchman can monitor several instances of the same service kind, for example two qBittorrent clients or two Synology NAS units. Each instance is a separate row in the DuckDB config store, identified by its `kind` and `instanceId`.
 
 ## Configuration
 
-### Environment Variables
+Instances are configured in the UI or through the config API, not with environment variables:
 
-Use numbered prefixes for each instance:
+- **Setup Wizard** (`/setup`) or **Settings → Services** (`/settings/services`): add another instance of a kind and give it a distinct **Instance ID** (default `main`).
+- **API**: `POST /config/services` with a body that includes `kind` and `instanceId`. See [[docs/api/config|Configuration API]].
 
-```bash
-# qBittorrent Instance 1
-QBITTORRENT_1_URL=http://192.0.2.10:8080
-QBITTORRENT_1_USERNAME=admin
-QBITTORRENT_1_PASSWORD=password1
+The pair `(kind, instanceId)` is unique (`idx_service_kind_instance` in `apps/backend/src/config/store/migrations.ts`). Secret fields of every instance are encrypted with the master key. Each instance has its own `enabled` flag, `pollPolicy`, `cacheTtlMs`, and `timeoutMs`, and belongs to one profile (see [[docs/features/profiles|Profiles]]).
 
-# qBittorrent Instance 2
-QBITTORRENT_2_URL=http://192.0.2.11:8080
-QBITTORRENT_2_USERNAME=admin
-QBITTORRENT_2_PASSWORD=password2
-```
-
-### Legacy Single Instance
-
-Legacy single-instance configuration is still supported:
-
-```bash
-QBITTORRENT_URL=http://127.0.0.1:8069
-QBITTORRENT_USERNAME=admin
-QBITTORRENT_PASSWORD=your-password
-```
+> [!info] Legacy numbered environment variables
+> Older versions read numbered variables such as `QBITTORRENT_1_URL`. The current backend does not read them. The only legacy import is `WATCHMAN_SERVICES_CONFIG`, applied once when the store is empty. See [[docs/reference/environment-variables|Environment Variables]].
 
 ## Supported Services
 
-Services that support multi-instance:
-
-- qBittorrent
-- Synology
-- Roon
-- Philips Hue
-- Mac Mini
-- Alby Hub
-- Raspberry Pi
-- Router (Beryl/Telenet)
+Every service kind supports multiple instances. The kinds are listed in `SERVICE_KINDS` (`apps/backend/src/config/schemas/fieldMetadata.ts`): `adguard`, `albyHub`, `bitcoin`, `homebridge`, `ipfs`, `macMini`, `philipsBridge`, `qbittorrent`, `raspberryPi`, `roon`, `router`, `synology`, `tor`.
 
 ## API Pattern
 
-Multi-instance services use the route pattern:
+The kind is a path parameter and the instance is an optional `instance` query parameter:
 
 ```
-GET /api/{serviceType}_{instanceNum}/status
-GET /api/{serviceType}_{instanceNum}/stats
+GET  /services/{kind}/health?instance={instanceId}
+GET  /services/{kind}/stats?instance={instanceId}
 ```
 
 Examples:
 
-- `/api/qbittorrent_1/status`
-- `/api/qbittorrent_2/stats`
-- `/api/synology_1/status`
+- `/services/qbittorrent/health?instance=main`
+- `/services/qbittorrent/stats?instance=seedbox`
+- `/services/synology/health?instance=nas2`
+
+If `instance` is omitted, the first registered instance of that kind is used. An unknown instance returns `404 NOT_FOUND`.
 
 ## Instance Discovery
 
-The `GET /api/services/instances` endpoint returns metadata about all configured instances:
+`GET /instances` lists every running instance, and `GET /instances/{kind}` lists the instances of one kind:
 
 ```json
 {
-  "instances": {
-    "qbittorrent": {
-      "count": 2,
-      "instances": [
-        { "id": "qbittorrent_1", "type": "qbittorrent" },
-        { "id": "qbittorrent_2", "type": "qbittorrent" }
-      ]
-    }
-  },
-  "timestamp": "2026-04-02T..."
+  "data": [
+    { "id": "qbittorrent:main", "kind": "qbittorrent", "instanceId": "main" },
+    { "id": "qbittorrent:seedbox", "kind": "qbittorrent", "instanceId": "seedbox" }
+  ]
 }
 ```
 
+The `id` is `<kind>:<instanceId>`. Only enabled instances in the active profile are running and listed. `GET /config/services` lists all stored instances, including disabled ones.
+
 ## Implementation
 
-Instance parsing is handled in `apps/backend/config.js` via `parseServiceInstances()`:
-
-1. Scans `process.env` for `{SERVICE}_{N}_` pattern
-2. Collects all env vars for each instance number
-3. Falls back to legacy single-instance config if no numbered instances found
+- `ConfigStore` (`apps/backend/src/config/store/ConfigStore.ts`) stores and validates instances with the Zod `ServiceInstanceSchema`.
+- `ServiceLifecycle` creates one `BaseService` per enabled instance through `createService()` in `apps/backend/src/bootstrap/registerServices.ts`.
+- `ServiceRegistry` (`apps/backend/src/domain/ServiceRegistry.ts`) indexes services by id and by kind; `getByKind(kind, instanceId)` resolves API requests.
 
 ## PlantUML Diagrams
 
@@ -104,33 +75,20 @@ Instance parsing is handled in `apps/backend/config.js` via `parseServiceInstanc
 @startuml
 !theme plain
 
-database "Environment Variables" as Env
+database "DuckDB app_service_instance" as DB
 
-package "Instance 1" {
-    [QBITTORRENT_1_URL]
-    [QBITTORRENT_1_USERNAME]
-    [QBITTORRENT_1_PASSWORD]
+package "qbittorrent" {
+    [instanceId: main\nbaseUrl, username,\npassword (encrypted)] as I1
+    [instanceId: seedbox\nbaseUrl, username,\npassword (encrypted)] as I2
 }
 
-package "Instance 2" {
-    [QBITTORRENT_2_URL]
-    [QBITTORRENT_2_USERNAME]
-    [QBITTORRENT_2_PASSWORD]
-}
+DB --> I1
+DB --> I2
 
-package "Legacy" {
-    [QBITTORRENT_URL]
-    [QBITTORRENT_USERNAME]
-    [QBITTORRENT_PASSWORD]
-}
-
-Env --> QBITTORRENT_1_URL
-Env --> QBITTORRENT_1_USERNAME
-Env --> QBITTORRENT_1_PASSWORD
-
-Env --> QBITTORRENT_2_URL
-Env --> QBITTORRENT_2_USERNAME
-Env --> QBITTORRENT_2_PASSWORD
+note right of DB
+  Unique per (kind, instanceId).
+  Edited in the UI or /config API.
+end note
 @enduml
 ```
 
@@ -142,23 +100,21 @@ Env --> QBITTORRENT_2_PASSWORD
 
 actor "Frontend" as FE
 participant "Backend" as BE
-participant "ServiceManager" as SvcMgr
-participant "QBittorrent Instance 1" as QB1
-participant "QBittorrent Instance 2" as QB2
+participant "ServiceRegistry" as Reg
+participant "qbittorrent:main" as QB1
+participant "qbittorrent:seedbox" as QB2
 
-FE -> BE : GET /api/qbittorrent_1/status
-BE -> SvcMgr : Route to qbittorrent_1
-SvcMgr -> QB1 : checkHealth()
-QB1 --> SvcMgr : {status: online}
-SvcMgr --> BE : Response
-BE --> FE : {serviceId: qbittorrent_1, status: online}
+FE -> BE : GET /services/qbittorrent/health?instance=main
+BE -> Reg : getByKind("qbittorrent", "main")
+Reg --> BE : qbittorrent:main
+BE -> QB1 : latest snapshot or checkHealth()
+BE --> FE : { data: HealthSnapshot }
 
-FE -> BE : GET /api/qbittorrent_2/stats
-BE -> SvcMgr : Route to qbittorrent_2
-SvcMgr -> QB2 : getStats()
-QB2 --> SvcMgr : {torrents: 42, download: 1.2MB/s}
-SvcMgr --> BE : Response
-BE --> FE : {serviceId: qbittorrent_2, ...}
+FE -> BE : GET /services/qbittorrent/stats?instance=seedbox
+BE -> Reg : getByKind("qbittorrent", "seedbox")
+Reg --> BE : qbittorrent:seedbox
+BE -> QB2 : getStats() (cached)
+BE --> FE : { data: StatsSnapshot }
 @enduml
 ```
 
@@ -168,34 +124,24 @@ BE --> FE : {serviceId: qbittorrent_2, ...}
 @startuml
 !theme plain
 
-participant "Config" as Cfg
-participant "parseServiceInstances" as Parser
-participant "Environment" as Env
+participant "ServiceLifecycle" as LC
+participant "ConfigStore" as Store
+participant "ServiceRegistry" as Reg
+participant "Frontend" as FE
 
-Cfg -> Parser : parseServiceInstances('qbittorrent')
-Parser -> Env : Scan for QBITTORRENT_*
-
-alt Found Numbered Instances
-    Parser -> Parser : Group by instance number
-    Parser --> Cfg : Array of instance configs
-else No Numbered Instances
-    Parser -> Env : Fall back to QBITTORRENT_*
-    Parser -> Parser : Create single instance
-    Parser --> Cfg : Array with one instance
+LC -> Store : loadAll()
+loop For each enabled instance in the active profile
+    LC -> Reg : register(createService(instance))
 end
 
-note over Cfg
-  Result:
-  [
-    { id: "qbittorrent_1", ... },
-    { id: "qbittorrent_2", ... }
-  ]
-end note
+FE -> Reg : GET /instances
+Reg --> FE : { data: [ { id, kind, instanceId } ] }
 @enduml
 ```
 
 ## Related
 
 - [[docs/features/service-monitoring|Service Monitoring]]
+- [[docs/features/ui-configuration|UI Configuration]]
+- [[docs/api/config|Configuration API]]
 - [[docs/reference/environment-variables|Environment Variables]]
-- `apps/backend/config.js`

@@ -11,6 +11,12 @@ export const torRenderer: ServiceRenderer<Stats> = {
     if (typeof fp === "string" && fp.length > 0) {
       return `https://metrics.torproject.org/rs.html#details/${encodeURIComponent(fp)}`;
     }
+    // the tor config stores the relay as relayNickname (nickname or
+    // fingerprint), not fingerprint
+    const nick = ctx.config?.relayNickname;
+    if (typeof nick === "string" && nick.trim().length > 0) {
+      return `https://metrics.torproject.org/rs.html#search/${encodeURIComponent(nick.trim())}`;
+    }
     return undefined;
   },
   quickLinkLabel: "View on Tor metrics",
@@ -37,6 +43,20 @@ export const torRenderer: ServiceRenderer<Stats> = {
         { key: "bandwidthCurrent", label: "Current", format: fmtBytes },
         { key: "bandwidthBurst", label: "Burst", format: fmtBytes },
         { key: "consensusWeight", label: "Consensus weight", format: fmtNumber(0) },
+      ],
+    },
+    {
+      // ControlPort mode (useControlPort) reports these instead of the
+      // Onionoo fields above
+      title: "ControlPort",
+      metrics: [
+        { key: "bwRead", label: "Read/s", format: fmtBytes },
+        { key: "bwWritten", label: "Written/s", format: fmtBytes },
+        { key: "trafficRead", label: "Total read", format: fmtBytes },
+        { key: "trafficWritten", label: "Total written", format: fmtBytes },
+        { key: "circuits.active", label: "Circuits built", format: fmtNumber(0) },
+        { key: "connections.current", label: "OR connections", format: fmtNumber(0) },
+        { key: "dormant", label: "Dormant", format: fmtRaw },
       ],
     },
     {

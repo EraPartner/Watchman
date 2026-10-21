@@ -6,7 +6,7 @@ import type {
 } from "../../../config/store/ProfileStore.js";
 import type { ServiceLifecycle } from "../../../application/ServiceLifecycle.js";
 import type { NetworkDetector } from "../../../infra/net/gatewayDetect.js";
-import { ValidationError } from "../../../core/errors.js";
+import { NotFoundError, ValidationError } from "../../../core/errors.js";
 
 export interface ProfileRouteDeps {
   profiles: ProfileStore;
@@ -163,7 +163,7 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
           return { data: toDto(updated, counts, activeId) };
         } catch (e) {
           const msg = e instanceof Error ? e.message : "invalid input";
-          const status = msg.includes("not found") ? 404 : 400;
+          const status = e instanceof NotFoundError ? 404 : 400;
           return reply.status(status).send({
             error: {
               code: status === 404 ? "NOT_FOUND" : "VALIDATION",

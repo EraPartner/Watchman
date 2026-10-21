@@ -25,6 +25,10 @@ interface ServerInformation {
   homebridgeVersion?: string;
   serverVersion?: string;
   uptime?: number;
+  // Config UI X nests host details: `os` is systeminformation's osInfo() and
+  // `time` is si.time() (unverified against a live server; read as fallbacks)
+  os?: { hostname?: string; platform?: string; distro?: string };
+  time?: { uptime?: number };
   [k: string]: unknown;
 }
 
@@ -158,7 +162,8 @@ export class HomebridgeService extends BaseService {
           this.versionMemo(sig).catch(() => null),
         ]);
         const details: Record<string, unknown> = {};
-        if (status?.hostname) details["hostname"] = status.hostname;
+        const hostname = status?.hostname ?? status?.os?.hostname;
+        if (hostname) details["hostname"] = hostname;
         const currentVersion = extractVersion(version);
         if (currentVersion !== "unknown")
           details["currentVersion"] = currentVersion;
@@ -215,11 +220,16 @@ export class HomebridgeService extends BaseService {
       return ok({
         at: this.now(),
         metrics: {
-          hostname: info.hostname ?? "",
-          platform: info.platform ?? "",
+          hostname: info.hostname ?? info.os?.hostname ?? "",
+          platform: info.platform ?? info.os?.platform ?? "",
           homebridgeVersion: info.homebridgeVersion ?? "",
           serverVersion: info.serverVersion ?? "",
-          uptime: typeof info.uptime === "number" ? info.uptime : 0,
+          uptime:
+            typeof info.uptime === "number"
+              ? info.uptime
+              : typeof info.time?.uptime === "number"
+                ? info.time.uptime
+                : 0,
           currentVersion: extractVersion(version),
           latestVersion: versionInfo?.latestVersion ?? null,
           updateAvailable: versionInfo?.updateAvailable ?? null,

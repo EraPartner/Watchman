@@ -27,7 +27,7 @@ type EditorState = { mode: "closed" } | { mode: "create" };
 export default function BentoDashboard() {
   const [openCtx, setOpenCtx] = useState<OpenCtx | null>(null);
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
-  const { data, isLoading } = useServiceInstances();
+  const { data, isLoading, isError, error, refetch } = useServiceInstances();
   const createMut = useCreateService();
 
   const configuredKinds = data?.instances ?? {};
@@ -75,7 +75,31 @@ export default function BentoDashboard() {
             </div>
           </header>
 
-          {!isLoading && entries.length === 0 ? (
+          {isError && !data ? (
+            // Without instance data we can't tell "none configured" from
+            // "backend unreachable", so don't show the empty state.
+            <div
+              role="alert"
+              className="glass-regular relative overflow-hidden rounded-r-3 p-s-12 text-center"
+            >
+              <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--crit)]">
+                no signal
+              </p>
+              <h2 className="mt-s-3 text-fs-h2 font-[600] tracking-[-0.02em] text-[var(--text-hi)]">
+                Couldn't load services
+              </h2>
+              <p className="mt-s-2 text-fs-body text-[var(--text-md)]">
+                {error instanceof Error
+                  ? error.message
+                  : "The backend did not respond."}
+              </p>
+              <div className="mt-s-6 flex justify-center">
+                <Button variant="accent" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </div>
+            </div>
+          ) : !isLoading && entries.length === 0 ? (
             <div className="glass-regular relative overflow-hidden rounded-r-3 p-s-12 text-center">
               <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--accent)]">
                 empty observatory

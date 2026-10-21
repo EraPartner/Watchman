@@ -3,8 +3,6 @@ import type {
   AggregatedEntry,
   BackendHealth,
   BackendVersion,
-  ControlRequest,
-  ControlResponse,
   HealthSnapshot,
   InstanceInfo,
   SetupStatus,
@@ -50,21 +48,6 @@ export class ApiClientEndpoints {
   ): Promise<StatsSnapshot> {
     const base = `/services/${encodeURIComponent(kind)}/stats`;
     return this.core.request(appendInstance(base, instance));
-  }
-
-  async controlService(
-    kind: string,
-    action: string,
-    params?: Record<string, unknown>,
-    instance?: string
-  ): Promise<ControlResponse> {
-    const base = `/services/${encodeURIComponent(kind)}/control`;
-    const body: ControlRequest = params ? { action, params } : { action };
-    return this.core.request(appendInstance(base, instance), {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json" },
-    });
   }
 
   async getInstances(): Promise<InstanceInfo[]> {

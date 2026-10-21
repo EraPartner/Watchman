@@ -1,18 +1,30 @@
 import { useRef, useState } from "react";
 import { Button } from "../../components/primitives";
 import { SettingsLayout } from "./SettingsLayout";
-import { useExportConfig, useImportConfig } from "./useConfigQueries";
+import {
+  useExportConfig,
+  useImportConfig,
+  useServiceLoadErrors,
+} from "./useConfigQueries";
 import type { ExportBundle, ImportResult } from "../../services/configApi";
 
 export default function BackupRestore() {
   const exportMut = useExportConfig();
   const importMut = useImportConfig();
+  const { data: loadErrors } = useServiceLoadErrors();
   const fileRef = useRef<HTMLInputElement>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   async function handleExport() {
-    const bundle = await exportMut.mutateAsync();
+    let bundle: ExportBundle;
+    try {
+      bundle = await exportMut.mutateAsync();
+    } catch {
+      // Surfaced below via exportMut.error; swallowing here avoids an
+      // unhandled rejection from the click handler.
+      return;
+    }
     const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: "application/json",
     });
@@ -67,6 +79,13 @@ export default function BackupRestore() {
               {exportMut.isPending ? "Exporting…" : "Download backup"}
             </Button>
           </div>
+          {loadErrors && loadErrors.length > 0 && (
+            <p className="mt-s-3 text-fs-label text-[var(--warn)]">
+              {loadErrors.length} service(s) fail to load and will not be in
+              the backup:{" "}
+              {loadErrors.map((e) => `${e.kind}/${e.instanceId}`).join(", ")}
+            </p>
+          )}
           {exportMut.error && (
             <p className="mt-s-3 text-fs-label text-[var(--crit)]">
               {(exportMut.error as Error).message}

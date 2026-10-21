@@ -4,6 +4,9 @@ Shared guidance for coding agents in this repository. Tool-specific files should
 to this file instead of duplicating it. If `AGENTS.local.md` exists, read it before work because it
 contains host-only setup.
 
+The global working agreement applies (signing, publication, safety); this file lists
+project-specific rules only.
+
 ## Project
 
 Watchman is a self-hosted dashboard that polls home-lab services and exposes status, metrics, and
@@ -16,7 +19,6 @@ Electron. License: AGPL-3.0-only.
 | `@watchman/frontend` | `apps/frontend/` |
 | `@watchman/backend`  | `apps/backend/`  |
 | desktop              | `apps/desktop/`  |
-| shared               | `packages/*`     |
 
 ## Start with project knowledge
 
@@ -55,14 +57,11 @@ These obligations are tracked here because Codex does not auto-load `AGENTS.loca
 root file exists. `AGENTS.local.md` may add machine-specific convenience, but it cannot weaken or
 replace these rules.
 
-- In the devcontainer, Codex uses isolated container state. Codex authentication and configuration
-  do not synchronize with the host. Never copy `~/.codex/auth.json` into the container. Treat
-  changes under container `~/.codex/` as ephemeral and report them before the session ends; tracked
-  repository files under `.agents/` and `.codex/` persist through the workspace mount.
-- Codex browser tooling is the supported replacement for Claude's Playwright plugin. There is no
-  Codex TypeScript-LSP plugin in this project; `npm run typecheck` and the relevant build/test
-  commands are the authoritative diagnostics and must not be skipped because editor diagnostics
-  appear clean.
+- The repository does not provide an agent container or synchronize provider state.
+- Use browser tooling available in the current client for visual review. Report visual checks
+  as skipped when no suitable tool is available. For every agent, `npm run typecheck` and the
+  relevant build/test commands are authoritative; do not skip them because editor or Language
+  Server Protocol diagnostics appear clean.
 
 ## Architecture and invariants
 
@@ -71,7 +70,7 @@ replace these rules.
   registered through `bootstrap/registerServices.ts` and `ServiceLifecycle`.
 - Reuse transport, cache, circuit-breaker, and scheduler code under `apps/backend/src/infra/`.
 - Service and multi-instance configuration belongs in the DuckDB store through `/config` or the
-  UI. Legacy `{SERVICE}_{N}_*` variables are imported once and then ignored.
+  UI. A legacy `WATCHMAN_SERVICES_CONFIG` value is imported once into an empty store and then ignored.
 - `apps/backend/openapi.yaml` is the API source of truth. After changing it, run
   `npm run generate:types`. Until the client migration is complete, also keep
   `apps/frontend/src/services/apiClient/types.ts` aligned.
@@ -85,7 +84,9 @@ replace these rules.
 This is a single-user trusted-network application. It intentionally has no authentication, CSRF
 protection, or rate limiting; see ADR-017 and ADR-025. Do not expose the backend outside the trusted
 network. Preserve the shared HTTP and WebSocket origin allowlist. Keep secrets in `.env.local` and
-encrypted in DuckDB. Never log tokens or personal data; preserve Pino redaction.
+encrypted in DuckDB. Never log tokens or personal data; preserve the configured Pino secret
+redaction. Validate every external input with server-side Zod schemas. Use least-privilege service
+configuration, and audit new dependencies before adding them.
 
 ## Required synchronization and verification
 
@@ -108,32 +109,25 @@ encrypted in DuckDB. Never log tokens or personal data; preserve Pino redaction.
 - Cross-module edit: targeted tests, workspace lint, and typecheck.
 - Security, persistence, or destructive edit: tests, lint, typecheck, build, and focused safety
   checks.
-- Explain destructive or irreversible commands and get confirmation first.
 
 Keep scope focused. Finish with changed files, checks run, skipped checks, residual risk, and
-follow-ups. In regular local development sessions, leave the reviewed working-tree diff for the
-LockBox `git-agent`; do not stage, sign, commit, or push. Only an explicitly authorized LockBox
-`git-agent` publication session may commit directly to `main` unless the user asks for a branch.
-Cloud publication follows the rules below.
+follow-ups. When the task authorizes a local commit, commit directly to `main` unless the user asks
+for a branch.
 
-Validate every external input with server-side Zod schemas. Use least-privilege service
-configuration, preserve the configured Pino secret redaction, and audit new dependencies before
-adding them.
+## Commit hooks
+
+`.githooks/pre-commit` runs `npx lint-staged` (config: `lint-staged.config.mjs`). It runs
+`eslint --fix` on staged backend and frontend sources and `prettier --write` on staged sources,
+JSON, YAML, CSS, HTML, and Markdown, then adds the results to the commit. A commit can therefore
+change staged content, including Markdown under `docs/`. Review `git show HEAD` after committing. `.githooks/pre-push` runs the heavier typecheck and test gate. Do not bypass the
+hooks with `SKIP_HOOKS=1` or `git commit --no-verify` unless the user asks.
 
 Create a session note in `docs/` only when it adds durable decisions, rationale, unresolved issues,
 or operational lessons that are not already captured in the updated project documentation, or
 when the user requests one. Do not duplicate the change summary merely because multiple files or
 modules changed. Follow `docs/AGENTS.md` and use the `update-watchman-docs` skill for the note.
 
-## Cloud sessions
+## Claude Code notes
 
-Run `bash .codex/cloud/setup.sh` as the Codex cloud environment setup command. Keep cloud secrets
-disposable and non-production. Cloud sessions cannot validate host containers, macOS integration,
-hardware-backed signing, or local service state; report those checks as skipped and leave them for
-a local session. In cloud sessions, do not publish with shell Git commands, configure Git
-credentials, or create a pull request with `gh`. The platform-managed **Open pull request** action
-may create a pull request, and the connected GitHub integration may update the same branch for
-pull-request-linked follow-ups. When the user explicitly requests it, that integration may merge
-the pull request after all required checks and approvals pass and no blocking review remains. Do
-not use an admin bypass or directly update a default or protected branch outside that approved
-merge.
+Project skills are maintained in `.agents/skills/`. The entries under `.claude/skills/` defer to
+those same canonical instructions.

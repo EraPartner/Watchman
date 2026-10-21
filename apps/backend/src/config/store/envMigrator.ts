@@ -12,8 +12,12 @@ export async function migrateEnvServicesIfNeeded(
   logger: Logger,
   source: NodeJS.ProcessEnv = process.env,
 ): Promise<EnvMigrationResult> {
+  // Rows that fail to load (e.g. undecryptable after a master-key change)
+  // still mean the store is not empty; re-importing would resurrect stale env
+  // config next to them.
   const existing = await store.loadAll();
-  if (existing.length > 0) {
+  const broken = await store.loadErrors();
+  if (existing.length > 0 || broken.length > 0) {
     if (source['WATCHMAN_SERVICES_CONFIG']) {
       logger.warn(
         'WATCHMAN_SERVICES_CONFIG set but DB already has services. Env var ignored — remove it.',

@@ -2,7 +2,7 @@
 title: AI Agent Workflow
 type: guide
 status: active
-date: 2026-09-05
+date: 2026-10-20
 tags: [guide, ai-agent, workflow, development, automation, skills]
 description: Model-neutral workflow for coding agents working on the Watchman project
 aliases: [ai-agent-guide, agent workflow, ai assistant, copilot]
@@ -18,28 +18,19 @@ aliases: [ai-agent-guide, agent workflow, ai assistant, copilot]
 
 | Purpose                | Canonical location | Compatibility                                     |
 | ---------------------- | ------------------ | ------------------------------------------------- |
-| Repository guidance    | `AGENTS.md`        | `CLAUDE.md` imports it                            |
-| Documentation guidance | `docs/AGENTS.md`   | `docs/CLAUDE.md` imports it                       |
+| Repository guidance    | `AGENTS.md`        | Read directly; no `CLAUDE.md` shim                |
+| Documentation guidance | `docs/AGENTS.md`   | Read directly; no `docs/CLAUDE.md` shim           |
 | Project skills         | `.agents/skills/`  | `.claude/skills/` defers to the same instructions |
 | Host-only guidance     | `AGENTS.local.md`  | `CLAUDE.local.md` remains tool-specific           |
 
 Do not copy shared guidance into a tool-specific file. Update the canonical file so every supported
 agent receives the same project rules.
 
-## Cloud tooling validation
+## Agent sandbox
 
-The CI workflow includes a **Cloud Tooling** job. It checks Bash syntax for cloud scripts and
-runs every `.codex/cloud/tests/*.test.sh` mocked regression suite. It also rejects drift between
-the vendored `.devcontainer` controls and LockBox's canonical `main` branch. These checks do not
-install application dependencies or start services. Quality Gate explicitly requires this job to
-succeed. The workflow's existing documentation path exclusions still apply to documentation-only
-changes.
-
-Run the same regression suites locally with:
-
-```bash
-for suite in .codex/cloud/tests/*.test.sh; do bash "$suite"; done
-```
+Use Claude and Codex with their built-in sandboxes and the current host access policy.
+The retired agent container and its fleet drift CI check have been removed. Application
+quality checks remain in CI. See [[docs/adr/031-built-in-agent-sandboxes|ADR-031]].
 
 ## Workflow
 
@@ -131,10 +122,10 @@ npm run generate:types
 ## Documentation Completion
 
 Update only pages made stale by the implementation. Preserve frontmatter, wikilinks, callouts,
-diagrams, and the interactive flow visualizer when relevant. Write a concise session note under
-`docs/` when work changes multiple modules or documentation surfaces, or changes architecture, API
-contracts, security, persistence, service integrations, configuration workflows, or
-build/deployment behavior. Isolated mechanical and comment-only edits do not need a session note.
+diagrams, and the interactive flow visualizer when relevant. Create a session note only when it
+adds durable decisions, rationale, unresolved issues, or operational lessons not already captured
+in the updated documentation, or when the user requests one. Do not duplicate a change summary
+merely because multiple files or modules changed.
 
 ## Related
 

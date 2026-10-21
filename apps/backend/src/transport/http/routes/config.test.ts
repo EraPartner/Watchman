@@ -4,7 +4,6 @@ import { buildServer } from "../server.js";
 import { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
 import { GetServiceStatus } from "../../../application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "../../../application/GetAggregatedHealth.js";
-import { ControlService } from "../../../application/ControlService.js";
 import { ListInstances } from "../../../application/ListInstances.js";
 import { createMetricsRegistry } from "../../../core/metrics.js";
 import { ok, err } from "../../../core/result.js";
@@ -98,6 +97,17 @@ function makeFakeStore(overrides: Partial<ConfigStore> = {}): ConfigStore {
 
 // ─── App builder ─────────────────────────────────────────────────────────────
 
+// Only "profile-default" exists.
+const knownProfiles = {
+  getProfile: vi.fn(async (id: string) =>
+    id === "profile-default"
+      ? ({ id, name: "Default" } as unknown as Awaited<
+          ReturnType<ProfileRouteDeps["profiles"]["getProfile"]>
+        >)
+      : undefined
+  ),
+};
+
 function makeFakeProfileDeps(store: ConfigStore, lifecycle: ServiceLifecycle) {
   const profiles = {
     listProfiles: vi.fn(async () => []),
@@ -150,11 +160,10 @@ function makeApp(store: ConfigStore, registry = new ServiceRegistry()) {
     services: {
       getStatus: new GetServiceStatus({ registry }),
       aggregated: new GetAggregatedHealth(registry),
-      control: new ControlService(registry),
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
-    config: { store, lifecycle: fakeLifecycle, registry },
+    config: { store, lifecycle: fakeLifecycle, registry, profiles: knownProfiles },
     profiles: makeFakeProfileDeps(store, fakeLifecycle),
     setup: { store, http: fakeHttp },
   });
@@ -420,6 +429,65 @@ describe("DELETE /config/services/:id", () => {
   });
 });
 
+describe("profile must exist", () => {
+  it("POST /config/services rejects an unknown profileId without storing", async () => {
+    const createMock = vi.fn(async () => makeStoredService());
+    const store = makeFakeStore({ create: createMock });
+    const app = await makeApp(store);
+    const res = await app.inject({
+      method: "POST",
+      url: "/config/services",
+      payload: { kind: "bitcoin", instanceId: "main", profileId: "ghost" },
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: { code: "VALIDATION" } });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("PUT /config/services/:id/profile rejects an unknown profileId without moving", async () => {
+    const setProfile = vi.fn(async () => undefined);
+    const store = makeFakeStore({
+      get: vi.fn(async () => makeStoredService()),
+      setProfile,
+    });
+    const app = await makeApp(store);
+    const res = await app.inject({
+      method: "PUT",
+      url: "/config/services/svc-uuid-1/profile",
+      payload: { profileId: "ghost" },
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: { code: "VALIDATION" } });
+    expect(setProfile).not.toHaveBeenCalled();
+  });
+
+  it("PUT /config/services/:id/profile moves to a known profile", async () => {
+    const setProfile = vi.fn(async () => undefined);
+    const store = makeFakeStore({
+      get: vi.fn(async () => makeStoredService()),
+      setProfile,
+    });
+    const app = await makeApp(store);
+    const res = await app.inject({
+      method: "PUT",
+      url: "/config/services/svc-uuid-1/profile",
+      payload: { profileId: "profile-default" },
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(200);
+    expect(setProfile).toHaveBeenCalledWith(
+      "svc-uuid-1",
+      "profile-default",
+      undefined
+    );
+  });
+});
+
 describe("POST /config/services/:id/test", () => {
   class FakeSvc extends BaseService {
     readonly kind = "bitcoin";
@@ -464,11 +532,10 @@ describe("POST /config/services/:id/test", () => {
       services: {
         getStatus: new GetServiceStatus({ registry }),
         aggregated: new GetAggregatedHealth(registry),
-        control: new ControlService(registry),
       },
       listInstances: new ListInstances(registry),
       metrics: createMetricsRegistry(),
-      config: { store, lifecycle: fakeLifecycle, registry },
+      config: { store, lifecycle: fakeLifecycle, registry, profiles: knownProfiles },
       profiles: makeFakeProfileDeps(store, fakeLifecycle),
       setup: {
         store,
@@ -506,11 +573,10 @@ describe("POST /config/services/:id/test", () => {
       services: {
         getStatus: new GetServiceStatus({ registry }),
         aggregated: new GetAggregatedHealth(registry),
-        control: new ControlService(registry),
       },
       listInstances: new ListInstances(registry),
       metrics: createMetricsRegistry(),
-      config: { store, lifecycle: fakeLifecycle, registry },
+      config: { store, lifecycle: fakeLifecycle, registry, profiles: knownProfiles },
       profiles: makeFakeProfileDeps(store, fakeLifecycle),
       setup: {
         store,
@@ -635,5 +701,19 @@ describe("GET /config/audit", () => {
     await app.close();
 
     expect(listAuditMock).toHaveBeenCalledWith(50);
+  });
+
+  it("falls back to the default limit for a non-numeric limit", async () => {
+    const listAuditMock = vi.fn(async () => []);
+    const store = makeFakeStore({ listAudit: listAuditMock });
+    const app = await makeApp(store);
+    const res = await app.inject({
+      method: "GET",
+      url: "/config/audit?limit=abc",
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(200);
+    expect(listAuditMock).toHaveBeenCalledWith(100);
   });
 });

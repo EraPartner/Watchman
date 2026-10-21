@@ -43,11 +43,20 @@ const envExample = join(backendDir, ".env.example");
 if (existsSync(envExample)) cpSync(envExample, join(stageDir, ".env.example"));
 
 // Isolated production install (the .bundle dir is not a workspace member, so
-// npm treats it standalone).
-execFileSync("npm", ["ci", "--omit=dev", "--ignore-scripts"], {
-  cwd: stageDir,
-  stdio: "inherit",
-});
+// npm treats it standalone and does not read the repo-root .npmrc). Follow the
+// repo's Git-dependency policy explicitly: verify the sole pinned Git
+// dependency, then opt in for this one install.
+const repoRoot = resolve(backendDir, "..", "..");
+execFileSync(
+  process.execPath,
+  [join(repoRoot, "scripts", "verify-git-dependencies.mjs")],
+  { cwd: repoRoot, stdio: "inherit" }
+);
+execFileSync(
+  "npm",
+  ["ci", "--omit=dev", "--ignore-scripts", "--allow-git=all"],
+  { cwd: stageDir, stdio: "inherit" }
+);
 
 const nodeModules = join(stageDir, "node_modules");
 if (!existsSync(join(nodeModules, "dotenv"))) {

@@ -6,6 +6,9 @@ import { logger } from "../lib/logger";
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  /** Clears a caught error when it changes, e.g. the route path, so
+   *  navigating away from a crashed page recovers. */
+  resetKey?: unknown;
 }
 
 interface State {
@@ -32,6 +35,12 @@ export class ErrorBoundary extends Component<Props, State> {
       componentStack: errorInfo.componentStack,
     });
     this.setState({ error, errorInfo });
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.handleReset();
+    }
   }
 
   handleReset = () => {

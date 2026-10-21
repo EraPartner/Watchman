@@ -985,7 +985,7 @@
           {
             "id": "be.routes.svc",
             "label": "/services routes",
-            "sub": "routes/services.ts (health/stats/control)",
+            "sub": "routes/services.ts (health/stats)",
             "kind": "transport",
             "x": 440,
             "y": 348
@@ -1045,14 +1045,6 @@
             "sub": "application/GetAggregatedHealth.ts",
             "kind": "app",
             "x": 240,
-            "y": 448
-          },
-          {
-            "id": "app.control",
-            "label": "ControlService",
-            "sub": "application/ControlService.ts",
-            "kind": "app",
-            "x": 440,
             "y": 448
           },
           {
@@ -1417,14 +1409,12 @@
 
           ["be.routes.svc", "app.getStatus"],
           ["be.routes.svc", "app.aggregated"],
-          ["be.routes.svc", "app.control"],
           ["be.routes.cfg", "app.lifecycle"],
           ["be.routes.inst", "app.listInst"],
           ["be.routes.metrics", "app.metricsReg"],
 
           ["app.getStatus", "dom.registry"],
           ["app.aggregated", "dom.registry"],
-          ["app.control", "dom.registry"],
           ["app.listInst", "dom.registry"],
           ["app.lifecycle", "dom.poller"],
           ["app.lifecycle", "dom.registry"],
@@ -1549,8 +1539,8 @@
               {
                 "from": "app.bootstrap",
                 "to": "app.shutdown",
-                "payload": "registerShutdown({ close: poller.stop → lifecycle.stop → dbPool.close → app.close })",
-                "annotation": "SIGTERM/SIGINT chain — every service's onStop runs before DuckDB and Fastify close."
+                "payload": "registerShutdown({ close: app.close → networkWatcher.stop → poller.stop → lifecycle.stop → snapshots.stop → dbPool.close })",
+                "annotation": "SIGTERM/SIGINT/SIGHUP chain — Fastify drains requests first, every service's onStop runs, DuckDB closes last. Forced exit after 10 s."
               }
             ]
           },
@@ -1736,7 +1726,7 @@
                 "from": "dom.bus",
                 "to": "dom.broadcaster",
                 "payload": "broadcaster subscriber callback",
-                "annotation": "Broadcaster also subscribes to service.stats.updated, config:service.created/updated/deleted."
+                "annotation": "Broadcaster also subscribes to service.stats.updated and config:service.applied (emitted by ServiceLifecycle after a create/update/delete is applied)."
               },
               {
                 "from": "dom.broadcaster",
@@ -1883,8 +1873,8 @@
               {
                 "from": "app.lifecycle",
                 "to": "dom.broadcaster",
-                "payload": "(via bus) config:service.created",
-                "annotation": "Broadcaster fans out { type: 'service_config_changed', action: 'created' } so every open tab refreshes its registry view."
+                "payload": "(via bus) config:service.applied { action: 'created' }",
+                "annotation": "Emitted after bring-up finishes, so the registry already holds the service. Broadcaster fans out { type: 'service_config_changed', action: 'created' } so every open tab refreshes its registry view."
               },
               {
                 "from": "dom.broadcaster",
@@ -1945,7 +1935,7 @@
               {
                 "from": "app.lifecycle",
                 "to": "dom.broadcaster",
-                "payload": "config:service.updated → WS",
+                "payload": "config:service.applied { action: 'updated' } → WS",
                 "annotation": "Frontend updates form state and dashboard simultaneously."
               }
             ]
@@ -2001,70 +1991,8 @@
               {
                 "from": "app.lifecycle",
                 "to": "dom.broadcaster",
-                "payload": "config:service.deleted → WS",
+                "payload": "config:service.applied { action: 'deleted' } → WS",
                 "annotation": "Tile disappears from the dashboard within a second."
-              }
-            ]
-          },
-          {
-            "id": "control-action",
-            "name": "Send a control action to a service",
-            "category": "Write paths",
-            "summary": "Tile → POST /api/services/{kind}/control { action } → ControlService → svc.control().",
-            "steps": [
-              {
-                "from": "browser",
-                "to": "fe.tile",
-                "payload": "click 'Pause torrents' / 'Restart Tor' / etc.",
-                "annotation": "Only services implementing the Controllable interface expose action buttons."
-              },
-              {
-                "from": "fe.tile",
-                "to": "fe.api",
-                "payload": "POST /api/services/{kind}/control?instance={id} { action }",
-                "annotation": "Action vocabulary is per-kind; ApiClient lets renderers declare them at component-registration time."
-              },
-              {
-                "from": "fe.api",
-                "to": "be.routes.svc",
-                "payload": "route handler",
-                "annotation": "Pass-through to ControlService — routes hold no business logic."
-              },
-              {
-                "from": "be.routes.svc",
-                "to": "app.control",
-                "payload": "control.run(kind, instance, action, signal)",
-                "annotation": "Returns Result<void, DomainError>; 4xx/5xx is mapped from DomainError codes."
-              },
-              {
-                "from": "app.control",
-                "to": "dom.registry",
-                "payload": "registry.get(kind, instance)",
-                "annotation": "404 if missing or service not Controllable."
-              },
-              {
-                "from": "dom.registry",
-                "to": "dom.base",
-                "payload": "if (isControllable(svc)) svc.control(action, signal)",
-                "annotation": "Controllable services dispatch on the action string (e.g. qBittorrent → pause/resume/recheck)."
-              },
-              {
-                "from": "dom.base",
-                "to": "inf.http",
-                "payload": "POST upstream API",
-                "annotation": "Or SSH command, or SNMP set; whatever the kind requires."
-              },
-              {
-                "from": "inf.http",
-                "to": "ext.qbit",
-                "payload": "POST /api/v2/torrents/pause",
-                "annotation": "qBittorrent WebUI v2 example."
-              },
-              {
-                "from": "be.routes.svc",
-                "to": "fe.api",
-                "payload": "{ data: null } or { error: { code, message } }",
-                "annotation": "Tile toasts success / failure. A poller tick shortly after confirms the new state."
               }
             ]
           },
@@ -2674,7 +2602,7 @@
             "id": "graceful-shutdown",
             "name": "Graceful shutdown",
             "category": "Lifecycle",
-            "summary": "SIGTERM/SIGINT chain: poller stops, lifecycle stops every service, DuckDB and Fastify close cleanly.",
+            "summary": "SIGTERM/SIGINT/SIGHUP chain: Fastify drains, poller stops, lifecycle stops every service, DuckDB closes last; forced exit after 10 s.",
             "steps": [
               {
                 "from": "electron",
@@ -2687,6 +2615,18 @@
                 "to": "app.shutdown",
                 "payload": "process receives SIGTERM",
                 "annotation": "registerShutdown wires SIGTERM + SIGINT to the same chain."
+              },
+              {
+                "from": "app.shutdown",
+                "to": "be.cors",
+                "payload": "app.close()",
+                "annotation": "Fastify drains open connections; wsPlugin onClose hook closes every WS with 1001 server_shutdown."
+              },
+              {
+                "from": "be.cors",
+                "to": "fe.api",
+                "payload": "client connections drained",
+                "annotation": "Frontend ApiClient sees a clean disconnect — useWebSocket queues a reconnect attempt."
               },
               {
                 "from": "app.shutdown",
@@ -2710,19 +2650,7 @@
                 "from": "app.shutdown",
                 "to": "data.duckdb",
                 "payload": "dbPool.close()",
-                "annotation": "DuckDB pool drained before Fastify; ensures audit rows from in-flight writes are flushed."
-              },
-              {
-                "from": "app.shutdown",
-                "to": "be.cors",
-                "payload": "app.close()",
-                "annotation": "Fastify drains open connections; wsPlugin onClose hook closes every WS with 1001 server_shutdown."
-              },
-              {
-                "from": "be.cors",
-                "to": "fe.api",
-                "payload": "client connections drained",
-                "annotation": "Frontend ApiClient sees a clean disconnect — useWebSocket queues a reconnect attempt."
+                "annotation": "Last step, so no request or service still uses a connection: close() force-closes borrowed connections and releases the file lock. A failing earlier step does not skip it."
               }
             ]
           },

@@ -55,7 +55,14 @@ export const zmqConnect: ZmqConnectFn = async (endpoint, topics) => {
         const topic = (topicBuf as Buffer).toString();
         const sequence = seqBuf ? (seqBuf as Buffer).readUInt32LE(0) : 0;
         const msg: ZmqMessage = { topic, data: data as Buffer, sequence };
-        for (const h of handlers) h(msg);
+        for (const h of handlers) {
+          // a throwing handler must not end the receive loop for everyone
+          try {
+            h(msg);
+          } catch {
+            /* handler's own failure */
+          }
+        }
       }
     } catch {
       // Socket closed — normal teardown

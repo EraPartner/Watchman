@@ -20,33 +20,6 @@ concurrency:
 permissions: {}
 
 jobs:
-  cloud-tooling:
-    name: Cloud Tooling
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-      - name: Check generated cloud agreement
-        run: python3 .codex/cloud/check-instructions.py
-      - name: Check cloud shell syntax and mocked regressions
-        run: |
-          set -euo pipefail
-          while IFS= read -r -d '' script; do bash -n "$script"; done < <(find .codex/cloud -name '*.sh' -print0)
-          for suite in .codex/cloud/tests/*.test.sh; do bash "$suite"; done
-      - name: Check LockBox vendored files against canonical main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          repository: EraPartner/Lockbox
-          ref: main
-          path: .lockbox-canonical
-          persist-credentials: false
-      - name: Reject LockBox fleet drift
-        run: |
-          CODE_ROOT="${GITHUB_WORKSPACE%/*}" \
-            .lockbox-canonical/sync.sh --check --target="$GITHUB_WORKSPACE/.devcontainer"
-
   # ─────────────────────────────────────────────────────────────────────────────
   # Secrets scan — gitleaks on push/PR diff range
   # ─────────────────────────────────────────────────────────────────────────────
@@ -135,8 +108,10 @@ jobs:
           node-version: 24
           cache: npm
 
+      # Full install (not :portable) so apps/desktop gets its own TypeScript and
+      # Electron type declarations for the desktop check below.
       - name: Install dependencies
-        run: npm run deps:ci:portable
+        run: npm run deps:ci
 
       - name: Type-check frontend
         run: npm run typecheck --workspace=apps/frontend
@@ -173,7 +148,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Verify generated artifacts — the committed OpenAPI-derived TS types must
   # match apps/backend/openapi.yaml. Drift means someone edited openapi.yaml
-  # without running `npm run generate:types`. Cheap, high-signal — and CLAUDE.md
+  # without running `npm run generate:types`. Cheap, high-signal — and AGENTS.md
   # explicitly flags this sync risk.
   # ─────────────────────────────────────────────────────────────────────────────
   verify-generated:
@@ -382,7 +357,6 @@ jobs:
     timeout-minutes: 5
     needs:
       - secrets-scan
-      - cloud-tooling
       - deps-audit
       - lint
       - typecheck
@@ -396,10 +370,7 @@ jobs:
     if: always()
     steps:
       - name: Check all gates passed
-        env:
-          CLOUD_TOOLING_RESULT: ${{ needs.cloud-tooling.result }}
         run: |
-          test "$CLOUD_TOOLING_RESULT" = success
           results='${{ toJson(needs.*.result) }}'
           if echo "$results" | grep -qE '"(failure|cancelled)"'; then
             echo "Quality gate failed. Job results: $results"

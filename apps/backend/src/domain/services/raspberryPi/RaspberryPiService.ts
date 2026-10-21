@@ -1,19 +1,13 @@
 import {
   BaseService,
-  type Controllable,
   type HealthResult,
   type HostHealth,
   type ServiceHealth,
   type PollPolicy,
   type StatsResult,
 } from "../../BaseService.js";
-import { ok, err, type Result } from "../../../core/result.js";
-import {
-  UnavailableError,
-  ValidationError,
-  isDomainError,
-  type DomainError,
-} from "../../../core/errors.js";
+import { ok, err } from "../../../core/result.js";
+import { UnavailableError, isDomainError } from "../../../core/errors.js";
 import type { RaspberryPiInstance } from "../../../config/services.js";
 import type { PigpioClient } from "../../../infra/gpio/pigpioClient.js";
 import {
@@ -23,7 +17,6 @@ import {
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 import type { SshExecutor } from "../../../infra/ssh/sshExecutor.js";
 import { PiStatsCollector } from "./PiStatsCollector.js";
-import { GpioController } from "./GpioController.js";
 
 export interface RaspberryPiDeps {
   pigpio: PigpioClient;
@@ -33,12 +26,11 @@ export interface RaspberryPiDeps {
   now: () => number;
 }
 
-export class RaspberryPiService extends BaseService implements Controllable {
+export class RaspberryPiService extends BaseService {
   readonly kind = "raspberryPi";
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy;
   private readonly stats: PiStatsCollector;
-  private readonly gpio: GpioController;
   private readonly host: string;
   private readonly piPort: number;
   private readonly timeoutMs: number;
@@ -56,8 +48,8 @@ export class RaspberryPiService extends BaseService implements Controllable {
     this.timeoutMs = deps.config.timeoutMs;
     this.pingCount = deps.config.pingCount;
     this.pinger = deps.ping;
-    // One persistent pigpiod connection shared by health checks, stats
-    // collection and GPIO control instead of two connects per poll cycle.
+    // One persistent pigpiod connection shared by health checks and stats
+    // collection instead of two connects per poll cycle.
     this.pigpioClient = createSharedPigpioClient(deps.pigpio);
     this.now = deps.now;
     this.stats = new PiStatsCollector({
@@ -66,60 +58,10 @@ export class RaspberryPiService extends BaseService implements Controllable {
       config: deps.config,
       now: deps.now,
     });
-    this.gpio = new GpioController({
-      pigpio: this.pigpioClient,
-      config: deps.config,
-    });
   }
 
   override async onStop(): Promise<void> {
     await this.pigpioClient.close();
-  }
-
-  /**
-   * GPIO control via pigpiod. Action grammar:
-   *   gpio:write:<pin>:<0|1>          set an output pin level
-   *   gpio:mode:<pin>:<input|output>  switch a pin's mode
-   */
-  async control(
-    action: string,
-    _signal: AbortSignal
-  ): Promise<Result<void, DomainError>> {
-    const [domain, op, pinRaw, arg] = action.split(":");
-    if (domain !== "gpio") {
-      return err(new ValidationError(`unsupported action: ${action}`));
-    }
-    const pin = Number(pinRaw);
-    try {
-      if (op === "write") {
-        if (arg !== "0" && arg !== "1") {
-          return err(
-            new ValidationError(
-              `gpio write level must be 0 or 1, got: ${arg ?? ""}`
-            )
-          );
-        }
-        await this.gpio.write(pin, arg === "1" ? 1 : 0);
-        return ok(undefined);
-      }
-      if (op === "mode") {
-        if (arg !== "input" && arg !== "output") {
-          return err(
-            new ValidationError(
-              `gpio mode must be input or output, got: ${arg ?? ""}`
-            )
-          );
-        }
-        await this.gpio.setMode(pin, arg);
-        return ok(undefined);
-      }
-      return err(new ValidationError(`unsupported gpio op: ${op ?? ""}`));
-    } catch (e) {
-      if (isDomainError(e)) return err(e);
-      return err(
-        new UnavailableError(e instanceof Error ? e.message : String(e))
-      );
-    }
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {

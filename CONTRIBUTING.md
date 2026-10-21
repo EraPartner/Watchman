@@ -1,15 +1,19 @@
 # Contributing to Watchman
 
-Watchman is primarily solo-maintained, but it's open source (AGPL-3.0-only) and
-contributions — bug reports, fixes, new service integrations — are welcome.
-This guide is also the checklist for future-me. The authoritative design docs
+> **Status: not actively maintained (October 2026).** Issues and pull requests may not be
+> reviewed or answered. If you want to continue development, fork the repository
+> (AGPL-3.0-only). The workflow below is kept so a fork or a returning maintainer can pick
+> the project up.
+
+Watchman is open source (AGPL-3.0-only). This guide documents the development workflow and
+the checks CI enforces. The authoritative design docs
 live in [`docs/`](./docs/) (start at [`docs/INDEX.md`](./docs/INDEX.md));
 `docs/` is intent, the code is truth — verify against the code.
 
 ## Prerequisites
 
-- **Node.js 22** — pinned in [`.nvmrc`](./.nvmrc) / [`.node-version`](./.node-version).
-  With `nvm`: `nvm use`. The `engines` field requires `node >=22`, `npm >=10`.
+- **Node.js 24** — pinned in [`.nvmrc`](./.nvmrc) / [`.node-version`](./.node-version)
+  and used by CI. With `nvm`: `nvm use`. The `engines` field requires `node >=22`, `npm >=10`.
 - **npm** (workspaces) — this is an npm monorepo; do not use yarn/pnpm.
 
 ## Getting started
@@ -17,8 +21,10 @@ live in [`docs/`](./docs/) (start at [`docs/INDEX.md`](./docs/INDEX.md));
 ```bash
 git clone git@github.com:EraPartner/Watchman.git
 cd Watchman
-nvm use                 # or ensure Node 22+
-npm run deps:ci:portable # verifies the Git pin; installs root, backend, and frontend; wires hooks
+nvm use                 # or ensure Node 24
+npm run deps:ci         # verifies the Git pin; installs all workspaces; wires hooks
+# npm run deps:ci:portable skips apps/desktop (no Electron); the pre-push desktop
+# typecheck then fails, because it needs the desktop's own TypeScript and Electron types.
 
 # Backend + frontend env (never commit these)
 cp apps/backend/.env.example  apps/backend/.env.local
@@ -28,8 +34,8 @@ npm run dev             # backend (:3001) + frontend (Vite), concurrently
 ```
 
 Service configuration (including multi-instance) lives in the DuckDB config
-store and is managed through the `/config` API or the UI — not env vars. Legacy
-`{SERVICE}_*` env vars are imported once on first boot, then ignored.
+store and is managed through the `/config` API or the UI — not env vars. A legacy
+`WATCHMAN_SERVICES_CONFIG` value is imported once into an empty store, then ignored.
 
 ## Project layout
 

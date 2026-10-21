@@ -101,7 +101,9 @@ Switching the active profile calls `switchActiveProfile(id, reason)`:
    - **Match found + auto-switch on**: calls `switchActiveProfile(id, "auto")`.
    - **Match found + auto-switch off**: does not switch (manual override in effect).
    - **No match**: emits `profile.network.unrecognized` → `Broadcaster` sends `profile_network_unrecognized` WebSocket frame; the UI shows an "unrecognized network — assign it?" hint.
-4. Stores the new signature regardless of match outcome (so future ticks detect changes correctly).
+4. Stores the new signature once it has been handled, whatever the match outcome, so later ticks detect changes correctly. If the switch fails, the signature is not stored and the next tick retries.
+
+A missing reading is not a change. A tick with no default route, or with the same gateway IP but no MAC (the ARP lookup missed the entry), leaves `last_detected_signature` alone. Otherwise the next full reading would look like a new network and undo a manual override on an unchanged LAN.
 
 ### Override-Stick Semantics
 

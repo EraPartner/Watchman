@@ -2,7 +2,7 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-06-12
+date: 2026-10-21
 tags:
   [
     feature,
@@ -60,7 +60,7 @@ Publishes status changes and alert transitions to connected clients:
 
 - Subscribes to `service.health.updated`, `service.stats.updated`, `service.error`, and `config:service.*` events from the EventBus
 - Includes full `snapshot` (HealthSnapshot or StatsSnapshot) in `service_update` payload when present (Phase 0a+)
-- **Alert frames** — deduped on state transitions: emits `{ type: "alert", level: "error" }` on a service's **first** poll failure (`service.error`); emits `{ type: "alert", level: "info", message: "…recovered" }` on the next successful poll. Subsequent failures while already errored are suppressed until recovery clears the set.
+- **Alert frames** — deduped on state transitions: emits `{ type: "alert", level: "error" }` on a service's **first** poll failure (`service.error`); emits `{ type: "alert", level: "info", message: "…recovered" }` on the next successful poll. Subsequent failures while already errored are suppressed until recovery clears the set. Deleting a service (`config:service.deleted`) or renaming it (`config:service.renamed`, old id) also clears its entry, so a later service with the same `kind:instanceId` starts clean.
 - Serializes all events to JSON before sending
 - Handles send errors gracefully (dead clients are removed, not crashed on)
 
@@ -95,8 +95,9 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
 3. `service_update` cache invalidation: keyed by `kind` using prefix invalidation (`[kind, ...]`), so all query families for that kind are invalidated in a single debounced batch
 4. `alert` frames: routed to toast notifications (`error` → `toast.error`, `warning` → `toast.warning`, `info` → `toast.info`)
 5. Reconnection logic with exponential backoff (max 30 seconds); reconnect attempts counted **once per failure** via `onclose` only (not double-counted from `onerror`)
-6. Connection toast only on **recovery** (`toast.success("WebSocket reconnected")`), not on every initial connect
-7. Hook-level observability via frontend logger (`logger.warn`/`logger.debug`)
+6. Connection toast only on **recovery** (`toast.success("WebSocket reconnected")`), not on every initial connect. On recovery the hook also invalidates profile, current-network, instance and health queries to catch up on frames missed while disconnected
+7. A connect attempt inside the 5s throttle window is deferred to the end of the window rather than dropped
+8. Hook-level observability via frontend logger (`logger.warn`/`logger.debug`)
 
 ## Benefits
 
@@ -128,7 +129,7 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
   - unmount-time invalidation flush for queued service updates
   - tor/router invalidation family behavior (`queryKeys.torRelay()` and `queryKeys.routerArp(...)`)
   - metrics invalidation and `connection` message toast behavior
-  - max reconnect attempts error path and reconnect terminal-state handling
+  - max reconnect attempts: one failure toast, then retries continue at the 30s cap
   - cleanup stability for singleton WebSocket state across tests
 - Frontend notification-state coverage now also includes `apps/frontend/src/hooks/use-toast.test.tsx` for `apps/frontend/src/hooks/use-toast.ts`:
   - reducer limit and dismiss-all behavior
@@ -235,7 +236,7 @@ participant "Toast" as Toast
 
 Hook -> WS : Connect to ws://host/ws
 WS --> Hook : onopen()
-Hook -> Hook : reconnectAttempts > 0?\nyes → toast.success("WebSocket reconnected")
+Hook -> Hook : reconnectAttempts > 0?\nyes → toast.success("WebSocket reconnected")\n+ invalidate profiles/network/instances/health
 Hook -> Hook : reset reconnectAttempts
 
 alt Normal Operation
@@ -254,7 +255,7 @@ else Connection Lost
     Hook -> Hook : increment reconnectAttempts\n(counted once per close, not per error)
     Hook -> Hook : schedule reconnect\n(exponential backoff, max 30s)
 
-    loop Until connected or max attempts
+    loop Until connected (failure toast once after 5 attempts, then every 30s)
         Hook -> WS : new WebSocket(url)
         alt Success
             WS --> Hook : onopen()

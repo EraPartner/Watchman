@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ---- mutable data shared across tests ----------------------------------
 let healthData: unknown = undefined;
 let statsData: unknown = undefined;
+let rendererDetail: unknown[] = [];
 
 vi.mock("@/hooks/useServiceHealth", () => ({
   useServiceHealth: () => ({ data: healthData, isLoading: false }),
@@ -30,11 +31,14 @@ vi.mock("@/services/renderers", () => ({
     summary: [],
     tone: () => "ok" as const,
     subtitle: undefined,
-    detail: [],
+    detail: rendererDetail,
     charts: [],
   }),
   rendererTrackedMetrics: () => [] as ReadonlyArray<string>,
-  dotGet: () => undefined,
+  dotGet: (obj: unknown, path: string) =>
+    obj && typeof obj === "object"
+      ? (obj as Record<string, unknown>)[path]
+      : undefined,
 }));
 
 // Heavy Radix primitives — replace with minimal HTML so jsdom renders children
@@ -100,6 +104,7 @@ describe("ServiceDetailSheet two-tier status dots", () => {
   beforeEach(() => {
     healthData = undefined;
     statsData = undefined;
+    rendererDetail = [];
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
@@ -163,6 +168,51 @@ describe("ServiceDetailSheet two-tier status dots", () => {
     const { container, cleanup } = await render();
 
     expect(statusDots(container).length).toBe(1);
+
+    await cleanup();
+  });
+});
+
+describe("ServiceDetailSheet detail metrics", () => {
+  beforeEach(() => {
+    healthData = undefined;
+    statsData = undefined;
+    rendererDetail = [];
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  it("reads source: \"health\" metrics from the health snapshot, others from stats", async () => {
+    rendererDetail = [
+      {
+        title: "Status",
+        metrics: [
+          {
+            key: "reachable",
+            label: "Reachable",
+            source: "health",
+            format: (v: unknown) => `reachable=${String(v)}`,
+          },
+          {
+            key: "blocks",
+            label: "Blocks",
+            format: (v: unknown) => `blocks=${String(v)}`,
+          },
+        ],
+      },
+    ];
+    healthData = { reachable: true };
+    statsData = { metrics: { blocks: 42, reachable: false }, at: 1 };
+
+    const { container, cleanup } = await render();
+    const text = container.textContent ?? "";
+
+    expect(text).toContain("reachable=true");
+    expect(text).toContain("blocks=42");
 
     await cleanup();
   });

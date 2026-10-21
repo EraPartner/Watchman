@@ -2,7 +2,7 @@
 title: UI-Driven Service Configuration
 type: feature
 status: active
-date: 2026-05-13
+date: 2026-10-20
 tags: [feature, configuration, ui, setup-wizard, settings, duckdb, encryption, hot-reload, backup, export, import, crud, discoverability, tested]
 description: Runtime service configuration from the UI with encrypted secrets, audit trail, hot-reload without restart, backup/restore, and dashboard CRUD discoverability (add/edit/delete from dashboard detail sheet). Phase 3 testing complete.
 aliases: [ui config, configuration, settings, setup wizard, backup, restore, service management, crud]
@@ -515,18 +515,17 @@ This moves master-key responsibility from the Electron main process (old model) 
 ### Removed
 
 - `ENABLED_SERVICES` — Use UI instead
-- `WATCHMAN_SERVICES_CONFIG` — Use UI instead
-- All per-kind service env vars (`*_URL`, `*_USERNAME`, `*_PASSWORD`, etc.) — Migrated to DB on first boot via `envMigrator`
+- All per-kind service env vars (`*_URL`, `*_USERNAME`, `*_PASSWORD`, numbered `*_1_*`, etc.) — No longer read by the backend; re-create those services in the UI
 
 ### Legacy Migration
 
-On first boot with existing `.env`, `envMigrator` runs:
-- Scans for legacy `*_MAIN_*`, `*_1_*`, etc. env vars
+The only legacy import is `WATCHMAN_SERVICES_CONFIG` (inline JSON or a path to a JSON file with `{ "instances": [...] }`). On startup, `envMigrator` (`apps/backend/src/config/store/envMigrator.ts`):
+- Runs only when the store has no service instances
 - Creates `app_service_instance` rows with `config_public` + `config_secret` (encrypted)
-- Adds audit entry with action `import`
-- Logs warning on subsequent boots if legacy vars still present
+- Adds an audit entry with action `import`
+- On later boots, logs a warning if `WATCHMAN_SERVICES_CONFIG` is still set, and ignores it
 
-Admins should remove legacy service env vars from `.env` after first boot.
+Remove `WATCHMAN_SERVICES_CONFIG` from the env file after the first successful import.
 
 ## Dashboard CRUD Discoverability (Phase 3)
 

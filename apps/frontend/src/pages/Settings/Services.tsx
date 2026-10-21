@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   Button,
   StatusDot,
@@ -127,7 +128,15 @@ export default function Services() {
                   value={svc.profileId}
                   disabled={moveMut.isPending}
                   onChange={(e) =>
-                    moveMut.mutate({ id: svc.id, profileId: e.target.value })
+                    moveMut.mutate(
+                      { id: svc.id, profileId: e.target.value },
+                      {
+                        onError: (err) =>
+                          toast.error(
+                            `Could not move ${svc.kind}/${svc.instanceId}: ${err.message}`
+                          ),
+                      }
+                    )
                   }
                   className="rounded-r-2 border border-[var(--hairline)] bg-[var(--surface-0)] px-s-2 py-s-1 text-fs-label text-[var(--text-md)]"
                   title="Owning profile"
@@ -143,10 +152,15 @@ export default function Services() {
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  updateMut.mutate({
-                    id: svc.id,
-                    input: { enabled: !svc.enabled },
-                  })
+                  updateMut.mutate(
+                    { id: svc.id, input: { enabled: !svc.enabled } },
+                    {
+                      onError: (err) =>
+                        toast.error(
+                          `Could not ${svc.enabled ? "disable" : "enable"} ${svc.kind}/${svc.instanceId}: ${err.message}`
+                        ),
+                    }
+                  )
                 }
               >
                 {svc.enabled ? "Disable" : "Enable"}

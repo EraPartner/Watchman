@@ -19,6 +19,10 @@ Use the groups: Added, Changed, Deprecated, Removed, Fixed, Security.
 No releases have been tagged yet; the work below is staged for the first
 `1.0.0` release.
 
+**Project status (2026-10-20):** Watchman is no longer actively maintained. The
+final maintenance pass below left `main` with passing CI, a clean HIGH/CRITICAL
+dependency audit, and documentation aligned with the code.
+
 ### Added
 
 - Desktop: native Electron experience, runtime hardening, and a distribution
@@ -37,14 +41,109 @@ No releases have been tagged yet; the work below is staged for the first
 
 - Backend: shared origin policy extracted for HTTP CORS and the WebSocket upgrade.
 - Backend: config store, service schema, and field metadata overhauled; service
-  config now lives in the DuckDB store (legacy `{SERVICE}_*` env vars imported
+  config now lives in the DuckDB store (legacy `WATCHMAN_SERVICES_CONFIG` imported
   once on first boot, then ignored).
 - Backend hardened across all service implementations; upgraded to Fastify 5.
+- Coverage thresholds lowered to just below measured coverage (frontend
+  lines 79%, statements 77%, branches 64%; backend branches 72%). They now guard against
+  regressions instead of requiring new tests.
 - Standardized the toolchain on **Node 24** (Active LTS): CI, `.nvmrc` /
   `.node-version`, and the devcontainer now agree; `engines` requires `node >=22`.
 
+### Removed
+
+- Service control: `POST /services/:kind/control`, `ControlService`, the `Controllable`
+  interface, Raspberry Pi GPIO write/mode actions and the frontend `controlService()`
+  client. Watchman is monitoring-only and never changes a monitored service (ADR-032).
+
 ### Fixed
 
+- Editing a service: saved secrets start blank ("leave blank to keep") instead
+  of holding the redaction marker `***`, which typing appended to and saved as
+  `***<new secret>`.
+- Editing or deleting a service: a delete that landed while an update or
+  create was being applied no longer leaves the deleted service running and
+  polled until restart. Applying a create for a service a profile switch
+  already started no longer starts it twice.
+- Moving or adding a service to a profile rejects an unknown `profileId` with
+  400 instead of parking the service in a profile that can never be active.
+- Service detail: a failed connection test shows its message instead of
+  `[object Object]`.
+- A failed delete shows its error in the confirm dialog, and a failed
+  enable/disable or profile move shows a toast. Before, they failed silently.
+- Frontend: the WebSocket no longer stops reconnecting after a short backend
+  outage. A retry that landed inside the 5 s connection throttle was dropped
+  with no further retry, so live updates stayed off until a page reload; it is
+  now deferred to the end of the window. After 5 failed attempts the failure
+  toast still shows once, but retries continue every 30 s instead of stopping.
+- Frontend: after the WebSocket reconnects, profile, network, instance and
+  health queries are refreshed, so frames missed while disconnected (such as
+  the auto profile switch after a network change) are not lost.
+- Frontend: a service's detail sheet event log shows only alerts for its own
+  instance, not for other instances of the same kind.
+- Backend: deleting or renaming a failing service clears its alert state, so a
+  later service with the same `kind:instanceId` gets its first error alert and
+  no false "recovered" alert.
+- Setup wizard: pressing Finish after adding a service sent you back to the
+  wizard, because the dashboard gate used the cached "needs setup" answer.
+  Adding, deleting or importing services now clears that cached answer.
+- Profiles: a manual profile switch is no longer undone when one network check
+  misses the gateway's MAC address or finds no default route on an unchanged
+  LAN.
+- Profiles: a failed automatic switch is retried on the next network check
+  instead of being recorded as done.
+- Profiles: shutdown waits for a network check in progress, so it cannot switch
+  profiles after services have stopped.
+- Profiles: clearing a profile's description in Settings now saves. Renaming a
+  profile to a name that contains "not found" returns 400, not 404.
+- Frontend: the dashboard shows a "Couldn't load services" error with a Retry
+  button when `/instances` fails, instead of the "No services configured yet"
+  empty state.
+- Frontend: a tile for a specific instance no longer shows another instance's
+  error while its own health entry is missing from `/services`.
+- Frontend: navigating to another route clears the app error screen; before, it
+  stayed until a full reload.
+- Frontend: the console logger no longer leaks a secret that also appears in its
+  key (e.g. `password=pass`), and data fields named `level`, `message` or
+  `timestamp` no longer overwrite the log entry's own fields.
+- Frontend: the API client no longer retries a 503 whose error code is
+  `UNAVAILABLE` or `CIRCUIT_OPEN`, so a down service shows its error after one
+  request instead of after up to four retried calls per fetch.
+- Frontend: `formatBytes` returns `0 B` for negative values and keeps values
+  below 1 in bytes, instead of `NaN undefined` or a missing unit.
+- Adding a service: the dashboard tile now appears right after saving. The
+  `service_config_changed` WebSocket frame is sent once the backend has brought
+  the service up, not before, so the client's `/instances` refetch no longer
+  misses it and waits for the 60-second poll.
+- Adding a service: list fields (router ports, interface filter, Roon ports)
+  accept a comma, so more than one value can be typed.
+- Adding a service: the Alby Hub form no longer pre-ticks "Legacy probe mode",
+  so UI-added hubs use the NWC API like the schema default.
+- Adding a Hue bridge: the form has a **Pair with bridge** button that fills the
+  application key and cert pin. Pairing now runs over a client pinned to the
+  bridge's cert; before, it used CA verification, which the bridge's
+  self-signed cert always fails.
+- SSH key paths (Mac Mini, Raspberry Pi) and the Tor cookie file accept `~/…`.
+- Roon: "Use Roon API" declares the transport service when registering with the
+  Core, as Roon's extension API requires; without it the zone subscription got
+  no data. Not verified against a live Roon Core.
+- Adding a service: a rejected config shows `field: problem` messages instead
+  of the raw validation JSON.
+- Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
+  fallback. Before, only `.env` was read, so settings placed in `.env.local` as
+  the documentation instructs were silently ignored.
+- Desktop: `apps/desktop/tsconfig.json` uses `Node16` module resolution. The
+  previous `node10` setting is removed in TypeScript 7, which broke the desktop
+  build and typecheck.
+- CI: the type-check job installs all workspaces, so the desktop check runs
+  against its own TypeScript and Electron type declarations.
+- Frontend: the Vite dev and preview proxy now forwards `/profiles`, so location
+  profiles work in browser (non-desktop) deployments. It forwards only
+  `/setup/…` API paths, so reloading the `/setup` wizard page no longer returns
+  a backend 404.
+- Documentation: deployment, setup, environment, and service guides describe the
+  current Fastify backend and trusted-network model instead of the removed
+  Express/JWT design.
 - `README.md` corrected to match the implementation: trusted-network security
   model (no auth/CSRF/rate limiting), Fastify (not Express), OpenAPI 3.1 with no
   Swagger UI served, and the real backend env surface (`WATCHMAN_MASTER_KEY`,
@@ -55,5 +154,10 @@ No releases have been tagged yet; the work below is staged for the first
 - Adopted a documented **trusted-network, single-user** security model — no auth,
   CSRF, or rate limiting by design (see ADR-017 / ADR-025 and `SECURITY.md`).
 - Patched Dependabot-flagged dependencies across both lockfiles.
+- Final dependency refresh (2026-10-20): both lockfiles updated with
+  `npm audit fix`, Vitest 4.1.12, and Electron 43.8.0. No known HIGH or CRITICAL
+  advisories remain, and the `.audit-ci.json` allowlist is empty. Moderate
+  advisories remain in Electron packaging tooling (`electron-builder` via
+  `sprintf-js`), which has no non-breaking fix.
 
 [unreleased]: https://github.com/EraPartner/Watchman/commits/main

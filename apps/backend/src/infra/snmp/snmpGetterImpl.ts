@@ -25,8 +25,19 @@ function mapPrivProto(p?: 'AES' | 'DES'): number {
 
 function varbindToString(vb: Varbind): string {
   if (vb.value == null) return '';
-  if (Buffer.isBuffer(vb.value)) return vb.value.toString('utf8');
+  if (Buffer.isBuffer(vb.value)) {
+    // net-snmp hands Counter64 back as the raw big-endian BER content bytes
+    // (variable length, possibly with a leading 0x00), not as a number
+    if (vb.type === snmp.ObjectType.Counter64) return decodeUnsignedBE(vb.value);
+    return vb.value.toString('utf8');
+  }
   return String(vb.value);
+}
+
+function decodeUnsignedBE(buf: Buffer): string {
+  let n = 0n;
+  for (const byte of buf) n = (n << 8n) | BigInt(byte);
+  return n.toString();
 }
 
 export function createSnmpGetter(): SnmpGetter {
