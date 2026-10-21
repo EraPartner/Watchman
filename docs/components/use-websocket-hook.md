@@ -2,7 +2,7 @@
 title: useWebSocket Hook
 type: component
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags: [hook, frontend, react, websocket, real-time, singleton]
 description: Global singleton WebSocket hook with automatic reconnection, exponential backoff, connection throttling, and batched targeted React Query invalidation
 aliases: [websocket hook, real-time hook, ws hook]
@@ -151,7 +151,9 @@ function Dashboard() {
 - **Global singleton** — Prevents multiple WebSocket connections across React component re-renders and multiple hook usages
 - **Subscriber pattern** — Components subscribe to global state changes rather than each managing their own connection
 - **Debounced + targeted invalidation** — Prevents React Query thrashing while keeping base and instance service keys in sync
-- **Connection throttling** — Prevents rapid-fire connection attempts that could overwhelm the server
+- **Connection throttling** — Prevents rapid-fire connection attempts that could overwhelm the server. An attempt inside the 5s window is deferred to the end of the window, not dropped, so a reconnect during a short backend outage still retries
+- **Catch-up on reconnect** — After a reconnect (not the first connect), invalidates `profiles`, `activeProfile`, `currentNetwork`, `servicesInstances` and `servicesHealth`, since frames sent while disconnected are lost
+- **Instance on events** — Republishes each frame's `instanceId` on the `wsEventBus`, so per-instance consumers (the detail sheet event log, via `isEventForInstance`) can ignore sibling instances
 - **Clean close detection** — Only reconnects if the close wasn't intentional (code !== 1000)
 - **Derived WebSocket URL** — Uses `getWebSocketUrl()` to choose `ws`/`wss` based on environment and backend URL settings (`[[apps/frontend/src/lib/backendUrl.ts]]`)
 

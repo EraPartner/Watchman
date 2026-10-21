@@ -52,6 +52,18 @@ dependency audit, and documentation aligned with the code.
 
 ### Fixed
 
+- Frontend: the WebSocket no longer stops reconnecting after a short backend
+  outage. A retry that landed inside the 5 s connection throttle was dropped
+  with no further retry, so live updates stayed off until a page reload; it is
+  now deferred to the end of the window.
+- Frontend: after the WebSocket reconnects, profile, network, instance and
+  health queries are refreshed, so frames missed while disconnected (such as
+  the auto profile switch after a network change) are not lost.
+- Frontend: a service's detail sheet event log shows only alerts for its own
+  instance, not for other instances of the same kind.
+- Backend: deleting or renaming a failing service clears its alert state, so a
+  later service with the same `kind:instanceId` gets its first error alert and
+  no false "recovered" alert.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.

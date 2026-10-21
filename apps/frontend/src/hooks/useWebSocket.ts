@@ -166,6 +166,7 @@ export const useWebSocket = (url?: string) => {
         publishWsEvent({
           type: message.type,
           service: message.service ?? message.kind,
+          instanceId: message.instanceId,
           level: message.level,
           message: message.message,
           data: message.data,
@@ -305,14 +306,22 @@ export const useWebSocket = (url?: string) => {
 
     // Throttle connection attempts
     const now = Date.now();
-    if (
-      now - globalConnectionState.lastConnectionAttempt <
-      CONNECTION_THROTTLE_MS
-    ) {
+    const elapsedMs = now - globalConnectionState.lastConnectionAttempt;
+    if (elapsedMs < CONNECTION_THROTTLE_MS) {
       logger.debug("[WEBSOCKET] Connection throttled", {
-        elapsedMs: now - globalConnectionState.lastConnectionAttempt,
+        elapsedMs,
         minIntervalMs: CONNECTION_THROTTLE_MS,
       });
+      // Defer rather than drop: a reconnect that lands inside the window
+      // (backoff is 2s/4s, the window 5s) would otherwise never retry.
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (globalReconnectFn) {
+          globalReconnectFn();
+        }
+      }, CONNECTION_THROTTLE_MS - elapsedMs);
       return;
     }
 
@@ -335,6 +344,18 @@ export const useWebSocket = (url?: string) => {
         // Only toast on recovery; a toast on every (re)connect is noise.
         if (wasReconnect) {
           toast.success("WebSocket reconnected");
+          // Frames sent while disconnected are lost (e.g. the auto profile
+          // switch after a network change, which itself drops the socket),
+          // so refresh everything those frames would have invalidated.
+          for (const queryKey of [
+            queryKeys.profiles(),
+            queryKeys.activeProfile(),
+            queryKeys.currentNetwork(),
+            queryKeys.servicesInstances(),
+            queryKeys.servicesHealth(),
+          ]) {
+            queryClient.invalidateQueries({ queryKey });
+          }
         }
       };
 
@@ -375,7 +396,7 @@ export const useWebSocket = (url?: string) => {
       notifyStateChange();
       scheduleReconnect();
     }
-  }, [websocketUrl, handleMessage, scheduleReconnect]);
+  }, [websocketUrl, handleMessage, scheduleReconnect, queryClient]);
 
   // Set global reconnect function reference
   useEffect(() => {

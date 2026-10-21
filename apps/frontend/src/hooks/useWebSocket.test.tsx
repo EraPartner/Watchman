@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useWebSocket } from "./useWebSocket";
+import { subscribeWsEvent, type WsEvent } from "../lib/wsEventBus";
 
 const {
   invalidateQueries,
@@ -127,6 +128,9 @@ describe("useWebSocket", () => {
       }
     }
     vi.runOnlyPendingTimers();
+    // Keep the mocked clock monotonic across tests: the connect throttle
+    // compares against a module-level timestamp from the previous test.
+    mockedNow = Math.max(mockedNow, Date.now());
     vi.useRealTimers();
     vi.unstubAllGlobals();
     document.body.innerHTML = "";
@@ -349,6 +353,130 @@ describe("useWebSocket", () => {
 
     await act(async () => {
       hookApi?.disconnect();
+      root.unmount();
+    });
+  });
+
+  it("retries a reconnect that lands inside the throttle window", async () => {
+    let hookApi: HookApi | null = null;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
+    });
+
+    const first = FakeWebSocket.instances[0];
+    await act(async () => {
+      first.readyState = FakeWebSocket.OPEN;
+      first.onopen?.();
+      // a long-lived connection, so the first reconnect is not throttled
+      await vi.advanceTimersByTimeAsync(60_000);
+      first.close(1006, "backend restarting");
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    // The backend is still down: the retry fails at once, and the next one
+    // (4s backoff) lands inside the 5s throttle window.
+    await act(async () => {
+      FakeWebSocket.instances[1].close(1006, "refused");
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(loggerDebug).toHaveBeenCalledWith(
+      "[WEBSOCKET] Connection throttled",
+      expect.objectContaining({ minIntervalMs: 5000 })
+    );
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    // ...and it is deferred to the end of the window, not dropped.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(3);
+
+    await act(async () => {
+      hookApi?.disconnect();
+      root.unmount();
+    });
+  });
+
+  it("refreshes profile and dashboard queries after reconnecting", async () => {
+    let hookApi: HookApi | null = null;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
+    });
+
+    const first = FakeWebSocket.instances[0];
+    await act(async () => {
+      first.readyState = FakeWebSocket.OPEN;
+      first.onopen?.();
+    });
+    // a first connect is not a recovery: nothing to catch up on
+    expect(invalidateQueries).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+      first.close(1006, "network changed");
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    const second = FakeWebSocket.instances[1];
+    await act(async () => {
+      second.readyState = FakeWebSocket.OPEN;
+      second.onopen?.();
+    });
+
+    expect(toastSuccess).toHaveBeenCalledWith("WebSocket reconnected");
+    for (const queryKey of [
+      ["profiles"],
+      ["profiles", "active"],
+      ["profiles", "current-network"],
+      ["services", "instances"],
+      ["services", "health"],
+    ]) {
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey });
+    }
+
+    await act(async () => {
+      hookApi?.disconnect();
+      root.unmount();
+    });
+  });
+
+  it("passes the instanceId of a frame on to event subscribers", async () => {
+    const received: WsEvent[] = [];
+    const unsub = subscribeWsEvent((ev) => received.push(ev));
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<HookProbe onHook={() => {}} />);
+    });
+
+    FakeWebSocket.instances[0].emitMessage({
+      type: "alert",
+      level: "error",
+      message: "bitcoin:backup: timeout",
+      service: "bitcoin",
+      kind: "bitcoin",
+      instanceId: "backup",
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(received[0]).toMatchObject({
+      type: "alert",
+      service: "bitcoin",
+      instanceId: "backup",
+    });
+
+    unsub();
+    act(() => {
       root.unmount();
     });
   });
