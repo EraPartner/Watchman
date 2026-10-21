@@ -52,6 +52,12 @@ done
 # ── 3. Version-stamped README ───────────────────────────────────────────────
 echo "==> Writing release README..."
 sed "s/__VERSION__/${VERSION}/g" "$README_SRC" > "$OUT_DIR/README.md"
+# Formatters can rewrite a bare __VERSION__ into **VERSION** (Markdown bold),
+# which sed no longer matches; keep placeholders in code spans.
+if grep -q 'VERSION__\|\*\*VERSION\*\*' "$OUT_DIR/README.md"; then
+  echo "ERROR: unreplaced VERSION placeholder in $OUT_DIR/README.md"
+  exit 1
+fi
 
 # ── 4. Summary ──────────────────────────────────────────────────────────────
 echo ""

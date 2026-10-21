@@ -2,7 +2,7 @@
 title: Running the Watchman Desktop Application
 type: guide
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [guide, desktop, electron, distribution, setup]
 description: How to build, run, and deploy the Watchman Electron desktop application
 aliases: [desktop app, electron, desktop guide]
@@ -157,6 +157,22 @@ The frontend will connect to `http://localhost:3001` (or your configured backend
 ### Backend Runtime
 
 The desktop app runs the backend with Electron's own binary (`ELECTRON_RUN_AS_NODE=1`). It does not use the system `node`, and there is no variable to override the runtime path.
+
+### Backend Shutdown
+
+On quit the shell sends the backend `SIGTERM`, waits up to 2 s, then sends
+`SIGKILL` if it is still running (`apps/desktop/src/childStop.ts`). The same
+applies to a backend that never became healthy and to one still starting when
+the app quits, so no orphaned backend keeps the DuckDB file locked.
+
+### Desktop Tests
+
+```bash
+npm test --workspace=apps/desktop
+```
+
+Uses Node's built-in test runner on `apps/desktop/test/*.test.ts` (no Electron
+needed). It is not part of CI.
 
 ### Override Frontend Dev URL
 
@@ -347,8 +363,8 @@ User -> User: Interact with app
 
 User -> Electron: Quit app
 Electron -> Backend: SIGTERM
-Backend -> Backend: Graceful shutdown (2s)
-Backend -> Electron: Exit
+Backend -> Backend: Graceful shutdown
+Backend -> Electron: Exit (SIGKILL after 2s if still running)
 
 Electron -> Electron: Close window
 Electron -> User: App quit
