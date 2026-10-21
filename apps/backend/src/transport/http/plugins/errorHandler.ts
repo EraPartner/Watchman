@@ -17,8 +17,14 @@ const plugin: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ error: { code: 'VALIDATION', message: fastifyErr.message ?? 'invalid request' } });
     }
     const status = fastifyErr.statusCode && fastifyErr.statusCode >= 400 ? fastifyErr.statusCode : 500;
+    if (status < 500) {
+      // Client errors raised by Fastify itself (malformed JSON, body too
+      // large, unsupported media type) are the caller's fault, not ours.
+      app.log.warn({ err }, 'rejected request');
+      return reply.status(status).send({ error: { code: 'VALIDATION', message: fastifyErr.message ?? 'invalid request' } });
+    }
     app.log.error({ err }, 'unhandled error');
-    return reply.status(status).send({ error: { code: 'INTERNAL', message: status === 500 ? 'internal error' : (fastifyErr.message ?? 'error') } });
+    return reply.status(status).send({ error: { code: 'INTERNAL', message: 'internal error' } });
   });
 
   app.setNotFoundHandler((_req, reply) => {
