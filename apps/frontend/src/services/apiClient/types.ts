@@ -59,16 +59,6 @@ export interface BackendHealth {
   [key: string]: unknown;
 }
 
-export interface ControlRequest {
-  action: string;
-  params?: Record<string, unknown>;
-}
-
-export interface ControlResponse {
-  ok: boolean;
-  [key: string]: unknown;
-}
-
 // --- Config / services ---
 
 export interface FieldMeta {

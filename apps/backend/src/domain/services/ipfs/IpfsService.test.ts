@@ -20,9 +20,19 @@ let state: {
   pinLsUrl: string;
 };
 
+// Kubo stats/dht shape: one object per table, peers grouped by bucket
 const DHT_NDJSON = [
-  JSON.stringify({ Name: "wan", Buckets: 20, PeerInfos: [{}, {}, {}] }),
-  JSON.stringify({ Name: "lan", Buckets: 20, PeerInfos: [{}, {}] }),
+  JSON.stringify({
+    Name: "wan",
+    Buckets: [
+      { LastRefresh: "", Peers: [{ ID: "a" }, { ID: "b" }] },
+      { LastRefresh: "", Peers: [{ ID: "c" }] },
+    ],
+  }),
+  JSON.stringify({
+    Name: "lan",
+    Buckets: [{ LastRefresh: "", Peers: [{ ID: "d" }, { ID: "e" }] }],
+  }),
 ].join("\n");
 
 beforeAll(
@@ -84,10 +94,11 @@ beforeAll(
         } else if (url === "/api/v0/diag/sys") {
           res.writeHead(200);
           res.end(
+            // Kubo diag/sys shape (nested, lower-case keys)
             JSON.stringify({
-              MemoryAlloc: 52_428_800,
-              GoNumGoroutine: 64,
-              NumCPU: 4,
+              runtime: { numcpu: 4, numgoroutines: 64, os: "linux" },
+              memory: { swap: 0, virt: 52_428_800 },
+              ipfs_version: "0.28.0",
             })
           );
         } else if (url === "/api/v0/stats/dht") {
@@ -242,8 +253,9 @@ describe("IpfsService", () => {
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
-      // 50 MB = 52_428_800 bytes
-      expect(res.value.metrics.memAllocMb).toBe(50);
+      // regression: these were read from flat keys Kubo doesn't emit, so
+      // they were always null. 50 MB = 52_428_800 bytes
+      expect(res.value.metrics.sysMemUsedMb).toBe(50);
       expect(res.value.metrics.goroutines).toBe(64);
       expect(res.value.metrics.numCPU).toBe(4);
     }

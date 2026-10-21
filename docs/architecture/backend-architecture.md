@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     architecture,
@@ -86,7 +86,7 @@ infra/         → HTTP (Undici), SSH (ssh2), GPIO (pigpio-client), SNMP (net-sn
 ↓
 domain/        → BaseService abstract, ServiceRegistry keyed by ${kind}:${instanceId}
 ↓
-application/   → UseCases: GetServiceStatus, GetAggregatedHealth, GetServiceHistory, ControlService, ListInstances
+application/   → UseCases: GetServiceStatus, GetAggregatedHealth, GetServiceHistory, ListInstances
 ↓
 transport/     → HTTP (Fastify routes), WebSocket (AuthGate, ConnectionManager, Broadcaster)
 ```
@@ -122,7 +122,7 @@ Fastify plugins are registered in the following order in [[apps/backend/src/tran
 | 5   | `errorHandlerPlugin`   | DomainError → envelope `{ error: { code, message } }` mapping                                                                                                                                                                                    |
 | 6   | `metaRoutes`           | `/meta/health`, `/meta/version`                                                                                                                                                                                                                  |
 | 7   | `metricsRoutes`        | `/metrics` snapshot — includes `breakers`, `caches`, and `errors: { total, byService }` fields                                                                                                                                                   |
-| 8   | `servicesRoutes`       | `/services` (SnapshotCache), `/services/:kind/health` (SnapshotCache), `/services/:kind/stats` (SWR stats cache), `/services/:kind/control`                                                                                                      |
+| 8   | `servicesRoutes`       | `/services` (SnapshotCache), `/services/:kind/health` (SnapshotCache), `/services/:kind/stats` (SWR stats cache)                                                                                                                                       |
 | 9   | `instancesRoutes`      | `/instances`, `/instances/:kind`, `/kinds`                                                                                                                                                                                                       |
 | 10  | `setupRoutes`          | `/setup/status`, `/setup/philips-bridge/pair`                                                                                                                                                                                                    |
 | 11  | `configRoutes`         | UI-driven ConfigStore CRUD + export/import + audit log; `PUT /config/services/:id/profile` moves a service between profiles                                                                                                                      |
@@ -157,10 +157,10 @@ The infra layer (`[[apps/backend/src/infra/]]`) provides protocol-agnostic adapt
 | http                  | Undici                | HTTP client with pooling, timeout, retry semantics                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | http/jwtClient        | -                     | **HB1 + I3 Tasks** — JWT token injection and single-retry wrapper for HttpClient. Injects `Authorization: Bearer <token>` on every request; on 401, calls `refresh()` once, retries with new token, returns response as-is. Concurrent 401s share one pending refresh promise (thundering herd prevention). Supports optional initial token; falsy tokens (empty string or undefined) skip Bearer injection. See [[apps/backend/src/infra/http/jwtClient.ts\|jwtClient.ts]]. Tested (8 tests covering token injection, 401 refresh, retry semantics, concurrent refresh sharing, empty-token fallback, failure propagation). Used by [[apps/backend/src/domain/services/homebridge/homebridgeClient.ts\|HomebridgeService]] for automatic JWT and cookie-based auth. |
 | http/pinnedClient     | undici, node:tls      | **I2 Task (rewritten)** — SHA-256 cert pinning via a custom undici connector. The pin is enforced on the actual TLS connection used for the request (no TOCTOU window). `probeCertFingerprint` remains available for the setup pairing flow. `createPinnedClient(expectedSha256)` returns a standalone `HttpClient`. Throws `UnauthorizedError` on mismatch, `UnavailableError` on probe failure. Used by PhilipsBridgeService. See [[apps/backend/src/infra/http/pinnedClient.ts\|pinnedClient.ts]]                                                                                                                                                                                                                                                                 |
-| ssh / ssh pool        | ssh2                  | SSH client wrapper for remote command execution. **I4 Task** — Persistent [[#ssh-connection-pool                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | SshPool]] for connection reuse across requests: one per `host:port:user:keyPath` tuple, auto-reconnect on disconnect (2s delay), pending queue during reconnect, no reconnect on auth errors. See [[apps/backend/src/infra/ssh/sshPool.ts\|sshPool.ts]]. Used by [[docs/integrations/raspberry-pi | RaspberryPiService]] for direct vcgencmd + /proc stats. |
-| gpio                  | pigpio-client         | GPIO interface for Raspberry Pi monitoring. `sharedPigpioClient.ts` — one persistent pigpiod TCP connection shared by health checks, stats collection, and GPIO control (was 2 connects per poll cycle). Closed in `onStop`. `GpioController` — handles `gpio:write:<pin>:<0\|1>` and `gpio:mode:<pin>:<input\|output>` actions for RaspberryPiService `control()`.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ssh / ssh pool        | ssh2                  | SSH client wrapper for remote command execution. **I4 Task** — Persistent [[#ssh-connection-pool                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | SshPool]] for connection reuse across requests: one per `host:port:user:keyPath` tuple, lazy reconnect (a failed or closed connection is dropped and the next exec opens a fresh one), pending queue bounded by each request's timeout and signal, new connection when the password or passphrase changes. See [[apps/backend/src/infra/ssh/sshPool.ts\|sshPool.ts]]. Used by [[docs/integrations/raspberry-pi | RaspberryPiService]] for direct vcgencmd + /proc stats. |
+| gpio                  | pigpio-client         | GPIO interface for Raspberry Pi monitoring. `sharedPigpioClient.ts` — one persistent pigpiod TCP connection shared by health checks and stats collection (was 2 connects per poll cycle). Closed in `onStop`. Read-only: no GPIO write or mode change ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]).                                                                                                                                                                                                                                                                                                                                                                                                  |
 | snmp                  | net-snmp              | SNMP querying for network device monitoring. **Interfaces**: `get()` for single OID fetch (v3 only), `walk(req)` for subtree traversal with v2c/v3 support. **V2c walks** pass community string; **v3 walks** pass user/authKey/privKey with configurable auth/priv protocols. Session cleanup and timeout handling are robust (timers + AbortSignal). **Used by**: RouterService (interface stats, ARP table, CPU load, sysUptime). See [[apps/backend/src/infra/snmp/snmpGetter.ts\|snmpGetter.ts]] and [[apps/backend/src/infra/snmp/snmpGetterImpl.ts\|snmpGetterImpl.ts]].                                                                                                                                                                                      |
-| synology/dsmClient    | node:http, Undici     | **SY1 Task** — Synology DSM session client (`createDsmClient`). Routes `SYNO.API.Auth` to `/webapi/auth.cgi`, all other APIs to `/webapi/entry.cgi`. Injects `_sid` on every non-auth request. Auto-login on first call, session recovery on codes 105/106/107 (re-login once, retry original call), concurrent login sharing (thundering herd prevention). Returns `<T>`, throws `UnauthorizedError` (no credentials), `UnavailableError` (DSM errors, failed recovery). 12 tests covering all branches. See [[apps/backend/src/infra/synology/dsmClient.ts\|dsmClient.ts]].                                                                                                                                                                                        |
+| synology/dsmClient    | node:http, Undici     | **SY1 Task** — Synology DSM session client (`createDsmClient`). Routes `SYNO.API.Auth` to `/webapi/auth.cgi`, all other APIs to `/webapi/entry.cgi`. Injects `_sid` on every non-auth request. Auto-login on first call, session recovery on codes 105/106/107/119 (re-login once, retry original call), concurrent login sharing (thundering herd prevention). Returns `<T>`, throws `UnauthorizedError` (no credentials), `UnavailableError` (DSM errors, failed recovery). 12 tests covering all branches. See [[apps/backend/src/infra/synology/dsmClient.ts\|dsmClient.ts]].                                                                                                                                                                                        |
 | tor/controlClient     | node:net, AbortSignal | Tor Control Protocol client (RFC 5050); TCP socket wrapper with async line-buffered reader, GETINFO/GETCONF/SIGNAL support (Task B4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | tor/eventSubscription | node:net, AbortSignal | Tor Event Subscription (Task B5); persistent TCP connection, `SETEVENTS`, async `650` event routing, handler map, reply FIFO queue                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | zmq / zmqSubscriber   | zeromq v6+            | **I6 Task** — ZMQ SUB socket wrapper for real-time publish-subscribe. Supports dynamic zeromq import (v6+ ESM N-API), 3-frame message parsing (topic, data, sequence), and async event handler pattern via Sets. Non-fatal failures (falls back to poll-only on connection error). See [[apps/backend/src/infra/zmq/zmqSubscriber.ts\|zmqSubscriber.ts]] (interface), [[apps/backend/src/infra/zmq/zmqSubscriberImpl.ts\|zmqSubscriberImpl.ts]] (impl), [[apps/backend/src/infra/zmq/zmqSubscriber.test.ts\|zmqSubscriber.test.ts]] (5 contract tests). Used by [[docs/integrations/bitcoin                                                                                                                                                                          | BitcoinService]] for block/transaction streaming (BT2 task).                                                                                                                                                                                                                                      |
@@ -280,8 +280,7 @@ Each pooled connection has a state:
 
 - **`connecting`** — Initial state; key/passphrase being loaded, connection initiated
 - **`ready`** — Connected and authenticated; pending queue drains and execs execute immediately
-- **`reconnecting`** — Disconnected (close or error); waiting 2 seconds before reconnect attempt
-- **`destroyed`** — Shutdown; all pending execs drain with `UnavailableError`
+- **`destroyed`** — Connection failed, closed, credentials changed, or pool shut down; pending execs drain with an error and the entry leaves the pool
 
 ### Behavior
 
@@ -289,18 +288,23 @@ Each pooled connection has a state:
    - Pool key: `${host}:${port}:${user}:${keyPath}`
    - One Map entry per unique key
    - All requests with same host/port/user/keyPath share the client
+   - If a request carries a different password or passphrase than the open entry, the old entry is closed and a new connection is opened with the new credentials
 
 2. **Request Queueing**
-   - While `connecting` or `reconnecting`, execs are queued (not rejected)
+   - While `connecting`, execs are queued (not rejected)
    - On `ready`, queued execs drain in order and new execs execute immediately
-   - Queued execs also have their own timeout; timeout is independent of connection state
+   - A queued exec still honours its own `timeoutMs` and `signal` (rejects with `TimeoutError`)
 
-3. **Auto-Reconnect**
-   - On `close` or `error` event: state → `reconnecting`, schedule reconnect in 2 seconds
-   - On connection error with auth-related message: drain pending with `UnauthorizedError` and mark destroyed (do not retry — bad key path is a config error)
-   - Concurrent auth failures do not retry (fail-fast on config error)
+3. **Reconnect (lazy)**
+   - On `error` or `close` (ssh2 emits both for one failure): pending execs reject (`UnauthorizedError` for auth-related messages or an unreadable key, otherwise `UnavailableError`), the entry is removed, and nothing reconnects in the background
+   - The next `exec` for that host opens a fresh connection, so a host that is down or removed from config is not dialled repeatedly
 
-4. **Shutdown**
+4. **Exit status**
+   - A channel that closes with an exit code resolves `{ stdout, stderr, code }`
+   - A channel that closes without an exit status (connection dropped) or after a signal rejects with `UnavailableError`, because the output is truncated
+   - stdout/stderr are collected as bytes and decoded once, so UTF-8 split across chunks stays intact
+
+5. **Shutdown**
    - `destroy()` marks all entries `destroyed`, drains pending with error, calls `client.end()` on each
    - Called during graceful shutdown (SIGTERM, SIGINT)
 
@@ -324,9 +328,11 @@ See [[apps/backend/src/domain/services/raspberryPi/PiStatsCollector.ts|PiStatsCo
 
 [[apps/backend/src/infra/ssh/sshPool.test.ts|sshPool.test.ts]] tests:
 
-- Connection lifecycle (connecting → ready → reconnecting → destroyed)
-- Request queuing during connection
-- Auto-reconnect on disconnect
+- Connection lifecycle (connecting → ready → destroyed)
+- Request queuing during connection, bounded by timeout and abort
+- No background reconnect after error + close; next exec reconnects
+- New connection on credential change
+- Missing exit status / signal → rejection
 - Auth error handling (no retry)
 - Timeout propagation with AbortSignal
 - Shutdown draining pending requests
@@ -340,7 +346,7 @@ const pool = createSshPool();
 
 // Execute on first call — establishes persistent connection
 const result1 = await pool.exec({
-  host: "192.168.1.100",
+  host: "192.0.2.100",
   port: 22,
   user: "pi",
   privateKeyPath: "/home/user/.ssh/id_rsa",
@@ -350,7 +356,7 @@ const result1 = await pool.exec({
 
 // Reuses connection from result1
 const result2 = await pool.exec({
-  host: "192.168.1.100",
+  host: "192.0.2.100",
   port: 22,
   user: "pi",
   privateKeyPath: "/home/user/.ssh/id_rsa",
@@ -512,7 +518,7 @@ type RoonConnectFn = (opts: RoonConnectOptions) => Promise<RoonHandle>;
 **[[apps/backend/src/infra/roon/roonClientImpl.ts|roonClientImpl.ts]]** — Real implementation:
 
 - Uses `@roonlabs/node-roon-api` (CJS via `createRequire`)
-- Calls `init_services()` then `ws_connect()`
+- Calls `init_services()` then `ws_connect()`; reconnects with backoff (5 s doubling to 60 s, reset on pairing) after `onclose` or `onerror`, because `ws_connect` never reconnects by itself
 - Subscribes to `com.roonlabs.transport:2` zones via `core.moo._subscribe_helper()`
 - Handles zone subscription events: `Subscribed`, `Changed`, `zones_added`, `zones_changed`, `zones_removed`
 - Normalizes raw Roon zone objects (snake_case) to contract shape (camelCase)
@@ -621,7 +627,6 @@ The application layer (`[[apps/backend/src/application/]]`) contains orchestrati
 | ------------------- | ----------------------------------------------------------------- |
 | GetServiceStatus    | Fetch current health for one service with circuit check           |
 | GetAggregatedHealth | Fetch health for all enabled services in parallel                 |
-| ControlService      | Execute state-changing action (e.g., toggle protection)           |
 | ListInstances       | Return service instance configuration and metadata                |
 | GetServiceHistory   | Query time-series metrics (optional; requires TIMESERIES_ENABLED) |
 
@@ -641,13 +646,12 @@ The transport layer (`[[apps/backend/src/transport/]]`) handles HTTP and WebSock
 Fastify routes in `[[apps/backend/src/transport/http/routes/]]`:
 
 1. **Meta**: `/meta/health`, `/meta/version`, `/metrics` (breakers + caches + errors)
-2. **Services**: `/services` (SnapshotCache), `/services/:kind/health` (SnapshotCache), `/services/:kind/stats` (SWR cache), `/services/:kind/control`
+2. **Services**: `/services` (SnapshotCache), `/services/:kind/health` (SnapshotCache), `/services/:kind/stats` (SWR cache); read-only
 3. **Instances**: `/instances`, `/instances/:kind`, `/kinds`
 4. **History**: `/services/:kind/history` (time-series; opt-in via TIMESERIES_ENABLED)
-5. **Control**: Service-specific actions (e.g., `/services/raspberryPi/control` for GPIO)
-6. **Setup**: `/setup/status`, `/setup/philips-bridge/pair`
-7. **Config**: `/config/services` CRUD + export/import + audit log
-8. **Special**: Homebridge accessories, router ARP, Tor relay info
+5. **Setup**: `/setup/status`, `/setup/philips-bridge/pair`
+6. **Config**: `/config/services` CRUD + export/import + audit log
+7. **Special**: Homebridge accessories, router ARP, Tor relay info
 9. **WebSocket**: `GET /ws` (upgrade; shared origin policy; token optional)
 
 > [!note] Route prefix
@@ -671,8 +675,8 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`, plus share
 
 ### Bootstrap Configuration
 
-- `[[apps/backend/src/config/env.ts]]` – Zod schema for required env vars (ports, auth, master key, etc.)
-- CORS allowlist precomputed from `FRONTEND_URL` during bootstrap
+- `[[apps/backend/src/config/env.ts]]` – Zod schema for process env vars (`NODE_ENV`, `BACKEND_V2_PORT`, `BACKEND_V2_HOST`, `LOG_LEVEL`, `DATA_DIR`, `WATCHMAN_MASTER_KEY`, `CORS_ALLOWED_ORIGINS`, `TRUST_PROXY`); all have defaults or are optional, and there are no auth variables
+- Origin allow-list and Host-header allow-list built once at bootstrap from `CORS_ALLOWED_ORIGINS` (plus the always-allowed `watchman://` and loopback origins) and shared by HTTP CORS and the WebSocket upgrade
 - `TRUST_PROXY` applied to Fastify configuration per deployment
 
 ### Service Configuration (UI-Driven, v2.2+)

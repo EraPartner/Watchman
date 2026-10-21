@@ -35,6 +35,10 @@ export async function createDuckDbPool(
     reject: (e: Error) => void;
   }> = [];
   let closed = false;
+  // Connections being opened but not yet in `borrowed`. Counted against maxSize
+  // so concurrent connect() calls can't all pass the size check before the
+  // first instance.connect() resolves.
+  let opening = 0;
 
   async function connect(): Promise<DuckDBConnection> {
     if (closed) throw new Error("DuckDbPool closed");
@@ -43,8 +47,14 @@ export async function createDuckDbPool(
       borrowed.add(reused);
       return reused;
     }
-    if (borrowed.size < maxSize) {
-      const conn = await instance.connect();
+    if (borrowed.size + opening < maxSize) {
+      opening += 1;
+      let conn: DuckDBConnection;
+      try {
+        conn = await instance.connect();
+      } finally {
+        opening -= 1;
+      }
       borrowed.add(conn);
       return conn;
     }

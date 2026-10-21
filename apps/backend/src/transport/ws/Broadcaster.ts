@@ -61,28 +61,14 @@ export class Broadcaster {
           id: p.id,
         });
       }),
-      this.deps.bus.on("config:service.created", (p) => {
+      // Sent once the lifecycle has applied the change, so a client refetching
+      // /instances on this message sees the new or removed service.
+      this.deps.bus.on("config:service.applied", (p) => {
         this.broadcast({
           type: "service_config_changed",
           kind: p.kind,
           instanceId: p.instanceId,
-          action: "created",
-        });
-      }),
-      this.deps.bus.on("config:service.updated", (p) => {
-        this.broadcast({
-          type: "service_config_changed",
-          kind: p.kind,
-          instanceId: p.instanceId,
-          action: "updated",
-        });
-      }),
-      this.deps.bus.on("config:service.deleted", (p) => {
-        this.broadcast({
-          type: "service_config_changed",
-          kind: p.kind,
-          instanceId: p.instanceId,
-          action: "deleted",
+          action: p.action,
         });
       }),
       this.deps.bus.on("profile.switched", (p) => {
@@ -97,6 +83,16 @@ export class Broadcaster {
           type: "profile_network_unrecognized",
           signature: p.signature,
         });
+      }),
+      // Service ids are kind:instanceId (BaseService.id). Once an instance is
+      // gone its error state must go too, or a later instance with the same
+      // id has its first failure suppressed and its first success announced
+      // as a recovery.
+      this.deps.bus.on("config:service.deleted", (p) => {
+        this.erroredIds.delete(`${p.kind}:${p.instanceId}`);
+      }),
+      this.deps.bus.on("config:service.renamed", (p) => {
+        this.erroredIds.delete(`${p.kind}:${p.oldInstanceId}`);
       })
     );
   }

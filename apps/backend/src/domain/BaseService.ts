@@ -60,11 +60,3 @@ export abstract class BaseService {
   onStart?(): Promise<void>;
   onStop?(): Promise<void>;
 }
-
-export interface Controllable {
-  control(action: string, signal: AbortSignal): Promise<Result<void, DomainError>>;
-}
-
-export function isControllable(svc: BaseService): svc is BaseService & Controllable {
-  return typeof (svc as Partial<Controllable>).control === 'function';
-}

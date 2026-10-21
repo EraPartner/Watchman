@@ -55,8 +55,10 @@ async function consumeOnce(opts: SseStreamOptions): Promise<void> {
   }
 
   let buffer = "";
+  // streaming decode: a multi-byte UTF-8 character can straddle two chunks
+  const decoder = new TextDecoder();
   for await (const chunk of res.body) {
-    buffer += chunk.toString();
+    buffer += decoder.decode(chunk as Uint8Array, { stream: true });
     buffer = buffer.replace(/\r\n/g, "\n");
     let sep = buffer.indexOf("\n\n");
     while (sep !== -1) {
@@ -65,7 +67,8 @@ async function consumeOnce(opts: SseStreamOptions): Promise<void> {
       const data = rawEvent
         .split("\n")
         .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trim())
+        // per the SSE spec only a single leading space is stripped
+        .map((line) => line.slice(line.startsWith("data: ") ? 6 : 5))
         .join("\n");
       if (data) opts.onMessage(data);
       sep = buffer.indexOf("\n\n");

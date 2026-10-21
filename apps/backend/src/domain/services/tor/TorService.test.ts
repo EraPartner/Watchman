@@ -289,6 +289,54 @@ describe("TorService", () => {
     if (res.ok) expect(res.value.metrics.nickname).toBe("MyRelay");
   });
 
+  it("does not report a prefix-matched relay as the configured one", async () => {
+    state.payload = {
+      relays: [{ nickname: "MyRelayAlt", fingerprint: "ZZZ", running: true }],
+    };
+    const svc = new TorService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      torControl: fakeTorControl(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBeInstanceOf(NotFoundError);
+  });
+
+  it("matches a relay by fingerprint (with or without $)", async () => {
+    state.payload = {
+      relays: [
+        { nickname: "Other", fingerprint: "ABCDEF0123", running: true },
+      ],
+    };
+    const svc = new TorService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      torControl: fakeTorControl(),
+      config: makeConfig({ relayNickname: "$abcdef0123" }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics.nickname).toBe("Other");
+  });
+
+  it("never queries Onionoo with an empty search", async () => {
+    const svc = new TorService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      torControl: fakeTorControl(),
+      config: makeConfig({ relayNickname: "" }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(state.lastSearch).toBeNull();
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBeInstanceOf(NotFoundError);
+  });
+
   it("upstream 500 yields UnavailableError", async () => {
     state.status = 500;
     state.payload = {};
@@ -464,6 +512,59 @@ describe("TorService", () => {
         expect(res.value.metrics.bwRead).toBe(2048);
         expect(res.value.metrics.bwWritten).toBe(1024);
       }
+    });
+
+    it("reports bwRead/bwWritten as null when no BW event is live", async () => {
+      // regression: a dead subscription used to report 0 B/s forever
+      const sub = makeFakeSub();
+      let t = 0;
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: makeFakeSubFactory(sub),
+        config: makeConfig({ useControlPort: true }),
+        now: () => t,
+      });
+      await svc.onStart?.();
+      sub.fire("BW", ["2048", "1024"]);
+      t = 60_000;
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.bwRead).toBeNull();
+        expect(res.value.metrics.bwWritten).toBeNull();
+      }
+    });
+
+    it("reopens the BW subscription when onStart could not open it", async () => {
+      const sub = makeFakeSub();
+      let creates = 0;
+      const factory: TorEventSubscriptionFactory = {
+        create: async () => {
+          creates++;
+          if (creates === 1) throw new UnavailableError("connection refused");
+          return sub;
+        },
+      };
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: factory,
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      await expect(svc.onStart?.()).rejects.toThrow();
+      await svc.getStats(new AbortController().signal);
+      // resubscribe runs in the background
+      await new Promise((r) => setTimeout(r, 0));
+      expect(creates).toBe(2);
+      expect(sub.lastSetevents).toContain("BW");
+      sub.fire("BW", ["10", "20"]);
+      const res = await svc.getStats(new AbortController().signal);
+      if (res.ok) expect(res.value.metrics.bwRead).toBe(10);
+      await svc.onStop?.();
     });
 
     it("onStart is a no-op when useControlPort=false", async () => {

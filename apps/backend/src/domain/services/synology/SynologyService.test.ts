@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { SynologyService } from "./SynologyService.js";
 import { UnauthorizedError, UnavailableError } from "../../../core/errors.js";
+import { selectExternalInterfaces } from "./SynologyService.js";
 import type {
   SnmpGetter,
   SnmpGetRequest,
   SnmpGetResult,
+  SnmpWalkRequest,
+  SnmpWalkResult,
 } from "../../../infra/snmp/snmpGetter.js";
 import type { SynologyInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
@@ -47,15 +50,62 @@ function fakeDsm(responses: Record<string, unknown>): DsmClient {
   };
 }
 
+// ifTable as a DSM box with Open vSwitch exposes it: ifIndex 1 is loopback
+const IF_WALK: Record<string, Array<[string, string]>> = {
+  "1.3.6.1.2.1.2.2.1.2": [
+    ["1", "lo"],
+    ["2", "eth0"],
+    ["3", "ovs_eth0"],
+    ["4", "docker0"],
+  ],
+  "1.3.6.1.2.1.31.1.1.1.6": [
+    ["1", "999999999999"],
+    ["2", "5000000000"],
+    ["3", "5123456789"],
+    ["4", "777"],
+  ],
+  "1.3.6.1.2.1.31.1.1.1.10": [
+    ["1", "999999999999"],
+    ["2", "5000000000"],
+    ["3", "5987654321"],
+    ["4", "777"],
+  ],
+  "1.3.6.1.2.1.2.2.1.10": [
+    ["1", "1"],
+    ["2", "2"],
+    ["3", "111"],
+    ["4", "4"],
+  ],
+  "1.3.6.1.2.1.2.2.1.16": [
+    ["1", "1"],
+    ["2", "2"],
+    ["3", "222"],
+    ["4", "4"],
+  ],
+};
+
+function walkFrom(
+  table: Record<string, Array<[string, string]>>
+): (req: SnmpWalkRequest) => SnmpWalkResult {
+  return (req) => ({
+    rows: (table[req.subtree] ?? []).map(([idx, value]) => ({
+      oid: `${req.subtree}.${idx}`,
+      value,
+    })),
+  });
+}
+
 function fakeSnmp(
   fn: (req: SnmpGetRequest) => SnmpGetResult | Promise<SnmpGetResult>,
-  calls: SnmpGetRequest[] = []
+  calls: SnmpGetRequest[] = [],
+  walk: (req: SnmpWalkRequest) => SnmpWalkResult = walkFrom(IF_WALK)
 ): SnmpGetter {
   return {
     get: async (req) => {
       calls.push(req);
       return fn(req);
     },
+    walk: async (req) => walk(req),
   };
 }
 
@@ -138,28 +188,20 @@ describe("SynologyService", () => {
     const calls: SnmpGetRequest[] = [];
     const values = [
       '"DS920"', // systemName
-      "500000", // uptime ticks -> 5000 seconds
+      "500000", // hrSystemUptime ticks -> 5000 seconds
       '"DS920+"', // systemModel
       '"DSM 7.2"', // systemVersion
       "1", // systemStatus Normal
-      "37", // cpuUsage
+      "63", // ssCpuIdle -> 37% busy
       "42", // cpuTemp
-      "8192", // memoryTotal MB
-      "2048", // memoryAvailable MB
-      "75", // memoryUsagePercent
-      "10000000", // diskTotal KB
-      "4000000", // diskUsed KB
-      "40", // diskUsagePercent
-      "123456789", // networkRx (32-bit fallback)
-      "987654321", // networkTx (32-bit fallback)
+      "8388608", // memTotalReal kB (8 GiB)
+      "1048576", // memAvailReal kB (1 GiB)
+      "524288", // memBuffer kB (0.5 GiB)
+      "524288", // memCached kB (0.5 GiB)
+      "999999", // sysUpTime (agent) — ignored when hrSystemUptime is set
     ];
-    // 64-bit HC counters are fetched separately (2 OIDs) and take precedence
-    const hcValues = ["5123456789", "5987654321"];
     const svc = new SynologyService({
-      snmp: fakeSnmp(
-        (req) => (req.oids.length === 2 ? { values: hcValues } : { values }),
-        calls
-      ),
+      snmp: fakeSnmp(() => ({ values }), calls),
       config: makeConfig(),
       ping: fakePing(),
       now: () => 42,
@@ -181,28 +223,44 @@ describe("SynologyService", () => {
         memoryAvailable: 2048 * 1024 * 1024,
         memoryUsed: (8192 - 2048) * 1024 * 1024,
         memoryUsagePercent: 75,
-        diskTotal: 10_000_000 * 1024,
-        diskUsed: 4_000_000 * 1024,
-        diskFree: 6_000_000 * 1024,
-        diskUsagePercent: 40,
+        // no SNMP source for volume sizes; only DSM provides them
+        diskTotal: 0,
+        diskUsed: 0,
+        diskFree: 0,
+        diskUsagePercent: 0,
+        // regression: ovs_eth0 HC counters only — not loopback (ifIndex 1),
+        // not eth0 (wrapped by ovs_eth0), not docker0
         networkRx: 5123456789,
         networkTx: 5987654321,
       });
     }
     expect(calls[0]?.credentials.user).toBe("u");
     expect(calls[0]?.credentials.authProtocol).toBe("SHA");
-    expect(calls[0]?.oids.length).toBe(15);
+    expect(calls[0]?.oids.length).toBe(12);
+    // regression: these OIDs are serialNumber / upgradeAvailable / disk-table
+    // columns, not CPU, memory or volume size
+    for (const wrong of [
+      "1.3.6.1.4.1.6574.1.5.2.0",
+      "1.3.6.1.4.1.6574.1.5.4.0",
+      "1.3.6.1.4.1.6574.1.5.5.0",
+      "1.3.6.1.4.1.6574.1.5.6.0",
+      "1.3.6.1.4.1.6574.2.1.1.4.0",
+      "1.3.6.1.4.1.6574.2.1.1.5.0",
+      "1.3.6.1.4.1.6574.2.1.1.6.0",
+    ]) {
+      expect(calls[0]?.oids).not.toContain(wrong);
+    }
+    expect(calls[0]?.oids).toContain("1.3.6.1.4.1.2021.11.11.0");
+    expect(calls[0]?.oids).toContain("1.3.6.1.4.1.2021.4.5.0");
   });
 
   it("getStats falls back to 32-bit counters when HC OIDs fail", async () => {
-    const values = Array.from({ length: 15 }, (_, i) =>
-      i === 13 ? "111" : i === 14 ? "222" : "0"
-    );
+    const values = Array.from({ length: 12 }, () => "0");
+    const noHc = { ...IF_WALK };
+    delete noHc["1.3.6.1.2.1.31.1.1.1.6"];
+    delete noHc["1.3.6.1.2.1.31.1.1.1.10"];
     const svc = new SynologyService({
-      snmp: fakeSnmp((req) => {
-        if (req.oids.length === 2) throw new Error("noSuchObject");
-        return { values };
-      }),
+      snmp: fakeSnmp(() => ({ values }), [], walkFrom(noHc)),
       config: makeConfig(),
       ping: fakePing(),
       now: () => 42,
@@ -217,8 +275,24 @@ describe("SynologyService", () => {
     }
   });
 
+  it("selectExternalInterfaces prefers bond, then ovs_, then eth; never lo", () => {
+    const pick = (names: string[]) =>
+      [
+        ...selectExternalInterfaces(
+          new Map(names.map((n, i) => [String(i + 1), n]))
+        ),
+      ]
+        .map((idx) => names[Number(idx) - 1])
+        .sort();
+    expect(pick(["lo", "eth0", "eth1", "bond0"])).toEqual(["bond0"]);
+    expect(pick(["lo", "eth0", "ovs_eth0", "docker0"])).toEqual(["ovs_eth0"]);
+    expect(pick(["lo", "eth0", "eth1", "veth12ab"])).toEqual(["eth0", "eth1"]);
+    expect(pick(["lo", "enp3s0"])).toEqual(["enp3s0"]);
+    expect(pick(["lo"])).toEqual([]);
+  });
+
   it("getStats reports Warning when systemStatus != 1", async () => {
-    const values = Array.from({ length: 15 }, (_, i) => (i === 4 ? "2" : "0"));
+    const values = Array.from({ length: 12 }, (_, i) => (i === 4 ? "2" : "0"));
     const svc = new SynologyService({
       snmp: fakeSnmp(() => ({ values })),
       config: makeConfig(),
@@ -253,16 +327,13 @@ describe("SynologyService", () => {
       '"DS920+"',
       '"DSM 7.2"',
       "1",
-      "37",
+      "63",
       "42",
-      "8192",
-      "2048",
-      "75",
-      "10000000",
-      "4000000",
-      "40",
-      "123456789",
-      "987654321",
+      "8388608",
+      "2097152",
+      "0",
+      "0",
+      "0",
     ];
     const svc = new SynologyService({
       snmp: fakeSnmp(() => ({ values: snmpValues })),
@@ -273,9 +344,10 @@ describe("SynologyService", () => {
       }),
       ping: fakePing(),
       dsm: fakeDsm({
-        "SYNO.DSM.Info/get": {
+        "SYNO.DSM.Info/getinfo": {
           model: "DS920+",
-          version: "DSM 7.2-64570",
+          version: "64570",
+          version_string: "DSM 7.2-64570",
           temperature: 38,
         },
         "SYNO.Core.System.Status/get": {
@@ -298,6 +370,7 @@ describe("SynologyService", () => {
     if (res.ok) {
       const m = res.value.metrics;
       expect(m.dsmTemperature).toBe(38);
+      expect(m.dsmVersion).toBe("DSM 7.2-64570");
       expect(m.cpuFanStatus).toBe("normal");
       expect(m.sysFanStatus).toBe("normal");
       expect(m.powerStatus).toBe("normal");
@@ -315,10 +388,7 @@ describe("SynologyService", () => {
       "0",
       "0",
       "1",
-      "37",
-      "0",
-      "0",
-      "0",
+      "63",
       "0",
       "0",
       "0",
@@ -357,10 +427,7 @@ describe("SynologyService", () => {
       "0",
       "0",
       "1",
-      "20",
-      "0",
-      "0",
-      "0",
+      "80",
       "0",
       "0",
       "0",
@@ -403,7 +470,7 @@ describe("SynologyService", () => {
           memory: { real_usage: 60 },
           network: [{ device: "total", rx: 111, tx: 222 }],
         },
-        "SYNO.DSM.Info/get": { model: "DS920+", version: "DSM 7.2" },
+        "SYNO.DSM.Info/getinfo": { model: "DS920+", version: "DSM 7.2" },
         "SYNO.Core.System.Status/get": { power_status: "normal" },
         "SYNO.Storage.CGI.Storage/load_info": {
           volumes: [
@@ -445,21 +512,18 @@ describe("SynologyService", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("DSM volume sizes override the single-volume SNMP disk scalars", async () => {
+  it("disk totals sum every DSM volume", async () => {
     const snmpValues = [
       '"DS920"',
       "500000",
       '"DS920+"',
       '"DSM 7.2"',
       "1",
-      "37",
+      "63",
       "42",
-      "8192",
-      "2048",
-      "75",
-      "10000000",
-      "4000000",
-      "40",
+      "8388608",
+      "2097152",
+      "0",
       "0",
       "0",
     ];
@@ -473,7 +537,7 @@ describe("SynologyService", () => {
       ping: fakePing(),
       dsm: fakeDsm({
         "SYNO.Core.System.Utilization/get": {},
-        "SYNO.DSM.Info/get": {},
+        "SYNO.DSM.Info/getinfo": {},
         "SYNO.Core.System.Status/get": {},
         "SYNO.Storage.CGI.Storage/load_info": {
           volumes: [
@@ -499,5 +563,45 @@ describe("SynologyService", () => {
       expect(res.value.metrics.diskUsagePercent).toBe(30);
       expect(res.value.metrics.diskFree).toBe(3_500_000_000);
     }
+  });
+
+  it("falls back to agent sysUpTime when hrSystemUptime is missing", async () => {
+    const values = Array.from({ length: 12 }, (_, i) =>
+      i === 1 ? "" : i === 11 ? "300000" : "0"
+    );
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values })),
+      config: makeConfig(),
+      ping: fakePing(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics.uptime).toBe(3000);
+  });
+
+  it("uses DSM utilization CPU when ssCpuIdle is missing", async () => {
+    const values = Array.from({ length: 12 }, (_, i) => (i === 5 ? "" : "0"));
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values })),
+      config: makeConfig({
+        dsmUrl: "http://nas:5000",
+        dsmAccount: "admin",
+        dsmPassword: "pass",
+      }),
+      ping: fakePing(),
+      dsm: fakeDsm({
+        "SYNO.Core.System.Utilization/get": {
+          cpu: { user_load: 10, system_load: 5, other_load: 0 },
+        },
+        "SYNO.DSM.Info/getinfo": {},
+        "SYNO.Core.System.Status/get": {},
+        "SYNO.Storage.CGI.Storage/load_info": {},
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics.cpuUsage).toBe(15);
   });
 });

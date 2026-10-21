@@ -237,6 +237,23 @@ describe("createDsmClient", () => {
     expect(state.loginCallCount).toBe(1);
   });
 
+  it("retries with fresh SID on error code 119 (SID not found)", async () => {
+    state.firstCallErrors["SYNO.DSM.Info/get"] = 119;
+    state.loginSid = "fresh-sid-119";
+    const client = createDsmClient({
+      http: createHttpClient(),
+      config: makeConfig({ initialSid: "stale-119" }),
+    });
+    await client.call(
+      "SYNO.DSM.Info",
+      1,
+      "get",
+      {},
+      new AbortController().signal
+    );
+    expect(state.loginCallCount).toBe(1);
+  });
+
   it("throws UnavailableError if retry also fails with auth code", async () => {
     state.persistentErrors["SYNO.DSM.Info/get"] = 105;
     const client = createDsmClient({

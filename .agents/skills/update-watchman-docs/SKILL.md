@@ -12,14 +12,20 @@ follow every connected surface through OpenAPI, indexes, diagrams, backlinks, an
 
 1. Before implementation, read the relevant docs to establish intent. Do not edit historical ADRs.
 2. During implementation, keep coupled contracts synchronized. API work includes OpenAPI, route
-   docs, generated types, and hand-maintained client types in the same implementation pass.
+   docs, generated types, and hand-maintained client types in the same implementation pass. A
+   documentation worker owns only its assigned documentation and OpenAPI files; hand off generated
+   and hand-maintained client type changes to the parent agent. The parent runs
+   `npm run generate:types`, aligns client types, and completes final validation. When using this
+   skill directly, the main agent owns these steps itself.
 3. Once the implementation diff is stable, run this skill before final validation for any change
    that could make project knowledge stale. The trigger is impact, not diff size.
 4. Update every affected surface, or record why no documentation change is warranted.
-5. Run final tests, lint, typecheck, build, generated-artifact checks, and documentation validation
-   after the docs update. If those checks change implementation behavior or contracts, repeat this
-   documentation pass.
-6. Before committing, inspect the complete diff and confirm `REVIEW.md` is satisfied.
+5. After the docs update, run checks within your assigned ownership. The parent agent completes
+   final validation for the changed surfaces under `AGENTS.md`, including applicable generated
+   artifact and documentation checks. If those checks change implementation behavior or contracts,
+   repeat this documentation pass.
+6. Before handoff, inspect the complete diff and confirm the applicable development checks in
+   `REVIEW.md` are satisfied. Publication checks belong to the authorized publication environment.
 
 Typical triggers include behavior, API, architecture, service integration, configuration,
 security, dependency or package, build or deployment, workflow, route, middleware, page, hook,
@@ -39,7 +45,8 @@ require documentation changes unless they expose existing drift.
 - Architectural decision: add the next numbered ADR from `docs/adr/template.md`; never rewrite an
   accepted ADR.
 
-Use `obsidian:obsidian-markdown`. Preserve required frontmatter, wikilinks, embeds, callouts,
+Use `obsidian:obsidian-markdown` when available; otherwise follow `docs/AGENTS.md` and existing
+vault syntax with plain repository file tools. Preserve required frontmatter, wikilinks, embeds, callouts,
 aliases, and cross-references. Update dates. Prefer existing Dataview patterns over static lists.
 Each new or heavily changed note must link to a section index and related documentation. Add
 reciprocal links where useful and avoid orphan notes.
@@ -49,14 +56,15 @@ reciprocal links where useful and avoid orphan notes.
 Diagrams are fenced `plantuml` blocks inside `docs/architecture/*.md`. Update diagram and prose
 together.
 
-| Change                                        | Architecture document                      |
-| --------------------------------------------- | ------------------------------------------ |
-| Backend service, middleware, route, or schema | `backend-architecture.md`                  |
-| React page, hook, store, or context           | `frontend-architecture.md`                 |
-| End-to-end or WebSocket flow                  | `data-flow.md`                             |
-| Auth, rate limit, real-time, or IP control    | `core-systems.md`                          |
-| Cross-cutting capability                      | Matching diagram in `index.md`             |
-| Integration                                   | Data-flow diagram and its integration page |
+| Change                                        | Architecture document                          |
+| --------------------------------------------- | ---------------------------------------------- |
+| Backend service, middleware, route, or schema | `backend-architecture.md`                      |
+| React page, hook, store, or context           | `frontend-architecture.md`                     |
+| End-to-end or WebSocket flow                  | `data-flow.md`                                 |
+| Origin policy or network-security middleware  | `backend-architecture.md` and `docs/security/` |
+| Event bus or service lifecycle (prose only)   | `core-systems.md`                              |
+| Cross-cutting capability                      | Matching diagram in `index.md`                 |
+| Integration                                   | Data-flow diagram and its integration page     |
 
 Update `docs/architecture/index.md` when adding a diagram.
 
@@ -82,7 +90,6 @@ Report docs and OpenAPI changes, diagram changes or why none were needed, flow-v
 why none were needed, index/backlink/Dataview checks, validation, and remaining gaps. Confirm claims
 against code and tests; never document intended behavior as implemented.
 
-Create a session note only when the work changes multiple modules or documentation surfaces, or
-changes architecture, API contracts, security, persistence, service integrations, configuration
-workflows, or build/deployment behavior. Isolated mechanical and comment-only edits do not need a
-session note unless the user requests one.
+Create a session note only when it adds durable decisions, rationale, unresolved issues, or
+operational lessons not already captured in the updated documentation, or when the user requests
+one. Do not duplicate the change summary merely because multiple files or modules changed.

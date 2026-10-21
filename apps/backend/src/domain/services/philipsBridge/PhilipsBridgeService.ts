@@ -82,6 +82,9 @@ export class PhilipsBridgeService extends BaseService {
 
   // live light state pushed via the bridge eventstream (id -> on)
   private readonly liveLightOn = new Map<string, boolean>();
+  // true once a full /resource/light fetch has seeded liveLightOn; SSE
+  // updates alone carry only changed lights, so they can't stand in for it
+  private lightsSeeded = false;
   private sseAbort: AbortController | undefined;
   private sseHealthy = false;
   private lastEventAt = 0;
@@ -126,7 +129,9 @@ export class PhilipsBridgeService extends BaseService {
       signal: this.sseAbort.signal,
       onMessage: (data) => this.handleSseMessage(data),
       onError: () => {
+        // events may be missed until the stream recovers — re-seed on next poll
         this.sseHealthy = false;
+        this.lightsSeeded = false;
       },
     });
   }
@@ -149,9 +154,9 @@ export class PhilipsBridgeService extends BaseService {
     this.lastEventAt = this.now();
     for (const envelope of envelopes) {
       for (const item of envelope.data ?? []) {
-        if (item.type === "light" && item.on !== undefined && item.id) {
-          this.liveLightOn.set(item.id, item.on.on);
-        }
+        if (item.type !== "light" || !item.id) continue;
+        if (envelope.type === "delete") this.liveLightOn.delete(item.id);
+        else if (item.on !== undefined) this.liveLightOn.set(item.id, item.on.on);
       }
     }
   }
@@ -300,7 +305,7 @@ export class PhilipsBridgeService extends BaseService {
   private async lightCounts(
     signal: AbortSignal
   ): Promise<Record<string, unknown>> {
-    if (this.sseHealthy && this.liveLightOn.size > 0) {
+    if (this.sseHealthy && this.lightsSeeded) {
       const lightCount = this.liveLightOn.size;
       const onCount = [...this.liveLightOn.values()].filter(Boolean).length;
       return { lightCount, onCount, offCount: lightCount - onCount };
@@ -316,12 +321,15 @@ export class PhilipsBridgeService extends BaseService {
       if (res.status < 200 || res.status >= 300) return {};
       const body = await res.json<HueListResponse<HueLight>>();
       const lights = body.data ?? [];
-      // seed the live map so SSE deltas keep it current from here on
+      // seed the live map so SSE deltas keep it current from here on;
+      // rebuild it so lights removed while unobserved don't linger
+      this.liveLightOn.clear();
       for (const light of lights) {
         if (light.id && light.on !== undefined) {
           this.liveLightOn.set(light.id, light.on.on);
         }
       }
+      this.lightsSeeded = true;
       const lightCount = lights.length;
       const onCount = lights.filter((l) => l.on?.on === true).length;
       return { lightCount, onCount, offCount: lightCount - onCount };

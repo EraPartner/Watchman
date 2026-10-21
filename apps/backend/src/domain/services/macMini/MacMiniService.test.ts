@@ -4,6 +4,8 @@ import {
   MAC_STATS_COMMANDS,
   TEMP_CMD,
   SMART_CMD,
+  DF_CMD,
+  parseUptimeSeconds,
 } from "./MacMiniService.js";
 import { SSH_SEGMENT_DELIMITER } from "../../../infra/ssh/compound.js";
 import { UnauthorizedError, UnavailableError } from "../../../core/errors.js";
@@ -164,7 +166,7 @@ describe("MacMiniService", () => {
       ssh: fakeSsh(
         {
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           [TEMP_CMD]: { stdout: "55.2°C\n", stderr: "", code: 0 },
         },
         calls
@@ -200,7 +202,7 @@ describe("MacMiniService", () => {
       ping: fakePing({ success: true }),
       ssh: fakeSsh({
         uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-        "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+        [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
         [TEMP_CMD]: { stdout: "", stderr: "not found", code: 1 },
       }),
       config: makeConfig(),
@@ -208,7 +210,8 @@ describe("MacMiniService", () => {
     });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.value.metrics.cpuTemp).toBe(0);
+    // regression: no temp tool means unknown (null), not 0 °C
+    if (res.ok) expect(res.value.metrics.cpuTemp).toBeNull();
   });
 
   it("getStats maps ssh failure to UnavailableError", async () => {
@@ -232,7 +235,7 @@ describe("MacMiniService", () => {
       ping: fakePing({ success: true }),
       ssh: fakeSsh({
         uptime: { stdout: "", stderr: "nope", code: 1 },
-        "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+        [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
       }),
       config: makeConfig(),
       now: () => 0,
@@ -240,7 +243,8 @@ describe("MacMiniService", () => {
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value.metrics.cpuLoad).toBe(0);
+      expect(res.value.metrics.cpuLoad).toBeNull();
+      expect(res.value.metrics.uptime).toBeNull();
       expect(res.value.metrics.diskUsagePercent).toBe(3);
     }
   });
@@ -263,7 +267,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           vm_stat: { stdout: VM_STAT_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
@@ -287,7 +291,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           "pmset -g batt": { stdout: PMSET_AC_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
@@ -307,7 +311,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           "pmset -g batt": { stdout: PMSET_DESKTOP_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
@@ -326,7 +330,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           "pmset -g batt": { stdout: PMSET_BATT_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
@@ -346,7 +350,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           "top -l 1 -n 0 -s 0": { stdout: TOP_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
@@ -359,6 +363,7 @@ describe("MacMiniService", () => {
       expect(m["cpuUser"]).toBe(12.25);
       expect(m["cpuSys"]).toBe(4.12);
       expect(m["cpuIdle"]).toBe(83.63);
+      expect(m["cpuUsagePercent"]).toBe(16.37);
       expect(m["processCount"]).toBe(350);
     });
 
@@ -367,7 +372,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           "ifconfig en0": { stdout: IFCONFIG_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
@@ -386,7 +391,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           [SMART_CMD]: { stdout: SMART_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
@@ -406,7 +411,7 @@ describe("MacMiniService", () => {
         ping: fakePing({ success: true }),
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-          "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
         now: () => 0,
@@ -434,7 +439,7 @@ describe("MacMiniService", () => {
         ssh: fakeSsh(
           {
             uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
-            "df -k /": { stdout: DF_OUT, stderr: "", code: 0 },
+            [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
           },
           calls
         ),
@@ -447,7 +452,7 @@ describe("MacMiniService", () => {
       const compound = calls[0]?.command ?? "";
       for (const command of [
         "uptime",
-        "df -k /",
+        DF_CMD,
         TEMP_CMD,
         "vm_stat",
         "pmset -g batt",
@@ -458,5 +463,73 @@ describe("MacMiniService", () => {
         expect(compound).toContain(command);
       }
     });
+  });
+});
+
+describe("parseUptimeSeconds (BSD/macOS uptime formats)", () => {
+  // regression: "mins"/"hrs"/"secs" and "N days, N mins" were unparsed (→ 0)
+  it.each([
+    ["15:04  up 1 day, 3:12, 3 users, load averages: 1.23 0.87 0.65", 97_920],
+    ["10:01  up 14 mins, 2 users, load averages: 1.00 1.00 1.00", 840],
+    ["10:01  up 1 min, 1 user, load averages: 1.00 1.00 1.00", 60],
+    ["10:01  up 2 hrs, 2 users, load averages: 1.00 1.00 1.00", 7_200],
+    ["10:01  up 3 days, 1 hr, 2 users, load averages: 1 1 1", 262_800],
+    ["10:01  up 3 days, 5 mins, 2 users, load averages: 1 1 1", 259_500],
+    ["10:01  up 12 secs, 1 user, load averages: 1 1 1", 12],
+    ["10:01  up 2:04, 2 users, load averages: 1 1 1", 7_440],
+  ])("%s", (input, expected) => {
+    expect(parseUptimeSeconds(input)).toBe(expected);
+  });
+
+  it("returns null for empty output", () => {
+    expect(parseUptimeSeconds("")).toBeNull();
+  });
+});
+
+describe("MacMiniService APFS and power edge cases", () => {
+  it("reads the Data volume and reports fullness as total minus available", async () => {
+    // APFS: Data volume Used excludes the system volume and snapshots, so
+    // fullness comes from shared available space
+    const dfData =
+      "Filesystem     1024-blocks      Used Available Capacity  Mounted on\n/dev/disk3s5     971350180 600000000 300000000    67%    /System/Volumes/Data\n";
+    const svc = new MacMiniService({
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh({
+        uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
+        [DF_CMD]: { stdout: dfData, stderr: "", code: 0 },
+      }),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.metrics.diskUsed).toBe(600_000_000 * 1024);
+    expect(res.value.metrics.diskFree).toBe(300_000_000 * 1024);
+    expect(res.value.metrics.diskUsagePercent).toBe(69);
+    expect(DF_CMD).toContain("/System/Volumes/Data");
+  });
+
+  it('"not charging" is reported as not charging', async () => {
+    const svc = new MacMiniService({
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh({
+        uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
+        [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
+        "pmset -g batt": {
+          stdout:
+            "Now drawing from 'AC Power'\n -InternalBattery-0 (id=4653155)\t80%; AC attached; not charging present: true\n",
+          stderr: "",
+          code: 0,
+        },
+      }),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.metrics.batteryCharging).toBe(false);
+    expect(res.value.metrics.onAC).toBe(true);
   });
 });

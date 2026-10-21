@@ -1,14 +1,17 @@
 ---
 title: Monitoring Upgrade Plan
 type: guide
-status: active
-date: 2026-05-07
+status: paused
+date: 2026-10-20
 tags: [guide, plan, monitoring, migration, health, snmp, ssh, tor, hue, two-tier]
 description: Phase-by-phase plan for adopting the two-tier health model and per-service monitoring upgrades defined in ADR-019
 aliases: [monitoring plan, monitoring upgrade plan, ADR-019 plan]
 ---
 
 # Monitoring Upgrade Plan
+
+> [!warning] Plan paused (2026-10-20)
+> This plan is paused because the project is no longer actively maintained. This page records P0a (two-tier health) and the P0b Tor ControlPort tasks B3–B7 as completed. P0c and later phases have no completion record here. Some related code exists (for example router SNMP, the Hue application key, Synology DSM, the Roon API, and Bitcoin ZMQ options in `apps/backend/src/config/services.ts`), so check the code and the [[docs/integrations/index|integration pages]] before treating a phase as not started.
 
 > [!abstract] Purpose
 > Phase-by-phase rollout of [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019]]. Each phase is independently shippable, each leaves the system green if rolled back, and each ends with a concrete verification step.
@@ -43,7 +46,7 @@ aliases: [monitoring plan, monitoring upgrade plan, ADR-019 plan]
 3. ✅ Updated all 13 services' `checkHealth`:
    - 8 services (AdGuard, AlbyHub, Bitcoin, Homebridge, IPFS, qBittorrent, Synology) use `withHostPing` helper
    - 5 services (MacMini, PhilipsBridge, Roon, Router, RaspberryPi) use inline parallel probe (already had ping, converted to two-tier)
-4. ✅ [[apps/backend/src/infra/scheduler/BackgroundPoller.ts|BackgroundPoller]] consumes the new shape (dual-loop unchanged).
+4. ✅ [[apps/backend/src/infra/scheduler/poller.ts|BackgroundPoller]] consumes the new shape (dual-loop unchanged).
 5. ⏳ Time-series migration: schema updated to include `host_reachable`, `host_ping_ms`, `service_reachable`, `service_latency_ms` columns. Legacy `reachable` column mapped for backward compat. (Frontend chart definitions deferred to P0b/P1).
 
 **Frontend changes.**
@@ -478,7 +481,7 @@ These run alongside whichever phase touches them.
 - **OpenAPI spec.** Each phase that changes a service's stats response updates [[apps/backend/openapi.yaml|openapi.yaml]] and the relevant integration doc under [[docs/integrations/index|docs/integrations]].
 - **Time-series migrations.** Each new metric is an additive column; never rename or drop. Keep reads tolerant of missing columns for one release.
 - **Frontend chart definitions.** Each new bandwidth/temperature/RAID metric should land with at least one chart spec to surface it; otherwise the data is invisible.
-- **Service registry.** [[apps/backend/src/config/ServiceRegistry.ts|ServiceRegistry.ts]] gains the new config fields per phase via additive Zod schemas.
+- **Service registry.** [[apps/backend/src/config/services.ts|services.ts]] gains the new config fields per phase via additive Zod schemas.
 
 ## Verification checklist per phase
 

@@ -1,7 +1,7 @@
 ---
 name: watchman-kb-updater
 description: Legacy Claude Code compatibility agent. Prefer the shared update-watchman-docs skill for current documentation work.
-tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
+tools: ["Read", "Write", "Edit", "Bash", "Skill"]
 model: sonnet
 ---
 
@@ -41,7 +41,7 @@ AdGuard Home, Bitcoin, Tor, qBittorrent, IPFS, Synology NAS, Homebridge, Alby Hu
 | `docs/api/`                 | REST endpoint contracts                                                 |
 | `docs/features/`            | Feature specs (Service Monitoring, Multi-Instance, Real-Time Updates)   |
 | `docs/integrations/`        | Per-service integration docs                                            |
-| `docs/security/`            | Auth, rate limiting, IP control                                         |
+| `docs/security/`            | Network-isolation model; no built-in auth (ADR-017, ADR-025)            |
 | `docs/performance/`         | Caching, request optimization                                           |
 | `docs/components/`          | React components and hooks                                              |
 | `docs/testing/`             | Testing strategies                                                      |
@@ -73,9 +73,10 @@ When called after code changes:
 ## Obsidian operations
 
 There is **no Obsidian MCP server** in this setup. For all docs work use the file tools
-(`Read`/`Write`/`Edit`/`Grep`/`Glob`) over the plain-markdown `docs/` tree, and the installed
-**`obsidian:obsidian-markdown` skill** for OFM-correct syntax (wikilinks, frontmatter, callouts)
-when writing or editing notes. Use `Grep`/`Glob` to discover docs by content, path, or frontmatter.
+(`Read`/`Write`/`Edit`) over the plain-markdown `docs/` tree, and the installed
+**`obsidian:obsidian-markdown` skill**, when available, for OFM-correct syntax (wikilinks,
+frontmatter, callouts) when writing or editing notes. Discover docs by content, path, or
+frontmatter with `grep -rn` and `ls` through `Bash`.
 
 `obsidian:obsidian-cli` and `obsidian:defuddle` are host-only (they need the `obs` binary, a running
 Obsidian app, or network access) and do not function in the sandbox — do not rely on them. State in
@@ -87,7 +88,7 @@ Follow the `obsidian:obsidian-markdown` skill for correct syntax. Key rules for 
 
 - Frontmatter: `title`, `type`, `status`, `date`, `tags`, `description`, `aliases`
 - Wiki-links: `[[docs/path/to/file|Display Name]]` for internal references
-- Code links: `[[apps/backend/services/ServiceName.js]]`
+- Code links: `[[apps/backend/src/domain/services/<service>/<file>.ts|ServiceName]]`
 - Backlinks: ensure each new or updated note links to related docs and at least one section index page (`docs/*/index.md`) so graph/backlinks remain useful
 - Callouts: `> [!warning]`, `> [!info]`, `> [!tip]`
 - ADRs are **append-only** — never rewrite a past decision; add a new one that supersedes it (use the next sequential number — check `docs/adr/` for the highest existing `NNN-`)
@@ -104,7 +105,8 @@ Watchman's architecture diagrams live **inline as PlantUML fenced blocks** (` ``
 | New / renamed backend service, middleware, route, or schema                      | `docs/architecture/backend-architecture.md`                         |
 | New / renamed React page, hook, store, or context                                | `docs/architecture/frontend-architecture.md`                        |
 | New end-to-end data flow (e.g. new WebSocket event, new service-monitoring path) | `docs/architecture/data-flow.md`                                    |
-| New cross-cutting concern (auth, rate-limit, real-time, IP control)              | `docs/architecture/core-systems.md`                                 |
+| New origin-policy or network-security middleware                                 | `docs/architecture/backend-architecture.md` and `docs/security/`    |
+| Event bus or service-lifecycle change (prose only, no diagram)                   | `docs/architecture/core-systems.md`                                 |
 | New top-level capability that touches several areas                              | the matching diagram inside `docs/architecture/index.md`            |
 | New / renamed integration                                                        | the data-flow diagram + the per-service doc in `docs/integrations/` |
 

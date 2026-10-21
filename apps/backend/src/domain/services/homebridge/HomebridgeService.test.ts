@@ -151,6 +151,30 @@ describe("HomebridgeService", () => {
     }
   });
 
+  it("getStats reads host details nested under os/time in server-information", async () => {
+    const svc = new HomebridgeService({
+      client: fakeClient((p) =>
+        p === cfg.statusPath
+          ? {
+              nodeVersion: "v20.11.0",
+              os: { hostname: "hb-pi", platform: "linux", distro: "Raspbian" },
+              time: { uptime: 86_400 },
+            }
+          : null
+      ),
+      ping: fakePing(),
+      config: cfg,
+      now,
+    });
+    const r = await svc.getStats(new AbortController().signal);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.metrics["hostname"]).toBe("hb-pi");
+      expect(r.value.metrics["platform"]).toBe("linux");
+      expect(r.value.metrics["uptime"]).toBe(86_400);
+    }
+  });
+
   it("getStats surfaces extended status API telemetry", async () => {
     const svc = new HomebridgeService({
       client: fakeClient((p) => {

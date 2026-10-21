@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from "child_process";
 import { app } from "electron";
 import * as path from "path";
 import * as http from "http";
+import { stopChild } from "./childStop";
 
 interface BackendHandle {
   readonly port: number;
@@ -13,6 +14,14 @@ interface BackendHandle {
 const HEALTH_TIMEOUT_MS = 20000;
 const HEALTH_POLL_INTERVAL_MS = 250;
 const SHUTDOWN_GRACE_MS = 2000;
+
+// Child spawned but not yet healthy. startBackend() has not returned a handle
+// for it, so a quit during startup has to stop it through stopPendingBackend().
+let pendingStop: (() => Promise<void>) | null = null;
+
+export function stopPendingBackend(): Promise<void> | null {
+  return pendingStop ? pendingStop() : null;
+}
 
 function resolveBackendEntry(): string {
   if (app.isPackaged) {
@@ -133,6 +142,8 @@ export async function startBackend(
     child.once("exit", (code) => resolve(code));
   });
 
+  const stop = () => stopChild(child, exitPromise, SHUTDOWN_GRACE_MS);
+  pendingStop = stop;
   try {
     await Promise.race([
       waitForHealth(host, port, HEALTH_TIMEOUT_MS),
@@ -143,29 +154,17 @@ export async function startBackend(
       }),
     ]);
   } catch (error) {
-    if (!child.killed) {
-      child.kill("SIGTERM");
-    }
+    await stop();
     throw error;
+  } finally {
+    pendingStop = null;
   }
 
   return {
     port,
     host,
     process: child,
-    async stop() {
-      if (child.killed || child.exitCode !== null) {
-        return;
-      }
-      child.kill("SIGTERM");
-      await Promise.race([
-        exitPromise,
-        new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GRACE_MS)),
-      ]);
-      if (child.exitCode === null && !child.killed) {
-        child.kill("SIGKILL");
-      }
-    },
+    stop,
   };
 }
 

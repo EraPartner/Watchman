@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 type: index
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags: [adr, architecture, index, decision, design, startup-flows]
 description: Index of all Architecture Decision Records for the Watchman project - why design choices were made
 aliases: [adr index, decisions, architecture decisions, design decisions]
@@ -90,3 +90,11 @@ For small fixes or incremental improvements, documentation in code comments is s
 - [[docs/architecture/index|Architecture Overview]]
 - [[docs/guides/contributing|Contributing Guide]]
 - [[docs/guides/ai-agent-workflow|AI Agent Workflow]]
+
+## Current agent sandbox decision
+
+[[docs/adr/031-built-in-agent-sandboxes|ADR-031: Built-in Agent Sandboxes]] supersedes ADR-030.
+
+## Monitoring-only decision
+
+[[docs/adr/032-monitoring-only-no-service-control|ADR-032: Monitoring Only, No Service Control]] removes the service control route and GPIO writes.

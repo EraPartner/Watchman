@@ -9,7 +9,7 @@
  * `prepare`.
  *
  * Uses a relative path (".githooks") so it resolves correctly both on the host
- * and inside the devcontainer (where the repo is mounted at /workspaces/repo).
+ * and when the repository is checked out at another path.
  *
  * Mirrors Vision's scripts/setup-git-hooks.js (ESM here -- this package is
  * "type": "module"). Replaces husky as the hook-wiring mechanism.
@@ -29,12 +29,6 @@ function git(args) {
 }
 
 function main() {
-  // Codex cloud tasks leave publication and host hook policy outside the
-  // environment. npm still runs dependency lifecycle scripts, so make the
-  // tracked root prepare hook an explicit no-op there without suppressing
-  // native dependency install scripts such as esbuild and ssh2.
-  if (process.env.CODEX_SESSION_ENV === "cloud") return;
-
   try {
     if (git(["rev-parse", "--is-inside-work-tree"]) !== "true") return;
   } catch {

@@ -278,4 +278,165 @@ describe("ServiceLifecycle", () => {
 
     await lifecycle.stop();
   });
+
+  it("announces config:service.applied only after a created service is registered", async () => {
+    const records = new Map<string, StoredService>();
+    const store = makeStore(records);
+    const registry = new ServiceRegistry();
+    const poller = makePoller();
+    const bus = createEventBus();
+
+    const lifecycle = createServiceLifecycle({
+      store,
+      profiles: makeProfiles(),
+      registry,
+      poller,
+      bus,
+      infra: fakeInfra,
+      logger: silentLogger,
+    });
+    await lifecycle.start();
+
+    const applied = new Promise<{ registered: boolean; action: string }>(
+      (resolve) => {
+        bus.on("config:service.applied", (p) =>
+          resolve({ registered: registry.has("ipfs:new"), action: p.action })
+        );
+      }
+    );
+
+    records.set("svc-new", makeStoredService("svc-new", "ipfs", "new"));
+    bus.emit("config:service.created", {
+      id: "svc-new",
+      kind: "ipfs",
+      instanceId: "new",
+    });
+    // Bring-up is async: the raw event fires before the registry has it.
+    expect(registry.has("ipfs:new")).toBe(false);
+
+    await expect(applied).resolves.toEqual({
+      registered: true,
+      action: "created",
+    });
+
+    await lifecycle.stop();
+  });
+
+  it("does not revive a service deleted while its update was reading the store", async () => {
+    const storedId = "svc-race";
+    const records = new Map([
+      [storedId, makeStoredService(storedId, "ipfs", "race")],
+    ]);
+    const base = makeStore(records);
+    // Hold the next store.get() open so the delete lands mid-read.
+    let releaseGet: (() => void) | undefined;
+    let holdNext = false;
+    const store: ConfigStore = {
+      ...base,
+      async get(id) {
+        const row = records.get(id) ?? null;
+        if (holdNext) {
+          holdNext = false;
+          await new Promise<void>((r) => (releaseGet = r));
+        }
+        return row;
+      },
+    };
+    const registry = new ServiceRegistry();
+    const poller = makePoller();
+
+    const lifecycle = createServiceLifecycle({
+      store,
+      profiles: makeProfiles(),
+      registry,
+      poller,
+      bus: createEventBus(),
+      infra: fakeInfra,
+      logger: silentLogger,
+    });
+    await lifecycle.start();
+    expect(registry.has("ipfs:race")).toBe(true);
+
+    holdNext = true;
+    const update = lifecycle.applyUpdate(storedId);
+    await vi.waitFor(() => expect(releaseGet).toBeDefined());
+    records.delete(storedId);
+    const del = lifecycle.applyDelete(storedId);
+    releaseGet!();
+    await Promise.all([update, del]);
+
+    expect(registry.has("ipfs:race")).toBe(false);
+    expect(poller.tracked.has("ipfs:race")).toBe(false);
+    expect(lifecycle.idByStoredId(storedId)).toBeUndefined();
+
+    await lifecycle.stop();
+  });
+
+  it("does not run a created service from the old profile when a switch lands mid-create", async () => {
+    const b = makeStoredService("svc-b", "bitcoin", "b", "p2");
+    const records = new Map([["svc-b", b]]);
+    const store = makeStore(records);
+    const registry = new ServiceRegistry();
+    const poller = makePoller();
+    let active = "p1";
+    // Reads after start() resolve in reverse call order, so the switch's read
+    // of the new profile finishes before the create's read of the old one.
+    const delays = [0, 20, 0];
+    let reads = 0;
+    const profiles = {
+      ...makeProfiles(),
+      getActiveProfileId: async () => {
+        const value = active;
+        const delay = delays[reads++] ?? 0;
+        await new Promise((r) => setTimeout(r, delay));
+        return value;
+      },
+      setActiveProfileId: async (id: string) => {
+        active = id;
+      },
+    } as unknown as ProfileStore;
+
+    const lifecycle = createServiceLifecycle({
+      store,
+      profiles,
+      registry,
+      poller,
+      bus: createEventBus(),
+      infra: fakeInfra,
+      logger: silentLogger,
+    });
+    await lifecycle.start();
+
+    records.set("svc-a", makeStoredService("svc-a", "ipfs", "a", "p1"));
+    const created = lifecycle.applyCreate("svc-a");
+    await new Promise((r) => setImmediate(r));
+    await Promise.all([created, lifecycle.switchActiveProfile("p2")]);
+
+    expect(registry.has("bitcoin:b")).toBe(true);
+    expect(registry.has("ipfs:a")).toBe(false);
+
+    await lifecycle.stop();
+  });
+
+  it("applyCreate is a no-op for a service reloadAll already brought up", async () => {
+    const a = makeStoredService("svc-a", "ipfs", "a", "p1");
+    const records = new Map([["svc-a", a]]);
+    const registry = new ServiceRegistry();
+    const lifecycle = createServiceLifecycle({
+      store: makeStore(records),
+      profiles: makeProfiles(),
+      registry,
+      poller: makePoller(),
+      bus: createEventBus(),
+      infra: fakeInfra,
+      logger: silentLogger,
+    });
+    await lifecycle.start();
+
+    await expect(lifecycle.applyCreate("svc-a")).resolves.toBeUndefined();
+    expect(registry.has("ipfs:a")).toBe(true);
+    expect(lifecycle.idByStoredId("svc-a")).toBe("ipfs:a");
+
+    await lifecycle.stop();
+  });
 });

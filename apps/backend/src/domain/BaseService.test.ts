@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { BaseService, isControllable, type HealthResult, type StatsResult, type PollPolicy } from './BaseService.js';
-import { ok, type Result } from '../core/result.js';
-import type { DomainError } from '../core/errors.js';
+import { BaseService, type HealthResult, type StatsResult, type PollPolicy } from './BaseService.js';
+import { ok } from '../core/result.js';
 
 class Plain extends BaseService {
   readonly kind = 'k';
@@ -15,19 +14,8 @@ class Plain extends BaseService {
   }
 }
 
-class Controlled extends Plain {
-  async control(): Promise<Result<void, DomainError>> {
-    return ok(undefined);
-  }
-}
-
 describe('BaseService', () => {
   it('id combines kind and instanceId', () => {
     expect(new Plain().id).toBe('k:i');
-  });
-
-  it('isControllable detects control method', () => {
-    expect(isControllable(new Plain())).toBe(false);
-    expect(isControllable(new Controlled())).toBe(true);
   });
 });

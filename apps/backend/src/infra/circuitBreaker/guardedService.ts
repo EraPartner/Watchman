@@ -1,7 +1,5 @@
 import {
   BaseService,
-  isControllable,
-  type Controllable,
   type HealthResult,
   type StatsResult,
   type PollPolicy,
@@ -55,13 +53,6 @@ class BreakerGuardedService extends BaseService {
     this.pollPolicy = inner.pollPolicy;
     if (inner.onStart) this.onStart = () => inner.onStart!();
     if (inner.onStop) this.onStop = () => inner.onStop!();
-    if (isControllable(inner)) {
-      // control is user-initiated, not polled; pass through unguarded
-      (this as BaseService & Partial<Controllable>).control = (
-        action,
-        signal
-      ) => inner.control(action, signal);
-    }
   }
 
   override onStart?: () => Promise<void>;

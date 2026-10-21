@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   BaseService,
-  isControllable,
-  type Controllable,
   type HealthResult,
   type StatsResult,
   type PollPolicy,
@@ -30,14 +28,6 @@ class Stub extends BaseService {
   async getStats(): Promise<StatsResult> {
     this.statsCalls++;
     return ok({ metrics: {}, at: 0 });
-  }
-}
-
-class ControllableStub extends Stub implements Controllable {
-  lastAction: string | null = null;
-  async control(action: string) {
-    this.lastAction = action;
-    return ok<void>(undefined);
   }
 }
 
@@ -112,16 +102,21 @@ describe("withBreakers", () => {
     expect(stats.ok).toBe(true);
   });
 
-  it("preserves identity, controllability and lifecycle hooks", async () => {
-    const inner = new ControllableStub();
+  it("preserves identity and poll policy", () => {
+    const inner = new Stub();
     const { guarded } = makeGuarded(inner);
     expect(guarded.id).toBe(inner.id);
     expect(guarded.pollPolicy).toEqual(inner.pollPolicy);
-    expect(isControllable(guarded)).toBe(true);
-    if (isControllable(guarded)) {
-      await guarded.control("restart", new AbortController().signal);
-    }
-    expect(inner.lastAction).toBe("restart");
+  });
+
+  // Watchman is monitoring-only: the wrapper must not forward any extra
+  // method, so a stray control() on an inner service never becomes reachable.
+  it("does not forward control() from the inner service", () => {
+    const inner = Object.assign(new Stub(), {
+      control: async () => ok<void>(undefined),
+    });
+    const { guarded } = makeGuarded(inner);
+    expect("control" in guarded).toBe(false);
   });
 
   it("does not advertise lifecycle hooks the inner service lacks", () => {
@@ -129,6 +124,5 @@ describe("withBreakers", () => {
     const { guarded } = makeGuarded(inner);
     expect(guarded.onStart).toBeUndefined();
     expect(guarded.onStop).toBeUndefined();
-    expect(isControllable(guarded)).toBe(false);
   });
 });

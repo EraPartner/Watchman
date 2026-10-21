@@ -2,7 +2,7 @@
 title: Core Systems - Event Bus and Service Lifecycle
 type: architecture
 status: active
-date: 2026-06-12
+date: 2026-10-21
 tags:
   [
     architecture,
@@ -67,6 +67,12 @@ interface EventMap {
     id: string;
     kind: string;
   };
+  "config:service.applied": {
+    id: string;
+    kind: string;
+    instanceId: string;
+    action: "created" | "updated" | "deleted";
+  };
   "config:service.renamed": {
     id: string;
     kind: string;
@@ -121,9 +127,10 @@ const safeOnError = (err: unknown): void => {
 | `service.health.updated`  | [[apps/backend/src/infra/scheduler/poller.ts]]       | Health check completes                                  |
 | `service.stats.updated`   | [[apps/backend/src/infra/scheduler/poller.ts]]       | Stats fetch completes                                   |
 | `service.error`           | [[apps/backend/src/infra/scheduler/poller.ts]]       | Poll fails (health or stats)                            |
-| `config:service.created`  | [[apps/backend/src/application/ServiceLifecycle.ts]] | New service instance created                            |
-| `config:service.updated`  | [[apps/backend/src/application/ServiceLifecycle.ts]] | Service config updated                                  |
-| `config:service.deleted`  | [[apps/backend/src/application/ServiceLifecycle.ts]] | Service deleted                                         |
+| `config:service.created`  | [[apps/backend/src/config/store/ConfigStore.ts]]     | New service instance created                            |
+| `config:service.updated`  | [[apps/backend/src/config/store/ConfigStore.ts]]     | Service config updated                                  |
+| `config:service.deleted`  | [[apps/backend/src/config/store/ConfigStore.ts]]     | Service deleted                                         |
+| `config:service.applied`  | [[apps/backend/src/application/ServiceLifecycle.ts]] | Lifecycle finished applying a create/update/delete      |
 | `config:service.renamed`  | [[apps/backend/src/config/store/ConfigStore.ts]]     | Service instanceId renamed (in addition to `updated`)   |
 | `cache:revalidate.failed` | [[apps/backend/src/infra/cache/swr.ts]]              | SWR stale-branch revalidation fails (optional EventBus) |
 
@@ -131,7 +138,7 @@ const safeOnError = (err: unknown): void => {
 
 | Subscriber                          | Subscribes To                                                                     | Action                                                                      |
 | ----------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| WebSocket Broadcaster               | `service.health.updated`, `service.stats.updated`, `service.error`, `config:*`    | Broadcast frames; alert on first error, info on recovery                    |
+| WebSocket Broadcaster               | `service.health.updated`, `service.stats.updated`, `service.error`, `config:service.applied`, `profile.*` | Broadcast frames; alert on first error, info on recovery                    |
 | SnapshotCache                       | `service.health.updated`, `service.error` (scope=health), `service.stats.updated` | Keep latest health result and stats per service for read-through HTTP layer |
 | Time-Series Writer                  | `service.stats.updated`, `service.health.updated`                                 | Write metrics to DuckDB (when TIMESERIES_ENABLED)                           |
 | Service Lifecycle (restart handler) | `config:service.created/updated/deleted`                                          | Reload affected service                                                     |

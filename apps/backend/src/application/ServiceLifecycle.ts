@@ -120,11 +120,18 @@ export function createServiceLifecycle(
     return svc;
   }
 
+  // Each apply* reads the stored row and active profile inside serialize():
+  // reading first and queueing after let a delete that landed during the read
+  // run its teardown first, after which the stale bring-up revived the
+  // deleted service and polled it until restart.
   async function applyCreate(id: string): Promise<void> {
-    const stored = await store.get(id);
-    if (!stored) return;
-    const activeProfileId = await profiles.getActiveProfileId();
     await serialize(async () => {
+      // reloadAll (e.g. a profile switch) may already have brought it up;
+      // a second bringUp would start it, then fail to register, and leak it.
+      if (storedIdToSvcId.has(id)) return;
+      const stored = await store.get(id);
+      if (!stored) return;
+      const activeProfileId = await profiles.getActiveProfileId();
       poller.pause();
       try {
         await bringUp(stored, activeProfileId);
@@ -135,10 +142,9 @@ export function createServiceLifecycle(
   }
 
   async function applyUpdate(id: string): Promise<void> {
-    const stored = await store.get(id);
-    if (!stored) return;
-    const activeProfileId = await profiles.getActiveProfileId();
     await serialize(async () => {
+      const stored = await store.get(id);
+      const activeProfileId = await profiles.getActiveProfileId();
       poller.pause();
       try {
         const prevSvcId = storedIdToSvcId.get(id);
@@ -146,7 +152,7 @@ export function createServiceLifecycle(
           await teardown(prevSvcId);
           storedIdToSvcId.delete(id);
         }
-        await bringUp(stored, activeProfileId);
+        if (stored) await bringUp(stored, activeProfileId);
       } finally {
         poller.resume();
       }
@@ -169,8 +175,8 @@ export function createServiceLifecycle(
   }
 
   async function reloadAll(): Promise<void> {
-    const activeProfileId = await profiles.getActiveProfileId();
     await serialize(async () => {
+      const activeProfileId = await profiles.getActiveProfileId();
       poller.pause();
       try {
         for (const svcId of [...storedIdToSvcId.values()]) {
@@ -205,27 +211,48 @@ export function createServiceLifecycle(
     bus.emit("profile.switched", { profileId: id, reason });
   }
 
+  // Clients refetch /instances when told a config changed. Announce only after
+  // the registry reflects the change; the config:service.* events fire before
+  // bring-up, so a refetch on those raced it and missed new services.
+  function announceApplied(
+    p: { id: string; kind: string; instanceId: string },
+    action: "created" | "updated" | "deleted"
+  ): void {
+    bus.emit("config:service.applied", {
+      id: p.id,
+      kind: p.kind,
+      instanceId: p.instanceId,
+      action,
+    });
+  }
+
   return {
     async start(): Promise<void> {
       unsubs.push(
         bus.on("config:service.created", (p) => {
-          void applyCreate(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, "applyCreate failed")
-          );
+          void applyCreate(p.id)
+            .catch((e) =>
+              logger.error({ err: e, id: p.id }, "applyCreate failed")
+            )
+            .finally(() => announceApplied(p, "created"));
         })
       );
       unsubs.push(
         bus.on("config:service.updated", (p) => {
-          void applyUpdate(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, "applyUpdate failed")
-          );
+          void applyUpdate(p.id)
+            .catch((e) =>
+              logger.error({ err: e, id: p.id }, "applyUpdate failed")
+            )
+            .finally(() => announceApplied(p, "updated"));
         })
       );
       unsubs.push(
         bus.on("config:service.deleted", (p) => {
-          void applyDelete(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, "applyDelete failed")
-          );
+          void applyDelete(p.id)
+            .catch((e) =>
+              logger.error({ err: e, id: p.id }, "applyDelete failed")
+            )
+            .finally(() => announceApplied(p, "deleted"));
         })
       );
       await reloadAll();

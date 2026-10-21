@@ -2,16 +2,23 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ConfigStore } from "../../../config/store/ConfigStore.js";
 import type { ServiceLifecycle } from "../../../application/ServiceLifecycle.js";
 import type { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
+import type { ProfileStore } from "../../../config/store/ProfileStore.js";
 import { KIND_META, SERVICE_KINDS } from "../../../config/schemas/index.js";
 
 export interface ConfigRouteDeps {
   store: ConfigStore;
   lifecycle: ServiceLifecycle;
   registry: ServiceRegistry;
+  profiles: Pick<ProfileStore, "getProfile">;
 }
 
 export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
-  const { store, lifecycle, registry } = deps;
+  const { store, lifecycle, registry, profiles } = deps;
+
+  // No FK backs profile_id, so an unknown id would park the service in a
+  // profile that never becomes active: it never runs and can't be selected.
+  const unknownProfile = async (profileId: string): Promise<boolean> =>
+    (await profiles.getProfile(profileId)) === undefined;
 
   return async (app) => {
     app.get("/config/kinds", async () => {
@@ -63,6 +70,14 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
           typeof body["profileId"] === "string"
             ? (body["profileId"] as string)
             : undefined;
+        if (profileId !== undefined && (await unknownProfile(profileId))) {
+          return reply.status(400).send({
+            error: {
+              code: "VALIDATION",
+              message: `unknown profile '${profileId}'`,
+            },
+          });
+        }
         const created = await store.create(
           req.body,
           actor ?? undefined,
@@ -129,6 +144,14 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
           return reply
             .status(404)
             .send({ error: { code: "NOT_FOUND", message: "not found" } });
+        }
+        if (await unknownProfile(profileId)) {
+          return reply.status(400).send({
+            error: {
+              code: "VALIDATION",
+              message: `unknown profile '${profileId}'`,
+            },
+          });
         }
         const actor = (req.headers["x-actor"] as string) ?? null;
         await store.setProfile(req.params.id, profileId, actor ?? undefined);
@@ -197,9 +220,13 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
     app.get<{ Querystring: { limit?: string } }>(
       "/config/audit",
       async (req) => {
-        const limit = req.query.limit
-          ? Math.max(1, Math.min(1000, Number(req.query.limit)))
-          : 100;
+        // A non-numeric limit (e.g. ?limit=abc) is NaN, which clamping can't fix;
+        // fall back to the default instead of interpolating NaN into SQL.
+        const requested = Number(req.query.limit);
+        const limit =
+          req.query.limit && Number.isFinite(requested)
+            ? Math.max(1, Math.min(1000, requested))
+            : 100;
         const entries = await store.listAudit(limit);
         return {
           data: entries.map((e) => ({

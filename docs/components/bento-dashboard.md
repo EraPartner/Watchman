@@ -2,7 +2,7 @@
 title: BentoDashboard Component
 type: component
 status: active
-date: 2026-06-13
+date: 2026-10-20
 tags:
   [
     component,
@@ -221,7 +221,7 @@ When `editorState.mode === "create"`:
 
 The dashboard is fully dynamic and instance-aware:
 
-1. **Service Discovery** — Dashboard queries `/api/instances` on mount to discover all configured services
+1. **Service Discovery** — Dashboard queries `GET /instances` (via `useServiceInstances` and `apiClient.getInstances()`) on mount to discover the running service instances
 2. **Per-Service Sizing** — Layout uses `BENTO_LAYOUT` tile sizes; e.g., Bitcoin renders as XL, Synology as L
 3. **Multiple Instances** — If a user configures 2 Bitcoin instances, the dashboard renders 2 XL tiles (one per instance)
 4. **Renderer Requirement** — Only services with implemented renderers appear (Phase 3: Bitcoin, Synology; Phase 4+: all 14)

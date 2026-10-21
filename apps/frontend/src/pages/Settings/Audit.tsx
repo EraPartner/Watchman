@@ -48,9 +48,12 @@ export default function Audit() {
                   >
                     {e.action}
                   </span>
-                  <span className="font-mono text-[var(--text-hi)]">
-                    {e.targetKind}/{e.targetId}
-                  </span>
+                  {/* import/export entries have no target; don't render a bare "/" */}
+                  {(e.targetKind || e.targetId) && (
+                    <span className="font-mono text-[var(--text-hi)]">
+                      {[e.targetKind, e.targetId].filter(Boolean).join("/")}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-s-1 text-fs-label text-[var(--text-lo)]">
                   {new Date(e.ts).toLocaleString()} · {e.actor ?? "system"}

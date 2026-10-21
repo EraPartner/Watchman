@@ -72,6 +72,9 @@ interface LogEntry {
 
 const COOKIE_TTL_MS = 60 * 60 * 1000;
 const MAX_ACTIVE_TORRENTS = 20;
+// log/main is a cursor (only entries after last_known_id), so keep a rolling
+// window of the newest warnings/errors instead of only the last poll's delta
+const MAX_RECENT_LOG_ENTRIES = 20;
 
 // qBittorrent torrent states grouped by activity. Covers the v4 names and the
 // v5 "stopped*" renames of "paused*". A torrent counts toward exactly one of
@@ -79,6 +82,7 @@ const MAX_ACTIVE_TORRENTS = 20;
 const DOWNLOADING_STATES = new Set([
   "downloading",
   "metaDL",
+  "forcedMetaDL",
   "forcedDL",
   "stalledDL",
   "queuedDL",
@@ -118,6 +122,8 @@ export class QBittorrentService extends BaseService {
   private cookieExpiresAt = 0;
   private rid = 0;
   private lastLogId = -1;
+  private recentErrors: string[] = [];
+  private recentWarnings: string[] = [];
   private cachedServerState: ServerState = {};
   private cachedTorrents: Record<string, Torrent> = {};
   private readonly versionMemo: TtlMemo<string>;
@@ -171,7 +177,7 @@ export class QBittorrentService extends BaseService {
         this.prefsMemo(signal),
         this.apiGet<MainData>(`/api/v2/sync/maindata?rid=${this.rid}`, signal),
         this.apiGet<LogEntry[]>(
-          `/api/v2/log/main?type=12&last_known_id=${this.lastLogId}`,
+          `/api/v2/log/main?normal=false&info=false&warning=true&critical=true&last_known_id=${this.lastLogId}`,
           signal
         ).catch((): LogEntry[] => []),
       ]);
@@ -249,14 +255,14 @@ export class QBittorrentService extends BaseService {
         )
         .slice(0, MAX_ACTIVE_TORRENTS);
 
-      // Split log entries by severity
-      const recentWarnings: string[] = [];
-      const recentErrors: string[] = [];
+      // Split log entries by severity, newest first (entries arrive ascending)
       for (const entry of logs) {
         if (!entry.message) continue;
-        if (entry.type === 8) recentErrors.push(entry.message);
-        else if (entry.type === 4) recentWarnings.push(entry.message);
+        if (entry.type === 8) this.recentErrors.unshift(entry.message);
+        else if (entry.type === 4) this.recentWarnings.unshift(entry.message);
       }
+      this.recentErrors = this.recentErrors.slice(0, MAX_RECENT_LOG_ENTRIES);
+      this.recentWarnings = this.recentWarnings.slice(0, MAX_RECENT_LOG_ENTRIES);
 
       const serverState = this.cachedServerState;
 
@@ -281,8 +287,8 @@ export class QBittorrentService extends BaseService {
           dhtNodes: serverState.dht_nodes ?? 0,
           freeSpaceOnDisk: serverState.free_space_on_disk ?? 0,
           activeTorrents,
-          recentErrors,
-          recentWarnings,
+          recentErrors: [...this.recentErrors],
+          recentWarnings: [...this.recentWarnings],
         },
       });
     } catch (e) {

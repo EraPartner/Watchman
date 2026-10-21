@@ -28,6 +28,14 @@ export interface EventMap {
   "config:service.created": { id: string; kind: string; instanceId: string };
   "config:service.updated": { id: string; kind: string; instanceId: string };
   "config:service.deleted": { id: string; kind: string; instanceId: string };
+  // The lifecycle finished applying a config change: the service is now
+  // registered (or torn down), so /instances reflects it.
+  "config:service.applied": {
+    id: string;
+    kind: string;
+    instanceId: string;
+    action: "created" | "updated" | "deleted";
+  };
   "config:service.renamed": {
     id: string;
     kind: string;

@@ -19,7 +19,11 @@ const NEW_STYLE_MODELS: Readonly<Record<number, string>> = {
   0x13: 'Pi 400',
   0x14: 'Pi CM4',
   0x15: 'Pi CM4S',
+  0x16: 'Internal use',
   0x17: 'Pi 5',
+  0x18: 'Pi CM5',
+  0x19: 'Pi 500',
+  0x1a: 'Pi CM5 Lite',
 };
 
 const OLD_STYLE_MODELS: Readonly<Record<string, string>> = {
@@ -48,6 +52,8 @@ export function getPiModel(revision: number | null | undefined): string {
     const type = (revision >> 4) & 0xff;
     return NEW_STYLE_MODELS[type] ?? `Unknown (type ${type})`;
   }
-  const hex = revision.toString(16).padStart(4, '0');
+  // old-style codes carry a "1000" prefix (bit 24) when the warranty
+  // (over-voltage) bit is set, e.g. 0x1000002 for a Pi B Rev 1.0
+  const hex = (revision & 0xffff).toString(16).padStart(4, '0');
   return OLD_STYLE_MODELS[hex] ?? `Unknown (rev ${hex})`;
 }

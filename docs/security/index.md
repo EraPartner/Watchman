@@ -2,7 +2,7 @@
 title: Security
 type: index
 status: active
-date: 2026-06-12
+date: 2026-10-20
 tags:
   [
     security,
@@ -39,8 +39,8 @@ SORT file.name ASC
 | --------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
 | **Network Isolation** | Firewall / VPN / Closed LAN                            | Operator's responsibility; no port forwarding to internet |
 | Input Validation      | Parameter sanitization and Zod validation              | All user inputs validated before processing               |
-| Headers               | Helmet, CSP, HSTS (via Fastify)                        | Standard security headers applied                         |
-| Logging               | Structured Pino logging with sensitive field redaction | Audit trail for configuration changes                     |
+| Browser gate          | Shared origin allow-list + Host-header check           | Blocks cross-site browser requests and DNS rebinding      |
+| Logging               | Structured Pino logging with sensitive field redaction | Configuration changes recorded in the DuckDB audit log    |
 
 > [!warning] No Built-In Authentication
 > Watchman **does not** have authentication, CSRF protection, rate-limiting middleware, or account lockout. Ensure network isolation before running Watchman. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
@@ -48,13 +48,15 @@ SORT file.name ASC
 ## Security Features
 
 - **Input Validation** - Zod schema validation and type checking on all endpoints
-- **Security Headers** - Helmet, CSP, HSTS, Permissions-Policy (via Fastify)
-- **Shared Origin Policy** - Unified allow-list (`watchman://`, loopback, `CORS_ALLOWED_ORIGINS`) enforced by both the HTTP CORS `onRequest` hook and the WebSocket upgrade gate — no split configuration. See [[apps/backend/src/transport/originPolicy.ts|originPolicy.ts]].
+- **Shared Origin Policy** - Unified allow-list (`watchman://`, loopback, `CORS_ALLOWED_ORIGINS`) enforced by both the HTTP CORS `onRequest` hook and the WebSocket upgrade gate — no split configuration. A cross-origin request from a disallowed origin gets `403` (not only the preflight); a genuine same-origin request (Origin host equals Host) is allowed. See [[apps/backend/src/transport/originPolicy.ts|originPolicy.ts]].
+- **Host-Header Check (DNS rebinding)** - Requests are rejected with `403` unless the `Host` header is a loopback name, an IP literal, this machine's hostname (or `<hostname>.local`), or a host listed in `CORS_ALLOWED_ORIGINS`.
 - **Request-Scoped AbortController** - Every HTTP request carries a real `AbortController` created by the `requestTimeoutPlugin`. Aborted on timeout (15 s default) or client disconnect; signal threaded into service calls so network I/O is cancelled promptly.
-- **Response Size Limit** - Prevents large response DoS
+- **Request Body Limit** - Fastify `bodyLimit` of 1 MB
+- **WebSocket Connection Cap** - At most 10 WebSocket connections per client address
 - **Command Injection Prevention** - Strict validation for SSH/SNMP/ARP commands
-- **Structured Logging with Redaction** - Pino `redact` config strips `req.headers.authorization`, `req.headers.cookie`, and fields named `password`, `passwd`, `token`, `secret`, `apiKey` (and their `*.<field>` nested variants) from all log output. See [[apps/backend/src/core/logger.ts|logger.ts]].
-- **Master Key Protection** - AES-256-GCM encryption of service secrets at rest
+- **Structured Logging with Redaction** - Pino `redact` config strips `req.headers.authorization`, `req.headers.cookie`, `set-cookie` response headers, and fields named `password`, `passwd`, `token`, `secret`, `apiKey`, `authHeader` (and their `*.<field>` nested variants) from all log output. See [[apps/backend/src/core/logger.ts|logger.ts]].
+- **Master Key Protection** - AES-256-GCM encryption of service secrets at rest. The key comes from `WATCHMAN_MASTER_KEY` or is auto-created at `{DATA_DIR}/master.key`.
+- **No Security Headers Middleware** - The backend does not add Helmet, CSP, or HSTS headers. Add them at a reverse proxy if needed.
 - **No Network Exposure** - Intended for trusted networks only (operator's responsibility)
 
 ## Production Hardening
@@ -106,7 +108,7 @@ package "Incoming Request" as Request {
 }
 
 package "Transport Hardening" {
-    [Helmet] as H1
+    [Host-header check\n(DNS rebinding guard)] as H1
     [Origin Policy (CORS onRequest hook)\nwatchman://, loopback, CORS_ALLOWED_ORIGINS] as C1
     [Log Sampling (/meta/health)] as Log
     [requestTimeoutPlugin\n(AbortController, 15s)] as Timeout

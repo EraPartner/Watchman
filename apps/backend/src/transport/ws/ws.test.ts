@@ -366,7 +366,7 @@ describe("Broadcaster", () => {
     bc.stop();
   });
 
-  it("broadcasts service_config_changed for created/updated/deleted config events", () => {
+  it("broadcasts service_config_changed once the lifecycle has applied a config change", () => {
     const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
     const a = fakeWs();
     cm.add(a, "a", { username: "u" });
@@ -374,20 +374,32 @@ describe("Broadcaster", () => {
     const bc = new Broadcaster({ manager: cm, bus, now: () => 0 });
     bc.start();
 
+    // The raw store events fire before the service is registered; a client
+    // refetching /instances on them would miss the new service.
     bus.emit("config:service.created", {
       id: "stored-1",
       kind: "bitcoin",
       instanceId: "main",
     });
-    bus.emit("config:service.updated", {
+    expect(a.sent.length).toBe(0);
+
+    bus.emit("config:service.applied", {
       id: "stored-1",
       kind: "bitcoin",
-      instanceId: "main2",
+      instanceId: "main",
+      action: "created",
     });
-    bus.emit("config:service.deleted", {
+    bus.emit("config:service.applied", {
       id: "stored-1",
       kind: "bitcoin",
       instanceId: "main2",
+      action: "updated",
+    });
+    bus.emit("config:service.applied", {
+      id: "stored-1",
+      kind: "bitcoin",
+      instanceId: "main2",
+      action: "deleted",
     });
 
     expect(a.sent.length).toBe(3);
@@ -411,10 +423,11 @@ describe("Broadcaster", () => {
     });
 
     bc.stop();
-    bus.emit("config:service.created", {
+    bus.emit("config:service.applied", {
       id: "x",
       kind: "tor",
       instanceId: "x",
+      action: "created",
     });
     expect(a.sent.length).toBe(3);
   });
@@ -501,5 +514,75 @@ describe("Broadcaster", () => {
       type: "connection",
       serverVersion: "1.2.3",
     });
+  });
+});
+
+describe("Broadcaster error-state reset", () => {
+  function setup() {
+    const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
+    const a = fakeWs();
+    cm.add(a, "a", { username: "u" });
+    const bus = createEventBus();
+    const bc = new Broadcaster({ manager: cm, bus, now: () => 0 });
+    bc.start();
+    const fail = (instanceId: string) =>
+      bus.emit("service.error", {
+        id: `bitcoin:${instanceId}`,
+        kind: "bitcoin",
+        instanceId,
+        scope: "health",
+        error: new Error("down"),
+        at: 0,
+      });
+    const ok = (instanceId: string) =>
+      bus.emit("service.health.updated", {
+        id: `bitcoin:${instanceId}`,
+        kind: "bitcoin",
+        instanceId,
+        at: 0,
+      });
+    const alerts = () =>
+      a.sent
+        .map((m) => JSON.parse(m) as { type: string; message: string })
+        .filter((m) => m.type === "alert")
+        .map((m) => m.message);
+    return { bus, bc, fail, ok, alerts };
+  }
+
+  it("alerts again for a re-added service that failed before it was deleted", () => {
+    const { bus, bc, fail, ok, alerts } = setup();
+    fail("main");
+    bus.emit("config:service.deleted", {
+      id: "stored-1",
+      kind: "bitcoin",
+      instanceId: "main",
+    });
+    fail("main");
+    expect(alerts()).toEqual(["bitcoin:main: down", "bitcoin:main: down"]);
+
+    bus.emit("config:service.deleted", {
+      id: "stored-2",
+      kind: "bitcoin",
+      instanceId: "main",
+    });
+    ok("main");
+    // no "recovered" for a fresh instance that never failed
+    expect(alerts()).toHaveLength(2);
+    bc.stop();
+  });
+
+  it("forgets the old id's error state when an instance is renamed", () => {
+    const { bus, bc, fail, ok, alerts } = setup();
+    fail("main");
+    bus.emit("config:service.renamed", {
+      id: "stored-1",
+      kind: "bitcoin",
+      oldInstanceId: "main",
+      newInstanceId: "node",
+    });
+    // a new service that later takes the old name starts clean
+    ok("main");
+    expect(alerts()).toEqual(["bitcoin:main: down"]);
+    bc.stop();
   });
 });

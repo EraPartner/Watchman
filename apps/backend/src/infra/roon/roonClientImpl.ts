@@ -18,7 +18,7 @@ const _require = createRequire(import.meta.url);
 
 // ─── Minimal types for @roonlabs/node-roon-api (no @types package) ───────────
 
-interface RoonApiOptions {
+export interface RoonApiOptions {
   extension_id: string;
   display_name: string;
   display_version: string;
@@ -29,7 +29,7 @@ interface RoonApiOptions {
   core_unpaired?: (core: RoonCore) => void;
 }
 
-interface RoonCore {
+export interface RoonCore {
   core_id: string;
   display_name: string;
   moo: {
@@ -42,11 +42,11 @@ interface RoonCore {
   };
 }
 
-interface RoonMooTransport {
+export interface RoonMooTransport {
   transport: { close(): void };
 }
 
-interface RoonApiInstance {
+export interface RoonApiInstance {
   init_services(opts: {
     required_services?: unknown[];
     optional_services?: unknown[];
@@ -60,9 +60,12 @@ interface RoonApiInstance {
   }): RoonMooTransport;
 }
 
-type RoonApiConstructor = new (opts: RoonApiOptions) => RoonApiInstance;
+export type RoonApiConstructor = new (opts: RoonApiOptions) => RoonApiInstance;
 
 const RoonApiCtor = _require("@roonlabs/node-roon-api") as RoonApiConstructor;
+// The Core only grants services an extension declares at registration; without
+// this, the transport "zones" subscription below never receives zone data.
+const RoonApiTransport = _require("node-roon-api-transport") as unknown;
 
 // ─── Raw zone shape from Roon transport:2 subscription ───────────────────────
 
@@ -137,93 +140,140 @@ function applyZoneUpdate(
 
 // ─── Public implementation ────────────────────────────────────────────────────
 
+export interface RoonConnectDeps {
+  RoonApi: RoonApiConstructor;
+  /** First reconnect delay after the Core connection drops (doubles up to maxReconnectDelayMs). */
+  reconnectDelayMs?: number;
+  maxReconnectDelayMs?: number;
+}
+
 /**
- * Connect to a Roon Core at `opts.host:opts.port` using the
- * `@roonlabs/node-roon-api` library.
+ * Build a RoonConnectFn around a node-roon-api constructor.
  *
  * The promise resolves immediately after initiating the connection.
  * Pairing (and therefore zone data) arrives asynchronously:
  * `handle.isPaired()` starts false and becomes true once the Roon UI
  * approves the extension (first time) or the saved token is accepted
  * (subsequent restarts).
+ *
+ * node-roon-api's `ws_connect` never reconnects by itself (its transport
+ * fires `onclose` only for a connection that had opened, and `onerror` for
+ * one that never did), so the handle reconnects with backoff until closed.
  */
-export const roonConnect: RoonConnectFn = (
-  opts: RoonConnectOptions
-): Promise<RoonHandle> => {
-  const zones = new Map<string, RoonZone>();
-  let paired = false;
-  let subscription: { unsubscribe: (cb?: () => void) => void } | undefined;
-  let mooTransportRef: { close(): void } | undefined;
+export function createRoonConnect(deps: RoonConnectDeps): RoonConnectFn {
+  const baseDelay = deps.reconnectDelayMs ?? 5_000;
+  const maxDelay = deps.maxReconnectDelayMs ?? 60_000;
 
-  const roon = new RoonApiCtor({
-    extension_id: opts.extensionId,
-    display_name: opts.displayName,
-    display_version: "1.0.0",
-    publisher: "Watchman",
-    email: "watchman@localhost",
-    log_level: "none",
+  return (opts: RoonConnectOptions): Promise<RoonHandle> => {
+    const zones = new Map<string, RoonZone>();
+    let paired = false;
+    let closed = false;
+    let subscription: { unsubscribe: (cb?: () => void) => void } | undefined;
+    let mooTransportRef: { close(): void } | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let delay = baseDelay;
 
-    core_paired(core: RoonCore): void {
-      paired = true;
-      subscription = core.moo._subscribe_helper(
-        "com.roonlabs.transport:2",
-        "zones",
-        (cmd, body) => {
-          applyZoneUpdate(cmd, body as ZonesBody, zones);
-          opts.onZonesChanged?.(Array.from(zones.values()));
-        }
-      );
-    },
-
-    core_unpaired(_core: RoonCore): void {
-      paired = false;
+    const dropSubscription = (): void => {
       try {
         subscription?.unsubscribe();
       } catch {
         /* ignore */
       }
       subscription = undefined;
-      zones.clear();
-      opts.onZonesChanged?.([]);
-    },
-  });
+    };
 
-  roon.init_services({
-    required_services: [],
-    optional_services: [],
-    provided_services: [],
-  });
+    const roon = new deps.RoonApi({
+      extension_id: opts.extensionId,
+      display_name: opts.displayName,
+      display_version: "1.0.0",
+      publisher: "Watchman",
+      email: "watchman@localhost",
+      log_level: "none",
 
-  const moo = roon.ws_connect({
-    host: opts.host,
-    port: opts.port,
-    onclose() {
+      core_paired(core: RoonCore): void {
+        paired = true;
+        delay = baseDelay;
+        subscription = core.moo._subscribe_helper(
+          "com.roonlabs.transport:2",
+          "zones",
+          (cmd, body) => {
+            applyZoneUpdate(cmd, body as ZonesBody, zones);
+            opts.onZonesChanged?.(Array.from(zones.values()));
+          }
+        );
+      },
+
+      core_unpaired(_core: RoonCore): void {
+        paired = false;
+        dropSubscription();
+        zones.clear();
+        opts.onZonesChanged?.([]);
+      },
+    });
+
+    roon.init_services({
+      required_services: [RoonApiTransport],
+      optional_services: [],
+      provided_services: [],
+    });
+
+    const onConnectionLost = (): void => {
+      const hadState = paired || zones.size > 0;
       paired = false;
-      zones.clear();
-    },
-  });
-
-  mooTransportRef = moo.transport;
-
-  const handle: RoonHandle = {
-    getZones: () => Array.from(zones.values()),
-    isPaired: () => paired,
-    close: async (): Promise<void> => {
-      try {
-        subscription?.unsubscribe();
-      } catch {
-        /* ignore */
-      }
       subscription = undefined;
+      zones.clear();
+      if (hadState) opts.onZonesChanged?.([]);
+      if (closed || reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        if (!closed) connect();
+      }, delay);
+      delay = Math.min(delay * 2, maxDelay);
+    };
+
+    let generation = 0;
+    const connect = (): void => {
+      const gen = ++generation;
       try {
         mooTransportRef?.close();
       } catch {
         /* ignore */
       }
-      zones.clear();
-      paired = false;
-    },
-  };
+      // callbacks from a superseded transport must not trigger another reconnect
+      const lost = (): void => {
+        if (gen === generation) onConnectionLost();
+      };
+      const moo = roon.ws_connect({
+        host: opts.host,
+        port: opts.port,
+        onclose: lost,
+        onerror: lost,
+      });
+      mooTransportRef = moo.transport;
+    };
 
-  return Promise.resolve(handle);
-};
+    connect();
+
+    const handle: RoonHandle = {
+      getZones: () => Array.from(zones.values()),
+      isPaired: () => paired,
+      close: async (): Promise<void> => {
+        closed = true;
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+        dropSubscription();
+        try {
+          mooTransportRef?.close();
+        } catch {
+          /* ignore */
+        }
+        zones.clear();
+        paired = false;
+      },
+    };
+
+    return Promise.resolve(handle);
+  };
+}
+
+export const roonConnect: RoonConnectFn = createRoonConnect({ RoonApi: RoonApiCtor });

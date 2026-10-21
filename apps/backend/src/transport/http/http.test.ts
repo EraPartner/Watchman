@@ -4,12 +4,10 @@ import { buildServer } from "./server.js";
 import { ServiceRegistry } from "../../domain/ServiceRegistry.js";
 import { GetServiceStatus } from "../../application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "../../application/GetAggregatedHealth.js";
-import { ControlService } from "../../application/ControlService.js";
 import { ListInstances } from "../../application/ListInstances.js";
 import { createMetricsRegistry } from "../../core/metrics.js";
 import {
   BaseService,
-  type Controllable,
   type HealthResult,
   type StatsResult,
   type PollPolicy,
@@ -19,8 +17,9 @@ import { UnavailableError } from "../../core/errors.js";
 import type { ConfigStore } from "../../config/store/ConfigStore.js";
 import type { ServiceLifecycle } from "../../application/ServiceLifecycle.js";
 import type { HttpClient } from "../../infra/http/client.js";
+import { SERVER_VERSION } from "../../version.js";
 
-class FakeSvc extends BaseService implements Controllable {
+class FakeSvc extends BaseService {
   readonly kind: string;
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
@@ -41,10 +40,6 @@ class FakeSvc extends BaseService implements Controllable {
   async getStats(): Promise<StatsResult> {
     return ok({ metrics: { count: 42 }, at: 1 });
   }
-  async control(action: string) {
-    if (action === "bad") return err(new UnavailableError("cannot control"));
-    return ok<void>(undefined);
-  }
 }
 
 async function makeApp(registry: ServiceRegistry) {
@@ -61,11 +56,15 @@ async function makeApp(registry: ServiceRegistry) {
     services: {
       getStatus: new GetServiceStatus({ registry }),
       aggregated: new GetAggregatedHealth(registry),
-      control: new ControlService(registry),
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
-    config: { store: fakeStore, lifecycle: fakeLifecycle, registry },
+    config: {
+      store: fakeStore,
+      lifecycle: fakeLifecycle,
+      registry,
+      profiles: { getProfile: async () => undefined },
+    },
     profiles: {
       profiles: {} as never,
       store: fakeStore,
@@ -94,6 +93,22 @@ describe("http routes", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { data: Array<{ id: string }> };
     expect(body.data).toHaveLength(2);
+    await app.close();
+  });
+
+  it("GET /services serialises a failed health result as { code, message }", async () => {
+    const r = new ServiceRegistry();
+    r.register(new FakeSvc("b", "main", false));
+    const app = await makeApp(r);
+    const res = await app.inject({ method: "GET", url: "/services" });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      data: Array<{ result: { ok: boolean; error?: unknown } }>;
+    };
+    expect(body.data[0]!.result).toEqual({
+      ok: false,
+      error: { code: "UNAVAILABLE", message: "down" },
+    });
     await app.close();
   });
 
@@ -137,29 +152,40 @@ describe("http routes", () => {
     await app.close();
   });
 
-  it("POST /services/:kind/control rejects missing action", async () => {
+  // Watchman is monitoring-only: nothing under /services may change a service.
+  it("has no control route", async () => {
     const r = new ServiceRegistry();
     r.register(new FakeSvc("bitcoin", "main"));
     const app = await makeApp(r);
-    const res = await app.inject({
-      method: "POST",
-      url: "/services/bitcoin/control",
-      payload: {},
-    });
-    expect(res.statusCode).toBe(400);
-    await app.close();
-  });
-
-  it("POST /services/:kind/control ok", async () => {
-    const r = new ServiceRegistry();
-    r.register(new FakeSvc("bitcoin", "main"));
-    const app = await makeApp(r);
+    expect(
+      app.hasRoute({ method: "POST", url: "/services/:kind/control" })
+    ).toBe(false);
     const res = await app.inject({
       method: "POST",
       url: "/services/bitcoin/control",
       payload: { action: "restart" },
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("accepts no write methods under /services", async () => {
+    const r = new ServiceRegistry();
+    r.register(new FakeSvc("raspberryPi", "main"));
+    const app = await makeApp(r);
+    const paths = [
+      "/services",
+      "/services/raspberryPi",
+      "/services/raspberryPi/health",
+      "/services/raspberryPi/stats",
+      "/services/raspberryPi/control",
+    ];
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"] as const) {
+      for (const url of paths) {
+        const res = await app.inject({ method, url, payload: {} });
+        expect(res.statusCode, `${method} ${url}`).toBe(404);
+      }
+    }
     await app.close();
   });
 
@@ -211,6 +237,8 @@ describe("http routes", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { version: string; node: string };
     expect(body.node).toMatch(/^v\d+/);
+    // Regression: was npm_package_version, so "dev" outside npm scripts.
+    expect(body.version).toBe(SERVER_VERSION);
     await app.close();
   });
 

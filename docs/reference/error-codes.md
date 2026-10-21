@@ -2,7 +2,7 @@
 title: Error Codes
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-10-20
 tags: [reference, api, error-codes]
 description: API error responses and HTTP status codes for the Watchman project
 aliases: [error codes, http status, api errors, error responses]
@@ -11,79 +11,54 @@ aliases: [error codes, http status, api errors, error responses]
 # Error Codes
 
 > [!abstract] Overview
-> Standard error responses and HTTP status codes used across the Watchman API.
-
-## HTTP Status Codes
-
-| Code  | Meaning               | When Used                              |
-| ----- | --------------------- | -------------------------------------- |
-| `200` | OK                    | Successful request                     |
-| `400` | Bad Request           | Invalid input, missing required fields |
-| `401` | Unauthorized          | Missing or invalid authentication      |
-| `403` | Forbidden             | Authenticated but not authorized       |
-| `404` | Not Found             | Service or endpoint not found          |
-| `405` | Method Not Allowed    | Wrong HTTP method                      |
-| `429` | Too Many Requests     | Rate limit exceeded                    |
-| `500` | Internal Server Error | Unexpected server error                |
-| `501` | Not Implemented       | Endpoint not implemented               |
-| `503` | Service Unavailable   | Service not configured/enabled         |
+> Error responses and HTTP status codes used by the Watchman backend. Sources: `apps/backend/src/core/errors.ts` (domain errors) and `apps/backend/src/transport/http/plugins/errorHandler.ts` (Fastify error and not-found handlers).
 
 ## Error Response Format
 
-Standardized via `apiResponse.js` middleware:
+Every JSON error uses one envelope (the `DomainError` schema in `apps/backend/openapi.yaml`):
 
 ```json
 {
-  "error": "User-friendly error message",
-  "message": "Technical details (development only)"
+  "error": {
+    "code": "UNAVAILABLE",
+    "message": "Human-readable detail"
+  }
 }
 ```
 
-## Common Error Responses
+## Domain Error Codes
 
-### Authentication Errors
+| Code           | HTTP status | Class               | Typical cause                                                         |
+| -------------- | ----------- | ------------------- | --------------------------------------------------------------------- |
+| `NOT_FOUND`    | `404`       | `NotFoundError`     | Unknown kind, instance, config id, or profile; unknown route          |
+| `VALIDATION`   | `400`       | `ValidationError`   | Request body or parameters fail validation (also Fastify validation)  |
+| `UNAUTHORIZED` | `401`       | `UnauthorizedError` | A monitored service rejected Watchman's credentials, or a cert pin mismatch |
+| `UNAVAILABLE`  | `503`       | `UnavailableError`  | The monitored service could not be reached or returned an error       |
+| `CIRCUIT_OPEN` | `503`       | `CircuitOpenError`  | The per-instance circuit breaker is open after repeated failures      |
+| `TIMEOUT`      | `504`       | `TimeoutError`      | The upstream call exceeded its timeout                                |
+| `INTERNAL`     | `500` (or Fastify status) | —     | Unhandled error; message is `internal error` for `500`                |
 
-| Endpoint          | Status | Response                                 |
-| ----------------- | ------ | ---------------------------------------- |
-| `/api/auth/login` | 401    | `{ "message": "Invalid credentials" }`   |
-| Protected route   | 401    | `{ "error": "Authentication required" }` |
-| CSRF failure      | 403    | `{ "error": "Invalid CSRF token" }`      |
+`UNAUTHORIZED` never refers to the Watchman API itself. Watchman has no login, protected routes, CSRF tokens, or rate limiting (see [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]]).
 
-### Service Errors
+## Responses Without a JSON Body
 
-| Condition              | Status | Response                                                    |
-| ---------------------- | ------ | ----------------------------------------------------------- |
-| Service not found      | 404    | `{ "error": "Service 'X' not found", "status": "offline" }` |
-| Service not configured | 503    | `{ "error": "Service not configured" }`                     |
-| Service not enabled    | 400    | `{ "error": "Service not enabled" }`                        |
-| Health check failed    | 200    | `{ "status": "offline", "error": "Connection failed" }`     |
+| Condition                                                     | Status | Body  |
+| ------------------------------------------------------------- | ------ | ----- |
+| `Host` header not allowed (DNS-rebinding guard)               | `403`  | Empty |
+| Cross-origin request from an origin not in the allow-list     | `403`  | Empty |
+| CORS preflight (`OPTIONS`)                                    | `204`  | Empty |
 
-### Rate Limiting
+WebSocket upgrades from a disallowed origin are closed with code `1008` (`origin_not_allowed`). A client address over the connection cap is closed with code `1013`.
 
-| Condition           | Status | Response                           |
-| ------------------- | ------ | ---------------------------------- |
-| Rate limit exceeded | 429    | `{ "error": "Too many requests" }` |
+## Health Is Not an Error
 
-### Validation Errors
-
-| Condition              | Status | Response                                   |
-| ---------------------- | ------ | ------------------------------------------ |
-| Missing required field | 400    | `{ "error": "Missing required field: X" }` |
-| Invalid service ID     | 400    | `{ "error": "Invalid service id: X" }`     |
-| Invalid input type     | 400    | `{ "error": "X must be a Y" }`             |
-
-### Security Errors
-
-| Condition          | Status | Response                                         |
-| ------------------ | ------ | ------------------------------------------------ |
-| IP not whitelisted | 403    | `{ "error": "IP not allowed" }`                  |
-| Account locked     | 429    | `{ "error": "Account locked, try again later" }` |
-| CORS violation     | 403    | `{ "error": "Origin not allowed" }`              |
+`GET /services/{kind}/health` normally returns `200` with a snapshot even when the service is down. Reachability is reported in the snapshot (`reachable`, `host`, `service`), not as an HTTP error. The spec also allows `404` (unknown kind or instance) and `503` (`UNAVAILABLE` or `CIRCUIT_OPEN`). See [[docs/api/services-health|Services Health]].
 
 ## Related
 
 - [[docs/api/index|API Documentation]]
 - [[docs/security/index|Security]]
+- [[docs/reference/openapi-spec|OpenAPI Spec]]
 
 ## PlantUML Diagrams
 
@@ -94,22 +69,23 @@ Standardized via `apiResponse.js` middleware:
 !theme plain
 
 participant "Client" as Client
-participant "Backend" as BE
-participant "Error Handler" as Err
-participant "apiResponse" as API
+participant "onRequest hook\n(Host + Origin)" as Gate
+participant "Route handler" as Route
+participant "errorHandler plugin" as Err
 
-Client -> BE : Request
-
-BE -> BE : Process request
-
-alt Success
-    BE -> API : Standardize response
-    API --> Client : 200 OK\n{ success: true, data: {...} }
-else Error
-    BE -> Err : Error occurred
-    Err -> Err : Determine status code
-    Err -> API : Standardize error
-    API --> Client : {error, message}
+Client -> Gate : Request
+alt Host or cross-origin Origin not allowed
+    Gate --> Client : 403 (empty body)
+else Allowed
+    Gate -> Route : Handle
+    alt Success
+        Route --> Client : 200 { data }
+    else Result is err(DomainError)
+        Route --> Client : error.httpStatus\n{ error: { code, message } }
+    else Thrown error
+        Route -> Err : DomainError / validation / other
+        Err --> Client : status + { error: { code, message } }
+    end
 end
 @enduml
 ```
@@ -124,43 +100,32 @@ start
 
 :Request received;
 
-if (Authenticated?) then (no)
-    :Return 401 Unauthorized;
+if (Host header allowed?) then (no)
+    :403 (empty);
     stop
 endif
 
-if (CSRF valid?) then (no)
-    :Return 403 Forbidden;
+if (Cross-origin and Origin not allowed?) then (yes)
+    :403 (empty);
     stop
 endif
 
-if (Rate limited?) then (yes)
-    :Return 429 Too Many Requests;
+if (Route exists?) then (no)
+    :404 NOT_FOUND;
     stop
 endif
 
-if (IP allowed?) then (no)
-    :Return 403 Forbidden;
+if (Input valid?) then (no)
+    :400 VALIDATION;
     stop
 endif
 
-if (Service exists?) then (no)
-    :Return 404 Not Found;
+if (Upstream call fails?) then (yes)
+    :401 UNAUTHORIZED / 503 UNAVAILABLE /\n503 CIRCUIT_OPEN / 504 TIMEOUT;
     stop
 endif
 
-if (Service enabled?) then (no)
-    :Return 503 Service Unavailable;
-    stop
-endif
-
-if (Valid input?) then (no)
-    :Return 400 Bad Request;
-    stop
-endif
-
-:Process request;
-:Return 200 OK;
+:200 { data };
 
 stop
 @enduml

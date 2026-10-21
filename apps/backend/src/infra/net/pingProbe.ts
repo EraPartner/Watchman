@@ -28,10 +28,7 @@ export function createPingProber(): PingProber {
       for (const attempt of ATTEMPTS) {
         try {
           const out = await runOnce(attempt.cmd, attempt.args(host, count), timeoutMs, signal);
-          const success =
-            /0% packet loss|0\.0% packet loss|0 packets lost/.test(out) &&
-            !/100% packet loss/.test(out);
-          if (success) {
+          if (repliedToPing(out)) {
             const avgMs = parseAvg(out);
             return avgMs !== undefined ? { success: true, avgMs } : { success: true };
           }
@@ -61,6 +58,15 @@ function runOnce(cmd: string, args: string[], timeoutMs: number, signal?: AbortS
     });
     child.on('error', (e) => reject(e));
   });
+}
+
+/**
+ * runOnce only resolves on exit 0, which iputils and BSD/macOS ping both use
+ * for "at least one reply received". Any reply counts as reachable; only a
+ * summary reporting 100% loss is treated as unreachable.
+ */
+export function repliedToPing(stdout: string): boolean {
+  return !/(^|[^\d.])100(\.0+)?% packet loss/m.test(stdout);
 }
 
 function parseAvg(stdout: string): number | undefined {

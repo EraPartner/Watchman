@@ -21,11 +21,49 @@ const KINDS: KindSchema[] = [
     ],
     secretFields: [],
   },
+  {
+    kind: "router",
+    label: "Router",
+    fields: [
+      { name: "instanceId", label: "Instance ID", type: "text", required: true, default: "main" },
+      { name: "enabled", label: "Enabled", type: "boolean", default: true },
+      { name: "host", label: "Host", type: "text", required: true },
+      { name: "ports", label: "Ports", type: "numberArray" },
+      { name: "interfaceFilter", label: "Interface filter", type: "stringArray" },
+    ],
+    secretFields: [],
+  },
+  {
+    kind: "philipsBridge",
+    label: "Philips Hue Bridge",
+    fields: [
+      { name: "instanceId", label: "Instance ID", type: "text", required: true, default: "main" },
+      { name: "enabled", label: "Enabled", type: "boolean", default: true },
+      { name: "host", label: "Host", type: "text", required: true },
+      { name: "applicationKey", label: "Application key", type: "password", secret: true },
+      { name: "certHash", label: "Cert SHA-256", type: "text" },
+    ],
+    secretFields: ["applicationKey"],
+  },
+  {
+    kind: "adguard",
+    label: "AdGuard Home",
+    fields: [
+      { name: "instanceId", label: "Instance ID", type: "text", required: true, default: "main" },
+      { name: "enabled", label: "Enabled", type: "boolean", default: true },
+      { name: "baseUrl", label: "Base URL", type: "url", required: true },
+      { name: "password", label: "Password", type: "password", secret: true },
+    ],
+    secretFields: ["password"],
+  },
 ];
+
+const { pairMock } = vi.hoisted(() => ({ pairMock: vi.fn() }));
 
 vi.mock("./useConfigQueries", () => ({
   useKinds: () => ({ data: KINDS, isLoading: false }),
   useTestService: () => ({ mutateAsync: vi.fn() }),
+  usePairPhilipsBridge: () => ({ mutateAsync: pairMock, isPending: false }),
 }));
 
 vi.mock("../../components/primitives", async () => {
@@ -207,6 +245,212 @@ describe("ServiceEditor instance id rename", () => {
     expect(payload.instanceId).toBe("renamed");
     expect(payload.kind).toBe("ipfs");
 
+    await cleanup();
+  });
+});
+
+function getFieldInput(container: HTMLElement, label: RegExp): HTMLInputElement {
+  for (const lab of container.querySelectorAll("label")) {
+    if (label.test(lab.textContent ?? "")) {
+      const input = lab.querySelector("input") as HTMLInputElement | null;
+      if (input) return input;
+    }
+  }
+  throw new Error(`Input ${label} not found`);
+}
+
+describe("ServiceEditor list fields", () => {
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  it("keeps a typed comma so a second item can be entered", async () => {
+    const { container, cleanup } = await render({ presetKind: "router", hideKind: true });
+    const ports = getFieldInput(container, /^Ports/);
+
+    await typeInto(ports, "80,");
+    expect(ports.value).toBe("80,");
+    await typeInto(ports, "80, ");
+    expect(ports.value).toBe("80, ");
+
+    await cleanup();
+  });
+
+  it("submits list fields parsed into arrays when adding a service", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({
+      presetKind: "router",
+      hideKind: true,
+      onSubmit,
+    });
+
+    await typeInto(getFieldInput(container, /^Host/), "192.168.1.1");
+    await typeInto(getFieldInput(container, /^Ports/), "80, 443,");
+    await typeInto(getFieldInput(container, /^Interface filter/), "eth0,eth1");
+
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.kind).toBe("router");
+    expect(payload.config).toEqual({
+      host: "192.168.1.1",
+      ports: [80, 443],
+      interfaceFilter: ["eth0", "eth1"],
+    });
+
+    await cleanup();
+  });
+
+  it("omits an empty optional list field", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({
+      presetKind: "router",
+      hideKind: true,
+      onSubmit,
+    });
+
+    await typeInto(getFieldInput(container, /^Host/), "10.0.0.1");
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).toEqual({ host: "10.0.0.1" });
+
+    await cleanup();
+  });
+});
+
+describe("ServiceEditor Hue pairing", () => {
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    pairMock.mockReset();
+  });
+
+  afterEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  function getPairButton(container: HTMLElement): HTMLButtonElement {
+    const btn = Array.from(container.querySelectorAll("button")).find((b) =>
+      /pair with bridge/i.test(b.textContent ?? ""),
+    );
+    if (!btn) throw new Error("Pair button not found");
+    return btn;
+  }
+
+  it("offers pairing only for a Hue bridge", async () => {
+    const router = await render({ presetKind: "router", hideKind: true });
+    expect(() => getPairButton(router.container)).toThrow();
+    await router.cleanup();
+  });
+
+  it("fills the key and cert pin from the bridge and saves them", async () => {
+    pairMock.mockResolvedValue({ applicationKey: "hue-key", certHash: "ab".repeat(32) });
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({
+      presetKind: "philipsBridge",
+      hideKind: true,
+      onSubmit,
+    });
+
+    await typeInto(getFieldInput(container, /^Host/), "192.168.1.50");
+    await act(async () => {
+      getPairButton(container).click();
+    });
+
+    expect(pairMock).toHaveBeenCalledWith("192.168.1.50");
+    expect(getFieldInput(container, /^Cert SHA-256/).value).toBe("ab".repeat(32));
+    expect(container.querySelector('[data-testid="pair-result"]')?.textContent).toMatch(/paired/i);
+
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).toMatchObject({
+      host: "192.168.1.50",
+      applicationKey: "hue-key",
+      certHash: "ab".repeat(32),
+    });
+
+    await cleanup();
+  });
+
+  it("shows the bridge error when the link button was not pressed", async () => {
+    pairMock.mockRejectedValue(new Error("link button not pressed"));
+    const { container, cleanup } = await render({ presetKind: "philipsBridge", hideKind: true });
+
+    await typeInto(getFieldInput(container, /^Host/), "192.168.1.50");
+    await act(async () => {
+      getPairButton(container).click();
+    });
+
+    expect(container.querySelector('[data-testid="pair-result"]')?.textContent).toMatch(
+      /link button/i,
+    );
+    await cleanup();
+  });
+});
+
+describe("ServiceEditor saved secrets in edit mode", () => {
+  const adguard: ServiceInstance = {
+    id: "adguard-1",
+    kind: "adguard",
+    instanceId: "main",
+    enabled: true,
+    profileId: "p1",
+    // Secrets arrive redacted from GET /config/services.
+    config: { kind: "adguard", instanceId: "main", enabled: true, baseUrl: "http://10.0.0.2", password: "***" },
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  it("starts a saved secret blank with the keep-placeholder, not the redaction marker", async () => {
+    const { container, cleanup } = await render({ existing: adguard });
+    const input = getFieldInput(container, /^Password/);
+    expect(input.value).toBe("");
+    expect(input.placeholder).toMatch(/leave blank to keep/i);
+    await cleanup();
+  });
+
+  it("saves a newly typed secret as typed, without the redaction marker", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({ existing: adguard, onSubmit });
+    await typeInto(getFieldInput(container, /^Password/), "new-secret");
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config?.["password"]).toBe("new-secret");
+    await cleanup();
+  });
+
+  it("omits an untouched saved secret so the server keeps it", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({ existing: adguard, onSubmit });
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).not.toHaveProperty("password");
     await cleanup();
   });
 });

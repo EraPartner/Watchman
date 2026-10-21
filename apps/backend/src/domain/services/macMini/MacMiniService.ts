@@ -29,6 +29,9 @@ export interface MacMiniDeps {
 // smctemp works on Apple Silicon where the unmaintained osx-cpu-temp reads 0.0
 export const TEMP_CMD =
   'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; if which smctemp >/dev/null 2>&1; then smctemp -c; elif which osx-cpu-temp >/dev/null 2>&1; then osx-cpu-temp; fi';
+// On APFS (macOS 10.15+) "/" is the sealed system volume, whose "Used" is
+// only the OS (~10-15 GB); user data lives on the Data volume.
+export const DF_CMD = "df -k /System/Volumes/Data 2>/dev/null || df -k /";
 export const SMART_CMD =
   "which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true";
 
@@ -36,7 +39,7 @@ export const SMART_CMD =
  *  (order matters — outputs are split positionally). */
 export const MAC_STATS_COMMANDS: readonly string[] = [
   "uptime",
-  "df -k /",
+  DF_CMD,
   TEMP_CMD,
   "vm_stat",
   "pmset -g batt",
@@ -139,8 +142,14 @@ export class MacMiniService extends BaseService {
         at: this.now(),
         metrics: {
           host: this.host,
-          cpuLoad: cpuLoad ?? 0,
-          cpuTemp: cpuTemp ?? 0,
+          // null = not measured (no load line / no temp tool), never a fake 0
+          cpuLoad,
+          cpuTemp,
+          // busy % from top; cpuLoad above is the 1-minute load average
+          cpuUsagePercent:
+            topCpu?.cpuUser != null && topCpu.cpuSys != null
+              ? Number((topCpu.cpuUser + topCpu.cpuSys).toFixed(2))
+              : null,
           cpuUser: topCpu?.cpuUser ?? null,
           cpuSys: topCpu?.cpuSys ?? null,
           cpuIdle: topCpu?.cpuIdle ?? null,
@@ -162,7 +171,7 @@ export class MacMiniService extends BaseService {
           batteryCharging: power?.batteryCharging ?? null,
           ipAddress: netInfo?.ipAddress ?? null,
           interfaceUp: netInfo?.interfaceUp ?? null,
-          uptime: uptime ?? 0,
+          uptime,
         },
       });
     } catch (e) {
@@ -237,22 +246,32 @@ function parseDiskBytes(dfOut: string): Disk {
   const total = totalK * 1024;
   const used = (Number.isFinite(usedK) ? usedK : 0) * 1024;
   const free = (Number.isFinite(availK) ? availK : 0) * 1024;
-  const usagePercent = Math.round((used / total) * 100);
+  // APFS volumes share the container's free space, so "how full" is
+  // (total - available), not this volume's own Used column
+  const usagePercent = Math.round(((total - free) / total) * 100);
   return { total, used, free, usagePercent };
 }
 
-function parseUptimeSeconds(uptime: string): number | null {
-  if (!uptime) return null;
-  let seconds = 0;
-  const days = uptime.match(/up\s+(\d+)\s+day/i);
-  if (days && days[1]) seconds += parseInt(days[1], 10) * 86400;
-  const hm = uptime.match(/up\s+(?:\d+\s+day[s,]?\s*)?(\d+):(\d+)/i);
-  if (hm && hm[1] && hm[2])
+/**
+ * Parses BSD/macOS `uptime`, whose duration is "N day(s)," followed by one of
+ * "H:MM", "N hr(s)", "N min(s)" or "N sec(s)" (e.g. "up 3 days, 14 mins,").
+ */
+export function parseUptimeSeconds(uptime: string): number | null {
+  const m = uptime.match(/\bup\s+(.*?)(?:,\s*\d+\s+users?\b|,\s*load\b|$)/i);
+  const span = m?.[1];
+  if (!span) return null;
+  const num = (re: RegExp): number => {
+    const hit = span.match(re);
+    return hit?.[1] ? parseInt(hit[1], 10) : 0;
+  };
+  let seconds = num(/(\d+)\s+days?\b/i) * 86400;
+  const hm = span.match(/(\d+):(\d+)/);
+  if (hm?.[1] && hm[2]) {
     seconds += parseInt(hm[1], 10) * 3600 + parseInt(hm[2], 10) * 60;
-  const hoursText = uptime.match(/up\s+(\d+)\s+hours?/i);
-  if (hoursText && hoursText[1]) seconds += parseInt(hoursText[1], 10) * 3600;
-  const mins = uptime.match(/up\s+(\d+)\s+minutes?/i);
-  if (mins && mins[1]) seconds += parseInt(mins[1], 10) * 60;
+  }
+  seconds += num(/(\d+)\s+(?:hrs?|hours?)\b/i) * 3600;
+  seconds += num(/(\d+)\s+(?:mins?|minutes?)\b/i) * 60;
+  seconds += num(/(\d+)\s+(?:secs?|seconds?)\b/i);
   return seconds > 0 ? seconds : null;
 }
 
@@ -309,10 +328,13 @@ function parsePmset(out: string): PmsetResult | null {
   const battMatch = out.match(/(\d+)%/);
   const batteryPercent =
     battMatch && battMatch[1] ? parseInt(battMatch[1], 10) : null;
+  // "AC attached; not charging" (optimized/held charge) is not charging
   const batteryCharging =
-    /\bcharging\b/i.test(out) && !/\bcharged\b/i.test(out)
+    /\bcharging\b/i.test(out) &&
+    !/\bnot charging\b/i.test(out) &&
+    !/\bcharged\b/i.test(out)
       ? true
-      : /\b(?:discharging|charged)\b/i.test(out)
+      : /\b(?:discharging|charged|not charging)\b/i.test(out)
         ? false
         : null;
   return { onAC, batteryPercent, batteryCharging };

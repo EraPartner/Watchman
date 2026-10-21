@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-08-19
+date: 2026-10-21
 tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -43,15 +43,15 @@ Or jump to:
 > 2. **Use ADRs for decisions** - Document significant design choices in `docs/adr/`
 > 3. **Update relevant docs** - Keep API, features, and integration docs in sync with code
 > 4. **Use templates** - Start new documents from templates in each section
-> 5. **Use wiki-links** - Link to code with `[[apps/backend/services/ServiceName.js]]` format
+> 5. **Use wiki-links** - Link to code with `[[apps/backend/src/domain/services/ipfs/IpfsService.ts]]` format
 > 6. **Search first** - Use Obsidian MCP tools to search the KB before reading code
 
 ## Knowledge Areas
 
 | Area                         | Description              | Documents                            |
 | ---------------------------- | ------------------------ | ------------------------------------ | ------------------- |
-| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 24 ADRs             |
-| 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 9 endpoints         |
+| 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 32 ADRs             |
+| 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 34 HTTP routes + /ws |
 | 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, Pi deploy, contributing, and wizard  | 8 guides            |
 | ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 5 features          |
 | 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 15 integrations     |
@@ -125,7 +125,7 @@ Watchman is a comprehensive **self-hosted service monitoring dashboard** support
 ### Tech Stack
 
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + OKLCH tokens + Geist typography + 14 custom primitives
-- **Backend**: Node.js 18+ + TypeScript + Fastify 4 + Zod validation + Pino logging + DuckDB ConfigStore
+- **Backend**: Node.js 22+ + TypeScript + Fastify 5 + Zod validation + Pino logging + DuckDB ConfigStore
 - **Communication**: WebSocket for real-time updates (WebSocketProvider singleton + useWebSocket hook)
 - **State**: In-process LRU cache, croner-based polling, circuit breaker, in-memory recent-activity ring buffer
 - **Tooling**: ESLint, Prettier, Vitest (396 tests across backend+frontend)
@@ -146,13 +146,13 @@ Watchman/
 │   │   │   ├── providers/ # WebSocketProvider
 │   │   │   └── lib/       # Utilities
 │   │   └── tests/         # Frontend tests (150+)
-│   ├── backend/           # TypeScript + Fastify 4 + DuckDB ConfigStore
+│   ├── backend/           # TypeScript + Fastify 5 + DuckDB ConfigStore
 │   │   ├── src/
 │   │   │   ├── config/    # Env validation, service registry, master key
 │   │   │   ├── core/      # Logger, errors, Result, eventBus
 │   │   │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller, DuckDB ConfigStore
 │   │   │   ├── domain/    # BaseService, ServiceRegistry
-│   │   │   ├── application/ # UseCases (GetServiceStatus, ControlService, etc.)
+│   │   │   ├── application/ # UseCases (GetServiceStatus, ListInstances, etc.)
 │   │   │   └── transport/ # Fastify routes, WebSocket
 │   │   ├── openapi.yaml   # OpenAPI 3.1 spec
 │   │   ├── dist/          # Compiled JavaScript
@@ -191,8 +191,8 @@ Watchman/
 > [!info] Single-User Design
 > Watchman is a single-user home-lab monitoring application with no built-in authentication. Network isolation (firewall, VPN, or closed LAN) is the operator's responsibility. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
 
-> [!info] Devcontainer (optional)
-> A hardened apple/container sandbox at `.devcontainer/` lets contributors run Claude Code or OpenAI Codex without exposing the host. It uses iptables default-deny egress, a non-root container user, and separate provider credential volumes. See [[docs/guides/devcontainer|Devcontainer Guide]], [[docs/adr/024-claude-code-devcontainer|ADR-024]], and [[docs/adr/030-devcontainer-apple-container-runtime|ADR-030]].
+> [!info] Agent sandbox
+> Claude and Codex use their built-in sandboxes and the current host access policy. See [[docs/guides/ai-agent-workflow|AI Agent Workflow]] and [[docs/adr/031-built-in-agent-sandboxes|ADR-031]].
 
 > [!info] Rate Limiting Tiers
 >
@@ -229,7 +229,7 @@ Watchman/
 ## Interactive Flow Visualizer
 
 > [!tip] Click-through architecture map
-> Open [[docs/flow-visualizer.html|flow-visualizer.html]] for an interactive single-page diagram of every component and end-to-end workflow (poller cycle, real-time WebSocket broadcast, dashboard load, service control, setup wizard, Electron startup, …). Pick a flow on the left to watch data move across the system.
+> Open [[docs/flow-visualizer.html|flow-visualizer.html]] for an interactive single-page diagram of every component and end-to-end workflow (poller cycle, real-time WebSocket broadcast, dashboard load, setup wizard, Electron startup, …). Pick a flow on the left to watch data move across the system.
 
 ## PlantUML Diagrams
 
@@ -255,12 +255,12 @@ package "Frontend (React 18)" as FE {
     [WebSocketProvider]
 }
 
-package "Backend (TypeScript/Fastify 4)" as BE {
+package "Backend (TypeScript/Fastify 5)" as BE {
     [Config Layer (env + ConfigStore)]
     [Core Layer (logger / bus / clock)]
     [Infra (HTTP / SSH / SNMP / Ping / ZMQ / Roon)]
     [Domain (BaseService + ServiceRegistry)]
-    [Application (GetServiceStatus / ControlService / …)]
+    [Application (GetServiceStatus / ListInstances / …)]
     [Transport (Fastify routes + WS)]
 }
 
@@ -312,7 +312,7 @@ participant "BaseService" as Svc
 database "External" as Ext
 
 User -> FE : open dashboard / detail sheet
-FE -> Fastify : GET /api/services or /services/{kind}/health
+FE -> Fastify : GET /services or /services/{kind}/health
 
 Fastify -> Fastify : CORS hook · log sampling
 Fastify -> Fastify : request timeout (AbortSignal)
@@ -363,7 +363,7 @@ partition "External" {
 Tile -> Hook : render
 Hook -> Query : useQuery
 
-Query -> API : GET /services / /health
+Query -> API : GET /services or /services/{kind}/health
 API -> App : run(signal)
 App -> Reg : lookup
 Reg -> Svc : checkHealth

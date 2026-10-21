@@ -285,9 +285,11 @@ export default function Profiles() {
               submitting={createMut.isPending || updateMut.isPending}
               onCancel={() => setEditor({ mode: "closed" })}
               onSubmit={async (v) => {
+                // Send an emptied description as "" (not undefined, which
+                // JSON drops) so the backend clears it instead of keeping it.
                 const patch = {
                   name: v.name,
-                  description: v.description || undefined,
+                  description: v.description,
                   color: v.color || undefined,
                 };
                 if (editor.mode === "edit") {

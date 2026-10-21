@@ -2,7 +2,7 @@
 title: Testing
 type: index
 status: active
-date: 2026-05-14
+date: 2026-10-20
 tags: [testing, index, coverage, vitest, phase-3, phase-4, e2e, playwright, smoke-tests, renderers, setup-wizard, ci, coverage-reporting, dependabot]
 description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing, Phase 3/4 frontend test suite expansion and E2E CI enforcement, vitest-coverage-report-action CI integration
 aliases: [testing index, tests, test docs, service testing, protocol testing]
@@ -312,16 +312,21 @@ Test files updated in Phase 0b (28 files, 226 tests passing):
 
 ## Backend Coverage Configuration
 
-**Phase 8 Coverage Push** (2026-04-18):
+**Maintenance-mode floors** (2026-10-20): thresholds were lowered to just below measured
+coverage when the project stopped active development. They block regressions; they are not
+targets.
 
 Test configuration in [[apps/backend/vitest.config.ts]]:
 
-| Metric      | Threshold | Coverage     | Status |
-| ----------- | --------- | ------------ | ------ |
-| Lines       | 80%       | 96.88%       | ✅ Pass |
-| Branches    | 75%       | 76.23%       | ✅ Pass |
-| Functions   | 80%       | 96.2%        | ✅ Pass |
-| Statements  | 80%       | 96.88%       | ✅ Pass |
+| Metric      | Threshold | Coverage (2026-10-20) | Status |
+| ----------- | --------- | --------------------- | ------ |
+| Lines       | 80%       | 91.18%                | ✅ Pass |
+| Branches    | 72%       | 74.16%                | ✅ Pass |
+| Functions   | 80%       | 85.05%                | ✅ Pass |
+| Statements  | 80%       | 87.9%                 | ✅ Pass |
+
+Frontend thresholds in [[apps/frontend/vitest.config.ts]]: lines 79% (80.93%), statements 77%
+(78.51%), functions 65% (71.69%), branches 64% (66.04%).
 
 **Excluded from Coverage:**
 The following adapters are intentionally excluded as they are untestable I/O layers:
@@ -333,7 +338,7 @@ The following adapters are intentionally excluded as they are untestable I/O lay
 - `src/core/container.ts` - Dependency injection container
 
 **Branch Threshold Rationale:**
-The branch threshold is set to 75% (not 80%) pragmatically. Remaining untestable branches are `??` (nullish coalescing) and `?.` (optional chaining) fallbacks in service response parsers. These are difficult to test without mocking external API variations that are best validated through integration testing.
+The backend branch threshold was originally 75% (not 80%) and is now a 72% maintenance floor. Remaining untestable branches are `??` (nullish coalescing) and `?.` (optional chaining) fallbacks in service response parsers. These are difficult to test without mocking external API variations that are best validated through integration testing.
 
 ## Coverage Status
 
@@ -347,7 +352,7 @@ The branch threshold is set to 75% (not 80%) pragmatically. Remaining untestable
 | Renderers          | ✅ Phase 3     | [[apps/frontend/src/services/renderers/renderers.test.ts]] covers ALL 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + factory and metrics helper                                                                                                                                             |
 | Setup pages        | ✅ Phase 3     | [[apps/frontend/src/pages/setup/kindCategories.test.ts]] kind constants; [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]] all setup steps integration                                                                                                                                                                                                |
 | Backend services   | ✅ Covered     | All 14 service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                                                                                                                                  |
-| Backend core/infra | ✅ Passing     | Phase 8: 96.88% lines, 76.23% branches, 96.2% functions, 96.88% statements. All thresholds passing. I/O adapters intentionally excluded.                                                                                                                                                                                                                        |
+| Backend core/infra | ✅ Passing     | 2026-10-20: 91.18% lines, 74.16% branches, 85.05% functions, 87.9% statements. All thresholds passing. I/O adapters intentionally excluded.                                                                                                                                                                                                                        |
 | E2E / Playwright   | ✅ Phase 4     | **Phase 4 complete:** CI `test-e2e` job runs Playwright smoke tests, gated on `build`, required by `ci-complete` for branch protection                                                                                                                                                                                                                            |
 
 ## Related

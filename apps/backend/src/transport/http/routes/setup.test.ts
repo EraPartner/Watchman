@@ -4,7 +4,6 @@ import { buildServer } from "../server.js";
 import { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
 import { GetServiceStatus } from "../../../application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "../../../application/GetAggregatedHealth.js";
-import { ControlService } from "../../../application/ControlService.js";
 import { ListInstances } from "../../../application/ListInstances.js";
 import { createMetricsRegistry } from "../../../core/metrics.js";
 import { ValidationError, UnavailableError } from "../../../core/errors.js";
@@ -22,6 +21,7 @@ vi.mock("../../../infra/http/pinnedClient.js", () => ({
 }));
 
 import { pairBridge } from "../../../domain/services/philipsBridge/huePairing.js";
+import { createPinnedClient } from "../../../infra/http/pinnedClient.js";
 
 const CERT_HASH = "aabbcc00" + "0".repeat(56);
 
@@ -40,11 +40,15 @@ function makeApp() {
     services: {
       getStatus: new GetServiceStatus({ registry }),
       aggregated: new GetAggregatedHealth(registry),
-      control: new ControlService(registry),
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
-    config: { store: fakeStore, lifecycle: fakeLifecycle, registry },
+    config: {
+      store: fakeStore,
+      lifecycle: fakeLifecycle,
+      registry,
+      profiles: { getProfile: async () => undefined },
+    },
     profiles: {
       profiles: {} as never,
       store: fakeStore,
@@ -138,6 +142,22 @@ describe("POST /setup/philips-bridge/pair", () => {
       expect.any(Object),
       3000
     );
+    await app.close();
+  });
+
+  it("pairs through a cert-pinned client, not the CA-verifying one", async () => {
+    vi.mocked(pairBridge).mockResolvedValue({
+      applicationKey: "k",
+      certHash: CERT_HASH,
+    });
+    const app = await makeApp();
+    await app.inject({
+      method: "POST",
+      url: "/setup/philips-bridge/pair",
+      payload: { host: "192.168.1.50" },
+    });
+    const deps = vi.mocked(pairBridge).mock.calls[0]![1];
+    expect(deps.httpForCert).toBe(createPinnedClient);
     await app.close();
   });
 });

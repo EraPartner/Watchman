@@ -2,7 +2,7 @@
 title: Contributing Guide
 type: guide
 status: active
-date: 2026-04-10
+date: 2026-10-20
 tags: [guide, contributing, development, workflow]
 description: Contribution guidelines and workflow for the Watchman project
 aliases: [contributing, contribution, workflow, pr guidelines]
@@ -12,6 +12,11 @@ aliases: [contributing, contribution, workflow, pr guidelines]
 
 > [!abstract] Overview
 > This guide covers the contribution workflow and coding standards for Watchman.
+
+> [!warning] Not actively maintained
+> Since October 2026 the project is no longer actively maintained. Issues and pull requests may
+> not be reviewed. Forking is the most reliable way to continue development. See the root
+> `CONTRIBUTING.md` for the full workflow.
 
 ## Getting Started
 

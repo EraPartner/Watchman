@@ -15,12 +15,6 @@ interface RawPi {
 
 interface RawGpio {
   read(cb: (err: Error | null, v: number) => void): void;
-  write(level: 0 | 1, cb: (err: Error | null) => void): void;
-  modeSet(mode: string, cb: (err: Error | null) => void): void;
-}
-
-function modeNumberToString(mode: number): string {
-  return mode === 1 ? 'output' : 'input';
 }
 
 function waitConnected(pi: RawPi, timeoutMs: number): Promise<void> {
@@ -87,20 +81,6 @@ export function createPigpioClient(): PigpioClient {
       return {
         async read(gpio) {
           return await promisify0<number>((cb) => getGpio(gpio).read(cb));
-        },
-        async write(gpio, level) {
-          await new Promise<void>((resolve, reject) => {
-            getGpio(gpio).write(level, (err) =>
-              err ? reject(new UnavailableError(err.message || String(err))) : resolve(),
-            );
-          });
-        },
-        async setMode(gpio, mode) {
-          await new Promise<void>((resolve, reject) => {
-            getGpio(gpio).modeSet(modeNumberToString(mode), (err) =>
-              err ? reject(new UnavailableError(err.message || String(err))) : resolve(),
-            );
-          });
         },
         async getHardwareRevision() {
           return toNum(pi.getInfo().hwVersion);
