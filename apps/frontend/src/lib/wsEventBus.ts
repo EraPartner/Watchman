@@ -13,6 +13,7 @@ export type WsEventType =
 export interface WsEvent {
   type: WsEventType;
   service?: string;
+  instanceId?: string;
   level?: "info" | "warning" | "error";
   message?: string;
   data?: unknown;
@@ -38,4 +39,21 @@ export function subscribeWsEvent(handler: Handler): () => void {
   return () => {
     handlers.delete(handler);
   };
+}
+
+/**
+ * Whether an event belongs to the service instance `kind`/`instanceId`.
+ * Events without a service apply to every instance; events naming another
+ * instance of the same kind do not.
+ */
+export function isEventForInstance(
+  ev: WsEvent,
+  kind: string,
+  instanceId: string
+): boolean {
+  if (ev.service && ev.service !== kind && ev.service !== instanceId) {
+    return false;
+  }
+  if (ev.instanceId && ev.instanceId !== instanceId) return false;
+  return true;
 }

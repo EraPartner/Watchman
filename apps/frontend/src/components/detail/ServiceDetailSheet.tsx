@@ -5,7 +5,7 @@ import { ChartsPanel } from "./ChartsPanel";
 import { RawStatsPanel } from "./RawStatsPanel";
 import { ConfigPanel } from "./ConfigPanel";
 import { useWebSocketEvent } from "@/hooks/useWebSocketEvent";
-import type { WsEvent } from "@/lib/wsEventBus";
+import { isEventForInstance, type WsEvent } from "@/lib/wsEventBus";
 import {
   Sheet,
   SheetContent,
@@ -143,8 +143,9 @@ export function ServiceDetailSheet({
   const handleWsEvent = useCallback(
     (ev: WsEvent) => {
       if (!kind) return;
-      if (ev.service && ev.service !== serviceKey && ev.service !== kind)
-        return;
+      // Without an instanceId the sheet shows the "main" instance (see
+      // `service` above); alerts for sibling instances of the kind don't belong.
+      if (!isEventForInstance(ev, kind, instanceId ?? "main")) return;
       if (ev.type !== "alert") return;
       const level: ServiceEvent["level"] =
         ev.level === "error"
@@ -161,7 +162,7 @@ export function ServiceDetailSheet({
       };
       setEvents((prev) => [next, ...prev].slice(0, 50));
     },
-    [kind, serviceKey]
+    [kind, instanceId, serviceKey]
   );
   useWebSocketEvent("alert", handleWsEvent);
 
