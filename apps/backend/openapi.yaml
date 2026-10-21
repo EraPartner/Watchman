@@ -366,7 +366,6 @@ paths:
                 properties:
                   data: { $ref: "#/components/schemas/ServiceInstance" }
         "400": { $ref: "#/components/responses/DomainError" }
-        "409": { $ref: "#/components/responses/DomainError" }
   /config/services/{id}:
     parameters:
       - name: id
@@ -417,8 +416,8 @@ paths:
       tags: [config]
       summary: Delete a service instance
       responses:
-        "204": { description: Deleted }
-        "404": { $ref: "#/components/responses/DomainError" }
+        "204":
+          { description: Deleted (also returned when the id does not exist) }
   /config/services/{id}/test:
     post:
       tags: [config]

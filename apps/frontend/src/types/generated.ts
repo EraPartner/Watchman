@@ -680,7 +680,6 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["DomainError"];
-                409: components["responses"]["DomainError"];
             };
         };
         delete?: never;
@@ -775,14 +774,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Deleted */
+                /** @description Deleted (also returned when the id does not exist) */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                404: components["responses"]["DomainError"];
             };
         };
         options?: never;
