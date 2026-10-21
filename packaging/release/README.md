@@ -1,4 +1,4 @@
-# Watchman **VERSION** — macOS
+# Watchman `__VERSION__` — macOS
 
 Watchman is a self-hosted dashboard that monitors your home-lab services
 (Bitcoin node, IPFS, qBittorrent, Tor, AdGuard, Synology, Hue, routers, and
@@ -14,14 +14,13 @@ database server). One app, one window.
 | File                                 | Purpose                                   |
 | ------------------------------------ | ----------------------------------------- |
 | `Watchman-__VERSION__-arm64.dmg`     | The application installer (Apple Silicon) |
-| `Watchman-__VERSION__-x64.dmg`       | The application installer (Intel)         |
 | `Watchman-__VERSION__-arm64-mac.zip` | Same app as a zip; alternative to the DMG |
 | `*.sha256`                           | Checksums for each artifact above         |
 
 ## Requirements
 
 - macOS 12 (Monterey) or newer
-- Apple Silicon (M1+) or Intel
+- Apple Silicon (M1 or newer). Intel Macs are not supported by this build.
 - A few hundred MB of free disk space
 - No internet connection required to run (Watchman reaches your services on your
   LAN; it does not phone home)
@@ -61,8 +60,9 @@ First launch is typically a few seconds.
 
 ## Daily use
 
-Double-click `Watchman.app`. Closing the window quits the app and stops the
-backend; reopening starts it again.
+Double-click `Watchman.app`. Closing the window leaves Watchman (and its
+backend) running in the Dock; click the Dock icon to reopen it. Quit with
+**⌘Q** to stop the backend; the next launch starts it again.
 
 ## Security model
 
