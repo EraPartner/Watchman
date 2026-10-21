@@ -21,6 +21,18 @@ const KINDS: KindSchema[] = [
     ],
     secretFields: [],
   },
+  {
+    kind: "router",
+    label: "Router",
+    fields: [
+      { name: "instanceId", label: "Instance ID", type: "text", required: true, default: "main" },
+      { name: "enabled", label: "Enabled", type: "boolean", default: true },
+      { name: "host", label: "Host", type: "text", required: true },
+      { name: "ports", label: "Ports", type: "numberArray" },
+      { name: "interfaceFilter", label: "Interface filter", type: "stringArray" },
+    ],
+    secretFields: [],
+  },
 ];
 
 vi.mock("./useConfigQueries", () => ({
@@ -206,6 +218,86 @@ describe("ServiceEditor instance id rename", () => {
     const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
     expect(payload.instanceId).toBe("renamed");
     expect(payload.kind).toBe("ipfs");
+
+    await cleanup();
+  });
+});
+
+function getFieldInput(container: HTMLElement, label: RegExp): HTMLInputElement {
+  for (const lab of container.querySelectorAll("label")) {
+    if (label.test(lab.textContent ?? "")) {
+      const input = lab.querySelector("input") as HTMLInputElement | null;
+      if (input) return input;
+    }
+  }
+  throw new Error(`Input ${label} not found`);
+}
+
+describe("ServiceEditor list fields", () => {
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  it("keeps a typed comma so a second item can be entered", async () => {
+    const { container, cleanup } = await render({ presetKind: "router", hideKind: true });
+    const ports = getFieldInput(container, /^Ports/);
+
+    await typeInto(ports, "80,");
+    expect(ports.value).toBe("80,");
+    await typeInto(ports, "80, ");
+    expect(ports.value).toBe("80, ");
+
+    await cleanup();
+  });
+
+  it("submits list fields parsed into arrays when adding a service", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({
+      presetKind: "router",
+      hideKind: true,
+      onSubmit,
+    });
+
+    await typeInto(getFieldInput(container, /^Host/), "192.168.1.1");
+    await typeInto(getFieldInput(container, /^Ports/), "80, 443,");
+    await typeInto(getFieldInput(container, /^Interface filter/), "eth0,eth1");
+
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.kind).toBe("router");
+    expect(payload.config).toEqual({
+      host: "192.168.1.1",
+      ports: [80, 443],
+      interfaceFilter: ["eth0", "eth1"],
+    });
+
+    await cleanup();
+  });
+
+  it("omits an empty optional list field", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({
+      presetKind: "router",
+      hideKind: true,
+      onSubmit,
+    });
+
+    await typeInto(getFieldInput(container, /^Host/), "10.0.0.1");
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).toEqual({ host: "10.0.0.1" });
 
     await cleanup();
   });

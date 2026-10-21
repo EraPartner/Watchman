@@ -2,7 +2,7 @@
 title: Data Flow
 type: architecture
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [architecture, backend, frontend, data-flow, two-tier, health, websocket-snapshots, setup-wizard, no-auth, configstore, electron, phase-0b, task-b5, event-subscription]
 description: Data flow documentation for setup wizard, service monitoring (two-tier health model), real-time updates with full snapshot payloads, encrypted ConfigStore lifecycle, and Tor ControlPort event subscription lifecycle (Task B5)
 aliases: [data flow, request flow, communication patterns]
@@ -33,8 +33,9 @@ aliases: [data flow, request flow, communication patterns]
    → ConfigStore encrypts secret fields (AES-GCM, per-install master key)
    → INSERT into DuckDB, bus.emit('config:service.created')
    → ServiceLifecycle.applyCreate(id) brings up the service and tracks it
-8. Broadcaster sees `config:service.created` and sends `service_config_changed`
-9. Frontend invalidates `/services` query, the tile appears
+   → ServiceLifecycle emits `config:service.applied` once bring-up finishes
+8. Broadcaster sees `config:service.applied` and sends `service_config_changed`
+9. Frontend invalidates the `/instances` query, the tile appears
 ```
 
 ## Service Monitoring Flow (Two-Tier Health)
@@ -179,9 +180,10 @@ Bus --> Life : applyCreate(id)
 Life -> Poll : pause()
 Life -> Life : bringUp(stored)
 Life -> Poll : resume() + track(svc)
-Bus --> WS : config:service.created
+Life --> Bus : config:service.applied (action: created)
+Bus --> WS : config:service.applied
 WS --> FE : { type: 'service_config_changed', action: 'created' }
-FE -> FE : invalidate /services query → tile appears
+FE -> FE : invalidate /instances query → tile appears
 @enduml
 ```
 

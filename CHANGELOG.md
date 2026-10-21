@@ -92,6 +92,14 @@ dependency audit, and documentation aligned with the code.
   request instead of after up to four retried calls per fetch.
 - Frontend: `formatBytes` returns `0 B` for negative values and keeps values
   below 1 in bytes, instead of `NaN undefined` or a missing unit.
+- Adding a service: the dashboard tile now appears right after saving. The
+  `service_config_changed` WebSocket frame is sent once the backend has brought
+  the service up, not before, so the client's `/instances` refetch no longer
+  misses it and waits for the 60-second poll.
+- Adding a service: list fields (router ports, interface filter, Roon ports)
+  accept a comma, so more than one value can be typed.
+- Adding a service: a rejected config shows `field: problem` messages instead
+  of the raw validation JSON.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.
