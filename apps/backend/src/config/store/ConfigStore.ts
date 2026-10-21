@@ -204,6 +204,62 @@ export function createConfigStore(
     return pool.withConnection(fn);
   }
 
+  // A row change and its audit entry commit together: a failed audit insert
+  // must not leave a changed row with no audit entry and no config:* event.
+  async function inTransaction<T>(
+    fn: (c: DuckDBConnection) => Promise<T>
+  ): Promise<T> {
+    return withConn(async (c) => {
+      await c.run("BEGIN TRANSACTION");
+      try {
+        const result = await fn(c);
+        await c.run("COMMIT");
+        return result;
+      } catch (e) {
+        // A failed COMMIT has already rolled back; ignore "no transaction".
+        await c.run("ROLLBACK").catch(() => undefined);
+        throw e;
+      }
+    });
+  }
+
+  async function instanceIdTaken(
+    kind: string,
+    instanceId: string,
+    exceptId?: string
+  ): Promise<boolean> {
+    const rows = await withConn(async (c) => {
+      const res = await c.runAndReadAll(
+        `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
+        [kind, instanceId]
+      );
+      return res.getRowObjects() as Array<Record<string, unknown>>;
+    });
+    return rows.some((r) => String(r["id"]) !== exceptId);
+  }
+
+  function duplicateInstanceId(kind: string, instanceId: string) {
+    return new ValidationError(
+      `instance id '${instanceId}' already in use for kind '${kind}'`
+    );
+  }
+
+  // Two concurrent writes can both pass the duplicate pre-check; the loser
+  // then hits the unique index. Report that as the same ValidationError
+  // instead of a raw constraint error.
+  async function asDuplicateError(
+    e: unknown,
+    kind: string,
+    instanceId: string,
+    exceptId?: string
+  ): Promise<unknown> {
+    if (e instanceof ValidationError) return e;
+    const taken = await instanceIdTaken(kind, instanceId, exceptId).catch(
+      () => false
+    );
+    return taken ? duplicateInstanceId(kind, instanceId) : e;
+  }
+
   // Single DB read, partitioned into usable services and per-row failures. A row that
   // fails to parse/decrypt is logged and skipped rather than rejecting the whole batch,
   // so one corrupt instance can't stop every other service from coming up at startup.
@@ -348,19 +404,13 @@ export function createConfigStore(
     kind: string | null,
     targetId: string | null,
     diff: unknown,
-    actor: string | null
+    actor: string | null,
+    ts: Date = new Date()
   ): Promise<void> {
     await c.run(
       `INSERT INTO app_config_audit (ts, action, target_kind, target_id, diff, actor)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        toTs(new Date()),
-        action,
-        kind,
-        targetId,
-        JSON.stringify(diff ?? null),
-        actor,
-      ]
+      [toTs(ts), action, kind, targetId, JSON.stringify(diff ?? null), actor]
     );
   }
 
@@ -397,15 +447,13 @@ export function createConfigStore(
       assertValidInstanceId(parts.instanceId);
       const resolvedProfileId =
         profileId ?? (await storeOpts?.resolveDefaultProfileId?.()) ?? "";
-      const stored = await withConn(async (c): Promise<StoredService> => {
+      const stored = await inTransaction(async (c): Promise<StoredService> => {
         const dup = await c.runAndReadAll(
           `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
           [parts.kind, parts.instanceId]
         );
         if (dup.getRowObjects().length > 0) {
-          throw new ValidationError(
-            `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`
-          );
+          throw duplicateInstanceId(parts.kind, parts.instanceId);
         }
         const id = randomUUID();
         const now = new Date();
@@ -454,6 +502,8 @@ export function createConfigStore(
           createdAt: now,
           updatedAt: now,
         };
+      }).catch(async (e: unknown) => {
+        throw await asDuplicateError(e, parts.kind, parts.instanceId);
       });
       bus.emit("config:service.created", {
         id: stored.id,
@@ -484,7 +534,7 @@ export function createConfigStore(
       const parts = extractStorable(config);
       assertValidInstanceId(parts.instanceId);
       const isRename = parts.instanceId !== existing.instanceId;
-      const stored = await withConn(async (c): Promise<StoredService> => {
+      const stored = await inTransaction(async (c): Promise<StoredService> => {
         if (isRename) {
           const dup = await c.runAndReadAll(
             `SELECT id FROM app_service_instance
@@ -492,9 +542,7 @@ export function createConfigStore(
             [parts.kind, parts.instanceId, id]
           );
           if (dup.getRowObjects().length > 0) {
-            throw new ValidationError(
-              `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`
-            );
+            throw duplicateInstanceId(parts.kind, parts.instanceId);
           }
         }
         const now = new Date();
@@ -556,6 +604,10 @@ export function createConfigStore(
           createdAt: existing.createdAt,
           updatedAt: now,
         };
+      }).catch(async (e: unknown) => {
+        throw isRename
+          ? await asDuplicateError(e, parts.kind, parts.instanceId, id)
+          : e;
       });
       bus.emit("config:service.updated", {
         id,
@@ -596,7 +648,7 @@ export function createConfigStore(
         kind = String(identity[0]!["kind"] ?? "");
         instanceId = String(identity[0]!["instance_id"] ?? "");
       }
-      await withConn(async (c) => {
+      await inTransaction(async (c) => {
         await c.run(`DELETE FROM app_service_instance WHERE id = ?`, [id]);
         await insertAudit(
           c,
@@ -618,7 +670,7 @@ export function createConfigStore(
       const existing = await this.get(id);
       if (!existing) throw new Error(`Not found: ${id}`);
       if (existing.profileId === profileId) return;
-      await withConn(async (c) => {
+      await inTransaction(async (c) => {
         const now = new Date();
         await c.run(
           `UPDATE app_service_instance SET profile_id = ?, updated_at = ? WHERE id = ?`,
@@ -689,7 +741,8 @@ export function createConfigStore(
           entry.targetKind,
           entry.targetId,
           entry.diff,
-          entry.actor ?? null
+          entry.actor ?? null,
+          entry.ts
         )
       );
     },

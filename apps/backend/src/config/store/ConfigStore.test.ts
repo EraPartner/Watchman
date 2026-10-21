@@ -599,4 +599,79 @@ describe("ConfigStore", () => {
       expect(await store.get(badId)).toBeNull();
     });
   });
+
+  describe("audit timestamps and atomic writes", () => {
+    const ipfs = (instanceId: string) => ({
+      kind: "ipfs",
+      instanceId,
+      apiUrl: "http://127.0.0.1:5001",
+    });
+
+    // Make every audit insert fail, then recreate the table.
+    async function withBrokenAudit(fn: () => Promise<void>) {
+      await pool.withConnection(async (c) => {
+        await c.run("DROP INDEX IF EXISTS idx_audit_ts");
+        await c.run("DROP TABLE app_config_audit");
+      });
+      try {
+        await fn();
+      } finally {
+        await pool.withConnection((c) => runConfigMigrations(c));
+      }
+    }
+
+    it("writeAudit stores the timestamp it is given", async () => {
+      const ts = new Date("2026-01-02T03:04:05.000Z");
+      await store.writeAudit({
+        action: "import",
+        targetKind: null,
+        targetId: null,
+        diff: { source: "env" },
+        actor: "env-migration",
+        ts,
+      });
+      const [entry] = await store.listAudit(1);
+      // Regression: ts was ignored and the row got the current time.
+      expect(entry!.ts.getTime()).toBe(ts.getTime());
+    });
+
+    it("create leaves no row when its audit entry can't be written", async () => {
+      await withBrokenAudit(async () => {
+        await expect(store.create(ipfs("one"))).rejects.toThrow();
+      });
+      // Regression: the row was committed without its audit entry, so the
+      // id stayed taken although create() had failed.
+      expect(await store.loadAll()).toEqual([]);
+      await expect(store.create(ipfs("one"))).resolves.toMatchObject({
+        instanceId: "one",
+      });
+    });
+
+    it("update keeps the old row when its audit entry can't be written", async () => {
+      const svc = await store.create(ipfs("one"));
+      await withBrokenAudit(async () => {
+        await expect(
+          store.update(svc.id, { ...ipfs("renamed") })
+        ).rejects.toThrow();
+      });
+      const reloaded = await store.get(svc.id);
+      expect(reloaded!.instanceId).toBe("one");
+      expect(renamedEvents).toEqual([]);
+    });
+
+    it("delete keeps the row when its audit entry can't be written", async () => {
+      const svc = await store.create(ipfs("one"));
+      await withBrokenAudit(async () => {
+        await expect(store.delete(svc.id)).rejects.toThrow();
+      });
+      expect(await store.get(svc.id)).not.toBeNull();
+    });
+
+    it("still reports a duplicate instance id as a ValidationError", async () => {
+      await store.create(ipfs("one"));
+      await expect(store.create(ipfs("one"))).rejects.toBeInstanceOf(
+        ValidationError
+      );
+    });
+  });
 });
