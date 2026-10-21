@@ -510,7 +510,7 @@ paths:
                 type: object
                 properties:
                   data: { $ref: "#/components/schemas/ServiceInstance" }
-        "400": { description: Missing profileId }
+        "400": { description: Missing or unknown profileId }
         "404": { description: Service not found }
   /profiles:
     get:

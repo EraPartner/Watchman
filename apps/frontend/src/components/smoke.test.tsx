@@ -555,6 +555,31 @@ describe("ConfirmDialog", () => {
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it("shows the error when onConfirm rejects and keeps the dialog open", async () => {
+    const onConfirm = vi.fn(async () => {
+      throw new Error("delete failed: 500");
+    });
+    await render(
+      <ConfirmDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        title="Confirm"
+        confirmLabel="Yes"
+        onConfirm={onConfirm}
+      />
+    );
+    const btn = Array.from(document.body.querySelectorAll("button")).find(
+      (b) => b.textContent === "Yes"
+    )!;
+    await act(async () => {
+      btn.click();
+    });
+    expect(document.body.querySelector("[role='alert']")?.textContent).toBe(
+      "delete failed: 500"
+    );
+    expect(document.body.textContent).toContain("Confirm");
+  });
 });
 
 // ─── TopNav ───────────────────────────────────────────────────────────────────

@@ -70,6 +70,19 @@ dependency audit, and documentation aligned with the code.
   no data. Not verified against a live Roon Core.
 - Adding a service: a rejected config shows `field: problem` messages instead
   of the raw validation JSON.
+- Editing a service: saved secrets start blank ("leave blank to keep") instead
+  of holding the redaction marker `***`, which typing appended to and saved as
+  `***<new secret>`.
+- Editing or deleting a service: a delete that landed while an update or
+  create was being applied no longer leaves the deleted service running and
+  polled until restart. Applying a create for a service a profile switch
+  already started no longer starts it twice.
+- Moving or adding a service to a profile rejects an unknown `profileId` with
+  400 instead of parking the service in a profile that can never be active.
+- Service detail: a failed connection test shows its message instead of
+  `[object Object]`.
+- A failed delete shows its error in the confirm dialog, and a failed
+  enable/disable or profile move shows a toast. Before, they failed silently.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.
