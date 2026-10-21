@@ -442,6 +442,94 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
     await svc.onStop();
   });
 
+  it("SSE delete events remove lights from the live counts", async () => {
+    let emit: ((data: string) => void) | undefined;
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: true }),
+      http: routedHttp(ROUTES),
+      config: hueConfig(),
+      now: () => 0,
+      sse: (opts) => {
+        emit = opts.onMessage;
+      },
+    });
+    await svc.onStart();
+    await svc.getStats(new AbortController().signal);
+    // CLIP v2 eventstream: a removed light arrives as a "delete" envelope
+    emit?.(
+      JSON.stringify([{ type: "delete", data: [{ id: "l1", type: "light" }] }])
+    );
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.lightCount).toBe(1);
+      expect(res.value.metrics.onCount).toBe(0);
+      expect(res.value.metrics.offCount).toBe(1);
+    }
+    await svc.onStop();
+  });
+
+  it("an SSE update before the first poll does not replace the full light list", async () => {
+    let emit: ((data: string) => void) | undefined;
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: true }),
+      http: routedHttp(ROUTES),
+      config: hueConfig(),
+      now: () => 0,
+      sse: (opts) => {
+        emit = opts.onMessage;
+      },
+    });
+    await svc.onStart();
+    // only l2 changed; l1 is unknown until the light list is fetched
+    emit?.(
+      JSON.stringify([
+        { type: "update", data: [{ id: "l2", type: "light", on: { on: true } }] },
+      ])
+    );
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.lightCount).toBe(2);
+    }
+    await svc.onStop();
+  });
+
+  it("re-fetches the light list after an SSE error and drops vanished lights", async () => {
+    let emit: ((data: string) => void) | undefined;
+    let fail: ((e: unknown) => void) | undefined;
+    const routes = { ...ROUTES };
+    const http = routedHttp(routes);
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: true }),
+      http,
+      config: hueConfig(),
+      now: () => 0,
+      sse: (opts) => {
+        emit = opts.onMessage;
+        fail = opts.onError;
+      },
+    });
+    await svc.onStart();
+    await svc.getStats(new AbortController().signal);
+    emit?.(JSON.stringify([{ type: "update", data: [] }]));
+    // stream drops; meanwhile l1 is removed from the bridge
+    fail?.(new Error("stream closed"));
+    routes["/clip/v2/resource/light"] = {
+      data: [{ id: "l2", type: "light", on: { on: false } }],
+    };
+    await svc.getStats(new AbortController().signal);
+    // stream recovers with an unrelated event; counts come from the re-seeded map
+    emit?.(JSON.stringify([{ type: "update", data: [] }]));
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.lightCount).toBe(1);
+      expect(res.value.metrics.sseConnected).toBe(true);
+    }
+    await svc.onStop();
+  });
+
   it("onStart skips SSE without an applicationKey and onStop aborts the stream", async () => {
     let started = 0;
     let abortSignal: AbortSignal | undefined;

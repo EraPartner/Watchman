@@ -16,7 +16,7 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
   displayName: "Homebridge",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {
-      hostKeys: ["url", "host"],
+      hostKeys: ["baseUrl", "url", "host"],
       portKeys: ["port"],
       defaultPort: 8581,
     }),
@@ -39,7 +39,8 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
     {
       title: "Versions",
       metrics: [
-        { key: "currentVersion", label: "UI version", format: fmtRaw },
+        // from /api/status/homebridge-version: the Homebridge package, not the UI
+        { key: "currentVersion", label: "Homebridge installed", format: fmtRaw },
         { key: "latestVersion", label: "Latest", format: fmtRaw },
         { key: "homebridgeVersion", label: "Homebridge", format: fmtRaw },
         { key: "serverVersion", label: "Server", format: fmtRaw },
