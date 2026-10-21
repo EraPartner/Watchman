@@ -177,4 +177,17 @@ describe('zmqConnect', () => {
     await handle.close();
     await expect(handle.close()).resolves.toBeUndefined();
   });
+  it('keeps delivering after a handler throws', async () => {
+    const handle = await zmqConnect('tcp://127.0.0.1:28332', ['hashblock']);
+    const messages: ZmqMessage[] = [];
+    handle.onMessage(() => { throw new Error('boom'); });
+    handle.onMessage((m) => messages.push(m));
+
+    socketInstance!.emitFrames(makeFrames('hashblock', Buffer.alloc(32, 1), 1));
+    socketInstance!.emitFrames(makeFrames('hashblock', Buffer.alloc(32, 2), 2));
+    await waitFor(50);
+
+    expect(messages.map((m) => m.sequence)).toEqual([1, 2]);
+    await handle.close();
+  });
 });

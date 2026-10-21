@@ -31,8 +31,10 @@ interface DsmEnvelope<T = unknown> {
   error?: { code?: number };
 }
 
-/** DSM error codes that indicate the session has expired and re-login is needed. */
-const AUTH_RETRY_CODES = new Set([105, 106, 107]);
+/** DSM error codes that indicate the session has expired and re-login is needed.
+ *  119 ("SID not found") is what DSM returns for a sid it no longer knows,
+ *  e.g. after a NAS reboot. */
+const AUTH_RETRY_CODES = new Set([105, 106, 107, 119]);
 
 /**
  * Minimal Synology DSM HTTP client.

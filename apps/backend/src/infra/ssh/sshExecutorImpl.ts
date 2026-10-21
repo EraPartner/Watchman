@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Client } from 'ssh2';
 import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/errors.js';
 import type { SshExecRequest, SshExecResult, SshExecutor } from './sshExecutor.js';
+import { exitResult } from './exitResult.js';
 
 export function createSshExecutor(): SshExecutor {
   return {
@@ -47,11 +48,10 @@ export function createSshExecutor(): SshExecutor {
             }
             let stdout = '';
             let stderr = '';
-            let code = 0;
-            stream.on('close', (exitCode: number | null) => {
+            stream.on('close', (exitCode?: number | null, signalName?: string) => {
               clearTimeout(timer);
-              code = exitCode ?? 0;
-              finish(() => resolve({ stdout, stderr, code }));
+              const result = exitResult(stdout, stderr, exitCode, signalName);
+              finish(() => (result instanceof Error ? reject(result) : resolve(result)));
             });
             stream.on('data', (d: Buffer) => {
               stdout += d.toString('utf8');

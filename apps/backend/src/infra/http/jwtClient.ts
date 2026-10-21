@@ -52,6 +52,8 @@ export function createJwtClient(inner: HttpClient, opts: JwtClientOptions): Http
       const res = await inner.send(withBearer(req));
       if (res.status !== 401) return res;
 
+      // consume the discarded 401 body so undici can release its connection
+      await res.text().catch(() => undefined);
       await doRefresh();
 
       return inner.send(withBearer(req));
