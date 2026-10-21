@@ -87,6 +87,9 @@ dependency audit, and documentation aligned with the code.
 - Frontend: the console logger no longer leaks a secret that also appears in its
   key (e.g. `password=pass`), and data fields named `level`, `message` or
   `timestamp` no longer overwrite the log entry's own fields.
+- Frontend: the API client no longer retries a 503 whose error code is
+  `UNAVAILABLE` or `CIRCUIT_OPEN`, so a down service shows its error after one
+  request instead of after up to four retried calls per fetch.
 - Frontend: `formatBytes` returns `0 B` for negative values and keeps values
   below 1 in bytes, instead of `NaN undefined` or a missing unit.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a

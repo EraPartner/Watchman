@@ -2,7 +2,7 @@
 title: Frontend Architecture
 type: architecture
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags:
   [
     architecture,
@@ -130,6 +130,7 @@ All 18 service-specific card components (`AdGuardCard`, `BitcoinCard`, `TorCard`
 ### Query Retry
 
 - React Query retry behavior in `[[apps/frontend/src/App.tsx]]` uses a predicate that avoids retries for 4xx responses while keeping capped retries for retryable failures
+- `ApiClientCore.request` (`[[apps/frontend/src/services/apiClient/core.ts]]`) retries idempotent requests on 408/429/5xx and timeouts, except a 503 whose error code is `UNAVAILABLE` or `CIRCUIT_OPEN`: the backend has already decided the service is down, so the error surfaces after one call
 
 ### Service Renderer Registry (Phase 3)
 
