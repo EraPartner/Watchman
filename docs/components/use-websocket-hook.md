@@ -38,7 +38,7 @@ The hook uses module-level globals to maintain a single connection:
 | -------------------------- | -------- | ---------------------------------------------- |
 | `CONNECTION_THROTTLE_MS`   | 5,000ms  | Minimum time between connection attempts       |
 | `MAX_RECONNECT_ATTEMPTS`   | 5        | Attempts before the one-time failure toast; retries continue every 30s after it |
-| `INITIAL_RECONNECT_DELAY`  | 1,000ms  | Initial delay before first reconnect           |
+| `INITIAL_RECONNECT_DELAY`  | 1,000ms  | Backoff base; the first reconnect waits 2× this |
 | `MAX_RECONNECT_DELAY`      | 30,000ms | Maximum delay between reconnect attempts       |
 | `INVALIDATION_DEBOUNCE_MS` | 150ms    | Debounce time for batched cache invalidations  |
 
@@ -50,14 +50,16 @@ Exponential backoff with cap:
 delay = min(INITIAL_RECONNECT_DELAY * 2^attempt, MAX_RECONNECT_DELAY)
 ```
 
+`attempt` is incremented in `onclose` before the delay is computed, so it is
+1 for the first reconnect.
+
 | Attempt | Delay     |
 | ------- | --------- |
-| 1       | 1s        |
-| 2       | 2s        |
-| 3       | 4s        |
-| 4       | 8s        |
-| 5       | 16s       |
-| 6+      | 30s (cap) |
+| 1       | 2s        |
+| 2       | 4s        |
+| 3       | 8s        |
+| 4       | 16s       |
+| 5+      | 30s (cap) |
 
 ## Message Types
 
