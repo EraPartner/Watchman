@@ -8,12 +8,18 @@ describe("KIND_META field defaults", () => {
     "%s form defaults match the schema defaults",
     (kind) => {
       const meta = KIND_META[kind];
-      const schemaDefaults = meta.schema.parse({
-        kind,
-        // Satisfy required fields; their defaults are not under test.
-        host: "h",
-        baseUrl: "http://h",
-      }) as Record<string, unknown>;
+      // Fill only fields the form itself requires and leaves empty, so every
+      // field with a form default is left to the schema's own default.
+      const input: Record<string, unknown> = { kind };
+      for (const f of meta.fields) {
+        if (f.required && f.default === undefined) {
+          input[f.name] = f.type === "url" ? "http://h" : "h";
+        }
+      }
+      const schemaDefaults = meta.schema.parse(input) as Record<
+        string,
+        unknown
+      >;
       for (const field of meta.fields) {
         if (field.default === undefined) continue;
         expect([field.name, field.default]).toEqual([
