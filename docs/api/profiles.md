@@ -135,7 +135,7 @@ Fetch a single profile by UUID.
 
 #### `PUT /profiles/:id`
 
-Update a profile's name, description, or color. Partial updates — omit any field to leave it unchanged.
+Update a profile's name, description, or color. Partial updates — omit any field to leave it unchanged. Send `description` as `""` or `null` to clear it.
 
 **Request Body:**
 
