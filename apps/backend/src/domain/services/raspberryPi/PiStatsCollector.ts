@@ -8,6 +8,7 @@ import { UnavailableError } from "../../../core/errors.js";
 import { compoundCommand, splitSegments } from "../../../infra/ssh/compound.js";
 import { getPiModel } from "./piModel.js";
 import { parseRpiInfo, type RpiInfo } from "./parseRpiInfo.js";
+import { shellQuote, shellQuotePath } from "../../../core/shellQuote.js";
 
 /** Per-poll measurements (one compound SSH exec; positional outputs). */
 const DYNAMIC_COMMANDS: readonly string[] = [
@@ -268,7 +269,15 @@ export class PiStatsCollector {
 
   private async fetchRpiInfo(signal: AbortSignal): Promise<RpiInfo> {
     const c = this.deps.config;
-    const command = `${c.nodePath} ${c.rpiCliPath} -H ${c.host}:${c.port} info`;
+    // Quoted: these are config values run by the relay host's shell, so a
+    // path with a space (or anything worse) must stay one literal argument.
+    const command = [
+      shellQuotePath(c.nodePath),
+      shellQuotePath(c.rpiCliPath),
+      "-H",
+      shellQuote(`${c.host}:${c.port}`),
+      "info",
+    ].join(" ");
     const req: SshExecRequest = {
       host: c.macMiniHost,
       port: c.macMiniSshPort,
