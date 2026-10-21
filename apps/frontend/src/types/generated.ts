@@ -218,62 +218,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/services/{kind}/control": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Issue a control action to a service instance */
-        post: {
-            parameters: {
-                query?: {
-                    /** @description Instance id. Omit to use first registered instance for the kind. */
-                    instance?: components["parameters"]["Instance"];
-                };
-                header?: never;
-                path: {
-                    /** @description Service kind (e.g. bitcoin, ipfs, homebridge) */
-                    kind: components["parameters"]["Kind"];
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        /** @example restart */
-                        action: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Action accepted */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            data: {
-                                ok: boolean;
-                            };
-                        };
-                    };
-                };
-                400: components["responses"]["DomainError"];
-                404: components["responses"]["DomainError"];
-                503: components["responses"]["DomainError"];
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/instances": {
         parameters: {
             query?: never;

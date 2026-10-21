@@ -21,8 +21,6 @@ const CONFIG: RaspberryPiInstance = {
 function makeFakeHandle(): PigpioHandle {
   return {
     read: vi.fn(async () => 0),
-    write: vi.fn(async () => undefined),
-    setMode: vi.fn(async () => undefined),
     getHardwareRevision: vi.fn(async () => 0xb03141),
     getPigpioVersion: async () => 78,
     getCurrentTick: async () => 12345,

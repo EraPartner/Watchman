@@ -2,7 +2,7 @@
 title: OpenAPI Specification
 type: reference
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [reference, openapi, swagger, api-spec, endpoint, documentation]
 description: Complete reference for the Watchman OpenAPI 3.1 specification - how to read, use, and extend the API spec
 aliases:
@@ -48,7 +48,7 @@ There is no `securitySchemes` section. Watchman has no authentication (see [[doc
 | Prefix        | Paths                                                                                                                                                         |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/meta`       | `/meta/health`, `/meta/version`                                                                                                                               |
-| `/services`   | `/services`, `/services/{kind}/health`, `/services/{kind}/stats`, `/services/{kind}/control`                                                                  |
+| `/services`   | `/services`, `/services/{kind}/health`, `/services/{kind}/stats`                                                                 |
 | `/instances`  | `/instances`, `/instances/{kind}`                                                                                                                             |
 | `/kinds`      | `/kinds`                                                                                                                                                      |
 | `/metrics`    | `/metrics`                                                                                                                                                    |

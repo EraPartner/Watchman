@@ -4,7 +4,6 @@ import { buildServer } from "../server.js";
 import { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
 import { GetServiceStatus } from "../../../application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "../../../application/GetAggregatedHealth.js";
-import { ControlService } from "../../../application/ControlService.js";
 import { ListInstances } from "../../../application/ListInstances.js";
 import { createMetricsRegistry } from "../../../core/metrics.js";
 import { NotFoundError, ValidationError } from "../../../core/errors.js";
@@ -71,7 +70,6 @@ function makeApp(opts: {
     services: {
       getStatus: new GetServiceStatus({ registry }),
       aggregated: new GetAggregatedHealth(registry),
-      control: new ControlService(registry),
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),

@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -152,7 +152,7 @@ Watchman/
 │   │   │   ├── core/      # Logger, errors, Result, eventBus
 │   │   │   ├── infra/     # HTTP, SSH, GPIO, SNMP, cache, poller, DuckDB ConfigStore
 │   │   │   ├── domain/    # BaseService, ServiceRegistry
-│   │   │   ├── application/ # UseCases (GetServiceStatus, ControlService, etc.)
+│   │   │   ├── application/ # UseCases (GetServiceStatus, ListInstances, etc.)
 │   │   │   └── transport/ # Fastify routes, WebSocket
 │   │   ├── openapi.yaml   # OpenAPI 3.1 spec
 │   │   ├── dist/          # Compiled JavaScript
@@ -229,7 +229,7 @@ Watchman/
 ## Interactive Flow Visualizer
 
 > [!tip] Click-through architecture map
-> Open [[docs/flow-visualizer.html|flow-visualizer.html]] for an interactive single-page diagram of every component and end-to-end workflow (poller cycle, real-time WebSocket broadcast, dashboard load, service control, setup wizard, Electron startup, …). Pick a flow on the left to watch data move across the system.
+> Open [[docs/flow-visualizer.html|flow-visualizer.html]] for an interactive single-page diagram of every component and end-to-end workflow (poller cycle, real-time WebSocket broadcast, dashboard load, setup wizard, Electron startup, …). Pick a flow on the left to watch data move across the system.
 
 ## PlantUML Diagrams
 
@@ -260,7 +260,7 @@ package "Backend (TypeScript/Fastify 5)" as BE {
     [Core Layer (logger / bus / clock)]
     [Infra (HTTP / SSH / SNMP / Ping / ZMQ / Roon)]
     [Domain (BaseService + ServiceRegistry)]
-    [Application (GetServiceStatus / ControlService / …)]
+    [Application (GetServiceStatus / ListInstances / …)]
     [Transport (Fastify routes + WS)]
 }
 

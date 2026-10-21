@@ -7,8 +7,6 @@ export type {
   ApiRequestOptions,
   BackendHealth,
   BackendVersion,
-  ControlRequest,
-  ControlResponse,
   HealthSnapshot,
   HistoryPayload,
   HistoryPoint,

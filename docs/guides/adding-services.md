@@ -2,7 +2,7 @@
 title: Adding Services Guide
 type: guide
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [guide, backend, services, development]
 description: Step-by-step guide to adding a new service integration to Watchman
 aliases: [add service, new service, service integration, how to add service]
@@ -24,7 +24,7 @@ A service kind touches these places:
 5. **Frontend renderer**: a tile/detail renderer under `apps/frontend/src/services/renderers/`
 6. **Tests and documentation**
 
-You do **not** add routes or environment variables. The HTTP routes are generic per kind (`GET /services/:kind/health`, `GET /services/:kind/stats`, `POST /services/:kind/control`, with `?instance=<instanceId>`). Connection settings live in the DuckDB config store and are edited in the UI or through `/config/services`.
+You do **not** add routes or environment variables. The HTTP routes are generic per kind (`GET /services/:kind/health`, `GET /services/:kind/stats`, with `?instance=<instanceId>`). Connection settings live in the DuckDB config store and are edited in the UI or through `/config/services`.
 
 ## Step 1: Add the Instance Schema
 
@@ -113,7 +113,7 @@ Guidelines:
 - Use the shared infrastructure in `apps/backend/src/infra/` (HTTP client, ping/TCP probes, SSH, SNMP, cache helpers). Pass `signal` to all network I/O so request timeouts cancel work.
 - Return `Result` values; do not throw for expected failures. Use the `DomainError` subclasses in `core/errors.ts`.
 - Use `core/ttlMemo.ts` for slow-changing data that should not be fetched every poll.
-- Optional hooks: `onStart()` / `onStop()` for long-lived connections, and `control(action, signal)` (the `Controllable` interface) to support `POST /services/:kind/control`.
+- Optional hooks: `onStart()` / `onStop()` for long-lived connections. Services are read-only: never add a method that changes the monitored service ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]).
 - Never log credentials. Pino redacts common field names, but do not rely on that alone.
 
 Circuit breakers, the snapshot cache, and polling are added by `ServiceLifecycle` and the `index.ts` instrumentation. The service class does not set them up.

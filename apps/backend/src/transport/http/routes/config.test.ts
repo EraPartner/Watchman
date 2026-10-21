@@ -4,7 +4,6 @@ import { buildServer } from "../server.js";
 import { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
 import { GetServiceStatus } from "../../../application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "../../../application/GetAggregatedHealth.js";
-import { ControlService } from "../../../application/ControlService.js";
 import { ListInstances } from "../../../application/ListInstances.js";
 import { createMetricsRegistry } from "../../../core/metrics.js";
 import { ok, err } from "../../../core/result.js";
@@ -161,7 +160,6 @@ function makeApp(store: ConfigStore, registry = new ServiceRegistry()) {
     services: {
       getStatus: new GetServiceStatus({ registry }),
       aggregated: new GetAggregatedHealth(registry),
-      control: new ControlService(registry),
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
@@ -534,7 +532,6 @@ describe("POST /config/services/:id/test", () => {
       services: {
         getStatus: new GetServiceStatus({ registry }),
         aggregated: new GetAggregatedHealth(registry),
-        control: new ControlService(registry),
       },
       listInstances: new ListInstances(registry),
       metrics: createMetricsRegistry(),
@@ -576,7 +573,6 @@ describe("POST /config/services/:id/test", () => {
       services: {
         getStatus: new GetServiceStatus({ registry }),
         aggregated: new GetAggregatedHealth(registry),
-        control: new ControlService(registry),
       },
       listInstances: new ListInstances(registry),
       metrics: createMetricsRegistry(),

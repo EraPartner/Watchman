@@ -50,6 +50,12 @@ dependency audit, and documentation aligned with the code.
 - Standardized the toolchain on **Node 24** (Active LTS): CI, `.nvmrc` /
   `.node-version`, and the devcontainer now agree; `engines` requires `node >=22`.
 
+### Removed
+
+- Service control: `POST /services/:kind/control`, `ControlService`, the `Controllable`
+  interface, Raspberry Pi GPIO write/mode actions and the frontend `controlService()`
+  client. Watchman is monitoring-only and never changes a monitored service (ADR-032).
+
 ### Fixed
 
 - Editing a service: saved secrets start blank ("leave blank to keep") instead

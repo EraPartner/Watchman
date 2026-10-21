@@ -2,7 +2,7 @@
 title: Architecture
 type: index
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [architecture, index, fastify, typescript, layered, duckdb, configuration, electron, single-user, roon-api, websocket, rn1, rn2]
 description: Index of all architecture documentation for the Watchman project - single-user client-server with TypeScript backend including Roon WebSocket API support
 aliases: [architecture index, system design, system architecture]
@@ -85,7 +85,7 @@ Frontend and backend run on the same machine (macOS, Windows, or Linux) as a sta
 
 Walk every workflow step-by-step in a self-contained page:
 
-- [[docs/flow-visualizer.html|flow-visualizer.html]] — pick a flow (poll cycle, real-time broadcast, dashboard load, control action, setup wizard, Electron startup, …) and watch the data travel across packages with annotated payloads.
+- [[docs/flow-visualizer.html|flow-visualizer.html]] — pick a flow (poll cycle, real-time broadcast, dashboard load, setup wizard, Electron startup, …) and watch the data travel across packages with annotated payloads.
 
 ## Related
 
@@ -126,7 +126,6 @@ package "Backend (TypeScript/Fastify 5)" as BE {
     package "Application Layer" {
         [GetServiceStatus]
         [GetAggregatedHealth]
-        [ControlService]
         [ListInstances]
     }
 

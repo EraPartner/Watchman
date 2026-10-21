@@ -46,8 +46,6 @@ interface FakeHandleOpts {
   currentTick?: number | Error;
   readValue?: 0 | 1;
   onEnd?: () => void;
-  onWrite?: (gpio: number, level: 0 | 1) => void;
-  onSetMode?: (gpio: number, mode: number) => void;
 }
 
 function fakeHandle(opts: FakeHandleOpts = {}): PigpioHandle {
@@ -55,8 +53,6 @@ function fakeHandle(opts: FakeHandleOpts = {}): PigpioHandle {
     v instanceof Error ? Promise.reject(v) : Promise.resolve(v ?? fallback);
   return {
     read: async () => opts.readValue ?? 0,
-    write: async (g, l) => opts.onWrite?.(g, l),
-    setMode: async (g, m) => opts.onSetMode?.(g, m),
     getHardwareRevision: () => maybe(opts.hwRevision, 0xa22082),
     getPigpioVersion: () => maybe(opts.pigpioVersion, 79),
     getCurrentTick: () => maybe(opts.currentTick, 123_456_789),
@@ -561,38 +557,6 @@ describe("GpioController", () => {
     expect(await ctrl.read(17)).toBe(1);
   });
 
-  it("write invokes handle", async () => {
-    let seen: [number, number] | null = null;
-    const ctrl = new GpioController({
-      pigpio: fakePigpio(
-        fakeHandle({
-          onWrite: (g, l) => {
-            seen = [g, l];
-          },
-        })
-      ),
-      config: makeConfig(),
-    });
-    await ctrl.write(17, 1);
-    expect(seen).toEqual([17, 1]);
-  });
-
-  it("setMode output maps to 1", async () => {
-    let mode: number | null = null;
-    const ctrl = new GpioController({
-      pigpio: fakePigpio(
-        fakeHandle({
-          onSetMode: (_, m) => {
-            mode = m;
-          },
-        })
-      ),
-      config: makeConfig(),
-    });
-    await ctrl.setMode(17, "output");
-    expect(mode).toBe(1);
-  });
-
   it("rejects invalid pins", async () => {
     const ctrl = new GpioController({
       pigpio: fakePigpio(fakeHandle()),
@@ -606,7 +570,7 @@ describe("GpioController", () => {
       pigpio: fakePigpio(new Error("refused")),
       config: makeConfig(),
     });
-    await expect(ctrl.write(17, 0)).rejects.toMatchObject({
+    await expect(ctrl.read(17)).rejects.toMatchObject({
       code: "UNAVAILABLE",
     });
   });
@@ -625,5 +589,32 @@ describe("GpioController", () => {
     });
     await ctrl.read(17);
     expect(ended).toBe(true);
+  });
+});
+
+// Watchman is monitoring-only: the Pi integration must not drive GPIO.
+describe("RaspberryPiService read-only", () => {
+  it("exposes no control() and its pigpio handle has no write or setMode", async () => {
+    const handed: object[] = [];
+    const svc = new RaspberryPiService({
+      pigpio: {
+        connect: async () => {
+          const h = fakeHandle();
+          handed.push(h);
+          return h;
+        },
+      },
+      ping: fakePing({ success: true, avgMs: 1 }),
+      ssh: fakeSsh({}),
+      config: makeConfig(),
+      now: () => 1000,
+    });
+    expect("control" in svc).toBe(false);
+    await svc.checkHealth(new AbortController().signal);
+    expect(handed).toHaveLength(1);
+    for (const h of handed) {
+      expect("write" in h).toBe(false);
+      expect("setMode" in h).toBe(false);
+    }
   });
 });

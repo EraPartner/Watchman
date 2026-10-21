@@ -985,7 +985,7 @@
           {
             "id": "be.routes.svc",
             "label": "/services routes",
-            "sub": "routes/services.ts (health/stats/control)",
+            "sub": "routes/services.ts (health/stats)",
             "kind": "transport",
             "x": 440,
             "y": 348
@@ -1045,14 +1045,6 @@
             "sub": "application/GetAggregatedHealth.ts",
             "kind": "app",
             "x": 240,
-            "y": 448
-          },
-          {
-            "id": "app.control",
-            "label": "ControlService",
-            "sub": "application/ControlService.ts",
-            "kind": "app",
-            "x": 440,
             "y": 448
           },
           {
@@ -1417,14 +1409,12 @@
 
           ["be.routes.svc", "app.getStatus"],
           ["be.routes.svc", "app.aggregated"],
-          ["be.routes.svc", "app.control"],
           ["be.routes.cfg", "app.lifecycle"],
           ["be.routes.inst", "app.listInst"],
           ["be.routes.metrics", "app.metricsReg"],
 
           ["app.getStatus", "dom.registry"],
           ["app.aggregated", "dom.registry"],
-          ["app.control", "dom.registry"],
           ["app.listInst", "dom.registry"],
           ["app.lifecycle", "dom.poller"],
           ["app.lifecycle", "dom.registry"],
@@ -2003,68 +1993,6 @@
                 "to": "dom.broadcaster",
                 "payload": "config:service.applied { action: 'deleted' } → WS",
                 "annotation": "Tile disappears from the dashboard within a second."
-              }
-            ]
-          },
-          {
-            "id": "control-action",
-            "name": "Send a control action to a service",
-            "category": "Write paths",
-            "summary": "Tile → POST /api/services/{kind}/control { action } → ControlService → svc.control().",
-            "steps": [
-              {
-                "from": "browser",
-                "to": "fe.tile",
-                "payload": "click 'Pause torrents' / 'Restart Tor' / etc.",
-                "annotation": "Only services implementing the Controllable interface expose action buttons."
-              },
-              {
-                "from": "fe.tile",
-                "to": "fe.api",
-                "payload": "POST /api/services/{kind}/control?instance={id} { action }",
-                "annotation": "Action vocabulary is per-kind; ApiClient lets renderers declare them at component-registration time."
-              },
-              {
-                "from": "fe.api",
-                "to": "be.routes.svc",
-                "payload": "route handler",
-                "annotation": "Pass-through to ControlService — routes hold no business logic."
-              },
-              {
-                "from": "be.routes.svc",
-                "to": "app.control",
-                "payload": "control.run(kind, instance, action, signal)",
-                "annotation": "Returns Result<void, DomainError>; 4xx/5xx is mapped from DomainError codes."
-              },
-              {
-                "from": "app.control",
-                "to": "dom.registry",
-                "payload": "registry.get(kind, instance)",
-                "annotation": "404 if missing or service not Controllable."
-              },
-              {
-                "from": "dom.registry",
-                "to": "dom.base",
-                "payload": "if (isControllable(svc)) svc.control(action, signal)",
-                "annotation": "Controllable services dispatch on the action string (e.g. qBittorrent → pause/resume/recheck)."
-              },
-              {
-                "from": "dom.base",
-                "to": "inf.http",
-                "payload": "POST upstream API",
-                "annotation": "Or SSH command, or SNMP set; whatever the kind requires."
-              },
-              {
-                "from": "inf.http",
-                "to": "ext.qbit",
-                "payload": "POST /api/v2/torrents/pause",
-                "annotation": "qBittorrent WebUI v2 example."
-              },
-              {
-                "from": "be.routes.svc",
-                "to": "fe.api",
-                "payload": "{ data: null } or { error: { code, message } }",
-                "annotation": "Tile toasts success / failure. A poller tick shortly after confirms the new state."
               }
             ]
           },

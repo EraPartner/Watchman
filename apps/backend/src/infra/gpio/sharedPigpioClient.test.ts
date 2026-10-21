@@ -8,8 +8,6 @@ function fakeHandle(
   let ended = false;
   return {
     read: async () => 1,
-    write: async () => undefined,
-    setMode: async () => undefined,
     getHardwareRevision: async () => 42,
     getPigpioVersion: async () => 79,
     getCurrentTick: async () => 1000,
@@ -33,6 +31,21 @@ describe("createSharedPigpioClient", () => {
     await a.getCurrentTick();
     await b.getHardwareRevision();
     expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  // Watchman is monitoring-only: handed-out handles must stay read-only even
+  // if the underlying client offers write commands.
+  it("hands out handles without write or setMode", async () => {
+    const inner = Object.assign(fakeHandle(), {
+      write: async () => undefined,
+      setMode: async () => undefined,
+    });
+    const client = createSharedPigpioClient({
+      connect: async () => inner,
+    } as PigpioClient);
+    const h = await client.connect(REQ);
+    expect("write" in h).toBe(false);
+    expect("setMode" in h).toBe(false);
   });
 
   it("end() on a handed-out handle does not close the shared connection", async () => {

@@ -12,7 +12,7 @@ export interface SharedPigpioClient extends PigpioClient {
 /**
  * PigpioClient wrapper that keeps one live pigpiod connection and hands out
  * non-owning handles: `end()` on a handed-out handle is a no-op, so health
- * checks, stats collection and GPIO control share a single TCP connection
+ * checks and stats collection share a single TCP connection
  * instead of opening and tearing one down per call. A failed command
  * invalidates the connection; the next call reconnects.
  */
@@ -65,8 +65,6 @@ export function createSharedPigpioClient(
       await acquire(req);
       return {
         read: (gpio) => guarded(req, (h) => h.read(gpio)),
-        write: (gpio, level) => guarded(req, (h) => h.write(gpio, level)),
-        setMode: (gpio, mode) => guarded(req, (h) => h.setMode(gpio, mode)),
         getHardwareRevision: () => guarded(req, (h) => h.getHardwareRevision()),
         getPigpioVersion: () => guarded(req, (h) => h.getPigpioVersion()),
         getCurrentTick: () => guarded(req, (h) => h.getCurrentTick()),
