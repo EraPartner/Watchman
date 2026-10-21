@@ -4,6 +4,11 @@ import { UnavailableError, ValidationError } from '../../../core/errors.js';
 export interface HuePairingDeps {
   http: HttpClient;
   probeCertHash: (host: string, port: number, timeoutMs: number) => Promise<string>;
+  /**
+   * Client pinned to the probed cert. The bridge serves a self-signed cert
+   * (Signify root, bridge-id CN), so a CA-verifying client can never pair.
+   */
+  httpForCert?: (certHash: string) => HttpClient;
 }
 
 export interface PairResult {
@@ -27,7 +32,8 @@ const PAIR_BODY = JSON.stringify({ devicetype: 'watchman#host', generateclientke
 
 /**
  * Pair with a Philips Hue Bridge by posting to its /api endpoint.
- * Simultaneously probes the TLS cert SHA-256 fingerprint.
+ * Probes the TLS cert SHA-256 fingerprint first, then pairs over a client
+ * pinned to it (trust on first use, same pin the service then uses).
  * Returns the applicationKey and certHash on success.
  * Throws ValidationError when the link button has not been pressed.
  * Throws UnavailableError on connection or bridge errors.
@@ -37,16 +43,15 @@ export async function pairBridge(
   deps: HuePairingDeps,
   timeoutMs = 10_000,
 ): Promise<PairResult> {
-  const [certHash, response] = await Promise.all([
-    deps.probeCertHash(host, 443, timeoutMs),
-    deps.http.send({
-      url: HUE_PAIR_URL(host),
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: PAIR_BODY,
-      timeoutMs,
-    }),
-  ]);
+  const certHash = await deps.probeCertHash(host, 443, timeoutMs);
+  const http = deps.httpForCert ? deps.httpForCert(certHash) : deps.http;
+  const response = await http.send({
+    url: HUE_PAIR_URL(host),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: PAIR_BODY,
+    timeoutMs,
+  });
 
   const items = await response.json<HuePairItem[]>();
 

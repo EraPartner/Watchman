@@ -6,7 +6,11 @@ import type {
   ServiceInstance,
   ServiceInstanceInput,
 } from "../../services/configApi";
-import { useKinds, useTestService } from "./useConfigQueries";
+import {
+  useKinds,
+  usePairPhilipsBridge,
+  useTestService,
+} from "./useConfigQueries";
 
 interface ServiceEditorProps {
   existing?: ServiceInstance;
@@ -103,6 +107,8 @@ export default function ServiceEditor({
 }: ServiceEditorProps) {
   const { data: kinds, isLoading } = useKinds();
   const testMut = useTestService();
+  const pairMut = usePairPhilipsBridge();
+  const [pairResult, setPairResult] = useState<string | null>(null);
 
   const [selectedKind, setSelectedKind] = useState<string>(
     existing?.kind ?? presetKind ?? ""
@@ -189,6 +195,28 @@ export default function ServiceEditor({
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
+    }
+  };
+
+  // The Hue key and cert pin can't be typed in by hand in practice; get them
+  // from the bridge after the operator presses its link button.
+  const handlePair = async () => {
+    const host = String(values["host"] ?? "").trim();
+    if (!host) {
+      setPairResult("Enter the bridge host first");
+      return;
+    }
+    setPairResult("Pairing… (press the bridge's link button first)");
+    try {
+      const res = await pairMut.mutateAsync(host);
+      setValues((prev) => ({
+        ...prev,
+        applicationKey: res.applicationKey,
+        certHash: res.certHash,
+      }));
+      setPairResult("Paired. Save to keep the key.");
+    } catch (err) {
+      setPairResult(err instanceof Error ? err.message : "Pairing failed");
     }
   };
 
@@ -279,6 +307,24 @@ export default function ServiceEditor({
           }
         />
       ))}
+
+      {selectedKind === "philipsBridge" && (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handlePair}
+            disabled={pairMut.isPending}
+          >
+            Pair with bridge
+          </Button>
+          {pairResult && (
+            <span className="text-sm" data-testid="pair-result">
+              {pairResult}
+            </span>
+          )}
+        </div>
+      )}
 
       <details
         open={advancedOpen}

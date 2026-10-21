@@ -7,6 +7,7 @@ import {
   type AuditEntry,
   type SetupStatus,
   type TestConnectionResult,
+  type HuePairResult,
   type ExportBundle,
   type ImportResult,
   type LoadError,
@@ -126,6 +127,12 @@ export function useDeleteService() {
 export function useTestService() {
   return useMutation<TestConnectionResult, Error, string>({
     mutationFn: (id: string) => configApi.testService(id),
+  });
+}
+
+export function usePairPhilipsBridge() {
+  return useMutation<HuePairResult, Error, string>({
+    mutationFn: (host: string) => configApi.pairPhilipsBridge(host),
   });
 }
 

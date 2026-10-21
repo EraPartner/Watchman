@@ -1,6 +1,7 @@
 import net from 'node:net';
 import { readFile } from 'node:fs/promises';
 import { UnavailableError, UnauthorizedError } from '../../core/errors.js';
+import { expandHome } from '../../core/expandHome.js';
 import type { TorControlConnectOpts } from './controlClient.js';
 
 export type TorEventHandler = (event: string, args: string[]) => void;
@@ -147,7 +148,7 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
   async authenticate(password: string, signal: AbortSignal, cookieAuthFile?: string): Promise<void> {
     let cmd: string;
     if (cookieAuthFile && cookieAuthFile.length > 0) {
-      const cookieBytes = await readFile(cookieAuthFile);
+      const cookieBytes = await readFile(expandHome(cookieAuthFile));
       cmd = `AUTHENTICATE ${cookieBytes.toString('hex')}\r\n`;
     } else if (password.length > 0) {
       cmd = `AUTHENTICATE "${escapePassword(password)}"\r\n`;

@@ -2,8 +2,8 @@
 title: Philips Hue Bridge Integration
 type: integration
 status: active
-date: 2026-06-13
-last-updated: 2026-06-13
+date: 2026-10-21
+last-updated: 2026-10-21
 tags:
   [
     integration,
@@ -73,7 +73,7 @@ Supported configuration fields (in the service instance UI):
 | `pingCount`      | number                  | No       | Number of ping probes per health check (default: 2)             |
 | `usePing`        | boolean                 | No       | Enable/disable ICMP ping (default: true)                        |
 | `applicationKey` | password (secret field) | No       | Hue API v2 application key; enables light stats when set        |
-| `certHash`       | text                    | No       | SHA-256 fingerprint of bridge TLS cert (hex or colon-delimited) |
+| `certHash`       | text                    | No       | SHA-256 fingerprint of bridge TLS cert (hex or colon-delimited). Needed for API stats: without it requests use CA verification, which the self-signed bridge cert fails |
 
 Configuration is managed via the `/config` API or the Settings UI. Legacy `PHILIPS_BRIDGE_*` environment variables (e.g. `PHILIPS_BRIDGE_HOST`, `PHILIPS_BRIDGE_APPLICATION_KEY`) are imported once on first boot and then ignored — use the UI or `/config` API for all ongoing configuration.
 
@@ -199,12 +199,12 @@ Initiates the pairing flow. Requires the physical **link button** on the bridge 
 1. **Open the Setup Wizard** — Go to **Settings → Services** and select **Philips Hue** (or during initial setup)
 2. **Press the link button** — Locate the physical link button on the Hue Bridge (usually on top, unmarked circular button). Press and hold for 1–2 seconds until a light blinks.
 3. **Enter bridge IP/hostname** — In the configuration form, enter the bridge's IP address (e.g., `192.0.2.200`) or hostname
-4. **Trigger pairing** — Click **Pair with Bridge** (or the wizard will auto-pair)
-   - Behind the scenes, this calls `POST /setup/philips-bridge/pair` with `{ "host": "192.0.2.200" }`
-5. **On success**, the wizard receives and displays:
-   - `applicationKey` — Copy this into the `applicationKey` field
-   - `certHash` — Copy this into the `certHash` field (optional, but recommended for security)
-6. **Save the configuration** — Click **Save Service** to store the credentials
+4. **Trigger pairing** — Click **Pair with bridge** in the form
+   - Behind the scenes, this calls `POST /setup/philips-bridge/pair` with `{ "host": "192.0.2.200" }`.
+     The backend reads the bridge's cert fingerprint first and pairs over a client pinned to it,
+     because the bridge's self-signed cert fails normal CA verification.
+5. **On success**, the form fills `applicationKey` and `certHash` for you
+6. **Save the configuration** — Click **Save** to store the credentials
 
 ### Request/Response
 

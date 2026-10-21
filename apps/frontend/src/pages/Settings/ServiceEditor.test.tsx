@@ -33,11 +33,26 @@ const KINDS: KindSchema[] = [
     ],
     secretFields: [],
   },
+  {
+    kind: "philipsBridge",
+    label: "Philips Hue Bridge",
+    fields: [
+      { name: "instanceId", label: "Instance ID", type: "text", required: true, default: "main" },
+      { name: "enabled", label: "Enabled", type: "boolean", default: true },
+      { name: "host", label: "Host", type: "text", required: true },
+      { name: "applicationKey", label: "Application key", type: "password", secret: true },
+      { name: "certHash", label: "Cert SHA-256", type: "text" },
+    ],
+    secretFields: ["applicationKey"],
+  },
 ];
+
+const { pairMock } = vi.hoisted(() => ({ pairMock: vi.fn() }));
 
 vi.mock("./useConfigQueries", () => ({
   useKinds: () => ({ data: KINDS, isLoading: false }),
   useTestService: () => ({ mutateAsync: vi.fn() }),
+  usePairPhilipsBridge: () => ({ mutateAsync: pairMock, isPending: false }),
 }));
 
 vi.mock("../../components/primitives", async () => {
@@ -299,6 +314,78 @@ describe("ServiceEditor list fields", () => {
     const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
     expect(payload.config).toEqual({ host: "10.0.0.1" });
 
+    await cleanup();
+  });
+});
+
+describe("ServiceEditor Hue pairing", () => {
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    pairMock.mockReset();
+  });
+
+  afterEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  function getPairButton(container: HTMLElement): HTMLButtonElement {
+    const btn = Array.from(container.querySelectorAll("button")).find((b) =>
+      /pair with bridge/i.test(b.textContent ?? ""),
+    );
+    if (!btn) throw new Error("Pair button not found");
+    return btn;
+  }
+
+  it("offers pairing only for a Hue bridge", async () => {
+    const router = await render({ presetKind: "router", hideKind: true });
+    expect(() => getPairButton(router.container)).toThrow();
+    await router.cleanup();
+  });
+
+  it("fills the key and cert pin from the bridge and saves them", async () => {
+    pairMock.mockResolvedValue({ applicationKey: "hue-key", certHash: "ab".repeat(32) });
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({
+      presetKind: "philipsBridge",
+      hideKind: true,
+      onSubmit,
+    });
+
+    await typeInto(getFieldInput(container, /^Host/), "192.168.1.50");
+    await act(async () => {
+      getPairButton(container).click();
+    });
+
+    expect(pairMock).toHaveBeenCalledWith("192.168.1.50");
+    expect(getFieldInput(container, /^Cert SHA-256/).value).toBe("ab".repeat(32));
+    expect(container.querySelector('[data-testid="pair-result"]')?.textContent).toMatch(/paired/i);
+
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).toMatchObject({
+      host: "192.168.1.50",
+      applicationKey: "hue-key",
+      certHash: "ab".repeat(32),
+    });
+
+    await cleanup();
+  });
+
+  it("shows the bridge error when the link button was not pressed", async () => {
+    pairMock.mockRejectedValue(new Error("link button not pressed"));
+    const { container, cleanup } = await render({ presetKind: "philipsBridge", hideKind: true });
+
+    await typeInto(getFieldInput(container, /^Host/), "192.168.1.50");
+    await act(async () => {
+      getPairButton(container).click();
+    });
+
+    expect(container.querySelector('[data-testid="pair-result"]')?.textContent).toMatch(
+      /link button/i,
+    );
     await cleanup();
   });
 });
