@@ -177,7 +177,8 @@ export const configApi = {
     return sharedCore.request(
       `${BASE}/setup/philips-bridge/pair`,
       jsonBody({ host }),
-      15_000
+      // Backend probes the cert, then pairs: up to 2 x its 10 s timeout.
+      25_000
     );
   },
 
