@@ -5,7 +5,8 @@
 
 version: 2
 updates:
-  # Root workspace manifest — covers backend/frontend through npm workspaces.
+  # Root workspace manifest — covers backend, frontend and desktop through
+  # npm workspaces (one lockfile: /package-lock.json).
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -18,16 +19,6 @@ updates:
         update-types: ["minor", "patch"]
       prod-deps:
         dependency-type: "production"
-        update-types: ["minor", "patch"]
-
-  # Desktop Electron app has its own pinned deps outside the root workspace.
-  - package-ecosystem: "npm"
-    directory: "/apps/desktop"
-    schedule:
-      interval: "weekly"
-    groups:
-      desktop-deps:
-        patterns: ["*"]
         update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
