@@ -14,6 +14,7 @@ import {
 } from "../schemas/index.js";
 import type { ServiceInstance } from "../services.js";
 import type { Encryptor } from "./encryption.js";
+import type { ProfileStore } from "./ProfileStore.js";
 
 const INSTANCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const INSTANCE_ID_MAX_LENGTH = 64;
@@ -83,6 +84,20 @@ export interface ExportBundle {
   version: 1;
   exportedAt: string;
   payload: string;
+  /**
+   * Base64 ciphertext of the exported profiles. A separate optional field
+   * (not part of `payload`) so older versions still import the services.
+   */
+  profiles?: string;
+}
+
+/** A profile as carried in a bundle (inside the encrypted `profiles` field). */
+interface ExportedProfile {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  networkSigs: unknown[];
 }
 
 export interface ImportResult {
@@ -189,6 +204,8 @@ function toBuffer(value: unknown): Buffer | null {
 export interface ConfigStoreOptions {
   /** Resolves the profile a newly-created service should land in when none is given (the active profile). */
   resolveDefaultProfileId?: () => Promise<string | undefined>;
+  /** Lets export/import carry profiles. Without it, bundles hold services only. */
+  profiles?: Pick<ProfileStore, "listProfiles" | "createProfile">;
 }
 
 export function createConfigStore(
@@ -764,13 +781,32 @@ export function createConfigStore(
         exportedAt: new Date().toISOString(),
         payload: cipher.toString("base64"),
       };
+      // Profiles hold captured network fingerprints, so they are encrypted too.
+      const profiles: ExportedProfile[] = storeOpts?.profiles
+        ? (await storeOpts.profiles.listProfiles()).map((p) => ({
+            id: p.id,
+            name: p.name,
+            ...(p.description !== undefined
+              ? { description: p.description }
+              : {}),
+            ...(p.color !== undefined ? { color: p.color } : {}),
+            networkSigs: p.networkSigs,
+          }))
+        : [];
+      if (storeOpts?.profiles) {
+        bundle.profiles = encryptor.encryptJson(profiles).toString("base64");
+      }
       await withConn((c) =>
         insertAudit(
           c,
           "export",
           null,
           null,
-          { count: plaintext.length, skipped: unloadable.length },
+          {
+            count: plaintext.length,
+            skipped: unloadable.length,
+            ...(storeOpts?.profiles ? { profiles: profiles.length } : {}),
+          },
           actor ?? null
         )
       );
@@ -813,6 +849,61 @@ export function createConfigStore(
         skipped: 0,
         errors: [],
       };
+
+      // Map each exported profile to a local one: the same id, else the same
+      // name, else a newly created profile. Existing profiles are never
+      // modified, and the active profile is not changed.
+      const profileMap = new Map<string, string>();
+      let profilesCreated = 0;
+      if (typeof b["profiles"] === "string" && storeOpts?.profiles) {
+        const exported = encryptor.decryptJson(
+          Buffer.from(b["profiles"], "base64")
+        );
+        if (!Array.isArray(exported))
+          throw new Error("Invalid bundle: decoded profiles must be array");
+        const local = await storeOpts.profiles.listProfiles();
+        const localIds = new Set(local.map((p) => p.id));
+        const localByName = new Map(
+          local.map((p) => [p.name.trim().toLowerCase(), p.id])
+        );
+        for (const raw of exported) {
+          if (typeof raw !== "object" || raw === null) continue;
+          const p = raw as Partial<ExportedProfile>;
+          const name = typeof p.name === "string" ? p.name : "";
+          if (typeof p.id !== "string" || name.trim() === "") continue;
+          if (localIds.has(p.id)) {
+            profileMap.set(p.id, p.id);
+            continue;
+          }
+          const sameName = localByName.get(name.trim().toLowerCase());
+          if (sameName) {
+            profileMap.set(p.id, sameName);
+            continue;
+          }
+          try {
+            const created = await storeOpts.profiles.createProfile(
+              {
+                name,
+                description: p.description,
+                color: p.color,
+                networkSigs: p.networkSigs,
+              },
+              actor
+            );
+            profileMap.set(p.id, created.id);
+            localByName.set(name.trim().toLowerCase(), created.id);
+            profileIds.add(created.id);
+            profilesCreated += 1;
+          } catch (err) {
+            result.errors.push({
+              kind: "profile",
+              instanceId: name,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
       for (const raw of plaintext) {
         if (typeof raw !== "object" || raw === null) {
           result.skipped += 1;
@@ -841,10 +932,14 @@ export function createConfigStore(
           } else {
             // Restore the exported profile when it still exists here; otherwise
             // (older bundle, or a profile that is gone) create() uses the active one.
+            const exportedProfileId =
+              typeof entry.profileId === "string"
+                ? (profileMap.get(entry.profileId) ?? entry.profileId)
+                : undefined;
             const profileId =
-              typeof entry.profileId === "string" &&
-              profileIds.has(entry.profileId)
-                ? entry.profileId
+              exportedProfileId !== undefined &&
+              profileIds.has(exportedProfileId)
+                ? exportedProfileId
                 : undefined;
             const created = await this.create(cfg, actor, profileId);
             // A later entry with the same (kind, instanceId) updates this one
@@ -872,6 +967,7 @@ export function createConfigStore(
             updated: result.updated,
             skipped: result.skipped,
             errors: result.errors.length,
+            profilesCreated,
           },
           actor ?? null
         )

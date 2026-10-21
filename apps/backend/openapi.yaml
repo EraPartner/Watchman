@@ -1062,6 +1062,9 @@ components:
         payload:
           type: string
           description: Base64 AES-256-GCM ciphertext of JSON service array
+        profiles:
+          type: string
+          description: Base64 AES-256-GCM ciphertext of JSON profile array (optional; older bundles have none)
     ImportResult:
       type: object
       required: [imported, updated, skipped, errors]

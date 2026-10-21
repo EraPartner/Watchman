@@ -1642,6 +1642,8 @@ export interface components {
             exportedAt: string;
             /** @description Base64 AES-256-GCM ciphertext of JSON service array */
             payload: string;
+            /** @description Base64 AES-256-GCM ciphertext of JSON profile array (optional; older bundles have none) */
+            profiles?: string;
         };
         ImportResult: {
             imported: number;
