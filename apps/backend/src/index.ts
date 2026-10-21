@@ -2,7 +2,7 @@ import "./loadDotenv.js";
 import { loadEnv } from "./config/env.js";
 import { createLogger } from "./core/logger.js";
 import { buildServer } from "./transport/http/server.js";
-import { registerShutdown } from "./bootstrap/shutdown.js";
+import { registerShutdown, runShutdownSteps } from "./bootstrap/shutdown.js";
 import { GetServiceStatus } from "./application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "./application/GetAggregatedHealth.js";
 import { ControlService } from "./application/ControlService.js";
@@ -54,8 +54,7 @@ import {
   type BreakerPolicy,
 } from "./infra/circuitBreaker/breaker.js";
 import { withBreakers } from "./infra/circuitBreaker/guardedService.js";
-
-const SERVER_VERSION = "2.0.0";
+import { SERVER_VERSION } from "./version.js";
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -214,14 +213,21 @@ async function main(): Promise<void> {
 
   registerShutdown(
     {
-      close: async () => {
-        await networkWatcher.stop();
-        await poller.stop();
-        await lifecycle.stop();
-        snapshots.stop();
-        await dbPool.close();
-        await app.close();
-      },
+      // Close the server first so no request or WS client can touch the
+      // store or lifecycle after they shut down; the DB pool goes last
+      // because closing it force-closes connections still in use.
+      close: () =>
+        runShutdownSteps(
+          [
+            { name: "server", run: () => app.close() },
+            { name: "networkWatcher", run: () => networkWatcher.stop() },
+            { name: "poller", run: () => poller.stop() },
+            { name: "lifecycle", run: () => lifecycle.stop() },
+            { name: "snapshots", run: () => snapshots.stop() },
+            { name: "db", run: () => dbPool.close() },
+          ],
+          logger
+        ),
     },
     logger
   );

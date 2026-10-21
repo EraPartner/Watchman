@@ -19,6 +19,7 @@ import { UnavailableError } from "../../core/errors.js";
 import type { ConfigStore } from "../../config/store/ConfigStore.js";
 import type { ServiceLifecycle } from "../../application/ServiceLifecycle.js";
 import type { HttpClient } from "../../infra/http/client.js";
+import { SERVER_VERSION } from "../../version.js";
 
 class FakeSvc extends BaseService implements Controllable {
   readonly kind: string;
@@ -232,6 +233,8 @@ describe("http routes", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { version: string; node: string };
     expect(body.node).toMatch(/^v\d+/);
+    // Regression: was npm_package_version, so "dev" outside npm scripts.
+    expect(body.version).toBe(SERVER_VERSION);
     await app.close();
   });
 
