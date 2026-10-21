@@ -1,4 +1,4 @@
-import type { HttpClient } from "../http/client.js";
+import type { HttpClient, HttpResponse } from "../http/client.js";
 import { UnauthorizedError, UnavailableError } from "../../core/errors.js";
 
 export interface DsmClientConfig {
@@ -29,6 +29,26 @@ interface DsmEnvelope<T = unknown> {
   success: boolean;
   data?: T;
   error?: { code?: number };
+}
+
+/**
+ * Parse a DSM reply. A 5xx from a reverse proxy or a rebooting NAS is usually
+ * an HTML page, which would otherwise surface as a raw JSON SyntaxError.
+ */
+async function readEnvelope<T>(
+  res: HttpResponse,
+  what: string
+): Promise<DsmEnvelope<T>> {
+  if (res.status < 200 || res.status >= 300) {
+    // Consume the body so undici can release the connection.
+    await res.text().catch(() => undefined);
+    throw new UnavailableError(`synology dsm ${what}: HTTP ${res.status}`);
+  }
+  try {
+    return await res.json<DsmEnvelope<T>>();
+  } catch {
+    throw new UnavailableError(`synology dsm ${what}: response is not JSON`);
+  }
 }
 
 /** DSM error codes that indicate the session has expired and re-login is needed.
@@ -68,7 +88,7 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       timeoutMs: config.timeoutMs,
       ...(signal ? { signal } : {}),
     });
-    const env = await res.json<DsmEnvelope<{ sid: string }>>();
+    const env = await readEnvelope<{ sid: string }>(res, "login");
     if (!env.success || !env.data?.sid) {
       throw new UnauthorizedError(
         `synology dsm login failed: code ${env.error?.code ?? "unknown"}`
@@ -120,7 +140,7 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       timeoutMs: config.timeoutMs,
       ...(signal ? { signal } : {}),
     });
-    return res.json<DsmEnvelope<T>>();
+    return readEnvelope<T>(res, `${api}.${method}`);
   }
 
   return {
