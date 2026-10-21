@@ -65,6 +65,9 @@ dependency audit, and documentation aligned with the code.
   bridge's cert; before, it used CA verification, which the bridge's
   self-signed cert always fails.
 - SSH key paths (Mac Mini, Raspberry Pi) and the Tor cookie file accept `~/…`.
+- Roon: "Use Roon API" declares the transport service when registering with the
+  Core, as Roon's extension API requires; without it the zone subscription got
+  no data. Not verified against a live Roon Core.
 - Adding a service: a rejected config shows `field: problem` messages instead
   of the raw validation JSON.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
