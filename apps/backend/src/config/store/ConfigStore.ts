@@ -288,7 +288,19 @@ export function createConfigStore(
   }
 
   function validate(input: unknown): ServiceInstance {
-    const parsed = ServiceInstanceSchema.parse(input);
+    const result = ServiceInstanceSchema.safeParse(input);
+    // A ZodError's message is the issue list as raw JSON, which the UI shows
+    // verbatim; flatten it to "field: problem" lines instead.
+    if (!result.success) {
+      throw new ValidationError(
+        result.error.issues
+          .map(
+            (i) => `${i.path.map(String).join(".") || "input"}: ${i.message}`
+          )
+          .join("; ")
+      );
+    }
+    const parsed = result.data;
     if (!isServiceKind(parsed.kind)) {
       throw new Error(`Unknown kind: ${parsed.kind}`);
     }

@@ -55,6 +55,11 @@ export interface ServiceInstanceInput {
   timeoutMs?: number;
 }
 
+export interface HuePairResult {
+  applicationKey: string;
+  certHash: string;
+}
+
 export interface TestConnectionResult {
   ok: boolean;
   latencyMs: number;
@@ -163,6 +168,17 @@ export const configApi = {
         body: JSON.stringify({ profileId }),
         headers: { "Content-Type": "application/json" },
       }
+    );
+  },
+
+  // Bridge link button must be pressed first. Returns the key and the cert
+  // pin the philipsBridge form needs.
+  async pairPhilipsBridge(host: string): Promise<HuePairResult> {
+    return sharedCore.request(
+      `${BASE}/setup/philips-bridge/pair`,
+      jsonBody({ host }),
+      // Backend probes the cert, then pairs: up to 2 x its 10 s timeout.
+      25_000
     );
   },
 

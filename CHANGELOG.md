@@ -92,6 +92,24 @@ dependency audit, and documentation aligned with the code.
   request instead of after up to four retried calls per fetch.
 - Frontend: `formatBytes` returns `0 B` for negative values and keeps values
   below 1 in bytes, instead of `NaN undefined` or a missing unit.
+- Adding a service: the dashboard tile now appears right after saving. The
+  `service_config_changed` WebSocket frame is sent once the backend has brought
+  the service up, not before, so the client's `/instances` refetch no longer
+  misses it and waits for the 60-second poll.
+- Adding a service: list fields (router ports, interface filter, Roon ports)
+  accept a comma, so more than one value can be typed.
+- Adding a service: the Alby Hub form no longer pre-ticks "Legacy probe mode",
+  so UI-added hubs use the NWC API like the schema default.
+- Adding a Hue bridge: the form has a **Pair with bridge** button that fills the
+  application key and cert pin. Pairing now runs over a client pinned to the
+  bridge's cert; before, it used CA verification, which the bridge's
+  self-signed cert always fails.
+- SSH key paths (Mac Mini, Raspberry Pi) and the Tor cookie file accept `~/…`.
+- Roon: "Use Roon API" declares the transport service when registering with the
+  Core, as Roon's extension API requires; without it the zone subscription got
+  no data. Not verified against a live Roon Core.
+- Adding a service: a rejected config shows `field: problem` messages instead
+  of the raw validation JSON.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.

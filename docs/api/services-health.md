@@ -2,7 +2,7 @@
 title: "API: Services Health"
 type: api
 status: active
-date: 2026-06-12
+date: 2026-10-21
 tags:
   [
     api,
@@ -294,7 +294,7 @@ All frames are JSON. A `timestamp` (ISO-8601) is always included.
 | `at`         | Epoch-ms timestamp of the snapshot                                                    |
 | `snapshot`   | The HealthSnapshot or StatsSnapshot payload (omitted if the poller produced an error) |
 
-**`service_config_changed`** — Emitted when a service instance is created, updated, or deleted via the Config API:
+**`service_config_changed`** — Emitted when a service instance is created, updated, or deleted via the Config API. It is sent after the backend has finished bringing the service up (or tearing it down), so a client that refetches `/instances` on this frame sees the change:
 
 ```json
 {

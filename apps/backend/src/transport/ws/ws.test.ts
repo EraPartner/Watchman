@@ -366,7 +366,7 @@ describe("Broadcaster", () => {
     bc.stop();
   });
 
-  it("broadcasts service_config_changed for created/updated/deleted config events", () => {
+  it("broadcasts service_config_changed once the lifecycle has applied a config change", () => {
     const cm = new ConnectionManager({ maxConnectionsPerIp: 5, now: () => 1 });
     const a = fakeWs();
     cm.add(a, "a", { username: "u" });
@@ -374,20 +374,32 @@ describe("Broadcaster", () => {
     const bc = new Broadcaster({ manager: cm, bus, now: () => 0 });
     bc.start();
 
+    // The raw store events fire before the service is registered; a client
+    // refetching /instances on them would miss the new service.
     bus.emit("config:service.created", {
       id: "stored-1",
       kind: "bitcoin",
       instanceId: "main",
     });
-    bus.emit("config:service.updated", {
+    expect(a.sent.length).toBe(0);
+
+    bus.emit("config:service.applied", {
       id: "stored-1",
       kind: "bitcoin",
-      instanceId: "main2",
+      instanceId: "main",
+      action: "created",
     });
-    bus.emit("config:service.deleted", {
+    bus.emit("config:service.applied", {
       id: "stored-1",
       kind: "bitcoin",
       instanceId: "main2",
+      action: "updated",
+    });
+    bus.emit("config:service.applied", {
+      id: "stored-1",
+      kind: "bitcoin",
+      instanceId: "main2",
+      action: "deleted",
     });
 
     expect(a.sent.length).toBe(3);
@@ -411,10 +423,11 @@ describe("Broadcaster", () => {
     });
 
     bc.stop();
-    bus.emit("config:service.created", {
+    bus.emit("config:service.applied", {
       id: "x",
       kind: "tor",
       instanceId: "x",
+      action: "created",
     });
     expect(a.sent.length).toBe(3);
   });

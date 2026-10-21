@@ -63,6 +63,9 @@ export interface RoonApiInstance {
 export type RoonApiConstructor = new (opts: RoonApiOptions) => RoonApiInstance;
 
 const RoonApiCtor = _require("@roonlabs/node-roon-api") as RoonApiConstructor;
+// The Core only grants services an extension declares at registration; without
+// this, the transport "zones" subscription below never receives zone data.
+const RoonApiTransport = _require("node-roon-api-transport") as unknown;
 
 // ─── Raw zone shape from Roon transport:2 subscription ───────────────────────
 
@@ -209,7 +212,7 @@ export function createRoonConnect(deps: RoonConnectDeps): RoonConnectFn {
     });
 
     roon.init_services({
-      required_services: [],
+      required_services: [RoonApiTransport],
       optional_services: [],
       provided_services: [],
     });

@@ -205,27 +205,48 @@ export function createServiceLifecycle(
     bus.emit("profile.switched", { profileId: id, reason });
   }
 
+  // Clients refetch /instances when told a config changed. Announce only after
+  // the registry reflects the change; the config:service.* events fire before
+  // bring-up, so a refetch on those raced it and missed new services.
+  function announceApplied(
+    p: { id: string; kind: string; instanceId: string },
+    action: "created" | "updated" | "deleted"
+  ): void {
+    bus.emit("config:service.applied", {
+      id: p.id,
+      kind: p.kind,
+      instanceId: p.instanceId,
+      action,
+    });
+  }
+
   return {
     async start(): Promise<void> {
       unsubs.push(
         bus.on("config:service.created", (p) => {
-          void applyCreate(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, "applyCreate failed")
-          );
+          void applyCreate(p.id)
+            .catch((e) =>
+              logger.error({ err: e, id: p.id }, "applyCreate failed")
+            )
+            .finally(() => announceApplied(p, "created"));
         })
       );
       unsubs.push(
         bus.on("config:service.updated", (p) => {
-          void applyUpdate(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, "applyUpdate failed")
-          );
+          void applyUpdate(p.id)
+            .catch((e) =>
+              logger.error({ err: e, id: p.id }, "applyUpdate failed")
+            )
+            .finally(() => announceApplied(p, "updated"));
         })
       );
       unsubs.push(
         bus.on("config:service.deleted", (p) => {
-          void applyDelete(p.id).catch((e) =>
-            logger.error({ err: e, id: p.id }, "applyDelete failed")
-          );
+          void applyDelete(p.id)
+            .catch((e) =>
+              logger.error({ err: e, id: p.id }, "applyDelete failed")
+            )
+            .finally(() => announceApplied(p, "deleted"));
         })
       );
       await reloadAll();

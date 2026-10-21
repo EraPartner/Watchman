@@ -278,4 +278,47 @@ describe("ServiceLifecycle", () => {
 
     await lifecycle.stop();
   });
+
+  it("announces config:service.applied only after a created service is registered", async () => {
+    const records = new Map<string, StoredService>();
+    const store = makeStore(records);
+    const registry = new ServiceRegistry();
+    const poller = makePoller();
+    const bus = createEventBus();
+
+    const lifecycle = createServiceLifecycle({
+      store,
+      profiles: makeProfiles(),
+      registry,
+      poller,
+      bus,
+      infra: fakeInfra,
+      logger: silentLogger,
+    });
+    await lifecycle.start();
+
+    const applied = new Promise<{ registered: boolean; action: string }>(
+      (resolve) => {
+        bus.on("config:service.applied", (p) =>
+          resolve({ registered: registry.has("ipfs:new"), action: p.action })
+        );
+      }
+    );
+
+    records.set("svc-new", makeStoredService("svc-new", "ipfs", "new"));
+    bus.emit("config:service.created", {
+      id: "svc-new",
+      kind: "ipfs",
+      instanceId: "new",
+    });
+    // Bring-up is async: the raw event fires before the registry has it.
+    expect(registry.has("ipfs:new")).toBe(false);
+
+    await expect(applied).resolves.toEqual({
+      registered: true,
+      action: "created",
+    });
+
+    await lifecycle.stop();
+  });
 });
