@@ -13,7 +13,25 @@ export function servicesRoutes(deps: ServicesRouteDeps): FastifyPluginAsync {
   return async (app) => {
     app.get("/services", async (req) => {
       const entries = await deps.aggregated.run(req.abortController.signal);
-      return { data: entries };
+      // A failed Result carries a DomainError; JSON.stringify drops its
+      // non-enumerable `message`, so project it to the documented
+      // { code, message } shape (openapi AggregatedEntry).
+      return {
+        data: entries.map((e) =>
+          e.result.ok
+            ? e
+            : {
+                ...e,
+                result: {
+                  ok: false,
+                  error: {
+                    code: e.result.error.code,
+                    message: e.result.error.message,
+                  },
+                },
+              }
+        ),
+      };
     });
 
     app.get<{ Params: { kind: string }; Querystring: { instance?: string } }>(

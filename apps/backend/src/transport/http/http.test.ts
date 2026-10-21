@@ -102,6 +102,22 @@ describe("http routes", () => {
     await app.close();
   });
 
+  it("GET /services serialises a failed health result as { code, message }", async () => {
+    const r = new ServiceRegistry();
+    r.register(new FakeSvc("b", "main", false));
+    const app = await makeApp(r);
+    const res = await app.inject({ method: "GET", url: "/services" });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      data: Array<{ result: { ok: boolean; error?: unknown } }>;
+    };
+    expect(body.data[0]!.result).toEqual({
+      ok: false,
+      error: { code: "UNAVAILABLE", message: "down" },
+    });
+    await app.close();
+  });
+
   it("GET /services/:kind/health returns 404 for unknown kind", async () => {
     const app = await makeApp(new ServiceRegistry());
     const res = await app.inject({
