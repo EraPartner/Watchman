@@ -35,7 +35,7 @@ Two-tier health with inline parallel probe:
 
 ## Configuration
 
-Configuration lives in the **DuckDB config store** — manage via the Settings UI or the `/config` API. `MACMINI_*` environment variables are **legacy**: they were imported once on first boot and are now ignored (see [[docs/adr/015-config-store|ADR-015]]).
+Configuration lives in the **DuckDB config store** — manage via the Settings UI or the `/config` API. `MACMINI_*` environment variables are **legacy**: they were imported once on first boot and are now ignored (see [[docs/adr/015-ui-driven-service-configuration|ADR-015]]).
 
 ### Mac Mini instance fields (`kind: macMini`)
 

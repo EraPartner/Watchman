@@ -1,14 +1,17 @@
 ---
 title: useBackendReachable Hook
 type: component
-status: active
-date: 2026-04-20
+status: superseded
+date: 2026-10-21
 tags: [hook, frontend, split-deploy, reachability, health-check, polling]
 description: React hook that monitors Raspberry Pi backend reachability via periodic polling of /meta/health endpoint
 aliases: [backend reachable hook, reachability hook]
 ---
 
 # useBackendReachable Hook
+
+> [!warning] Superseded: removed from the code
+> `useBackendReachable.ts` was removed with the split deploy (commit `f6462b4`, [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]). This page is kept as history.
 
 > [!abstract] Overview
 > The `useBackendReachable` hook monitors the health of a remote Fastify backend (typically on a Raspberry Pi in split-deploy mode) by polling the `/meta/health` endpoint at regular intervals. It detects when the backend becomes unreachable and provides methods to manually retry or reconfigure the URL.

@@ -2,7 +2,7 @@
 title: Bitcoin Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -40,7 +40,7 @@ If host is unreachable, service tier is skipped.
 
 ## Configuration
 
-Configure via the Settings UI or `/config` API (DuckDB config store). Legacy `BITCOIN_*` environment variables are imported once on first boot then ignored (see [[docs/adr/015-config-store|ADR-015]]).
+Configure via the Settings UI or `/config` API (DuckDB config store). Legacy `BITCOIN_*` environment variables are imported once on first boot then ignored (see [[docs/adr/015-ui-driven-service-configuration|ADR-015]]).
 
 | Field                  | Type     | Required | Default                 | Secret | Description                                                            |
 | ---------------------- | -------- | -------- | ----------------------- | ------ | ---------------------------------------------------------------------- |
@@ -55,6 +55,13 @@ Configure via the Settings UI or `/config` API (DuckDB config store). Legacy `BI
 | `cacheTtlMs`           | number   |          | `10000`                 |        | Stats cache TTL (ms)                                                   |
 
 The ICMP ping target is derived from the hostname in `rpcUrl` — there is no separate host field.
+
+> [!warning] Cookie auth is not supported
+> Watchman sends HTTP Basic auth from `rpcUser` / `rpcPassword` only. It cannot read Bitcoin
+> Core's `.cookie` file. Set `rpcauth=` (or `rpcuser=` / `rpcpassword=`) in `bitcoin.conf` and
+> enter the same user and password here. Without them, RPC calls fail and stats are unavailable
+> (field help in `apps/backend/src/config/schemas/fieldMetadata.ts`). Watchman only calls read
+> RPCs (listed under Stats below).
 
 ## Endpoints
 
@@ -214,7 +221,7 @@ Removed in Phase 3. Replaced by `ServiceTile` with `bitcoinRenderer` from the re
 ## Related
 
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 Phase 0a — Two-Tier Health]]
-- [[docs/adr/020-two-tier-health-and-monitoring-upgrades|ADR-020 — ZMQ and Real-Time Metrics (BT2)]]
+- [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 — Two-Tier Health + Monitoring Upgrades]]
 - [[docs/architecture/backend-architecture#zmq-subscriber-i6---real-time-zeromq-subscriptions|Backend Architecture — ZMQ Infra Primitive]]
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/integrations/tor|Tor Integration]]

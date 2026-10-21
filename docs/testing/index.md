@@ -2,9 +2,9 @@
 title: Testing
 type: index
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [testing, index, coverage, vitest, phase-3, phase-4, e2e, playwright, smoke-tests, renderers, setup-wizard, ci, coverage-reporting, dependabot]
-description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing, Phase 3/4 frontend test suite expansion and E2E CI enforcement, vitest-coverage-report-action CI integration
+description: Index of all testing documentation for the Watchman project — service patterns, fake TCP server, protocol testing, Phase 3/4 frontend test suite expansion, local Playwright E2E, vitest-coverage-report-action CI integration
 aliases: [testing index, tests, test docs, service testing, protocol testing]
 ---
 
@@ -64,12 +64,18 @@ npx vitest run --testNamePattern="testName"
 
 - **API endpoint testing** - Verify route behavior and response shapes
 - **Service integration testing** - Test service class behavior with mocked HTTP
-- **Middleware testing** - Verify auth, CSRF, rate limiting behavior
-- **Authentication flow** - Test login, token validation, session management
-- **Core utility testing** - Validate backend helpers used by routes and middleware
-- **Infrastructure testing** - Cover request validation, logging, and IP parsing helpers
+- **Plugin and hook testing** - Origin policy, request timeout and error handler
+  (`transport/originPolicy.test.ts`, `transport/http/plugins/*.test.ts`)
+- **Core utility testing** - Validate `core/` helpers (abort, clock, errors, event bus, logger redaction)
+- **Infrastructure testing** - Transport clients, cache, circuit breaker, poller and DuckDB pool under `infra/`
+
+There is no auth, CSRF or rate-limiting code to test (ADR-017, ADR-025).
 
 ### Recent frontend coverage additions
+
+> [!warning] Partly historical
+> `ServiceLink.test.tsx`, `lib/url.test.ts` and `dashboardStatus.test.ts` below, and the `/login`
+> route test in `App.test.tsx`, were removed with their code. The other files still exist.
 
 - [[apps/frontend/src/components/ServiceLink.test.tsx]] (new)
   - validates `hostOnly` rendering behavior in [[apps/frontend/src/components/ServiceLink.tsx]]
@@ -140,45 +146,49 @@ npx vitest run --testNamePattern="testName"
 
 ## Test Structure
 
+Tests are colocated with the code they cover. Selected files on `main` (2026-10-21):
+
 ```
 apps/frontend/
 ├── src/
-│   ├── lib/
-│   │   ├── utils.test.ts              # Utility function tests
-│   │   ├── apiResponse.test.ts        # API response envelope/error helper tests
-│   │   ├── env.test.ts                # Environment variable validation and required lookups
-│   │   ├── queryKeys.test.ts          # React Query key construction and instance-aware key helpers
-│   │   ├── backendUrl.test.ts         # Backend/base URL and WebSocket URL derivation behavior
-│   │   ├── logger.test.ts             # Frontend logger redaction + metadata behavior
-│   │   └── url.test.ts                # URL display/href/ping helpers and safe external open behavior
+│   ├── App.test.tsx                   # Route composition and retry policy
+│   ├── lib/                           # utils, apiResponse, env, queryKeys, backendUrl, logger,
+│   │                                  # metricHistory, wsEventBus tests
 │   ├── components/
-│   │   ├── ErrorBoundary.test.tsx     # Error boundary rendering/recovery behavior
-│   │   ├── ServiceLink.test.tsx       # hostOnly rendering + click-through behavior
-│   │   └── dashboard/
-│   │       ├── dashboardData.test.ts       # Dashboard data helper normalization/chunking/instance tile behavior
-│   │       └── dashboardStatus.test.ts     # Dashboard status mapping and aggregate counter derivation behavior
-│   ├── hooks/
-│   │   ├── useWebSocket.test.tsx      # WebSocket message handling, batched invalidation dedup, alert/unknown-message behavior
-│   │   ├── use-mobile.test.tsx        # Mobile breakpoint updates and media-query listener cleanup behavior
-│   │   ├── useEnabledServices.test.ts # Enabled service list derivation
-│   │   ├── usePingServiceCard.test.ts # Service ping card behavior
-│   │   └── useServiceInstances.test.ts # Service instance resolution behavior
-│   ├── App.test.tsx                   # Top-level app route rendering behavior
-│   └── pages/
-│       └── NotFound.test.tsx          # 404 page content and dashboard-link behavior
-apps/backend/src/                      # TypeScript tests colocated with source
+│   │   ├── ErrorBoundary.test.tsx
+│   │   ├── smoke.test.tsx             # Primitive smoke tests
+│   │   ├── dashboard/                 # BentoDashboard smoke, dashboardData
+│   │   ├── detail/                    # ServiceDetailSheet (+ rename), detail panels smoke
+│   │   ├── primitives/StatusDot.test.tsx
+│   │   └── tile/ServiceTile.test.tsx
+│   ├── hooks/                         # useWebSocket, useWebSocketEvent, useServiceHealth,
+│   │                                  # useAggregatedHealth, useBackendMetrics,
+│   │                                  # useServiceInstances, useSetupDismissal, use-mobile
+│   ├── pages/
+│   │   ├── NotFound.test.tsx
+│   │   ├── Settings/                  # Profiles, ServiceEditor, useConfigQueries, settings smoke
+│   │   └── setup/                     # ProgressRail, kindCategories, steps smoke
+│   ├── providers/WebSocketProvider.test.tsx
+│   └── services/                      # apiClient core/endpoints, configApi, profilesApi, renderers
+└── tests/e2e/smoke.spec.ts            # Playwright (local only, not in CI)
+apps/backend/src/
+├── core/                              # abort, clock, errors, eventBus, logger, metrics, result, ttlMemo
+├── application/                       # ServiceLifecycle, SnapshotCache, NetworkWatcher
+├── bootstrap/                         # registerServices, shutdown
+├── config/                            # env, field metadata, ConfigStore, ProfileStore, encryption, envMigrator
 ├── domain/
-│   ├── BaseService.test.ts            # BaseService contract and lifecycle
-│   ├── ServiceRegistry.test.ts        # Registry CRUD operations
-│   └── services/                      # Per-service unit tests (14 services)
-├── infra/
-│   ├── cache/swr.test.ts              # SWR cache TTL and invalidation
-│   ├── circuitBreaker/breaker.test.ts # Circuit breaker state machine
-│   ├── scheduler/poller.test.ts       # BackgroundPoller orchestration
-│   └── timeseries/timeseries.test.ts  # DuckDB time-series query behavior
+│   ├── BaseService.test.ts
+│   ├── ServiceRegistry.test.ts
+│   └── services/                      # One test file per service kind (13 kinds)
+├── infra/                             # http, sse, ssh, snmp, tor, zmq, roon, net, cache,
+│                                      # circuitBreaker, scheduler/poller, db/DuckDbPool
 └── transport/
+    ├── originPolicy.test.ts
     ├── http/http.test.ts              # Fastify HTTP route behavior
+    ├── http/plugins/                  # errorHandler, requestTimeout
+    ├── http/routes/                   # config, profiles, setup
     └── ws/ws.test.ts                  # WebSocket plugin behavior
+apps/desktop/test/                     # node:test (not in CI)
 ```
 
 ## Phase 3–4 Frontend Test Suite Completion (2026-05-13)
@@ -187,17 +197,17 @@ apps/backend/src/                      # TypeScript tests colocated with source
 
 **New test files (9 files, 150+ new tests):**
 
-| File                                                     | Coverage                                                                                   |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/services/renderers/renderers.test.ts`              | All 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, etc.)   |
-| `src/pages/setup/kindCategories.test.ts`                | `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` pure unit tests                     |
-| `src/pages/setup/steps/steps.smoke.test.tsx`            | All 5 setup steps + `SetupWizard` integration (jsdom)                                    |
-| `src/components/dashboard/BentoDashboard.smoke.test.tsx` | Empty state, heading, labels, interactive buttons (jsdom)                                |
-| `src/components/detail/detail.smoke.test.tsx`           | ChartsPanel, ConfigPanel (boolean/object configs, test-conn click), RawStatsPanel (jsdom) |
-| `src/providers/WebSocketProvider.test.tsx`              | `WebSocketProvider` and `useWebSocketContext` hook (with/without provider jsdom)         |
-| `src/lib/metricHistory.hook.test.tsx`                   | `useMetricSeries` hook (empty, pre-recorded, re-renders) (jsdom)                         |
-| `src/components/smoke.test.tsx` (expanded)              | Toggle, ToggleGroup, Popover, Sheet (all variants) (jsdom)                               |
-| `src/lib/apiResponse.test.ts` (expanded)                | Nested error objects, v2 envelope cases (node)                                           |
+| File                                                     | Coverage                                                                                  |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `src/services/renderers/renderers.test.ts`               | All 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, etc.)    |
+| `src/pages/setup/kindCategories.test.ts`                 | `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` pure unit tests                      |
+| `src/pages/setup/steps/steps.smoke.test.tsx`             | All 5 setup steps + `SetupWizard` integration (jsdom)                                     |
+| `src/components/dashboard/BentoDashboard.smoke.test.tsx` | Empty state, heading, labels, interactive buttons (jsdom)                                 |
+| `src/components/detail/detail.smoke.test.tsx`            | ChartsPanel, ConfigPanel (boolean/object configs, test-conn click), RawStatsPanel (jsdom) |
+| `src/providers/WebSocketProvider.test.tsx`               | `WebSocketProvider` and `useWebSocketContext` hook (with/without provider jsdom)          |
+| `src/lib/metricHistory.hook.test.tsx`                    | `useMetricSeries` hook (empty, pre-recorded, re-renders) (jsdom)                          |
+| `src/components/smoke.test.tsx` (expanded)               | Toggle, ToggleGroup, Popover, Sheet (all variants) (jsdom)                                |
+| `src/lib/apiResponse.test.ts` (expanded)                 | Nested error objects, v2 envelope cases (node)                                            |
 
 **Frontend coverage targets (vitest.config.ts):**
 ```typescript
@@ -217,6 +227,12 @@ thresholds: {
 - **Test count:** 450 tests across 45 test files (all passing) ✅
 
 ### Phase 4: CI/E2E Enforcement
+
+> [!warning] No longer current
+> `.github/workflows/ci.yml` on `main` has no `test-e2e` job, and E2E is not a required check. Run
+> the Playwright suite locally with `npm run test:e2e`. The Phase 3 thresholds above were also
+> lowered: frontend lines 79%, statements 77%, functions 65%, branches 64%
+> (`apps/frontend/vitest.config.ts`).
 
 **CI workflow additions (.github/workflows/ci.yml):**
 
@@ -318,12 +334,12 @@ targets.
 
 Test configuration in [[apps/backend/vitest.config.ts]]:
 
-| Metric      | Threshold | Coverage (2026-10-20) | Status |
-| ----------- | --------- | --------------------- | ------ |
-| Lines       | 80%       | 91.18%                | ✅ Pass |
-| Branches    | 72%       | 74.16%                | ✅ Pass |
-| Functions   | 80%       | 85.05%                | ✅ Pass |
-| Statements  | 80%       | 87.9%                 | ✅ Pass |
+| Metric     | Threshold | Coverage (2026-10-20) | Status  |
+| ---------- | --------- | --------------------- | ------- |
+| Lines      | 80%       | 91.18%                | ✅ Pass |
+| Branches   | 72%       | 74.16%                | ✅ Pass |
+| Functions  | 80%       | 85.05%                | ✅ Pass |
+| Statements | 80%       | 87.9%                 | ✅ Pass |
 
 Frontend thresholds in [[apps/frontend/vitest.config.ts]]: lines 79% (80.93%), statements 77%
 (78.51%), functions 65% (71.69%), branches 64% (66.04%).
@@ -342,18 +358,18 @@ The backend branch threshold was originally 75% (not 80%) and is now a 72% maint
 
 ## Coverage Status
 
-| Area               | Status         | Notes                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Utility functions  | ✅ Improved    | Frontend lib aggregate improved materially with expanded `logger.test.ts` and `backendUrl.test.ts`; dashboard helpers now have targeted coverage; extended renderers coverage for all 11 service types                                                                                                                                                            |
-| React components   | ✅ Phase 3     | **Phase 3 complete:** BentoDashboard, detail panels (ChartsPanel, ConfigPanel, RawStatsPanel), setup wizard (WelcomeStep, KindPickerStep, ReviewStep, ConfigureStep), UI components (Toggle, ToggleGroup, Popover, Sheet)                                                                                                                                         |
-| Custom hooks       | ✅ Phase 3     | [[apps/frontend/src/hooks/useWebSocket.test.tsx]] full coverage; [[apps/frontend/src/lib/metricHistory.hook.test.tsx]] new; [[apps/frontend/src/providers/WebSocketProvider.test.tsx]] new; comprehensive invalidation, alert routing, message handling                                                                                                            |
-| API response utils | ✅ Covered     | New [[apps/frontend/src/lib/apiResponse.test.ts]] covers envelope detection, unwrapping, error extraction, nested errors, v2 envelope cases                                                                                                                                                                                                                       |
-| API client         | ⚠️ Partial     | `ApiClient.test.ts` covers wrapper surface/singleton; `endpoints.test.ts` expanded to 11 tests; `endpoints.ts` at 86.58% lines, 96.66% branches, 71.79% functions                                                                                                                                                                                                 |
-| Renderers          | ✅ Phase 3     | [[apps/frontend/src/services/renderers/renderers.test.ts]] covers ALL 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + factory and metrics helper                                                                                                                                             |
-| Setup pages        | ✅ Phase 3     | [[apps/frontend/src/pages/setup/kindCategories.test.ts]] kind constants; [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]] all setup steps integration                                                                                                                                                                                                |
-| Backend services   | ✅ Covered     | All 14 service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                                                                                                                                  |
-| Backend core/infra | ✅ Passing     | 2026-10-20: 91.18% lines, 74.16% branches, 85.05% functions, 87.9% statements. All thresholds passing. I/O adapters intentionally excluded.                                                                                                                                                                                                                        |
-| E2E / Playwright   | ✅ Phase 4     | **Phase 4 complete:** CI `test-e2e` job runs Playwright smoke tests, gated on `build`, required by `ci-complete` for branch protection                                                                                                                                                                                                                            |
+| Area               | Status       | Notes                                                                                                                                                                                                                                                   |
+| ------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Utility functions  | ✅ Improved  | Frontend lib aggregate improved materially with expanded `logger.test.ts` and `backendUrl.test.ts`; dashboard helpers now have targeted coverage; extended renderers coverage for all 11 service types                                                  |
+| React components   | ✅ Phase 3   | **Phase 3 complete:** BentoDashboard, detail panels (ChartsPanel, ConfigPanel, RawStatsPanel), setup wizard (WelcomeStep, KindPickerStep, ReviewStep, ConfigureStep), UI components (Toggle, ToggleGroup, Popover, Sheet)                               |
+| Custom hooks       | ✅ Phase 3   | [[apps/frontend/src/hooks/useWebSocket.test.tsx]] full coverage; [[apps/frontend/src/lib/metricHistory.hook.test.tsx]] new; [[apps/frontend/src/providers/WebSocketProvider.test.tsx]] new; comprehensive invalidation, alert routing, message handling |
+| API response utils | ✅ Covered   | New [[apps/frontend/src/lib/apiResponse.test.ts]] covers envelope detection, unwrapping, error extraction, nested errors, v2 envelope cases                                                                                                             |
+| API client         | ⚠️ Partial    | `ApiClient.test.ts` covers wrapper surface/singleton; `endpoints.test.ts` expanded to 11 tests; `endpoints.ts` at 86.58% lines, 96.66% branches, 71.79% functions                                                                                       |
+| Renderers          | ✅ Phase 3   | [[apps/frontend/src/services/renderers/renderers.test.ts]] covers ALL 11 renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + factory and metrics helper                                     |
+| Setup pages        | ✅ Phase 3   | [[apps/frontend/src/pages/setup/kindCategories.test.ts]] kind constants; [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]] all setup steps integration                                                                                       |
+| Backend services   | ✅ Covered   | All 13 service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                        |
+| Backend core/infra | ✅ Passing   | 2026-10-20: 91.18% lines, 74.16% branches, 85.05% functions, 87.9% statements. All thresholds passing. I/O adapters intentionally excluded.                                                                                                             |
+| E2E / Playwright   | ⚠️ Local only | Playwright smoke suite in `apps/frontend/tests/e2e/`; run with `npm run test:e2e`. Not run in CI (`.github/workflows/ci.yml` has no E2E job)                                                                                                            |
 
 ## Related
 

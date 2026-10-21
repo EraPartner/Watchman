@@ -2,7 +2,7 @@
 title: Configuration API Reference
 type: api
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags: [api, configuration, setup, audit, backup, export, import, endpoints]
 description: REST API reference for runtime service configuration endpoints - CRUD operations, test connection, backup/restore, audit log
 aliases: [config api, configuration endpoints, setup api]
@@ -25,7 +25,7 @@ aliases: [config api, configuration endpoints, setup api]
 
 #### `GET /setup/status`
 
-Check setup wizard state — no auth required.
+Check setup wizard state (`apps/backend/src/transport/http/routes/setup.ts`; `SetupStatus` in `openapi.yaml`).
 
 **Response:**
 
@@ -33,8 +33,7 @@ Check setup wizard state — no auth required.
 {
   "data": {
     "needsSetup": false,
-    "hasServices": true,
-    "adminConfigured": true
+    "serviceCount": 3
   }
 }
 ```
@@ -44,8 +43,7 @@ Check setup wizard state — no auth required.
 ```typescript
 {
   needsSetup: boolean; // true if no services configured yet
-  hasServices: boolean; // true if at least one service exists
-  adminConfigured: boolean; // true if AUTH_USERNAME is set in env
+  serviceCount: number; // number of stored service instances
 }
 ```
 

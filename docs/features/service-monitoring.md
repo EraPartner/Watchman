@@ -2,7 +2,7 @@
 title: Service Monitoring
 type: feature
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [feature, monitoring, backend, frontend, services, two-tier, health-check, icmp, timeseries, phase-0a, status-dots]
 description: Core service monitoring feature - two-tier health checks (ICMP + protocol) with persistence to time-series store, real-time WebSocket updates, and frontend two-tier status rendering (Phase 0a F1 + F2)
 aliases: [monitoring, health checks, service status, two-tier health]
@@ -52,10 +52,11 @@ The background poller (`createBackgroundPoller` in `apps/backend/src/infra/sched
 
 1. Tracks services that `ServiceLifecycle` brings up
 2. Polls each service on its `pollPolicy` (defaults: health 10 s, stats 30 s, 10% jitter)
-3. Emits `service.health.updated` and `service.stats.updated` events on status change
+3. Emits `service.health.updated` / `service.stats.updated` after each successful poll, or `service.error` on failure
 4. Broadcaster publishes events (including snapshots) to WebSocket clients
-5. TimeSeriesWriter persists both stats and health metrics to DuckDB (Phase 0a+)
-6. Applies circuit breaker pattern for fault tolerance
+5. Applies circuit breaker pattern for fault tolerance
+
+Metrics are not persisted: the time-series writer was removed in [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]. Sparklines use an in-memory history in the browser (`apps/frontend/src/lib/metricHistory.ts`).
 
 ### Health Check Flow
 

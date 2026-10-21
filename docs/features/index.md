@@ -2,7 +2,7 @@
 title: Features
 type: index
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags: [feature, index]
 description: Index of all feature documentation for the Watchman project
 aliases: [features index, feature docs]
@@ -72,7 +72,7 @@ package "Service Profiles" as PR {
 }
 
 note right of SM
-  14+ service types
+  13 service kinds
   Standard interface
 end note
 

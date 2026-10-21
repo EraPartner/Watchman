@@ -1,14 +1,17 @@
 ---
 title: "Hook: useEnabledServices"
 type: component
-status: active
-date: 2026-04-09
+status: superseded
+date: 2026-10-21
 tags: [hook, frontend, react, config, feature-flag]
 description: React Query hook for determining which services are enabled via environment configuration
 aliases: [use enabled services, enabled services hook, service config]
 ---
 
 # Hook: useEnabledServices
+
+> [!warning] Superseded: removed from the code
+> `useEnabledServices.ts` was removed as dead code (commit `8f289c2`); `useFrontendConfig.ts` went earlier (commit `6abf46b`). The dashboard reads configured instances with [[docs/components/use-service-instances|useServiceInstances]]. This page is kept as history.
 
 > [!abstract] Overview
 > A React Query hook that fetches the frontend configuration and provides an `isServiceEnabled()` helper to check if individual services are active.

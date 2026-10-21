@@ -28,7 +28,8 @@ dependency audit, and documentation aligned with the code.
 - Backups include profiles (#127). On import, each profile maps to a local one
   by id, then by name; only unmatched profiles are created.
 - Desktop: native Electron experience, runtime hardening, and a distribution
-  layer (ad-hoc signed macOS `.dmg`, arm64 + x64).
+  layer (ad-hoc signed macOS `.dmg` and `.zip`, Apple Silicon / arm64 only).
+  Closing the window on macOS keeps the app and its backend running in the Dock.
 - Per-location service **profiles** with automatic LAN-based switching.
 - Backend resilience infra: `SnapshotCache`, `ttlMemo`, `guardedService`, and an
   SSE client, wired into the application layer.
@@ -79,6 +80,33 @@ dependency audit, and documentation aligned with the code.
   backend runs in the user-data folder; "Retry" waits for a start already in
   progress.
 
+- Integrations (#122, #123): Bitcoin reads `networkHashPs` from `getmininginfo`
+  (it was always 0); Alby Hub reads `/api/info` and `/api/apps` in their real
+  shapes and fetches protected endpoints only with a token from
+  `POST /api/unlock` (a `readonly` JWT, not a static key); IPFS reads goroutines,
+  CPU count and DHT peers from their nested fields; Tor matches its relay by
+  exact nickname or fingerprint and reports `null` bandwidth when no BW event is
+  live; AdGuard reports processing time in ms and no longer counts safe-search
+  rewrites as blocks; qBittorrent queries `log/main` with its documented flags;
+  Hue honours SSE delete events; Homebridge reads nested `os`/`time` fields.
+  Bitcoin Core cookie auth is not supported: set `rpcauth` (or
+  `rpcuser`/`rpcpassword`) in `bitcoin.conf`.
+- Integrations (#126): Synology CPU, memory and network come from the correct
+  SNMP OIDs; Mac mini parses BSD uptime formats and reads the APFS Data volume;
+  Raspberry Pi uptime no longer comes from the wrapping pigpio tick; one failing
+  router SNMP walk no longer drops every SNMP metric.
+- Transport clients (#125): SNMP Counter64 decoding, SSE UTF-8 across chunks,
+  SSH pool reconnect and timeouts, ping loss parsing, Roon reconnect with
+  backoff, ZMQ handler errors, JWT 401 retry and DSM re-login on error 119.
+- Backend (#112, #114, #117, #119): late poll results for a removed service are
+  dropped; concurrent DuckDB pool opens respect the cap; every service secret
+  field is redacted in logs; a corrupt scrypt salt file fails instead of being
+  replaced; shutdown closes the server before the database and exits after
+  10 s if a step hangs; `BACKEND_V2_PORT` above 65535 is rejected; the OpenAPI
+  spec matches the routes; a streamed response is no longer cut by a 504.
+- Desktop (#120): a hung backend is killed with `SIGKILL` after 2 s; a backend
+  still starting is stopped on quit; reopening the window after a failed start
+  retries.
 - Editing a service: saved secrets start blank ("leave blank to keep") instead
   of holding the redaction marker `***`, which typing appended to and saved as
   `***<new secret>`.

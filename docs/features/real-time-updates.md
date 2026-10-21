@@ -40,7 +40,8 @@ Validates the WebSocket upgrade request. Uses the **shared origin allow-list** f
 Manages active client connections:
 
 - Track each connection with unique ID
-- Track IP address per connection (for rate limiting, security alerts)
+- Track IP address per connection and cap open connections at 10 per IP (`maxConnectionsPerIp`)
+- Upgrade attempts are capped separately at 30 per IP per minute by `HandshakeLimiter.ts`; over the cap the route answers 429 before the upgrade
 - Clean up disconnected clients (idempotent handling)
 - Prevent double-processing on close/error
 
@@ -131,9 +132,7 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
   - metrics invalidation and `connection` message toast behavior
   - max reconnect attempts: one failure toast, then retries continue at the 30s cap
   - cleanup stability for singleton WebSocket state across tests
-- Frontend notification-state coverage now also includes `apps/frontend/src/hooks/use-toast.test.tsx` for `apps/frontend/src/hooks/use-toast.ts`:
-  - reducer limit and dismiss-all behavior
-  - hook lifecycle coverage for add/update/dismiss/remove transitions
+- Toasts use `sonner` (`toast.error` / `toast.warning` / `toast.info` in `useWebSocket.ts`; `<Toaster>` in `App.tsx`). The earlier `hooks/use-toast.ts` reducer and its test were removed.
 
 ## PlantUML Diagrams
 

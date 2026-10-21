@@ -126,7 +126,7 @@ Two-tier health via `withHostPing` helper:
 
 ## Configuration
 
-Service instances are configured via the Settings UI or the `/config` API — not environment variables. Legacy `SYNOLOGY_*` env vars are imported once on first boot to seed the config store, then ignored thereafter (see [[docs/adr/015-config-store|ADR-015]]).
+Service instances are configured via the Settings UI or the `/config` API — not environment variables. Legacy `SYNOLOGY_*` env vars are imported once on first boot to seed the config store, then ignored thereafter (see [[docs/adr/015-ui-driven-service-configuration|ADR-015]]).
 
 ### Fields
 

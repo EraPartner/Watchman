@@ -2,7 +2,7 @@
 title: Tor Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -33,7 +33,7 @@ aliases: [tor, tor relay, onion, tor proxy, tor control port]
 
 ## Configuration
 
-Configure via the Settings UI or the `/config` API (DuckDB config store). Environment variables (`TOR_*`) are legacy — imported once on first boot then ignored (see [[docs/adr/015-service-config-migration|ADR-015]]).
+Configure via the Settings UI or the `/config` API (DuckDB config store). Environment variables (`TOR_*`) are legacy — imported once on first boot then ignored (see [[docs/adr/015-ui-driven-service-configuration|ADR-015]]).
 
 ### Service-specific fields
 
@@ -112,6 +112,10 @@ This hierarchy allows secure deployment where the control auth cookie is stored 
 - SIGNAL command (Task B4): `SIGNAL name\r\n`
   - Valid signals: `NEWNYM`, `SHUTDOWN`, `DUMP_STATS`, `DEBUG`, `SIGTERM`, `RELOAD`, `REOPEN_LOGS`, `CLEARDNSCACHE`
   - Response: `250 OK` or `5xx` error
+  - The client exposes `signal()`, but `TorService` never calls it: polling only sends
+    `GETINFO` commands and the `SETEVENTS BW` subscription (`TorService.ts`,
+    `eventSubscription.ts`), so Watchman stays read-only
+    toward Tor ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]).
 
 **Circuit Established Check**:
 
@@ -254,7 +258,7 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
   - `enrich()` — Private helper: best-effort Onionoo enrichment returning country, consensusWeight, asName, consensusWeightFraction; swallows errors (B7)
   - `searchRelay()` — Onionoo HTTP lookup (shared between Onionoo path and B7 enrichment). Accepts only an exact nickname (case-insensitive) or exact fingerprint (optional `$`) match from the results; Onionoo's partial matches are other relays and yield not found. An empty `relayNickname` never queries Onionoo.
 
-- `TorManager` — Tor proxy management (`apps/backend/src/domain/services/tor/TorManager.ts`)
+- `TorManager` — spawns and stops a local `tor` process (`apps/backend/src/infra/tor/torManager.ts`). Kept for other uses; the backend does not import it, so Watchman never starts or stops Tor.
 
 ### TorService Methods (ControlPort Path, Phase 0b+ through Task B5)
 

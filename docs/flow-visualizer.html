@@ -1639,8 +1639,8 @@
               {
                 "from": "fe.hooks",
                 "to": "fe.api",
-                "payload": "GET /api/services/{kind}/health?instance={id} + /stats",
-                "annotation": "ApiClient fires both requests in parallel."
+                "payload": "GET /services/{kind}/health?instance={id} + /stats",
+                "annotation": "ApiClient fires both requests in parallel. Routes are root-mounted (no /api prefix)."
               },
               {
                 "from": "fe.api",
@@ -2000,49 +2000,49 @@
             "id": "hue-pair",
             "name": "Pair a Philips Hue bridge",
             "category": "Setup wizard",
-            "summary": "User puts bridge in pairing mode → POST /setup/philips-bridge/pair → returns the developer username.",
+            "summary": "User presses the bridge's link button → clicks 'Pair with bridge' → POST /setup/philips-bridge/pair → the form gets applicationKey + certHash.",
             "steps": [
               {
                 "from": "browser",
                 "to": "fe.setup",
-                "payload": "press bridge button · click 'Pair'",
-                "annotation": "Wizard prompts the user to press the physical link button before submitting."
+                "payload": "press bridge link button · click 'Pair with bridge'",
+                "annotation": "The button is in ServiceEditor (apps/frontend/src/pages/Settings/ServiceEditor.tsx) when the kind is philipsBridge; it needs the host field first."
               },
               {
                 "from": "fe.setup",
                 "to": "fe.api",
-                "payload": "POST /setup/philips-bridge/pair { host, timeoutMs }",
-                "annotation": ""
+                "payload": "POST /setup/philips-bridge/pair { host }",
+                "annotation": "usePairPhilipsBridge mutation; the result fills applicationKey and certHash into the form, which the user then saves."
               },
               {
                 "from": "fe.api",
                 "to": "be.routes.setup",
-                "payload": "validated body",
-                "annotation": "ValidationError if host is missing or malformed."
+                "payload": "validated body (pairBodySchema)",
+                "annotation": "apps/backend/src/transport/http/routes/setup.ts validates host and caps timeoutMs; a bad body is a 400 ValidationError."
               },
               {
                 "from": "be.routes.setup",
                 "to": "inf.http",
-                "payload": "pairBridge(host, http, timeoutMs)",
-                "annotation": "Hue pairing uses the legacy /api endpoint with `{devicetype: 'watchman#…'}`; loops until the button is pressed or timeout."
+                "payload": "pairBridge(host, { probeCertHash, pinned client })",
+                "annotation": "apps/backend/src/domain/services/philipsBridge/huePairing.ts reads the bridge's TLS cert fingerprint first, then pairs over a client pinned to it (trust on first use)."
               },
               {
                 "from": "inf.http",
                 "to": "ext.hue",
-                "payload": "POST http://{host}/api {devicetype}",
-                "annotation": "Bridge returns `[{success:{username:…}}]` once the link button has been pressed."
+                "payload": "POST https://{host}/api { devicetype: 'watchman#host', generateclientkey: true }",
+                "annotation": "One-time setup write: the bridge creates an app key. Polling stays read-only (ADR-032)."
               },
               {
                 "from": "ext.hue",
                 "to": "be.routes.setup",
-                "payload": "{ username }",
-                "annotation": "huePairing maps Hue errors into UnavailableError so the wizard can show a friendly retry hint."
+                "payload": "[{ success: { username } }] or link-button error",
+                "annotation": "A 'link button not pressed' reply maps to LINK_BUTTON_NOT_PRESSED (400) so the form can ask the user to press it and retry."
               },
               {
                 "from": "be.routes.setup",
                 "to": "fe.api",
-                "payload": "{ data: { username } }",
-                "annotation": "Wizard stores the username as the Hue service secret and continues with cert pinning setup."
+                "payload": "{ data: { applicationKey, certHash } }",
+                "annotation": "applicationKey is stored encrypted as the Hue secret; certHash pins the bridge cert for every later poll."
               }
             ]
           },
@@ -2062,13 +2062,13 @@
                 "from": "fe.setup",
                 "to": "fe.api",
                 "payload": "GET /config/export",
-                "annotation": ""
+                "annotation": "Settings → Backup & Restore (apps/frontend/src/pages/Settings/BackupRestore.tsx) calls useExportConfig()."
               },
               {
                 "from": "fe.api",
                 "to": "be.routes.cfg",
-                "payload": "stream JSON envelope",
-                "annotation": ""
+                "payload": "GET request, JSON bundle reply",
+                "annotation": "The route in apps/backend/src/transport/http/routes/config.ts returns the bundle with a Content-Disposition attachment header."
               },
               {
                 "from": "be.routes.cfg",
@@ -2079,7 +2079,7 @@
               {
                 "from": "be.routes.cfg",
                 "to": "fe.api",
-                "payload": "watchman-config-export.json",
+                "payload": "watchman-config-YYYY-MM-DD.json",
                 "annotation": "Frontend triggers a browser download via Blob URL."
               },
               {
@@ -2092,19 +2092,19 @@
                 "from": "fe.setup",
                 "to": "fe.api",
                 "payload": "POST /config/import (JSON body)",
-                "annotation": ""
+                "annotation": "useImportConfig() posts the parsed file; a bad bundle returns 400 VALIDATION."
               },
               {
                 "from": "fe.api",
                 "to": "be.routes.cfg",
-                "payload": "ConfigStore.importAll(body)",
+                "payload": "ConfigStore.importBundle(body)",
                 "annotation": "Inserts missing services; existing ids are updated; conflicts are surfaced as ValidationError."
               },
               {
                 "from": "be.routes.cfg",
                 "to": "data.duckdb",
-                "payload": "INSERT / UPDATE stored_services + audit rows",
-                "annotation": ""
+                "payload": "INSERT / UPDATE app_service_instance + app_config_audit rows",
+                "annotation": "Profiles in the bundle map to local ones by id, then name; config writes and their audit rows commit together."
               },
               {
                 "from": "data.duckdb",
@@ -2130,18 +2130,18 @@
                 "from": "fe.setup",
                 "to": "fe.api",
                 "payload": "GET /config/audit?limit=100",
-                "annotation": ""
+                "annotation": "Settings → Audit (apps/frontend/src/pages/Settings/Audit.tsx)."
               },
               {
                 "from": "fe.api",
                 "to": "be.routes.cfg",
                 "payload": "validated limit",
-                "annotation": ""
+                "annotation": "limit is clamped to 1..1000; a missing or non-numeric value falls back to 100."
               },
               {
                 "from": "be.routes.cfg",
                 "to": "data.audit",
-                "payload": "ConfigStore.audit(limit)",
+                "payload": "ConfigStore.listAudit(limit)",
                 "annotation": "Returns the most recent N rows ordered desc; secret diffs are masked."
               },
               {
@@ -2198,7 +2198,7 @@
                 "from": "dom.bus",
                 "to": "dom.broadcaster",
                 "payload": "subscriber callback",
-                "annotation": ""
+                "annotation": "The Broadcaster subscribes to the bus once and fans events out to WebSocket clients."
               },
               {
                 "from": "dom.broadcaster",
@@ -2262,49 +2262,49 @@
             "id": "roon-zones",
             "name": "Roon zone & now-playing tracking (RN1/RN2)",
             "category": "Service-specific",
-            "summary": "RoonService keeps a WebSocket open to the Core; zone state and current track stream in continuously.",
+            "summary": "With useRoonApi on, RoonService keeps a Roon extension connection open; zone state streams into an in-memory map that each stats poll reads.",
             "steps": [
               {
                 "from": "app.lifecycle",
                 "to": "dom.base",
                 "payload": "create RoonService → svc.onStart()",
-                "annotation": "Roon WebSocket API requires a pairing token (stored as a secret in ConfigStore)."
+                "annotation": "Only when useRoonApi=true. Roon has no Watchman secret fields; the Core approves the extension once in Roon Settings → Extensions (one-time setup)."
               },
               {
                 "from": "dom.base",
                 "to": "inf.roon",
-                "payload": "roonConnect({ host, port, token })",
-                "annotation": "Auto-reconnect on disconnect; pending listeners queued during reconnect."
+                "payload": "roonConnect({ host, port: apiPort, extensionId, displayName })",
+                "annotation": "apps/backend/src/infra/roon/roonClientImpl.ts reconnects with backoff (5 s doubling to 60 s) after the Core connection drops."
               },
               {
                 "from": "inf.roon",
                 "to": "ext.roonsvr",
-                "payload": "ws://core:9100/api/socket",
-                "annotation": "Subscribes to zone + now-playing change topics."
+                "payload": "ws_connect to core:{apiPort} (default 9330)",
+                "annotation": "Registers as an extension that requires com.roonlabs.transport:2 and subscribes to zones; it only reads."
               },
               {
                 "from": "ext.roonsvr",
                 "to": "inf.roon",
-                "payload": "zone_changed / now_playing_changed messages",
-                "annotation": "Roon pushes deltas; service merges them into its internal zone map."
+                "payload": "zones subscription: Subscribed / Changed (zones_changed, zones_removed …)",
+                "annotation": "The client merges each message into its zone map; it is cleared while disconnected."
               },
               {
                 "from": "inf.roon",
                 "to": "dom.base",
-                "payload": "service updates its in-memory zones",
-                "annotation": ""
+                "payload": "handle.getZones() on each getStats()",
+                "annotation": "apps/backend/src/domain/services/roon/RoonService.ts derives zoneCount, activeZones and nowPlaying from the snapshot."
               },
               {
                 "from": "dom.base",
                 "to": "dom.bus",
-                "payload": "service.stats.updated { zones, nowPlaying }",
-                "annotation": ""
+                "payload": "stats result from the poller",
+                "annotation": "The normal poll cycle publishes it; no extra Roon polling is needed for zone data."
               },
               {
                 "from": "dom.bus",
                 "to": "fe.ws",
-                "payload": "→ Broadcaster",
-                "annotation": "Roon tile shows live zone state without polling Roon constantly."
+                "payload": "→ Broadcaster service_update",
+                "annotation": "The Roon tile shows zone and now-playing state from the latest stats."
               }
             ]
           },
@@ -2318,7 +2318,7 @@
                 "from": "dom.poller",
                 "to": "dom.base",
                 "payload": "tick → svc.checkHealth()",
-                "annotation": ""
+                "annotation": "The poller calls checkHealth on healthMs and getStats on statsMs (pollPolicy, default 10 s / 30 s)."
               },
               {
                 "from": "dom.base",
@@ -2348,7 +2348,7 @@
                 "from": "dom.base",
                 "to": "dom.bus",
                 "payload": "service.health.updated + service.stats.updated",
-                "annotation": ""
+                "annotation": "Results go through the bus to SnapshotCache and the WebSocket Broadcaster."
               }
             ]
           },
@@ -2386,7 +2386,7 @@
                 "from": "inf.snmp",
                 "to": "dom.base",
                 "payload": "interface stats + ARP + CPU + uptime",
-                "annotation": ""
+                "annotation": "Each SNMP walk is settled separately, so one failing walk no longer drops the other metrics (#126)."
               },
               {
                 "from": "dom.base",
@@ -2411,20 +2411,20 @@
               {
                 "from": "inf.http",
                 "to": "ext.synology",
-                "payload": "GET /webapi/auth.cgi  ·  SYNO.API.Auth login",
+                "payload": "POST /webapi/auth.cgi  ·  SYNO.API.Auth login (form body)",
                 "annotation": "Concurrent requests share one pending login promise (thundering-herd prevention)."
               },
               {
                 "from": "ext.synology",
                 "to": "inf.http",
                 "payload": "{ sid }",
-                "annotation": "Subsequent calls inject `_sid` and target /webapi/entry.cgi."
+                "annotation": "Subsequent calls send `_sid` in the POST form and target /webapi/entry.cgi."
               },
               {
                 "from": "inf.http",
                 "to": "ext.synology",
-                "payload": "GET /webapi/entry.cgi?api=SYNO.Storage.* + _sid",
-                "annotation": ""
+                "payload": "POST /webapi/entry.cgi  api=SYNO.* + _sid (form body)",
+                "annotation": "apps/backend/src/infra/synology/dsmClient.ts sends every parameter, credentials included, as a POST form, not in the URL."
               },
               {
                 "from": "ext.synology",
@@ -2455,8 +2455,8 @@
               {
                 "from": "inf.http",
                 "to": "ext.homebridge",
-                "payload": "GET /api/status  ·  Authorization: Bearer …",
-                "annotation": ""
+                "payload": "GET /api/status/{cpu,ram,uptime,homebridge}  ·  Authorization: Bearer …",
+                "annotation": "Read-only status endpoints (HomebridgeService.ts)."
               },
               {
                 "from": "ext.homebridge",
@@ -2526,7 +2526,7 @@
                 "from": "fe.api",
                 "to": "be.routes.metrics",
                 "payload": "route handler",
-                "annotation": ""
+                "annotation": "apps/backend/src/transport/http/routes/metrics.ts registers GET /metrics."
               },
               {
                 "from": "be.routes.metrics",
@@ -2564,25 +2564,25 @@
                 "from": "fe.dashboard",
                 "to": "fe.hooks",
                 "payload": "useServiceInstances('qbittorrent')",
-                "annotation": ""
+                "annotation": "BentoDashboard and ServiceTile read instances through useServiceInstances."
               },
               {
                 "from": "fe.hooks",
                 "to": "fe.api",
                 "payload": "GET /instances/qbittorrent",
-                "annotation": ""
+                "annotation": "Root-mounted route, no /api prefix."
               },
               {
                 "from": "fe.api",
                 "to": "be.routes.inst",
                 "payload": "route handler",
-                "annotation": ""
+                "annotation": "apps/backend/src/transport/http/routes/instances.ts handles GET /instances and /instances/:kind."
               },
               {
                 "from": "be.routes.inst",
                 "to": "app.listInst",
                 "payload": "listInstances.byKind('qbittorrent')",
-                "annotation": ""
+                "annotation": "Returns the registered instances of that kind."
               },
               {
                 "from": "app.listInst",

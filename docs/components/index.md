@@ -2,7 +2,7 @@
 title: Frontend Components
 type: index
 status: active
-date: 2026-05-07
+date: 2026-10-21
 tags:
   [
     component,
@@ -37,27 +37,27 @@ aliases:
 # Frontend Components
 
 > [!abstract] Overview
-> Watchman's frontend is built with React 18, TypeScript, Tailwind CSS, and custom primitives from the dark-luxury design system. **Phase 2** (LIVE) introduces 14 foundation primitives built on OKLCH tokens and Geist typography. **Phase 3** (LIVE — pilot) ships the bento dashboard with a generic `ServiceTile` and renderer registry, collapsing 18 service-specific card components into one. Fully shipped and passing 150+ tests.
+> Watchman's frontend is built with React 18, TypeScript, Tailwind CSS, and custom primitives from the dark-luxury design system. **Phase 2** introduced 16 foundation primitives (`apps/frontend/src/components/primitives/`) built on OKLCH tokens and Geist typography. **Phase 3** shipped the bento dashboard with a generic `ServiceTile` and renderer registry, which replaced the service-specific card components.
 
 ## Bento Dashboard Components (Phase 3 — Renderer-Driven Layout)
 
 Phase 3 introduces a new dashboard architecture built on a renderer registry pattern with full CRUD discoverability:
 
-- [[docs/components/bento-dashboard|BentoDashboard]] — Main page orchestrator with header add button and empty-state discovery (lazy-loaded, behind `?bento=1` flag)
+- [[docs/components/bento-dashboard|BentoDashboard]] — Main page orchestrator with header add button and empty-state discovery (lazy-loaded on `/`, behind the setup gate in `App.tsx`)
 - [[docs/components/dashboard-grid|DashboardGrid]] — 12-column CSS grid layout container
-- [[docs/components/service-tile|ServiceTile]] — Generic single-tile component (replaces all 18 legacy `*Card.tsx`)
+- [[docs/components/service-tile|ServiceTile]] — Generic single-tile component (replaces the legacy `*Card.tsx` components)
 - [[docs/components/service-detail-sheet|ServiceDetailSheet]] — Right-anchored detail view with enable/disable, edit, and delete footer controls
 - [[docs/components/service-editor|ServiceEditor]] — Reusable dynamic form for create/edit with field filtering and validation
 - [[docs/services/renderers/index|ServiceRenderer Registry]] — Per-service customization (summary metrics, detail groups, charts, tone)
 
-**Phase 3 Pilot Services**: Bitcoin (XL tile) and Synology (L tile) have full renderers. Remaining 14 services are stubbed for Phase 4.
+**Renderers**: each of the 13 service kinds has a renderer in `apps/frontend/src/services/renderers/` (registered in `index.ts`).
 
 > [!note] Legacy Cards Removed
-> The 18 service-specific card components (`BitcoinCard`, `SynologyCard`, etc.) and `LiveServerDashboard` were removed in Phase 3. The bento dashboard with `ServiceTile` + renderer registry is the active dashboard.
+> The service-specific card components (`BitcoinCard`, `SynologyCard`, etc.) and `LiveServerDashboard` were removed in Phase 3. The bento dashboard with `ServiceTile` + renderer registry is the active dashboard.
 
 ## Primitive Components (Phase 2 — Design System — LIVE)
 
-The foundation layer is a set of 14 typed, accessible primitives built on OKLCH color tokens, Geist Variable + Geist Mono typography, and motion foundations. All primitives are <150 LOC each and use Radix Primitives for accessibility underneath.
+The foundation layer is a set of 16 typed primitives built on OKLCH color tokens, Geist Variable + Geist Mono typography, and motion foundations. Dialog, Popover, ScrollArea and similar primitives wrap Radix Primitives (`@radix-ui/*` in `apps/frontend/package.json`) for accessibility.
 
 See [[docs/components/primitives/index|Primitive Components Index]] for complete documentation.
 
@@ -82,9 +82,9 @@ WHERE type = "component" AND file.path != "docs/components/primitives"
 SORT file.name ASC
 ```
 
-## Service Cards (Legacy — Phase 6 pending)
+## Service Cards (Removed)
 
-The 18 service-specific card components below are **legacy** and remain active for the `LiveServerDashboard` until Phase 6. The bento dashboard (Phase 3, LIVE) replaces them with a single `<ServiceTile>` component driven by a `ServiceRenderer` registry.
+The service-specific card components below were **removed** in Phase 3; their pages are kept as history. The bento dashboard replaces them with a single `<ServiceTile>` component driven by a `ServiceRenderer` registry. Nostrcheck is no longer a supported service kind.
 
 | Component                                                  | Service      | Status            |
 | ---------------------------------------------------------- | ------------ | ----------------- |
@@ -105,11 +105,12 @@ The 18 service-specific card components below are **legacy** and remain active f
 
 ## Shared Components
 
-| Component                                                      | Description                | File                                               | Status                |
-| -------------------------------------------------------------- | -------------------------- | -------------------------------------------------- | --------------------- |
-| [[docs/components/error-boundary\|ErrorBoundary]]              | Error boundary wrapper     | [[apps/frontend/src/components/ErrorBoundary.tsx]] | Active                |
-| [[docs/components/offline-banner\|OfflineBanner]]              | LAN backend unreachable    | [[apps/frontend/src/components/OfflineBanner.tsx]] | Active (split-deploy) |
-| [[docs/components/live-server-dashboard\|LiveServerDashboard]] | Legacy dashboard (Phase 6) | Removed                                            | **Deprecated**        |
+| Component                                                      | Description                | File                                               | Status         |
+| -------------------------------------------------------------- | -------------------------- | -------------------------------------------------- | -------------- |
+| [[docs/components/error-boundary\|ErrorBoundary]]              | Error boundary wrapper     | [[apps/frontend/src/components/ErrorBoundary.tsx]] | Active         |
+| [[docs/components/offline-banner\|OfflineBanner]]              | LAN backend unreachable    | Removed (ADR-019)                                  | **Superseded** |
+| `DesktopChrome`                                                | Desktop shell integration  | [[apps/frontend/src/components/DesktopChrome.tsx]] | Active         |
+| [[docs/components/live-server-dashboard\|LiveServerDashboard]] | Legacy dashboard (Phase 6) | Removed                                            | **Deprecated** |
 
 ### Deleted Components
 
@@ -134,13 +135,14 @@ The 18 service-specific card components below are **legacy** and remain active f
 
 ### Data & Service Hooks
 
-| Hook                                                                       | Description                                          | File                                                |
-| -------------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
-| [[docs/components/use-service-health\|useServiceHealth / useServiceStats]] | Query service health/stats snapshots                 | [[apps/frontend/src/hooks/useServiceHealth.ts]]     |
-| `useServiceHistory`                                                        | Query time-series historical metrics (Phase 1)       | [[apps/frontend/src/hooks/useServiceHistory.ts]]    |
-| [[docs/components/use-service-instances\|useServiceInstances]]             | Multi-instance service management                    | [[apps/frontend/src/hooks/useServiceInstances.tsx]] |
-| [[docs/components/use-enabled-services\|useEnabledServices]]               | Enabled services configuration                       | [[apps/frontend/src/hooks/useEnabledServices.ts]]   |
-| `useBackendReachable`                                                      | Polls `/meta/health` and detects backend unreachable | [[apps/frontend/src/hooks/useBackendReachable.ts]]  |
+| Hook                                                                       | Description                                        | File                                                |
+| -------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- |
+| [[docs/components/use-service-health\|useServiceHealth / useServiceStats]] | Query service health/stats snapshots               | [[apps/frontend/src/hooks/useServiceHealth.ts]]     |
+| `useAggregatedHealth`                                                      | Aggregated health for every instance (`/services`) | [[apps/frontend/src/hooks/useAggregatedHealth.ts]]  |
+| [[docs/components/use-service-instances\|useServiceInstances]]             | Multi-instance service management                  | [[apps/frontend/src/hooks/useServiceInstances.tsx]] |
+| `useBackendMetrics`                                                        | Breaker, cache and process metrics (`/metrics`)    | [[apps/frontend/src/hooks/useBackendMetrics.ts]]    |
+
+Removed hooks: `useServiceHistory` (time-series layer, ADR-019), `useBackendReachable` (split deploy, ADR-019) and [[docs/components/use-enabled-services|useEnabledServices]] (dead code).
 
 ### WebSocket & Realtime Hooks
 
@@ -148,7 +150,7 @@ The 18 service-specific card components below are **legacy** and remain active f
 | ---------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
 | [[docs/components/use-websocket-hook\|useWebSocket]] | Singleton WebSocket connection (internal to provider)    | [[apps/frontend/src/hooks/useWebSocket.ts]]           |
 | `useWebSocketContext()`                              | Access connection state (isConnected, reconnectAttempts) | [[apps/frontend/src/providers/WebSocketProvider.tsx]] |
-| `useWebSocketEvent(type)`                            | Subscribe to specific WebSocket message type             | [[apps/frontend/src/hooks/useWebSocket.ts]]           |
+| `useWebSocketEvent(type)`                            | Subscribe to specific WebSocket message type             | [[apps/frontend/src/hooks/useWebSocketEvent.ts]]      |
 
 ### UI & Setup Hooks
 
@@ -156,6 +158,7 @@ The 18 service-specific card components below are **legacy** and remain active f
 | ---------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------ |
 | [[docs/components/use-setup-dismissal\|useSetupDismissal]] | Setup wizard dismissal state via localStorage | [[apps/frontend/src/hooks/useSetupDismissal.ts]] |
 | [[docs/components/use-mobile-hook\|use-mobile]]            | Mobile breakpoint detection                   | [[apps/frontend/src/hooks/use-mobile.tsx]]       |
+| `useDesktopChrome`                                         | Desktop bridge hooks (no-op in a browser)     | [[apps/frontend/src/hooks/useDesktopChrome.ts]]  |
 
 ### Hook Coverage Notes
 
@@ -169,6 +172,8 @@ The 18 service-specific card components below are **legacy** and remain active f
 | Dashboard         | `/`                  | [[apps/frontend/src/App.tsx]]                                            |
 | Setup Wizard      | `/setup`             | [[docs/components/setup-wizard\|SetupWizard]]                            |
 | Services Settings | `/settings/services` | [[docs/components/service-editor\|ServiceEditor]] (embedded in Settings) |
+| Profiles          | `/settings/profiles` | [[docs/features/profiles\|Profiles]]                                     |
+| Audit log         | `/settings/audit`    | [[apps/frontend/src/pages/Settings/Audit.tsx]]                           |
 | Backup            | `/settings/backup`   | [[docs/components/backup-restore\|BackupRestore]]                        |
 | Not Found         | `*`                  | [[apps/frontend/src/pages/NotFound.tsx]]                                 |
 
@@ -179,23 +184,22 @@ The 18 service-specific card components below are **legacy** and remain active f
 
 ## Services and Utilities
 
-| Module                | Description                                    | File                                                                                                                       |
-| --------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `ApiClient`           | Public HTTP client wrapper                     | [[apps/frontend/src/services/ApiClient.ts]]                                                                                |
-| `apiClient/core`      | Request pipeline (retry/dedup/timeout/headers) | [[apps/frontend/src/services/apiClient/core.ts]]                                                                           |
-| `apiClient/endpoints` | Endpoint method layer                          | [[apps/frontend/src/services/apiClient/endpoints.ts]]                                                                      |
-| `apiClient/types`     | Shared API response/request types              | [[apps/frontend/src/services/apiClient/types.ts]]                                                                          |
-| `queryKeys`           | Centralized React Query key factory            | [[apps/frontend/src/lib/queryKeys.ts]]                                                                                     |
-| Dashboard helpers     | Extracted dashboard status/data helpers        | [[apps/frontend/src/components/dashboard/dashboardStatus.ts]], [[apps/frontend/src/components/dashboard/dashboardData.ts]] |
+| Module                | Description                                    | File                                                        |
+| --------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
+| `ApiClient`           | Public HTTP client wrapper                     | [[apps/frontend/src/services/ApiClient.ts]]                 |
+| `apiClient/core`      | Request pipeline (retry/dedup/timeout/headers) | [[apps/frontend/src/services/apiClient/core.ts]]            |
+| `apiClient/endpoints` | Endpoint method layer                          | [[apps/frontend/src/services/apiClient/endpoints.ts]]       |
+| `apiClient/types`     | Shared API response/request types              | [[apps/frontend/src/services/apiClient/types.ts]]           |
+| `queryKeys`           | Centralized React Query key factory            | [[apps/frontend/src/lib/queryKeys.ts]]                      |
+| Dashboard helpers     | Extracted dashboard data helpers               | [[apps/frontend/src/components/dashboard/dashboardData.ts]] |
 
 ### Dashboard Helper Test Coverage Notes
 
 - [[apps/frontend/src/components/dashboard/dashboardData.test.ts]] validates dashboard data helper behavior in [[apps/frontend/src/components/dashboard/dashboardData.ts]].
-- [[apps/frontend/src/components/dashboard/dashboardStatus.test.ts]] validates status mapping and aggregate counter derivation in [[apps/frontend/src/components/dashboard/dashboardStatus.ts]].
 - [[apps/frontend/src/hooks/useWebSocket.test.tsx]] expands hook-level real-time coverage tied to dashboard refresh behavior via query invalidation.
 
 > [!note]
-> Legacy files removed during refactors: `use-config.tsx`, `useServicesHealth.ts`, `RequestOptimizer.ts`, `OptimizedServiceCard.tsx`, and `PerformantServiceCard.tsx`.
+> Legacy files removed during refactors: `use-config.tsx`, `useServicesHealth.ts`, `RequestOptimizer.ts`, `OptimizedServiceCard.tsx`, `PerformantServiceCard.tsx`, `dashboardStatus.ts`, `ServiceLink.tsx` and `lib/url.ts`.
 
 ## Design System
 
@@ -213,11 +217,9 @@ The dark-luxury design system provides a cohesive visual language. [[docs/adr/02
 
 See [[docs/architecture/frontend-design-system|Frontend Design System]] for complete reference.
 
-## UI Components (shadcn/ui — Legacy)
+## UI Components (shadcn/ui — Removed)
 
-The `ui/` directory contains shadcn/ui components. These are standard library components and typically don't need individual documentation. **Note**: These are scheduled for gradual replacement by primitives as Phase 3–6 proceed.
-
-`[[apps/frontend/src/components/ui/button.tsx]]`, `[[apps/frontend/src/components/ui/card.tsx]]`, `[[apps/frontend/src/components/ui/badge.tsx]]`, `[[apps/frontend/src/components/ui/dialog.tsx]]`, `[[apps/frontend/src/components/ui/alert.tsx]]`, `[[apps/frontend/src/components/ui/tooltip.tsx]]`, `[[apps/frontend/src/components/ui/input.tsx]]`, `[[apps/frontend/src/components/ui/select.tsx]]`, `[[apps/frontend/src/components/ui/checkbox.tsx]]`, `[[apps/frontend/src/components/ui/switch.tsx]]`, `[[apps/frontend/src/components/ui/slider.tsx]]`, `[[apps/frontend/src/components/ui/tabs.tsx]]`, `[[apps/frontend/src/components/ui/form.tsx]]`, and 30+ more.
+The shadcn/ui `components/ui/` directory no longer exists; the primitives above replaced it.
 
 ## Related
 

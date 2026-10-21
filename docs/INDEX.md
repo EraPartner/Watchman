@@ -115,7 +115,7 @@ LIMIT 15
 
 Watchman is a comprehensive **self-hosted service monitoring dashboard** supporting:
 
-- **Service Monitoring**: Health checks and statistics for 14+ service types
+- **Service Monitoring**: Health checks and statistics for 13 service kinds
 - **Multi-Instance Support**: Run multiple nodes of the same service type
 - **Real-Time Updates**: WebSocket-based status broadcasting
 - **Single-User Design**: Simplified for home-lab deployments (no authentication)
@@ -215,7 +215,7 @@ Watchman/
 | Frontend hooks      | `apps/frontend/src/hooks/*.ts`                       |
 | API client          | `apps/frontend/src/services/ApiClient.ts`            |
 | Environment config  | `apps/backend/.env.example`                          |
-| Circuit breaker     | `apps/backend/src/infra/circuitBreaker.ts`           |
+| Circuit breaker     | `apps/backend/src/infra/circuitBreaker/breaker.ts`   |
 
 ## Contributing
 
@@ -279,7 +279,7 @@ cloud "External Services" as Ext {
     [Synology]
     [Roon]
     [Philips Hue]
-    [14+ adapters]
+    [13 adapters]
 }
 
 DT --> BE : spawn subprocess (loopback port)
@@ -418,7 +418,7 @@ folder "docs/" as KB {
     }
 
     folder "integrations/" as INT {
-        [14+ Service Docs] as INT_DOC
+        [13 Service Docs] as INT_DOC
     }
 
     folder "security/" as SEC {

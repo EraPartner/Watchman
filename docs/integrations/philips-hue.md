@@ -342,7 +342,7 @@ constructor(deps: PhilipsBridgeDeps) {
 
 ## Related
 
-- [[docs/adr/020-two-tier-health-and-monitoring-upgrades|ADR-020 — Two-Tier Health and Monitoring Upgrades]]
+- [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 — Two-Tier Health and Monitoring Upgrades]]
 - [[docs/api/index#configuration--setup-endpoints|API Documentation — Setup/Pairing Endpoints]]
 - [[docs/guides/running-the-setup-wizard|Running the Setup Wizard Guide]]
 - [[docs/architecture/backend-architecture#certificate-pinning-i2-task|Backend Architecture — Cert Pinning]]

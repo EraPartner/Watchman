@@ -2,7 +2,7 @@
 title: Primitive Components
 type: index
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [primitive, component, index, design-system, dark-luxury, glass, liquid-glass]
 description: Index of all primitive components in the dark-luxury design system, including the ADR-028 glass material variants applied to Surface, Dialog, Sheet, Popover, and Tabs.
@@ -168,7 +168,8 @@ export {
 
 ## Demo Page
 
-The `apps/frontend/src/pages/BentoDemo.tsx` (BentoDemo) page showcases all primitives with interactive examples. Gated by `?bento=1` query or reachable at `/bento` route.
+> [!warning] Not in the current code
+> There is no `BentoDemo.tsx` page and no `/bento` route or `?bento=1` flag in `apps/frontend/src/` (routes are in `App.tsx`). The primitives are used directly by the dashboard, detail sheet and settings pages.
 
 ## Phase Roadmap
 

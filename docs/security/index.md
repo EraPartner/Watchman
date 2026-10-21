@@ -2,7 +2,7 @@
 title: Security
 type: index
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags:
   [
     security,
@@ -43,7 +43,7 @@ SORT file.name ASC
 | Logging               | Structured Pino logging with sensitive field redaction | Configuration changes recorded in the DuckDB audit log    |
 
 > [!warning] No Built-In Authentication
-> Watchman **does not** have authentication, CSRF protection, rate-limiting middleware, or account lockout. Ensure network isolation before running Watchman. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
+> Watchman **does not** have authentication, CSRF protection, HTTP rate-limiting middleware, or account lockout. The WebSocket route only caps upgrade attempts at 30 per IP per minute (`HandshakeLimiter.ts`, answers 429) and open connections at 10 per IP (`ConnectionManager`). Ensure network isolation before running Watchman. See [[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] for design rationale.
 
 ## Security Features
 

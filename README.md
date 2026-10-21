@@ -31,7 +31,10 @@ It combines a React + TypeScript frontend with a Node.js + Fastify backend and s
 > [!IMPORTANT]
 > **Monitoring-only by design**
 >
-> Watchman is intentionally **read-only**. It does **not** start/stop/restart/reconfigure services.
+> Watchman is intentionally **read-only**. It does **not** start/stop/restart/reconfigure services
+> or write to devices (no GPIO writes). The only writes are one-time setup handshakes you start
+> yourself: Hue bridge pairing (creates an app key) and Roon extension registration.
+> See [ADR-032](./docs/adr/032-monitoring-only-no-service-control.md).
 
 ## Why Watchman?
 
@@ -42,7 +45,7 @@ If you run multiple services, Watchman gives you one dashboard instead of 10+ br
 | Fast visibility across services             | Unified health + stats endpoints and cards in a single UI                                                                                       |
 | Support for multiple instances of a service | Multiple instances per service type, configured in the UI (e.g. several qBittorrent or Synology instances)                                      |
 | Live status updates                         | WebSocket-based real-time updates                                                                                                               |
-| A trusted-network security model            | Origin allow-list (CORS + WebSocket), service secrets encrypted at rest, PII-redacted logs — no auth/CSRF/rate-limiting by design (single-user) |
+| A trusted-network security model            | Origin allow-list (CORS + WebSocket), service secrets encrypted at rest, PII-redacted logs — no auth/CSRF/HTTP rate limiting by design (single-user) |
 | Extensibility                               | Factory-driven service integration architecture                                                                                                 |
 
 ## Feature Highlights
@@ -55,18 +58,17 @@ If you run multiple services, Watchman gives you one dashboard instead of 10+ br
 - ✅ Circuit breaker + caching patterns for resilient service polling
 - ✅ Trusted-network security model — origin allow-list, encrypted secrets at rest, PII-redacted logging
 
-## Supported Integrations (Examples)
+## Supported Integrations
 
-Watchman supports **14+ service types**. You can enable only what you use.
+Watchman supports **13 service kinds**. You can enable only what you use.
 
-| Category           | Integrations                               |
-| ------------------ | ------------------------------------------ |
-| Network & Security | AdGuard Home, Tor, Router (Beryl, Telenet) |
-| Cryptocurrency     | Bitcoin, Alby Hub                          |
-| Storage & Sharing  | qBittorrent, IPFS, Synology                |
-| Smart Home & Media | Homebridge, Philips Hue, Roon              |
-| Infrastructure     | Mac Mini, Raspberry Pi                     |
-| Social             | Nostrcheck                                 |
+| Category           | Integrations                                |
+| ------------------ | ------------------------------------------- |
+| Network & Security | AdGuard Home, Tor, Router (ping, TCP, SNMP) |
+| Cryptocurrency     | Bitcoin, Alby Hub                           |
+| Storage & Sharing  | qBittorrent, IPFS, Synology                 |
+| Smart Home & Media | Homebridge, Philips Hue, Roon               |
+| Infrastructure     | Mac Mini, Raspberry Pi                      |
 
 See full docs: [`docs/integrations/index.md`](./docs/integrations/index.md)
 
@@ -82,7 +84,8 @@ See full docs: [`docs/integrations/index.md`](./docs/integrations/index.md)
 
 ### Option A — macOS Desktop (recommended for end users)
 
-The `install.sh` script sets up everything from scratch — Homebrew, Node.js, workspace dependencies, and a `.app` launcher:
+Requires a Mac with **Apple Silicon**: the desktop build is `arm64` only and does not run on
+Intel Macs. The `install.sh` script sets up everything from scratch — Homebrew, Node.js, workspace dependencies, and a `.app` launcher:
 
 ```bash
 git clone https://github.com/EraPartner/Watchman.git
@@ -97,6 +100,8 @@ npm run electron:prod
 ```
 
 > The desktop app needs no env file: it sets the backend port and data directory itself, and the backend generates a master key on first run. Services are configured in the UI.
+>
+> Closing the window does not quit Watchman: it keeps running in the Dock with its backend. Click the Dock icon to reopen the window, and press ⌘Q to quit. See [`docs/guides/running-the-desktop-app.md`](./docs/guides/running-the-desktop-app.md).
 
 ### Option B — Native production self-host (any platform)
 
@@ -215,7 +220,7 @@ Watchman/
 ## API and Security
 
 - OpenAPI 3.1 spec: [`apps/backend/openapi.yaml`](./apps/backend/openapi.yaml) — documentation only; no Swagger UI is served.
-- **Security model:** single user on a trusted network — **no authentication, CSRF, or rate limiting, by design** (ADR-017 / ADR-025). Anyone who can reach the port can read and reconfigure, so do **not** expose the backend beyond your trusted network.
+- **Security model:** single user on a trusted network — **no authentication, CSRF, or HTTP rate limiting, by design** (ADR-017 / ADR-025). The only limits are on the WebSocket: 30 handshakes per IP per minute and 10 open connections per IP (`apps/backend/src/transport/ws/`). Anyone who can reach the port can read everything and change Watchman's service configuration (Watchman itself never changes the monitored services), so do **not** expose the backend beyond your trusted network.
 - Browser cross-origin access is gated by an origin allow-list shared by CORS and the WebSocket upgrade: desktop `watchman://`, loopback, and anything in `CORS_ALLOWED_ORIGINS`.
 - Service secrets are encrypted at rest in the DuckDB config store (`WATCHMAN_MASTER_KEY`); secrets and PII are never logged.
 
