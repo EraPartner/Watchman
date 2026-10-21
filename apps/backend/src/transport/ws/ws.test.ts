@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { AuthGate } from "./AuthGate.js";
 import { ConnectionManager } from "./ConnectionManager.js";
 import { HeartbeatScheduler } from "./HeartbeatScheduler.js";
+import { HandshakeLimiter } from "./HandshakeLimiter.js";
 import { Broadcaster } from "./Broadcaster.js";
 import { createEventBus } from "../../core/eventBus.js";
 import { WS_OPEN, type WsClient } from "./types.js";
@@ -164,6 +165,51 @@ describe("ConnectionManager", () => {
     expect(cm.getMeta(a)?.alive).toBe(false);
     cm.markAlive(a);
     expect(cm.getMeta(a)?.alive).toBe(true);
+  });
+});
+
+describe("HandshakeLimiter", () => {
+  it("caps attempts per ip within the window", () => {
+    let t = 0;
+    const limiter = new HandshakeLimiter({
+      maxPerWindow: 2,
+      windowMs: 1000,
+      now: () => t,
+    });
+    expect(limiter.allow("1.1.1.1")).toBe(true);
+    expect(limiter.allow("1.1.1.1")).toBe(true);
+    expect(limiter.allow("1.1.1.1")).toBe(false);
+    expect(limiter.allow("2.2.2.2")).toBe(true);
+    t = 999;
+    expect(limiter.allow("1.1.1.1")).toBe(false);
+  });
+
+  it("opens a new window once the old one expires", () => {
+    let t = 0;
+    const limiter = new HandshakeLimiter({
+      maxPerWindow: 1,
+      windowMs: 1000,
+      now: () => t,
+    });
+    expect(limiter.allow("1.1.1.1")).toBe(true);
+    expect(limiter.allow("1.1.1.1")).toBe(false);
+    t = 1000;
+    expect(limiter.allow("1.1.1.1")).toBe(true);
+  });
+
+  it("prunes expired windows", () => {
+    let t = 0;
+    const limiter = new HandshakeLimiter({
+      maxPerWindow: 5,
+      windowMs: 1000,
+      now: () => t,
+    });
+    limiter.allow("1.1.1.1");
+    limiter.allow("2.2.2.2");
+    expect(limiter.size()).toBe(2);
+    t = 1500;
+    limiter.allow("3.3.3.3");
+    expect(limiter.size()).toBe(1);
   });
 });
 

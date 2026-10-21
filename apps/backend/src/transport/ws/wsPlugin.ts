@@ -1,10 +1,11 @@
 import fp from "fastify-plugin";
 import websocket from "@fastify/websocket";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Logger } from "pino";
 import { AuthGate } from "./AuthGate.js";
 import { ConnectionManager } from "./ConnectionManager.js";
 import { HeartbeatScheduler } from "./HeartbeatScheduler.js";
+import { HandshakeLimiter } from "./HandshakeLimiter.js";
 import { Broadcaster } from "./Broadcaster.js";
 import type { WsClient, WsUpgradeRequest } from "./types.js";
 import type { EventBus } from "../../core/eventBus.js";
@@ -15,6 +16,8 @@ export interface WsPluginOptions {
   now: () => number;
   serverVersion: string;
   maxConnectionsPerIp?: number;
+  maxHandshakesPerWindow?: number;
+  handshakeWindowMs?: number;
   heartbeatIntervalMs?: number;
   isOriginAllowed?: (origin: string | undefined) => boolean;
   extractToken?: (req: WsUpgradeRequest) => string | null;
@@ -61,6 +64,11 @@ export const wsPlugin = fp(
       maxConnectionsPerIp: opts.maxConnectionsPerIp ?? 10,
       now: opts.now,
     });
+    const limiter = new HandshakeLimiter({
+      maxPerWindow: opts.maxHandshakesPerWindow ?? 30,
+      windowMs: opts.handshakeWindowMs ?? 60_000,
+      now: opts.now,
+    });
     const heartbeat = new HeartbeatScheduler({
       intervalMs: opts.heartbeatIntervalMs ?? 30_000,
       manager,
@@ -79,7 +87,19 @@ export const wsPlugin = fp(
     heartbeat.start();
 
     const path = opts.path ?? "/ws";
-    app.get(path, { websocket: true }, (socket, req) => {
+    // preValidation runs before the upgrade, so a throttled client gets a
+    // plain 429 and no socket is opened.
+    const preValidation = async (
+      req: FastifyRequest,
+      reply: FastifyReply
+    ): Promise<void> => {
+      const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+      if (!limiter.allow(ip)) {
+        await reply.code(429).send({ error: "too_many_handshakes" });
+      }
+    };
+
+    app.get(path, { websocket: true, preValidation }, (socket, req) => {
       const upgradeReq: WsUpgradeRequest = {
         headers: req.headers as Record<string, string | string[] | undefined>,
         url: req.url,

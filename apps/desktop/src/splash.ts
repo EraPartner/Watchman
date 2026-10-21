@@ -2,6 +2,35 @@ import type { BrowserWindow } from "electron";
 
 const APP_NAME = "Watchman";
 
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch] ?? ch);
+}
+
+const JS_UNSAFE: Record<string, string> = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
+// JSON.stringify yields a valid JS string literal; also escape characters that
+// could end a script context or break older JS parsers.
+export function toJsStringLiteral(text: string): string {
+  return JSON.stringify(text).replace(
+    /[<>\/\u2028\u2029]/g,
+    (ch) => JS_UNSAFE[ch] ?? ch
+  );
+}
+
 // Lightweight, theme-matched boot splash shown the instant the window opens —
 // before the backend has booted. The window navigates to the real frontend
 // once the backend reports healthy.
@@ -31,7 +60,7 @@ export function splashDataUrl(status = "Starting…"): string {
 </style></head><body>
   <div class="ring"></div>
   <div class="name">${APP_NAME}</div>
-  <div class="status" id="splash-status">${status}</div>
+  <div class="status" id="splash-status">${escapeHtml(status)}</div>
 </body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
@@ -46,7 +75,7 @@ export function setSplashStatus(
   if (!window.webContents.getURL().startsWith("data:")) return;
   window.webContents
     .executeJavaScript(
-      `(() => { const el = document.getElementById('splash-status'); if (el) el.textContent = ${JSON.stringify(text)}; })()`,
+      `(() => { const el = document.getElementById('splash-status'); if (el) el.textContent = ${toJsStringLiteral(text)}; })()`,
       true
     )
     .catch(() => {
