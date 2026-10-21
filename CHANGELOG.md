@@ -58,6 +58,8 @@ dependency audit, and documentation aligned with the code.
   misses it and waits for the 60-second poll.
 - Adding a service: list fields (router ports, interface filter, Roon ports)
   accept a comma, so more than one value can be typed.
+- Adding a service: the Alby Hub form no longer pre-ticks "Legacy probe mode",
+  so UI-added hubs use the NWC API like the schema default.
 - Adding a service: a rejected config shows `field: problem` messages instead
   of the raw validation JSON.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
