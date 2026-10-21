@@ -1,11 +1,42 @@
-import { pino, type Logger, type LoggerOptions } from "pino";
+import {
+  pino,
+  type DestinationStream,
+  type Logger,
+  type LoggerOptions,
+} from "pino";
 
 export type { Logger };
 
-export function createLogger(env: {
-  NODE_ENV: "development" | "test" | "production";
-  LOG_LEVEL: string;
-}): Logger {
+// Generic credential names plus every service secret field (KIND_META
+// secretFields; logger.test.ts keeps the two in sync). Redacted at the top level
+// and one level down, e.g. logger.info({ config }) of a service config.
+export const REDACTED_LOG_KEYS = [
+  "password",
+  "passwd",
+  "token",
+  "secret",
+  "apiKey",
+  "authHeader",
+  "authToken",
+  "rpcPassword",
+  "controlPassword",
+  "dsmPassword",
+  "applicationKey",
+  "snmpCommunity",
+  "snmpAuthKey",
+  "snmpPrivKey",
+  "sshPassphrase",
+  "macMiniSshPassphrase",
+];
+
+export function createLogger(
+  env: {
+    NODE_ENV: "development" | "test" | "production";
+    LOG_LEVEL: string;
+  },
+  /** Non-development output target; defaults to stdout. Used by tests. */
+  destination?: DestinationStream
+): Logger {
   const base: LoggerOptions = {
     level: env.LOG_LEVEL,
     base: { service: "watchman-backend-v2" },
@@ -17,18 +48,8 @@ export function createLogger(env: {
         "req.headers.authorization",
         "req.headers.cookie",
         'res.headers["set-cookie"]',
-        "password",
-        "passwd",
-        "token",
-        "secret",
-        "apiKey",
-        "authHeader",
-        "*.password",
-        "*.passwd",
-        "*.token",
-        "*.secret",
-        "*.apiKey",
-        "*.authHeader",
+        ...REDACTED_LOG_KEYS,
+        ...REDACTED_LOG_KEYS.map((k) => `*.${k}`),
         "*.headers.authorization",
         "*.headers.cookie",
       ],
@@ -50,5 +71,5 @@ export function createLogger(env: {
     });
   }
 
-  return pino(base);
+  return destination ? pino(base, destination) : pino(base);
 }

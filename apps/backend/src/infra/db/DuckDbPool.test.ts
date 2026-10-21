@@ -42,6 +42,29 @@ describe("DuckDbPool", () => {
     await pool.close();
   });
 
+  it("caps concurrent first-time connects at maxSize", async () => {
+    // Regression: the size check ran before the awaited instance.connect(), so
+    // simultaneous callers on an empty pool all opened their own connection.
+    const pool = await createDuckDbPool({ path: ":memory:", maxSize: 2 });
+    let settled = 0;
+    const pending = [pool.connect(), pool.connect(), pool.connect()].map((p) =>
+      p.then((c) => {
+        settled += 1;
+        return c;
+      })
+    );
+    const [a, b] = await Promise.all(pending.slice(0, 2));
+    await new Promise((r) => setImmediate(r));
+    expect(settled).toBe(2);
+    expect(a).not.toBe(b);
+    pool.release(a!);
+    const c = await pending[2]!;
+    expect(c).toBe(a);
+    pool.release(b!);
+    pool.release(c);
+    await pool.close();
+  });
+
   it("rejects connects after close", async () => {
     const pool = await createDuckDbPool({ path: ":memory:" });
     await pool.close();

@@ -41,7 +41,7 @@ Every variable has a default or is optional. There is no authentication configur
 | `WATCHMAN_MASTER_KEY` | AES-256-GCM key for encrypting service secrets at rest. A 32-byte base64 or hex key is used directly; any other string is a passphrase (salted scrypt). | Auto-provisioned at `{DATA_DIR}/master.key` if not set | Output of `openssl rand -base64 32`         |
 
 > [!warning] Master Key Loss
-> If the master key is lost or changed, all encrypted service secrets become unrecoverable. Back up `WATCHMAN_MASTER_KEY` (or `{DATA_DIR}/master.key`) together with `DATA_DIR`. A passphrase key also creates `{DATA_DIR}/master.key.salt`, which must be preserved too. Losing either requires re-entering all service credentials.
+> If the master key is lost or changed, all encrypted service secrets become unrecoverable. Back up `WATCHMAN_MASTER_KEY` (or `{DATA_DIR}/master.key`) together with `DATA_DIR`. A passphrase key also creates `{DATA_DIR}/master.key.salt`, which must be preserved too. If that salt file exists but is empty or corrupt, the backend refuses to start instead of replacing it; restore it from backup. Losing either requires re-entering all service credentials.
 
 ## Server Configuration
 

@@ -48,7 +48,7 @@ LOG_LEVEL=warn
 The Pino `redact` configuration replaces these values with `[redacted]` at every log level:
 
 - Request headers `authorization` and `cookie`, and the response `set-cookie` header
-- Fields named `password`, `passwd`, `token`, `secret`, `apiKey`, `authHeader`, at the top level and one level deep (`*.<field>`)
+- Fields named `password`, `passwd`, `token`, `secret`, `apiKey`, `authHeader`, and every service secret field (`authToken`, `rpcPassword`, `controlPassword`, `dsmPassword`, `applicationKey`, `snmpCommunity`, `snmpAuthKey`, `snmpPrivKey`, `sshPassphrase`, `macMiniSshPassphrase`), at the top level and one level deep (`*.<field>`). The list is `REDACTED_LOG_KEYS` in `logger.ts`; `logger.test.ts` fails if a kind's `secretFields` entry is missing from it
 - Nested `*.headers.authorization` and `*.headers.cookie`
 
 Redaction is path-based. It does not scan free text (for example email addresses inside a message string), so never put secrets or personal data in log messages.
