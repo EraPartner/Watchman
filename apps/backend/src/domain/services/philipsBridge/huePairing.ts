@@ -53,7 +53,12 @@ export async function pairBridge(
     timeoutMs,
   });
 
-  const items = await response.json<HuePairItem[]>();
+  let items: HuePairItem[];
+  try {
+    items = await response.json<HuePairItem[]>();
+  } catch {
+    throw new UnavailableError('unexpected response from Hue bridge');
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     throw new UnavailableError('unexpected response from Hue bridge');
