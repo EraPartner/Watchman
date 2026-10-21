@@ -129,7 +129,7 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
   - unmount-time invalidation flush for queued service updates
   - tor/router invalidation family behavior (`queryKeys.torRelay()` and `queryKeys.routerArp(...)`)
   - metrics invalidation and `connection` message toast behavior
-  - max reconnect attempts error path and reconnect terminal-state handling
+  - max reconnect attempts: one failure toast, then retries continue at the 30s cap
   - cleanup stability for singleton WebSocket state across tests
 - Frontend notification-state coverage now also includes `apps/frontend/src/hooks/use-toast.test.tsx` for `apps/frontend/src/hooks/use-toast.ts`:
   - reducer limit and dismiss-all behavior
@@ -255,7 +255,7 @@ else Connection Lost
     Hook -> Hook : increment reconnectAttempts\n(counted once per close, not per error)
     Hook -> Hook : schedule reconnect\n(exponential backoff, max 30s)
 
-    loop Until connected or max attempts
+    loop Until connected (failure toast once after 5 attempts, then every 30s)
         Hook -> WS : new WebSocket(url)
         alt Success
             WS --> Hook : onopen()

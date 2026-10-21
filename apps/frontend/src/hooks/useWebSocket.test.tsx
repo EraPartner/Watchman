@@ -624,12 +624,13 @@ describe("useWebSocket", () => {
   });
 
   it("shows error toast when max reconnect attempts are reached", async () => {
+    let hookApi: HookApi | null = null;
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
 
     await act(async () => {
-      root.render(<HookProbe onHook={() => {}} />);
+      root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
     await act(async () => {
@@ -651,7 +652,18 @@ describe("useWebSocket", () => {
       "WebSocket connection failed after multiple attempts"
     );
 
+    // ...but it keeps retrying at the capped delay, without repeating the toast
+    await act(async () => {
+      FakeWebSocket.instances[0].close(1006, "abnormal");
+    });
+    expect(loggerDebug).toHaveBeenLastCalledWith(
+      "[WEBSOCKET] Scheduling reconnect",
+      { attempt: 7, delay: 30_000 }
+    );
+    expect(toastError).toHaveBeenCalledTimes(1);
+
     act(() => {
+      hookApi?.disconnect();
       root.unmount();
     });
   });

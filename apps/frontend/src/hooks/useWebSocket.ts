@@ -263,12 +263,13 @@ export const useWebSocket = (url?: string) => {
   );
 
   const scheduleReconnect = useCallback(() => {
-    if (globalConnectionState.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    // Past MAX_RECONNECT_ATTEMPTS, tell the user once but keep retrying at
+    // the capped delay, so live updates resume when the backend returns.
+    if (globalConnectionState.reconnectAttempts === MAX_RECONNECT_ATTEMPTS) {
       logger.warn("[WEBSOCKET] Max reconnection attempts reached", {
         reconnectAttempts: globalConnectionState.reconnectAttempts,
       });
       toast.error("WebSocket connection failed after multiple attempts");
-      return;
     }
 
     const delay = Math.min(
@@ -372,10 +373,7 @@ export const useWebSocket = (url?: string) => {
         notifyStateChange();
 
         // Only attempt reconnect if it wasn't a clean close
-        if (
-          event.code !== 1000 &&
-          globalConnectionState.reconnectAttempts < MAX_RECONNECT_ATTEMPTS
-        ) {
+        if (event.code !== 1000) {
           globalConnectionState.reconnectAttempts++;
           notifyStateChange();
           scheduleReconnect();

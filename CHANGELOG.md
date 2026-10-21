@@ -55,7 +55,8 @@ dependency audit, and documentation aligned with the code.
 - Frontend: the WebSocket no longer stops reconnecting after a short backend
   outage. A retry that landed inside the 5 s connection throttle was dropped
   with no further retry, so live updates stayed off until a page reload; it is
-  now deferred to the end of the window.
+  now deferred to the end of the window. After 5 failed attempts the failure
+  toast still shows once, but retries continue every 30 s instead of stopping.
 - Frontend: after the WebSocket reconnects, profile, network, instance and
   health queries are refreshed, so frames missed while disconnected (such as
   the auto profile switch after a network change) are not lost.

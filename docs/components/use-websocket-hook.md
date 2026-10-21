@@ -37,7 +37,7 @@ The hook uses module-level globals to maintain a single connection:
 | Constant                   | Value    | Description                                    |
 | -------------------------- | -------- | ---------------------------------------------- |
 | `CONNECTION_THROTTLE_MS`   | 5,000ms  | Minimum time between connection attempts       |
-| `MAX_RECONNECT_ATTEMPTS`   | 5        | Maximum reconnection attempts before giving up |
+| `MAX_RECONNECT_ATTEMPTS`   | 5        | Attempts before the one-time failure toast; retries continue every 30s after it |
 | `INITIAL_RECONNECT_DELAY`  | 1,000ms  | Initial delay before first reconnect           |
 | `MAX_RECONNECT_DELAY`      | 30,000ms | Maximum delay between reconnect attempts       |
 | `INVALIDATION_DEBOUNCE_MS` | 150ms    | Debounce time for batched cache invalidations  |
@@ -115,7 +115,7 @@ Coverage now includes focused hook tests in [[apps/frontend/src/hooks/useWebSock
 - Tor invalidation family coverage (`queryKeys.torRelay()`) during relevant service updates
 - Router invalidation family coverage (`queryKeys.routerArp(...)`) for `router` instance update paths
 - metrics invalidation + connection toast behavior coverage (`queryKeys.metrics()` and `connection` message handling)
-- max reconnect attempts error-path coverage (stops retry loop and surfaces terminal reconnect failure behavior)
+- max reconnect attempts: the failure toast shows once, and retries continue at the 30s cap
 - test cleanup stability coverage for singleton/global WebSocket state reset between tests
 
 ## Return Value
