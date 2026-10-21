@@ -252,7 +252,7 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
   - `probeCircuit()` — TCP ControlPort connect → GETINFO status/circuit-established
   - `getStatsControlPort()` — Reads traffic, version, accounting, dormant state; computes deltas (B6); calls `enrich()` for Onionoo supplemental metrics (B7)
   - `enrich()` — Private helper: best-effort Onionoo enrichment returning country, consensusWeight, asName, consensusWeightFraction; swallows errors (B7)
-  - `searchRelay()` — Onionoo HTTP lookup (shared between Onionoo path and B7 enrichment). Accepts only an exact nickname (case-insensitive) or exact fingerprint (optional `$`) match from the results; Onionoo's prefix matches are other relays and yield not found. An empty `relayNickname` never queries Onionoo.
+  - `searchRelay()` — Onionoo HTTP lookup (shared between Onionoo path and B7 enrichment). Accepts only an exact nickname (case-insensitive) or exact fingerprint (optional `$`) match from the results; Onionoo's partial matches are other relays and yield not found. An empty `relayNickname` never queries Onionoo.
 
 - `TorManager` — Tor proxy management (`apps/backend/src/domain/services/tor/TorManager.ts`)
 

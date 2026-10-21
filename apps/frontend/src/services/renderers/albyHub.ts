@@ -26,7 +26,7 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
   summary: [
     { key: "version", label: "Version", format: fmtRaw },
     { key: "appCount", label: "Apps", format: fmtNumber(0) },
-    { key: "connected", label: "Connected", format: fmtBool("yes", "no") },
+    { key: "running", label: "Node running", format: fmtBool("yes", "no") },
   ],
 
   detail: [
@@ -54,7 +54,9 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
     {
       title: "NWC",
       metrics: [
-        { key: "connected", label: "Connected", format: fmtBool("yes", "no") },
+        // Alby Hub's /api/info reports "running", not "connected"
+        { key: "running", label: "Node running", format: fmtBool("yes", "no") },
+        { key: "network", label: "Network", format: fmtRaw },
         {
           key: "setupCompleted",
           label: "Setup complete",

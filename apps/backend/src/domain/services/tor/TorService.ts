@@ -548,7 +548,7 @@ export class TorService extends BaseService {
     });
     const data = await this.parseOnionoo(res);
     const relays = data.relays ?? [];
-    // Onionoo search also matches nickname prefixes and other fields, so only
+    // Onionoo search also matches partial nicknames and fingerprint prefixes, so only
     // accept an exact nickname or fingerprint — anything else is a different
     // relay
     const term = this.relayNickname.trim();

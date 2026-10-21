@@ -89,8 +89,8 @@ All Kubo API calls are **POST-only** (Kubo ≥ 0.5 dropped GET support). The pre
 | `/api/v0/swarm/peers?format=json`          | `peers`                                                                                                                            | Connected peer count                                                                                                                |
 | `/api/v0/repo/stat?format=json`            | `repoSize`, `numObjects`                                                                                                           | Repository size in bytes, object count                                                                                              |
 | `/api/v0/stats/bw?format=json`             | `bwTotalIn`, `bwTotalOut`, `bwRateIn`, `bwRateOut`                                                                                 | Bandwidth totals and rates in bytes/sec                                                                                             |
-| `/api/v0/diag/sys`                         | `memAllocMb`, `goroutines`, `numCPU`                                                                                               | Memory allocation (rounded MB), goroutine count, CPU count. Optional, null on failure.                                              |
-| `/api/v0/stats/dht`                        | `dhtPeers`                                                                                                                         | **Slow lane (10-min ttlMemo).** Sum of peer counts across all DHT routing table instances. Parses NDJSON. Defaults to 0 on failure. |
+| `/api/v0/diag/sys`                         | `sysMemUsedMb`, `goroutines`, `numCPU` (`memAllocMb` legacy)                                                                       | `memory.virt` (host used memory, rounded MB; system-wide, not Kubo's own), `runtime.numgoroutines`, `runtime.numcpu`. `memAllocMb` reads a flat `MemoryAlloc` key Kubo does not emit, so it is null. Optional, null on failure. |
+| `/api/v0/stats/dht`                        | `dhtPeers`                                                                                                                         | **Slow lane (10-min ttlMemo).** Sum of `Buckets[].Peers` across all DHT routing tables (`wan`, `lan`). Parses NDJSON. Defaults to 0 on failure. Kubo marks this output unstable. |
 | `/api/v0/pin/ls?type=recursive&quiet=true` | `pinnedCount`                                                                                                                      | **Slow lane (10-min ttlMemo).** Count of recursively pinned content hashes. Optional, null on failure.                              |
 | `/api/v0/swarm/addrs/listen`               | `listenAddrCount`                                                                                                                  | Count of listen addresses (multiaddrs). Optional, null on failure.                                                                  |
 | `/api/v0/stats/bitswap`                    | `bitswapBlocksReceived`, `bitswapBlocksSent`, `bitswapDataReceived`, `bitswapDataSent`, `bitswapDupBlocks`, `bitswapWantlistCount` | Bitswap exchange metrics. Optional, null on failure.                                                                                |
@@ -122,7 +122,7 @@ Optional endpoints use `.catch()` to handle timeouts or 500 errors without faili
 
 ### DHT Parsing (NDJSON)
 
-`/api/v0/stats/dht` returns newline-delimited JSON. The private method `postNdjson<T>()` parses it by splitting on newlines and extracting `PeerInfos.length` from each entry, summing to `dhtPeers`.
+`/api/v0/stats/dht` returns newline-delimited JSON. The private method `postNdjson<T>()` parses it by splitting on newlines and summing `Peers.length` over each entry's `Buckets` into `dhtPeers` (Kubo `core/commands/stat_dht.go`).
 
 ## Frontend Component
 

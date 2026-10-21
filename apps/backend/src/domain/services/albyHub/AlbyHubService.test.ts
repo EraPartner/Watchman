@@ -31,18 +31,25 @@ let state: {
   failNwcApps: boolean;
 };
 
+// shapes follow getAlby/hub api/models.go (InfoResponse, ListAppsResponse,
+// BalancesResponse, Channel)
 const NWC_INFO_PAYLOAD = {
-  name: "Alby Hub NWC",
+  nodeAlias: "Alby Hub NWC",
   version: "1.5.0",
-  connected: true,
+  running: true,
+  unlocked: false,
+  network: "bitcoin",
   setupCompleted: true,
-  backendType: "LND",
+  backendType: "LDK",
 };
 
-const NWC_APPS_PAYLOAD = [
-  { id: 1, name: "App1" },
-  { id: 2, name: "App2" },
-];
+const NWC_APPS_PAYLOAD = {
+  apps: [
+    { id: 1, name: "App1" },
+    { id: 2, name: "App2" },
+  ],
+  totalCount: 2,
+};
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   const url = req.url ?? "";
@@ -65,6 +72,11 @@ function handler(req: IncomingMessage, res: ServerResponse) {
       return;
     }
     if (url === "/api/apps") {
+      if (!req.headers["authorization"]) {
+        res.writeHead(401);
+        res.end();
+        return;
+      }
       if (state.failNwcApps) {
         res.writeHead(503);
         res.end();
@@ -83,8 +95,20 @@ function handler(req: IncomingMessage, res: ServerResponse) {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          onchain: { spendable: 50_000, total: 60_000 },
-          lightning: { totalSpendable: 2_000_000, totalReceivable: 1_000_000 },
+          onchain: {
+            spendable: 50_000,
+            spendableSat: 50_000,
+            total: 60_000,
+            totalSat: 60_000,
+          },
+          lightning: {
+            // deprecated unsuffixed fields deliberately disagree, so the
+            // test proves the explicit *Msat fields win
+            totalSpendable: 1,
+            totalSpendableMsat: 2_000_000,
+            totalReceivable: 1,
+            totalReceivableMsat: 1_000_000,
+          },
         })
       );
       return;
@@ -98,8 +122,16 @@ function handler(req: IncomingMessage, res: ServerResponse) {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify([
-          { active: true, localBalance: 1_500_000, remoteBalance: 400_000 },
-          { active: false, localBalance: 500_000, remoteBalance: 600_000 },
+          {
+            active: true,
+            localBalanceMsat: 1_500_000,
+            remoteBalanceMsat: 400_000,
+          },
+          {
+            active: false,
+            localBalanceMsat: 500_000,
+            remoteBalanceMsat: 600_000,
+          },
         ])
       );
       return;
@@ -295,6 +327,7 @@ describe("AlbyHubService", () => {
     if (res.ok) {
       expect(res.value.reachable).toBe(true);
       expect(res.value.details?.connected).toBe(true);
+      expect(res.value.details?.running).toBe(true);
       expect(res.value.details?.version).toBe("1.5.0");
       expect(res.value.details?.endpoint).toBe("/api/info");
     }
@@ -319,7 +352,7 @@ describe("AlbyHubService", () => {
     const svc = new AlbyHubService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ legacyProbe: false }),
+      config: makeConfig({ legacyProbe: false, token: "nwc_tok" }),
       now: () => 10,
     });
     const res = await svc.getStats(new AbortController().signal);
@@ -329,9 +362,15 @@ describe("AlbyHubService", () => {
         name: "Alby Hub NWC",
         version: "1.5.0",
         reachable: true,
+        // regression: these came from fields /api/info doesn't have
+        // ("name", "connected") and an /api/apps shape it doesn't return
+        // (bare array), so they were always the fallback / null
         connected: true,
+        running: true,
+        unlocked: false,
+        network: "bitcoin",
         setupCompleted: true,
-        backendType: "LND",
+        backendType: "LDK",
         appCount: 2,
         endpoint: "/api/info",
       });
@@ -344,7 +383,7 @@ describe("AlbyHubService", () => {
     const svc = new AlbyHubService({
       http: createHttpClient(),
       ping: fakePing(),
-      config: makeConfig({ legacyProbe: false }),
+      config: makeConfig({ legacyProbe: false, token: "nwc_tok" }),
       now: () => 5,
     });
     const res = await svc.getStats(new AbortController().signal);
@@ -395,6 +434,30 @@ describe("AlbyHubService", () => {
     }
     expect(state.seenPaths).not.toContain("/api/balances");
     expect(state.seenPaths).not.toContain("/api/channels");
+    // /api/apps is JWT-protected too, so it isn't requested without a token
+    expect(state.seenPaths).not.toContain("/api/apps");
+  });
+
+  it("NWC checkHealth warns when the hub reports the node not running", async () => {
+    state.nwcMode = true;
+    const original = { ...NWC_INFO_PAYLOAD };
+    Object.assign(NWC_INFO_PAYLOAD, { running: false });
+    try {
+      const svc = new AlbyHubService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig({ legacyProbe: false }),
+        now: () => 1,
+      });
+      const res = await svc.checkHealth(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.details?.running).toBe(false);
+        expect(res.value.details?.warning).toMatch(/not running/);
+      }
+    } finally {
+      Object.assign(NWC_INFO_PAYLOAD, original);
+    }
   });
 
   it("NWC bearer token forwarded on deterministic paths", async () => {
