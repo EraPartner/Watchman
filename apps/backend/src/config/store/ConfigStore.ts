@@ -657,9 +657,15 @@ export function createConfigStore(
     },
 
     async listAudit(limit = 100): Promise<ReadonlyArray<AuditEntry>> {
+      // The limit is interpolated into SQL, so a non-finite value must never reach it.
+      const safeLimit = Number.isFinite(limit)
+        ? Math.floor(Math.max(1, Math.min(limit, 1000)))
+        : 100;
       return withConn(async (c) => {
+        // id breaks ts ties: rows written in the same millisecond (update + rename)
+        // otherwise come back in arbitrary order.
         const result = await c.runAndReadAll(
-          `SELECT * FROM app_config_audit ORDER BY ts DESC LIMIT ${Math.floor(Math.max(1, Math.min(limit, 1000)))}`
+          `SELECT * FROM app_config_audit ORDER BY ts DESC, id DESC LIMIT ${safeLimit}`
         );
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
         return rows.map((r) => ({
@@ -689,11 +695,14 @@ export function createConfigStore(
     },
 
     async exportAll(actor?: string): Promise<ExportBundle> {
-      const all = await this.loadAll();
+      // Rows that fail to load can't be exported; count them in the audit row so
+      // an incomplete backup is visible (the UI warns from /config/load-errors).
+      const { services: all, errors: unloadable } = await loadAllPartitioned();
       const plaintext = all.map((s) => ({
         kind: s.kind,
         instanceId: s.instanceId,
         enabled: s.enabled,
+        profileId: s.profileId,
         config: s.config,
       }));
       const cipher = encryptor.encryptJson(plaintext);
@@ -708,7 +717,7 @@ export function createConfigStore(
           "export",
           null,
           null,
-          { count: plaintext.length },
+          { count: plaintext.length, skipped: unloadable.length },
           actor ?? null
         )
       );
@@ -729,9 +738,21 @@ export function createConfigStore(
       if (!Array.isArray(plaintext))
         throw new Error("Invalid bundle: decoded payload must be array");
 
-      const existing = await this.loadAll();
+      const { services: existing, errors: unloadable } =
+        await loadAllPartitioned();
       const byKey = new Map<string, StoredService>();
       for (const s of existing) byKey.set(`${s.kind}/${s.instanceId}`, s);
+      const unloadableKeys = new Set(
+        unloadable.map((e) => `${e.kind}/${e.instanceId}`)
+      );
+      const profileIds = await withConn(async (c) => {
+        const res = await c.runAndReadAll(`SELECT id FROM app_profile`);
+        return new Set(
+          (res.getRowObjects() as Array<Record<string, unknown>>).map((r) =>
+            String(r["id"])
+          )
+        );
+      });
 
       const result: ImportResult = {
         imported: 0,
@@ -747,6 +768,7 @@ export function createConfigStore(
         const entry = raw as {
           kind?: unknown;
           instanceId?: unknown;
+          profileId?: unknown;
           config?: unknown;
         };
         const kind = String(entry.kind ?? "");
@@ -756,10 +778,25 @@ export function createConfigStore(
           if (!cfg) throw new Error("missing config");
           const match = byKey.get(`${kind}/${instanceId}`);
           if (match) {
+            // Existing services keep their current profile.
             await this.update(match.id, cfg, actor);
             result.updated += 1;
+          } else if (unloadableKeys.has(`${kind}/${instanceId}`)) {
+            throw new Error(
+              "an existing row with this kind and instance id fails to load; delete it under Settings > Services, then import again"
+            );
           } else {
-            await this.create(cfg, actor);
+            // Restore the exported profile when it still exists here; otherwise
+            // (older bundle, or a profile that is gone) create() uses the active one.
+            const profileId =
+              typeof entry.profileId === "string" &&
+              profileIds.has(entry.profileId)
+                ? entry.profileId
+                : undefined;
+            const created = await this.create(cfg, actor, profileId);
+            // A later entry with the same (kind, instanceId) updates this one
+            // instead of failing as a duplicate.
+            byKey.set(`${kind}/${instanceId}`, created);
             result.imported += 1;
           }
         } catch (err) {

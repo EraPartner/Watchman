@@ -144,6 +144,203 @@ describe("ConfigStore", () => {
     expect(audit[0]!.action).toBe("delete");
   });
 
+  it("breaks audit ts ties by insertion order (newest id first)", async () => {
+    const ts = toTs(new Date("2026-01-01T00:00:00Z"));
+    await pool.withConnection(async (c) => {
+      for (const action of ["update", "rename"]) {
+        await c.run(
+          `INSERT INTO app_config_audit (ts, action, target_kind, target_id, diff, actor)
+           VALUES (?, ?, NULL, NULL, NULL, NULL)`,
+          [ts, action]
+        );
+      }
+    });
+    const audit = await store.listAudit();
+    expect(audit.map((e) => e.action)).toEqual(["rename", "update"]);
+  });
+
+  it("listAudit falls back to the default limit for a non-finite value", async () => {
+    await store.create({
+      kind: "ipfs",
+      instanceId: "a",
+      apiUrl: "http://127.0.0.1:5001",
+    });
+    await expect(store.listAudit(Number.NaN)).resolves.toHaveLength(1);
+  });
+
+  describe("export / import", () => {
+    it("round-trips services, secrets included, and updates matching entries", async () => {
+      const created = await store.create({
+        kind: "qbittorrent",
+        instanceId: "main",
+        baseUrl: "http://127.0.0.1:8069",
+        username: "admin",
+        password: "supersecret",
+      });
+      const bundle = await store.exportAll("alice");
+      expect(bundle.version).toBe(1);
+      expect(bundle.payload).not.toContain("supersecret");
+
+      await store.delete(created.id);
+      const restored = await store.importBundle(bundle, "alice");
+      expect(restored).toEqual({
+        imported: 1,
+        updated: 0,
+        skipped: 0,
+        errors: [],
+      });
+      const [svc] = await store.loadAll();
+      expect((svc!.config as { password: string }).password).toBe(
+        "supersecret"
+      );
+
+      const again = await store.importBundle(bundle);
+      expect(again.updated).toBe(1);
+      expect(again.imported).toBe(0);
+      expect(await store.loadAll()).toHaveLength(1);
+
+      const actions = (await store.listAudit()).map((e) => e.action);
+      expect(actions).toContain("export");
+      expect(actions).toContain("import");
+    });
+
+    it("updates instead of failing when a bundle repeats a (kind, instanceId)", async () => {
+      const encryptor = createEncryptor(deriveKey("unit-test-key"));
+      const entry = (apiUrl: string) => ({
+        kind: "ipfs",
+        instanceId: "dup",
+        enabled: true,
+        config: { kind: "ipfs", instanceId: "dup", apiUrl },
+      });
+      const payload = encryptor
+        .encryptJson([
+          entry("http://127.0.0.1:5001"),
+          entry("http://127.0.0.1:5002"),
+        ])
+        .toString("base64");
+
+      const result = await store.importBundle({
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        payload,
+      });
+
+      expect(result.errors).toEqual([]);
+      expect(result.imported).toBe(1);
+      expect(result.updated).toBe(1);
+      const all = await store.loadAll();
+      expect(all).toHaveLength(1);
+      expect((all[0]!.config as { apiUrl: string }).apiUrl).toBe(
+        "http://127.0.0.1:5002"
+      );
+    });
+
+    async function insertProfile(id: string): Promise<void> {
+      const now = toTs(new Date());
+      await pool.withConnection((c) =>
+        c.run(
+          `INSERT INTO app_profile (id, name, network_sigs, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, id, "[]", now, now]
+        )
+      );
+    }
+
+    function bundleOf(entries: unknown[]) {
+      const encryptor = createEncryptor(deriveKey("unit-test-key"));
+      return {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        payload: encryptor.encryptJson(entries).toString("base64"),
+      };
+    }
+
+    it("restores the exported profile when it exists, else falls back", async () => {
+      await insertProfile("travel");
+      const ipfs = (instanceId: string, profileId?: string) => ({
+        kind: "ipfs",
+        instanceId,
+        enabled: true,
+        ...(profileId === undefined ? {} : { profileId }),
+        config: { kind: "ipfs", instanceId, apiUrl: "http://127.0.0.1:5001" },
+      });
+
+      const result = await store.importBundle(
+        bundleOf([ipfs("a", "travel"), ipfs("b", "gone"), ipfs("c")])
+      );
+
+      expect(result.errors).toEqual([]);
+      const byId = new Map(
+        (await store.loadAll()).map((s) => [s.instanceId, s.profileId])
+      );
+      expect(byId.get("a")).toBe("travel");
+      // No resolveDefaultProfileId in this store, so the fallback is unassigned.
+      expect(byId.get("b")).toBe("");
+      expect(byId.get("c")).toBe("");
+    });
+
+    it("exports profileId with each service", async () => {
+      await insertProfile("home");
+      await store.create(
+        { kind: "ipfs", instanceId: "a", apiUrl: "http://127.0.0.1:5001" },
+        undefined,
+        "home"
+      );
+      const bundle = await store.exportAll();
+      const encryptor = createEncryptor(deriveKey("unit-test-key"));
+      const entries = encryptor.decryptJson<Array<{ profileId: string }>>(
+        Buffer.from(bundle.payload, "base64")
+      );
+      expect(entries[0]!.profileId).toBe("home");
+    });
+
+    it("explains a conflict with an unloadable row and counts skipped rows on export", async () => {
+      const now = toTs(new Date());
+      await pool.withConnection((c) =>
+        c.run(
+          `INSERT INTO app_service_instance
+            (id, kind, instance_id, enabled, config_public, config_secret, poll_policy, cache_ttl_ms, timeout_ms, created_at, updated_at)
+           VALUES (?, 'adguard', 'broken', true, '{}', NULL, '{}', 10000, 5000, ?, ?)`,
+          [randomUUID(), now, now]
+        )
+      );
+
+      await store.exportAll();
+      const exportRow = (await store.listAudit()).find(
+        (e) => e.action === "export"
+      );
+      expect(exportRow!.diff).toEqual({ count: 0, skipped: 1 });
+
+      const result = await store.importBundle(
+        bundleOf([
+          {
+            kind: "adguard",
+            instanceId: "broken",
+            enabled: true,
+            config: {
+              kind: "adguard",
+              instanceId: "broken",
+              baseUrl: "http://127.0.0.1:3000",
+            },
+          },
+        ])
+      );
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]!.message).toMatch(/fails to load/);
+    });
+
+    it("rejects a bundle encrypted with a different master key", async () => {
+      const other = createEncryptor(deriveKey("some-other-key"));
+      await expect(
+        store.importBundle({
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          payload: other.encryptJson([]).toString("base64"),
+        })
+      ).rejects.toThrow();
+    });
+  });
+
   it("loadAll returns all instances", async () => {
     await store.create({
       kind: "ipfs",

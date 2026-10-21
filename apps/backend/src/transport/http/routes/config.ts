@@ -220,9 +220,13 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
     app.get<{ Querystring: { limit?: string } }>(
       "/config/audit",
       async (req) => {
-        const limit = req.query.limit
-          ? Math.max(1, Math.min(1000, Number(req.query.limit)))
-          : 100;
+        // A non-numeric limit (e.g. ?limit=abc) is NaN, which clamping can't fix;
+        // fall back to the default instead of interpolating NaN into SQL.
+        const requested = Number(req.query.limit);
+        const limit =
+          req.query.limit && Number.isFinite(requested)
+            ? Math.max(1, Math.min(1000, requested))
+            : 100;
         const entries = await store.listAudit(limit);
         return {
           data: entries.map((e) => ({
