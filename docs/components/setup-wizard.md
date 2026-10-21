@@ -2,7 +2,7 @@
 title: Setup Wizard Components
 type: component
 status: active
-date: 2026-04-20
+date: 2026-10-21
 tags: [component, frontend, setup, wizard, onboarding, multi-step, form, service-configuration, v2, single-user]
 description: Multi-step setup wizard for first-boot service configuration with welcome, kind picker, configure, and review steps
 aliases: [setup wizard, onboarding wizard, setup flow]
@@ -20,14 +20,13 @@ aliases: [setup wizard, onboarding wizard, setup flow]
 **File**: `[[apps/frontend/src/pages/setup/SetupWizard.tsx]]`
 
 Main orchestrator component. Owns:
-- **step state** — "connect" | "welcome" | "pick" | "configure" | "review"
+- **step state** — "welcome" | "pick" | "configure" | "review" (starts at "welcome")
 - **selectedKind state** — Currently selected service kind
 - **addedIds state** — Array of IDs for services added in this session
 
 Renders the shell layout (grain background, sidebar with brand + progress rail, main content area) and dispatches to step-specific components based on state.
 
 **Key Behavior:**
-- **Initial step gating** — When `getDesktopBridge()?.apiUrl` is empty, wizard starts at "connect"; when already set, starts at "welcome"
 - On `skip`: Calls `dismiss()` to set localStorage flag, then navigates to "/"
 - On `finish`: Navigates to "/" without dismiss (can re-enter wizard)
 - On `pick`: Sets selectedKind and moves to "configure" step
@@ -38,43 +37,28 @@ Renders the shell layout (grain background, sidebar with brand + progress rail, 
 
 **File**: `[[apps/frontend/src/pages/setup/ProgressRail.tsx]]`
 
-Visual progress indicator. Shows five steps with titles and a connecting line:
-- Connect (split-deploy only; skipped if `apiUrl` already set)
+Visual progress indicator. Shows four steps with titles and a connecting line
+(`ProgressRail.tsx`):
 - Welcome
-- Choose Services
+- Pick
 - Configure
 - Review
 
-Type: `type SetupStep = "connect" | "welcome" | "pick" | "configure" | "review"`
+Type: `type SetupStep = "welcome" | "pick" | "configure" | "review"`
 
 Highlights the current step and provides visual feedback.
 
-### ConnectStep
+### ConnectStep (removed)
 
-**File**: `[[apps/frontend/src/pages/setup/steps/ConnectStep.tsx]]`
-
-**Split-deploy only.** First step when running on Electron without an `apiUrl` configured. Guides the user to pair the Mac client with a Raspberry Pi backend (or any Fastify backend on the LAN).
-
-Displays:
-- Explanation of split-deploy architecture (backend on always-on Pi, client on Mac)
-- Zod-validated URL input with placeholder `http://192.168.1.10:3001`
-- Help text: "HTTP only on LAN. Reserve a DHCP lease so the URL stays stable."
-- Test & Save button with 3s timeout probe of `GET {url}/meta/health`
-
-**Behavior:**
-- On successful probe (200 OK), calls `bridge.saveApiUrl(url)` and `bridge.reload()`, then navigates to Welcome
-- On probe failure (timeout, network error, or non-200), shows error message with context (e.g., "No response in 3s. Is the backend running at...?")
-- If `bridge.saveApiUrl` or `bridge.reload` are missing, shows error and suggests restarting the app
-- Dismissible errors; user can edit the URL and retry
-
-**Props:**
-- `onConnected: () => void` — Navigate to Welcome step on successful connection
+The split-deploy `ConnectStep.tsx` was removed with the split deploy (commit `f6462b4`,
+[[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]). The wizard always starts
+at Welcome.
 
 ### WelcomeStep
 
 **File**: `[[apps/frontend/src/pages/setup/steps/WelcomeStep.tsx]]`
 
-Second step (or first in web/non-split-deploy mode). Introduction and decision point. Displays:
+First step. Introduction and decision point. Displays:
 - Watchman branding and tagline
 - Brief explanation of what the wizard does
 - Two CTAs: "Get Started" or "Skip for Now"
@@ -89,7 +73,7 @@ Second step (or first in web/non-split-deploy mode). Introduction and decision p
 
 Service type selection. Features:
 - **Search box** — Filter by service name or kind
-- **5 category tabs** — Network, Media, Bitcoin, Home Automation, Hardware
+- **5 category tabs** — Network, Media, Bitcoin, Home, Hardware
 - **KindCard components** — Per-service cards with icons, names, and descriptions
 - **13 service kinds** — AdGuard, Bitcoin, Tor, qBittorrent, IPFS, Synology, Roon, Philips Hue, Homebridge, Alby Hub, Raspberry Pi, Mac Mini, Router
 
@@ -165,7 +149,7 @@ Custom CSS for the setup shell and wizard-specific layout:
 **File**: `[[apps/frontend/src/pages/setup/kindCategories.ts]]`
 
 Lookup table defining:
-- 5 categories (Network, Media, Bitcoin, Home Automation, Hardware)
+- 5 categories (Network, Media, Bitcoin, Home, Hardware)
 - Per-service metadata:
   - `name` — Display name
   - `description` — One-line explanation
@@ -200,19 +184,15 @@ ServiceEditor filters framework fields (instanceId, enabled, cacheTtlMs, timeout
 
 This keeps the form reusable for both first-boot setup and runtime service editing.
 
-## Split-Deploy Integration
+## Split-Deploy Integration (removed)
 
-When running the Electron desktop app in split-deploy mode (backend on Pi, client on Mac):
-
-- ConnectStep appears first and gates the rest of the wizard until a backend URL is entered and tested
-- `getDesktopBridge()?.apiUrl` is checked on SetupWizard mount; if empty, `initialStep()` returns "connect"
-- Once `apiUrl` is saved and the app reloads, subsequent visits to the wizard start at "welcome"
-- Desktop bridge methods (`saveApiUrl`, `reload`) are called from ConnectStep to persist the URL and trigger a reload
-- See [[docs/adr/018-split-deploy-pi-backend|ADR-018]] for architecture rationale
+The split-deploy flow (ConnectStep, `apiUrl` gating, `saveApiUrl` / `reload` bridge calls) was
+removed in [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]. The desktop app
+runs its own backend, so the wizard needs no backend URL.
 
 ## Related
 
-- [[docs/adr/018-split-deploy-pi-backend|ADR-018]] — Split Deploy: Pi Backend + Mac Client
+- [[docs/adr/018-split-deploy-pi-backend|ADR-018]] — Split Deploy: Pi Backend + Mac Client (reverted by [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]])
 - [[docs/features/ui-configuration|UI Configuration Feature]] — Overview of setup flow and service management
 - [[docs/components/service-editor|ServiceEditor Component]] — Embedded configuration form
 - [[docs/components/use-setup-dismissal|useSetupDismissal Hook]] — Persistence of wizard dismissal state

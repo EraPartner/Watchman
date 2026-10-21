@@ -23,11 +23,13 @@ npm run electron:dev
 
 This command:
 
-1. Pre-builds the backend and frontend
-2. Starts Electron in development mode
-3. Opens the dashboard on `watchman://app/`
+1. Builds the backend and frontend once
+2. Starts Electron in development mode (`NODE_ENV=development`)
+3. Opens the dashboard on `watchman://app/` (or `WATCHMAN_DEV_URL`, if set)
 
-The app will reload on backend/frontend code changes.
+There is no watch mode: after a code change, stop the app and run the command again
+(`package.json` `electron:dev`). For hot reload, run `npm run dev:frontend` and point
+`WATCHMAN_DEV_URL` at the Vite server (see [Override Frontend Dev URL](#override-frontend-dev-url)).
 
 ### Run in Production Mode (Packaged)
 
@@ -46,8 +48,13 @@ npm run dist
 This command:
 
 1. Builds frontend and backend
-2. Runs electron-builder for all platforms (macOS dmg, Windows nsis, Linux AppImage+deb)
+2. Stages the backend's production dependencies and runs electron-builder for the
+   **host** platform only (on a Mac: an Apple Silicon `.dmg` and `.zip`)
 3. Outputs to `apps/desktop/out/`
+
+> [!important] Apple Silicon only
+> The macOS build targets `arm64` only (`apps/desktop/electron-builder.yml`). It does not
+> run on Intel Macs. See [Building for Distribution](#building-for-distribution).
 
 ## Native Desktop Experience
 
@@ -61,6 +68,11 @@ The shell behaves like a first-class native app, not a wrapped web page:
   `<html data-desktop="macos">` (via `useDesktopChrome`) so the topbar clears the
   traffic lights and becomes a window drag region; interactive controls opt out
   with `-webkit-app-region: no-drag`.
+- **Closing the window keeps the app running (macOS)** — closing the last window does
+  not quit the app or stop the backend; Watchman stays in the Dock. Click the Dock icon
+  to reopen the window, and use **Quit** (⌘Q) to stop the app and its backend. On
+  Windows and Linux, closing the last window quits (`window-all-closed` in
+  `apps/desktop/src/main.ts`).
 - **Window state** — size and position are persisted to
   `<userData>/settings.json` (debounced, clamped to the visible work area) and
   restored on the next launch.
@@ -104,13 +116,16 @@ adds renderer hardening:
 
 ### Master Key
 
-On first run, Watchman auto-generates a **per-installation master key**:
+On first run, the backend auto-generates a **per-installation master key**
+(`apps/backend/src/config/masterKey.ts`):
 
-- **Location**: `<userData>/master.key` (platform-specific)
-  - **macOS**: `~/Library/Application Support/io.watchman.desktop/master.key`
-  - **Windows**: `%AppData%\io.watchman.desktop\master.key`
-  - **Linux**: `~/.config/io.watchman.desktop/master.key`
-- **Format**: Base64-encoded 32-byte AES key
+- **Location**: `<userData>/data/master.key` (the desktop app sets `DATA_DIR` to
+  `<userData>/data`). `<userData>` is Electron's per-app folder, named after the
+  `productName` (`Watchman`) in the packaged app:
+  - **macOS**: `~/Library/Application Support/Watchman/data/master.key`
+  - Windows and Linux use Electron's matching user-data folder (not verified on those
+    platforms).
+- **Format**: Base64-encoded 32 random bytes
 - **Permissions**: Mode `0600` (user-only read/write)
 - **Purpose**: Encrypts all service credentials stored in DuckDB
 
@@ -119,12 +134,15 @@ On first run, Watchman auto-generates a **per-installation master key**:
 
 ### Data Directory
 
-All time-series metrics and service configuration:
+Service configuration, profiles and the audit log:
 
-- **Location**: `<userData>/data/` (same base as master key)
+- **Location**: `<userData>/data/` (same folder as the master key)
 - **Contents**:
-  - `timeseries.duckdb` — DuckDB database (metrics, service config)
-  - `timeseries.duckdb.wal` — DuckDB write-ahead log (temporary)
+  - `watchman.duckdb` — DuckDB database (`apps/backend/src/index.ts`)
+  - `watchman.duckdb.wal` — DuckDB write-ahead log (temporary)
+
+There is no time-series store; it was removed in
+[[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]].
 
 ### Desktop State & Logs
 
@@ -233,7 +251,7 @@ a `GH_TOKEN` to upload.
 
 ### Windows (NSIS)
 
-Requires running on Windows or cross-compile setup.
+Configured in `electron-builder.yml` but not exercised; unverified. Requires running on Windows or a cross-compile setup.
 
 ```bash
 npm run dist
@@ -244,6 +262,8 @@ Outputs:
 - `apps/desktop/out/Watchman Setup <version>.exe` — NSIS installer
 
 ### Linux (AppImage + deb)
+
+Configured in `electron-builder.yml` but not exercised; unverified.
 
 ```bash
 npm run dist
@@ -298,17 +318,16 @@ The main process (`apps/desktop/src/backend.ts`) spawns the backend with these v
 
 ### Master Key Missing After Reinstall
 
-Each installation has its own master key. If you reinstall:
+Reinstalling the app does not touch `<userData>`, so the key and database stay. A new
+key is generated only when `<userData>/data/master.key` is gone (for example, a new Mac
+or a deleted folder). Secrets encrypted with the old key cannot be decrypted with a new
+one.
 
-- Old installation: master key stays in old `userData`
-- New installation: new master key generated
-- **Important**: Old credentials are encrypted with the old key and cannot be recovered
+To move to a new machine:
 
-Migration steps:
-
-1. Before reinstalling, export service configs (if available in UI)
-2. Reinstall
-3. Re-enter service credentials in Setup Wizard
+1. Copy the whole `<userData>/data/` folder (database **and** `master.key`), or
+2. Export a backup in **Settings → Backup & Restore**, import it on the new machine, and
+   re-enter any secrets that do not work there (not verified end to end).
 
 ### Crashes on Startup
 
@@ -316,7 +335,7 @@ Migration steps:
 2. Verify frontend and backend builds are present: `apps/frontend/dist/` and `apps/backend/dist/`
 3. Clear userData and restart (will regenerate master key on next run, but you'll lose saved config):
    ```bash
-   rm -rf ~/Library/Application\ Support/io.watchman.desktop/  # macOS
+   rm -rf ~/Library/Application\ Support/Watchman/  # macOS
    ```
 
 ## Related

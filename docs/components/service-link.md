@@ -1,14 +1,17 @@
 ---
 title: "Component: ServiceLink"
 type: component
-status: active
-date: 2026-04-11
+status: superseded
+date: 2026-10-21
 tags: [component, frontend, react, shared, navigation]
 description: Reusable external link button for service web interfaces with URL normalization
 aliases: [service link, external link button, url button]
 ---
 
 # Component: ServiceLink
+
+> [!warning] Superseded: removed from the code
+> `ServiceLink.tsx` and `lib/url.ts` were removed as dead code (commit `8f289c2`). Tile quick links now come from `apps/frontend/src/services/renderers/quickLink.ts`. This page is kept as history.
 
 > [!abstract] Overview
 > A reusable button component that renders an external link to a service's web interface with URL normalization, HTTPS preference, and an external link icon.

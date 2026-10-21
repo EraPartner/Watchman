@@ -131,9 +131,7 @@ The [[apps/frontend/src/hooks/useWebSocket.ts|useWebSocket]] hook manages:
   - metrics invalidation and `connection` message toast behavior
   - max reconnect attempts: one failure toast, then retries continue at the 30s cap
   - cleanup stability for singleton WebSocket state across tests
-- Frontend notification-state coverage now also includes `apps/frontend/src/hooks/use-toast.test.tsx` for `apps/frontend/src/hooks/use-toast.ts`:
-  - reducer limit and dismiss-all behavior
-  - hook lifecycle coverage for add/update/dismiss/remove transitions
+- Toasts use `sonner` (`toast.error` / `toast.warning` / `toast.info` in `useWebSocket.ts`; `<Toaster>` in `App.tsx`). The earlier `hooks/use-toast.ts` reducer and its test were removed.
 
 ## PlantUML Diagrams
 

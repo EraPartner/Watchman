@@ -2,7 +2,7 @@
 title: Frontend Design System
 type: architecture
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     design-system,
@@ -505,9 +505,10 @@ Usage: `shadow-elev-1`
 
 ## Demo Page
 
-The `apps/frontend/src/pages/BentoDemo.tsx` (BentoDemo) page showcases all primitives and tokens. It's gated by the `?bento=1` query parameter or reachable at `/bento` route.
+> [!warning] Not in the current code
+> There is no `BentoDemo.tsx` page and no `/bento` route or `?bento=1` flag in `apps/frontend/src/` (routes are in `App.tsx`). The primitives are used directly by the dashboard, detail sheet and settings pages.
 
-Sections include:
+The planned demo sections were:
 
 - Buttons (ghost, tonal, accent sizes: sm, md, lg, icon)
 - Surfaces (elevations 0–3, tones: neutral/warn/crit/ok, padding variants)

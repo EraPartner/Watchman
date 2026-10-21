@@ -2,13 +2,18 @@
 title: Changelog
 type: reference
 status: active
-date: 2026-04-02
+date: 2026-10-21
 tags: [changelog, release-notes, version-history]
 description: Project changelog tracking all notable changes to Watchman
 aliases: [changelog, release notes, version history, changes]
 ---
 
 # Changelog
+
+> [!note] Not updated after April 2026
+> This page records the 2026-04 monorepo restructuring. Later changes, including the read-only
+> change (ADR-032) and the October 2026 correctness audit, are in the repository root
+> `CHANGELOG.md`.
 
 All notable changes to this project will be documented in this file.
 

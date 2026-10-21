@@ -2,7 +2,7 @@
 title: ServiceEditor Component
 type: component
 status: active
-date: 2026-04-19
+date: 2026-10-21
 tags: [component, frontend, form, configuration, setup-wizard, dynamic-form, validation]
 description: Dynamic form component for creating and editing service instances with field filtering, advanced settings, and array support
 aliases: [service editor, service configuration form, dynamic form]
@@ -173,11 +173,24 @@ Empty required fields block submission with error message.
 
 ### Test Connection Button
 
-Optional "Test Connection" button (shown on edit):
+"Test" button, shown only when editing a saved service:
 
-- Calls `POST /config/services/{id}/test` with current config
-- Shows inline result: `"OK (45ms)"` or `"Failed: Connection timeout"`
+- Calls `POST /config/services/{id}/test`, which tests the **saved** config, not unsaved
+  edits in the form (save first)
+- Shows inline result: `"OK (45ms)"` or `"Failed: <message>"`
 - Does not save; for validation only
+
+### Pair with Bridge Button (Philips Hue)
+
+Shown when the kind is `philipsBridge` (`ServiceEditor.tsx`):
+
+- Needs the `host` field filled in; otherwise it shows "Enter the bridge host first"
+- Press the bridge's physical link button, then click **Pair with bridge**
+- Calls `POST /setup/philips-bridge/pair` and fills `applicationKey` and `certHash` into the
+  form; click **Save** to keep them
+- This is the one write Watchman makes to the bridge: it registers an app key once. Polling
+  stays read-only ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]). See
+  [[docs/integrations/philips-hue#Pairing Wizard (H2 Task)|Hue pairing]].
 
 ### Error Display
 

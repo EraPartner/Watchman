@@ -1,14 +1,17 @@
 ---
 title: OfflineBanner Component
 type: component
-status: active
-date: 2026-04-20
+status: superseded
+date: 2026-10-21
 tags: [component, frontend, split-deploy, offline, banner, reachability]
 description: Fixed-top offline notification banner displayed when the Raspberry Pi backend is unreachable in split-deploy mode
 aliases: [offline banner, reachability banner]
 ---
 
 # OfflineBanner Component
+
+> [!warning] Superseded: removed from the code
+> `OfflineBanner.tsx` was removed with the split deploy (commit `f6462b4`, [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]]). The desktop app runs its own backend again; the desktop health watchdog and its `backend:lost` toast cover outages ([[docs/guides/running-the-desktop-app|desktop guide]]). This page is kept as history.
 
 > [!abstract] Overview
 > The OfflineBanner is a fixed-position banner mounted at the top of the app in split-deploy mode (Electron client + Raspberry Pi backend). It detects when the backend becomes unreachable (via polling `/meta/health`) and displays an offline state with Retry and Change URL controls.

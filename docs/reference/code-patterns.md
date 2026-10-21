@@ -2,7 +2,7 @@
 title: Code Patterns
 type: reference
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [reference, code-patterns, backend, frontend, configuration, zod, mutex]
 description: Standard code patterns and conventions used across the Watchman codebase
 aliases: [patterns, conventions, code style, best practices]
@@ -210,60 +210,56 @@ return health;
 
 ### Per-Kind Zod Schema + UI Field Metadata Pattern
 
-Service configurations are defined as Zod schemas with attached field metadata for dynamic UI form generation. One file per service kind under `apps/backend/src/config/schemas/`:
+Each service kind has a Zod instance schema and a list of UI field metadata. They live in two
+files, not one file per kind:
+
+- `[[apps/backend/src/config/services.ts]]` — the instance schemas (`BitcoinInstanceSchema`, …),
+  built on a shared `BaseInstanceSchema` (`instanceId`, `enabled`, `pollPolicy`, `cacheTtlMs`,
+  `timeoutMs`) and combined into the `ServiceInstanceSchema` union.
+- `[[apps/backend/src/config/schemas/fieldMetadata.ts]]` — `KIND_META`, one entry per kind with
+  its label, schema, form fields and `secretFields`.
 
 ```typescript
-// apps/backend/src/config/schemas/bitcoin.ts
-import { z } from "zod";
-
-export const BitcoinConfigSchema = z.object({
-  onionUrl: z.string().url(),
-  rpcUser: z.string(),
-  rpcPassword: z.string(),
-  rpcPort: z.number().int().default(8332),
+// apps/backend/src/config/services.ts
+export const BitcoinInstanceSchema = BaseInstanceSchema.extend({
+  kind: z.literal("bitcoin"),
+  rpcUrl: z.string().url().default("http://127.0.0.1:8332"),
+  rpcUser: z.string().default(""),
+  rpcPassword: z.string().default(""),
+  zmqHashblockEndpoint: z.string().default(""),
+  zmqRawtxEndpoint: z.string().default(""),
 });
 
-export const BitcoinFieldMeta: FieldMeta[] = [
-  {
-    name: "onionUrl",
-    label: "Onion Address",
-    type: "text",
-    required: true,
-    help: "Tor hidden service URL",
-  },
-  {
-    name: "rpcUser",
-    label: "RPC User",
-    type: "text",
-    required: true,
-  },
-  {
-    name: "rpcPassword",
-    label: "RPC Password",
-    type: "password",
-    secret: true, // Encrypted at rest; masked in GET responses
-    required: true,
-  },
-  {
-    name: "rpcPort",
-    label: "RPC Port",
-    type: "number",
-    required: false,
-    placeholder: "8332",
-  },
-];
-
-export type BitcoinConfig = z.infer<typeof BitcoinConfigSchema>;
+// apps/backend/src/config/schemas/fieldMetadata.ts (excerpt)
+bitcoin: {
+  kind: "bitcoin",
+  label: "Bitcoin Node",
+  description: "Bitcoin Core JSON-RPC.",
+  schema: BitcoinInstanceSchema,
+  fields: withCommon([
+    { name: "rpcUrl", label: "RPC URL", type: "url", required: true, default: "http://127.0.0.1:8332" },
+    { name: "rpcUser", label: "RPC user", type: "text", help: "Needed for stats. Cookie auth is not supported; …" },
+    { name: "rpcPassword", label: "RPC password", type: "password", secret: true },
+    // zmqHashblockEndpoint, zmqRawtxEndpoint …
+  ]),
+  secretFields: ["rpcPassword"],
+},
 ```
 
-**Why this pattern:**
-- **Single source of truth**: Zod schema defines both validation and field metadata
-- **Type safety**: `z.infer<>` generates TypeScript types automatically
-- **Dynamic UI**: Frontend generates forms from field metadata without hardcoding
-- **Server validation**: Same schema validates on both client (partial) and server (full)
-- **Secret handling**: Metadata `secret: true` flag marks fields for encryption and redaction
+Field `type` is one of `text`, `password`, `number`, `url`, `boolean`, `select`, `stringArray`,
+`numberArray`. `withCommon()` prepends the shared `instanceId`, `enabled`, `cacheTtlMs` and
+`timeoutMs` fields.
 
-Re-export all schemas from `[[apps/backend/src/config/schemas/index.ts]]` for API endpoint to serve to frontend.
+**Why this pattern:**
+- **Server validation**: the backend parses every config write with the kind's Zod schema
+- **Type safety**: `z.infer<>` generates the instance types
+- **Dynamic UI**: `GET /config/kinds` serves `KIND_META`, and the frontend builds forms from it
+  without hardcoding
+- **Secret handling**: `secretFields` marks fields that are encrypted at rest, redacted in
+  responses, and redacted in logs
+
+`[[apps/backend/src/config/schemas/index.ts]]` re-exports `KIND_META`, `SERVICE_KINDS` and the
+helpers for the routes.
 
 ### Mutex-Serialized Lifecycle Pattern
 

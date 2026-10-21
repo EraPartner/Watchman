@@ -9,8 +9,8 @@ project-specific rules only.
 
 ## Project
 
-Watchman is a self-hosted dashboard that polls home-lab services and exposes status, metrics, and
-controls. It is an npm-workspaces monorepo using React 18, TypeScript, Vite, Tailwind and shadcn/ui;
+Watchman is a self-hosted dashboard that polls home-lab services and exposes status and metrics.
+It is read-only toward monitored services (ADR-032). It is an npm-workspaces monorepo using React 18, TypeScript, Vite, Tailwind and shadcn/ui;
 Node, TypeScript and Fastify 5; REST and WebSocket transport; DuckDB configuration; Vitest; and
 Electron. License: AGPL-3.0-only.
 

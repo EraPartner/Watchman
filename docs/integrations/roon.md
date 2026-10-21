@@ -173,7 +173,7 @@ Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 ## Related
 
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 Phase 0a — Two-Tier Health]]
-- [[docs/adr/020-two-tier-health-and-monitoring-upgrades|ADR-020 Phase 0b + Two-Tier Health Enhancements]]
+- [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 Phase 0b + Two-Tier Health Enhancements]]
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/api/services-health|Services Health API]]
 - [[docs/architecture/backend-architecture#roon-websocket-client-rn1--real-time-zone-tracking|Roon WebSocket Client Documentation]]

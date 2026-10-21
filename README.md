@@ -31,7 +31,10 @@ It combines a React + TypeScript frontend with a Node.js + Fastify backend and s
 > [!IMPORTANT]
 > **Monitoring-only by design**
 >
-> Watchman is intentionally **read-only**. It does **not** start/stop/restart/reconfigure services.
+> Watchman is intentionally **read-only**. It does **not** start/stop/restart/reconfigure services
+> or write to devices (no GPIO writes). The only writes are one-time setup handshakes you start
+> yourself: Hue bridge pairing (creates an app key) and Roon extension registration.
+> See [ADR-032](./docs/adr/032-monitoring-only-no-service-control.md).
 
 ## Why Watchman?
 
@@ -55,18 +58,17 @@ If you run multiple services, Watchman gives you one dashboard instead of 10+ br
 - ✅ Circuit breaker + caching patterns for resilient service polling
 - ✅ Trusted-network security model — origin allow-list, encrypted secrets at rest, PII-redacted logging
 
-## Supported Integrations (Examples)
+## Supported Integrations
 
-Watchman supports **14+ service types**. You can enable only what you use.
+Watchman supports **13 service kinds**. You can enable only what you use.
 
-| Category           | Integrations                               |
-| ------------------ | ------------------------------------------ |
-| Network & Security | AdGuard Home, Tor, Router (Beryl, Telenet) |
-| Cryptocurrency     | Bitcoin, Alby Hub                          |
-| Storage & Sharing  | qBittorrent, IPFS, Synology                |
-| Smart Home & Media | Homebridge, Philips Hue, Roon              |
-| Infrastructure     | Mac Mini, Raspberry Pi                     |
-| Social             | Nostrcheck                                 |
+| Category           | Integrations                                |
+| ------------------ | ------------------------------------------- |
+| Network & Security | AdGuard Home, Tor, Router (ping, TCP, SNMP) |
+| Cryptocurrency     | Bitcoin, Alby Hub                           |
+| Storage & Sharing  | qBittorrent, IPFS, Synology                 |
+| Smart Home & Media | Homebridge, Philips Hue, Roon               |
+| Infrastructure     | Mac Mini, Raspberry Pi                      |
 
 See full docs: [`docs/integrations/index.md`](./docs/integrations/index.md)
 
@@ -82,7 +84,8 @@ See full docs: [`docs/integrations/index.md`](./docs/integrations/index.md)
 
 ### Option A — macOS Desktop (recommended for end users)
 
-The `install.sh` script sets up everything from scratch — Homebrew, Node.js, workspace dependencies, and a `.app` launcher:
+Requires a Mac with **Apple Silicon**: the desktop build is `arm64` only and does not run on
+Intel Macs. The `install.sh` script sets up everything from scratch — Homebrew, Node.js, workspace dependencies, and a `.app` launcher:
 
 ```bash
 git clone https://github.com/EraPartner/Watchman.git
@@ -97,6 +100,8 @@ npm run electron:prod
 ```
 
 > The desktop app needs no env file: it sets the backend port and data directory itself, and the backend generates a master key on first run. Services are configured in the UI.
+>
+> Closing the window does not quit Watchman: it keeps running in the Dock with its backend. Click the Dock icon to reopen the window, and press ⌘Q to quit. See [`docs/guides/running-the-desktop-app.md`](./docs/guides/running-the-desktop-app.md).
 
 ### Option B — Native production self-host (any platform)
 

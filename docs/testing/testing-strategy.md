@@ -2,7 +2,7 @@
 title: Testing Strategy and Patterns
 type: doc
 status: active
-date: 2026-08-19
+date: 2026-10-21
 tags:
   [
     testing,
@@ -201,6 +201,30 @@ describe("cn utility", () => {
 ```
 
 ## Backend Testing
+
+Backend tests are Vitest files colocated with the code as `apps/backend/src/**/*.test.ts`
+(`apps/backend/vitest.config.ts`); there were 79 such files on 2026-10-21. They cover `core/`,
+`infra/` (HTTP, SSE, SSH pool, SNMP, Tor control, ZMQ, Roon, circuit breaker, poller), every
+service class under `domain/services/`, the `application/` layer (`ServiceLifecycle`,
+`SnapshotCache`, `NetworkWatcher`), the config store, HTTP routes and the WebSocket plugin.
+Coverage is measured over `src/core`, `src/infra` and `src/domain`, with floors of 80% lines,
+functions and statements and 72% branches.
+
+Desktop tests use Node's built-in runner on `apps/desktop/test/*.test.ts`
+(`npm test --workspace=apps/desktop`) and are not part of CI. The Playwright suite in
+`apps/frontend/tests/e2e/` (`npm run test:e2e`) is also not run in CI
+(`.github/workflows/ci.yml`).
+
+> [!warning] Historical coverage log (removed code)
+> The notes from here to [[#Service Class Testing (Phase 0b+)]] describe the v1
+> Express backend (`apps/backend/tests/*.test.js`, `middleware/*.js`), the removed auth layer
+> (`useAuth`, `AuthGuard`, `Login`, `csrf`) and removed frontend files (`LiveServerDashboard`,
+> `UpdateBadge`, `ServerStatusBadge`, `ServiceLink`, `lib/url.ts`, `dashboardStatus.ts`,
+> `use-toast.ts`, `pages/Index.tsx`, `services/ApiClient.test.ts`). None of those files exist on
+> `main`. The coverage figures below are from that time and are not current. The entries for
+> files that still exist (`lib/utils`, `lib/apiResponse`, `lib/env`, `lib/queryKeys`,
+> `lib/backendUrl`, `lib/logger`, `App`, `NotFound`, `useWebSocket`, `use-mobile`,
+> `dashboardData`, `apiClient/core` and `apiClient/endpoints`) may also be out of date.
 
 Current middleware coverage includes `responseSizeLimit` behavior in `apps/backend/tests/responseSizeLimit.test.js` for `apps/backend/middleware/responseSizeLimit.js`:
 
@@ -648,21 +672,21 @@ it("handles rejected promises", async () => {
 
 ## Current Test Coverage
 
-| Area               | Status               | Notes                                                                                                                                                                                                                                                  |
-| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Utility functions  | ✅ Improved          | Frontend lib aggregate improved materially; dashboard helpers now have targeted coverage; expanded formatter and display utilities                                                                                                                     |
-| API response utils | ✅ Covered           | New `apiResponse.test.ts` covers `isApiResponseEnvelope`, `unwrapApiResponse`, and `extractApiError` including nested error objects and v2 envelope cases                                                                                              |
-| React components   | ✅ Phase 3 complete  | **Phase 3 added smoke tests** for `BentoDashboard`, `ChartsPanel`, `ConfigPanel`, `RawStatsPanel`, `WelcomeStep`, `KindPickerStep`, `ReviewStep`, `ConfigureStep`, `SetupWizard`, plus UI component coverage (Toggle, ToggleGroup, Popover, Sheet)     |
-| Custom hooks       | ✅ Phase 3 complete  | `useMetricSeries` hook tests added; `useWebSocket` has comprehensive invalidation/message-handling coverage; `WebSocketProvider` and context consumption tests                                                                                         |
-| Renderers          | ✅ Phase 3 complete  | Extended coverage for ALL renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + `getRenderer()` and `rendererTrackedMetrics()` in [[apps/frontend/src/services/renderers/renderers.test.ts]] |
-| Setup pages        | ✅ Phase 3 complete  | Pure tests for `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` in [[apps/frontend/src/pages/setup/kindCategories.test.ts]] + jsdom smoke tests for all setup steps in [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]]                |
-| Detail views       | ✅ Phase 3 complete  | jsdom smoke tests for detail panels (`ChartsPanel`, `ConfigPanel`, `RawStatsPanel`) covering all config branches and user interactions in [[apps/frontend/src/components/detail/detail.smoke.test.tsx]]                                                |
-| Backend services   | ✅ Covered           | All service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                          |
-| Backend middleware | ✅ Improved          | `auth` and `csrf` middleware are now at 100% line coverage; `requestTimeout` and `responseSizeLimit` are directly tested                                                                                                                               |
-| Backend routes     | ⚠️ Partially covered | Auth route integration includes login compatibility and `/api/auth/me` decoded-token fallback coverage in `apps/backend/tests/authRoutes.integration.test.js`                                                                                          |
-| E2E tests          | ✅ Phase 4 complete  | **Phase 4 added CI enforcement**: Playwright E2E smoke tests run in `test-e2e` job, gated on `build` job, required by `ci-complete` branch protection check                                                                                            |
+| Area               | Status              | Notes                                                                                                                                                                                                                                                  |
+| ------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Utility functions  | ✅ Improved         | Frontend lib aggregate improved materially; dashboard helpers now have targeted coverage; expanded formatter and display utilities                                                                                                                     |
+| API response utils | ✅ Covered          | New `apiResponse.test.ts` covers `isApiResponseEnvelope`, `unwrapApiResponse`, and `extractApiError` including nested error objects and v2 envelope cases                                                                                              |
+| React components   | ✅ Phase 3 complete | **Phase 3 added smoke tests** for `BentoDashboard`, `ChartsPanel`, `ConfigPanel`, `RawStatsPanel`, `WelcomeStep`, `KindPickerStep`, `ReviewStep`, `ConfigureStep`, `SetupWizard`, plus UI component coverage (Toggle, ToggleGroup, Popover, Sheet)     |
+| Custom hooks       | ✅ Phase 3 complete | `useMetricSeries` hook tests added; `useWebSocket` has comprehensive invalidation/message-handling coverage; `WebSocketProvider` and context consumption tests                                                                                         |
+| Renderers          | ✅ Phase 3 complete | Extended coverage for ALL renderers (adguard, albyhub, bitcoin, homebridge, ipfs, macmini, philips, qbittorrent, raspi, roon, synology) + `getRenderer()` and `rendererTrackedMetrics()` in [[apps/frontend/src/services/renderers/renderers.test.ts]] |
+| Setup pages        | ✅ Phase 3 complete | Pure tests for `KIND_CATEGORIES`, `CATEGORY_ORDER`, `getKindMeta()` in [[apps/frontend/src/pages/setup/kindCategories.test.ts]] + jsdom smoke tests for all setup steps in [[apps/frontend/src/pages/setup/steps/steps.smoke.test.tsx]]                |
+| Detail views       | ✅ Phase 3 complete | jsdom smoke tests for detail panels (`ChartsPanel`, `ConfigPanel`, `RawStatsPanel`) covering all config branches and user interactions in [[apps/frontend/src/components/detail/detail.smoke.test.tsx]]                                                |
+| Backend services   | ✅ Covered          | All service classes have colocated `.test.ts` files under `apps/backend/src/domain/services/`                                                                                                                                                          |
+| Backend middleware | ✅ Covered          | Fastify plugins and hooks (origin policy, request timeout, error handler) are tested next to their code under `apps/backend/src/transport/`; there is no auth or CSRF middleware (ADR-017)                                                             |
+| Backend routes     | ✅ Covered          | Route tests such as `transport/http/routes/config.test.ts`, `profiles.test.ts` and `setup.test.ts`; there are no auth routes                                                                                                                           |
+| E2E tests          | ⚠️ Not in CI         | Playwright smoke suite in `apps/frontend/tests/e2e/`, run locally with `npm run test:e2e`; `.github/workflows/ci.yml` has no E2E job                                                                                                                   |
 
-Backend test suite status: expanded with additional middleware/auth route coverage in this update cycle.
+Coverage floors on `main` (2026-10-21): frontend lines 79%, statements 77%, functions 65%, branches 64% (`apps/frontend/vitest.config.ts`); backend lines, functions and statements 80%, branches 72% (`apps/backend/vitest.config.ts`).
 
 ### Phase 3 Frontend Test Suite Expansion (2026-05-13)
 
@@ -699,6 +723,9 @@ coverage: {
 - **Test count:** 450 tests across 45 test files (all passing)
 
 ### Phase 4 CI/E2E Integration (2026-05-13)
+
+> [!warning] No longer current
+> The `test-e2e` CI job described below is not in `.github/workflows/ci.yml` on `main`, and E2E is not a required check. The Phase 3 thresholds above were later lowered (see the coverage floors under [[#Current Test Coverage]]).
 
 **CI workflow enhancements (.github/workflows/ci.yml):**
 

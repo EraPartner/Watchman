@@ -2,7 +2,7 @@
 title: UI-Driven Service Configuration
 type: feature
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [feature, configuration, ui, setup-wizard, settings, duckdb, encryption, hot-reload, backup, export, import, crud, discoverability, tested]
 description: Runtime service configuration from the UI with encrypted secrets, audit trail, hot-reload without restart, backup/restore, and dashboard CRUD discoverability (add/edit/delete from dashboard detail sheet). Phase 3 testing complete.
 aliases: [ui config, configuration, settings, setup wizard, backup, restore, service management, crud]
@@ -122,7 +122,7 @@ sequenceDiagram
 
 **Steps** (4-step flow):
 1. **Welcome** — Introduction and skip/start options
-2. **Kind Picker** — Select from 13 service types across 5 categories (Network, Media, Bitcoin, Home Automation, Hardware)
+2. **Kind Picker** — Select from 13 service types across 5 categories (Network, Media, Bitcoin, Home, Hardware)
 3. **Configure** — Dynamic form (embedded `ServiceEditor`) with Zod validation and optional test-connection
 4. **Review** — Summary of added services with "Add Another" or "Finish Setup" options
 
@@ -329,8 +329,7 @@ Returns setup state:
 {
   "data": {
     "needsSetup": false,
-    "hasServices": true,
-    "adminConfigured": true
+    "serviceCount": 3
   }
 }
 ```

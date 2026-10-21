@@ -2,7 +2,7 @@
 title: Glossary & Terminology
 type: reference
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     glossary,
@@ -50,48 +50,48 @@ aliases:
 
 ## Core Concepts
 
-| Term                  | Also Known As                                | Description                                                                                                                           | See Also                                  |
-| --------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------- |
-| **Service**           | integration, monitor, addon, plugin          | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay).                                 | [[docs/features/service-monitoring        | Service Monitoring]] |
-| **Service Instance**  | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.                                           | [[docs/features/multi-instance            | Multi-Instance]]     |
-| **Health Check**      | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.                                               | [[docs/api/index                          | API]]                |
-| **Stats**             | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                                                    | [[docs/api/index                          | API]]                |
-| **ServiceManager**    | orchestrator, service manager                | Central backend class that manages all service instances and routes requests.                                                         | `apps/backend/services/ServiceManager.js` |
-| **Circuit Breaker**   | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                                                             | [[docs/performance/index                  | Performance]]        |
-| **Profile**           | location, environment, network profile       | A named set of service instances for one location (e.g. Home, Office). One profile per service; only the active profile is monitored. | [[docs/features/profiles                  | Profiles]]           |
-| **Active Profile**    | current profile, selected profile            | The single profile whose services are currently monitored (server-authoritative). Chosen by network auto-switch or manual override.   | [[docs/features/profiles                  | Profiles]]           |
-| **Network Signature** | LAN fingerprint, gateway MAC                 | The default-gateway MAC (plus ip/subnet) used to identify a LAN and auto-switch to its profile.                                       | [[docs/features/profiles                  | Profiles]]           |
+| Term                  | Also Known As                                | Description                                                                                                                           | See Also                                                 |
+| --------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **Service**           | integration, monitor, addon, plugin          | An external self-hosted service that Watchman monitors (e.g., AdGuard Home, Bitcoin node, Tor relay).                                 | [[docs/features/service-monitoring\|Service Monitoring]] |
+| **Service Instance**  | node, instance, server, deployment           | A specific deployment of a service type. Multiple instances of the same type are supported.                                           | [[docs/features/multi-instance\|Multi-Instance]]         |
+| **Health Check**      | status check, ping, heartbeat                | A lightweight request to verify a service is responsive. Returns online/offline status.                                               | [[docs/api/index\|API]]                                  |
+| **Stats**             | metrics, statistics, data, information       | Detailed service-specific data (e.g., AdGuard query counts, Bitcoin block height).                                                    | [[docs/api/index\|API]]                                  |
+| **ServiceLifecycle**  | orchestrator, service manager                | Backend class that starts, stops and hot-reloads service instances (replaced the v1 `ServiceManager`).                                | `apps/backend/src/application/ServiceLifecycle.ts`       |
+| **Circuit Breaker**   | failure protection, fault tolerance, breaker | Pattern that prevents repeated calls to failing services.                                                                             | [[docs/performance/index\|Performance]]                  |
+| **Profile**           | location, environment, network profile       | A named set of service instances for one location (e.g. Home, Office). One profile per service; only the active profile is monitored. | [[docs/features/profiles\|Profiles]]                     |
+| **Active Profile**    | current profile, selected profile            | The single profile whose services are currently monitored (server-authoritative). Chosen by network auto-switch or manual override.   | [[docs/features/profiles\|Profiles]]                     |
+| **Network Signature** | LAN fingerprint, gateway MAC                 | The default-gateway MAC (plus ip/subnet) used to identify a LAN and auto-switch to its profile.                                       | [[docs/features/profiles\|Profiles]]                     |
 
 ## Services
 
-| Service          | Also Known As                      | Description                                       | See Also                         |
-| ---------------- | ---------------------------------- | ------------------------------------------------- | -------------------------------- | -------------------------- |
-| **AdGuard Home** | AdGuard, AdGuardDNS                | DNS-level ad blocker and tracker blocker          | [[docs/integrations/adguard      | AdGuard Integration]]      |
-| **Bitcoin**      | BTC, Bitcoin Core, BTC node        | Bitcoin full node with RPC interface              | [[docs/integrations/bitcoin      | Bitcoin Integration]]      |
-| **Tor**          | Tor Network, Onion Router          | Tor relay/proxy for anonymous communication       | [[docs/integrations/tor          | Tor Integration]]          |
-| **qBittorrent**  | qBit, qBittorrent WebUI            | BitTorrent client with web interface              | [[docs/integrations/qbittorrent  | qBittorrent Integration]]  |
-| **IPFS**         | InterPlanetary File System         | Decentralized file storage and content addressing | [[docs/integrations/ipfs         | IPFS Integration]]         |
-| **Synology**     | Synology NAS, DiskStation          | Synology Network Attached Storage                 | [[docs/integrations/synology     | Synology Integration]]     |
-| **Roon**         | Roon Server, Roon Core             | Music server and streaming platform               | [[docs/integrations/roon         | Roon Integration]]         |
-| **Philips Hue**  | Hue Bridge, Philips Smart Lighting | Smart lighting system bridge                      | [[docs/integrations/philips-hue  | Philips Hue Integration]]  |
-| **Homebridge**   | HomeKit Bridge                     | HomeKit to third-party smart home integration     | [[docs/integrations/homebridge   | Homebridge Integration]]   |
-| **Alby Hub**     | Alby, Alby Lightning               | Lightning Network wallet and node                 | [[docs/integrations/albyhub      | Alby Hub Integration]]     |
-| **Mac Mini**     | Mac Mini Server, macOS Server      | macOS-based server or device                      | [[docs/integrations/macmini      | Mac Mini Integration]]     |
-| **Raspberry Pi** | RPi, RasPi                         | Raspberry Pi single-board computer                | [[docs/integrations/raspberry-pi | Raspberry Pi Integration]] |
-| **Router**       | Network Router, Beryl, Telenet     | Network router monitoring (Beryl/Telenet)         | [[docs/integrations/router       | Router Integration]]       |
+| Service          | Also Known As                      | Description                                       | See Also                                                     |
+| ---------------- | ---------------------------------- | ------------------------------------------------- | ------------------------------------------------------------ |
+| **AdGuard Home** | AdGuard, AdGuardDNS                | DNS-level ad blocker and tracker blocker          | [[docs/integrations/adguard\|AdGuard Integration]]           |
+| **Bitcoin**      | BTC, Bitcoin Core, BTC node        | Bitcoin full node with RPC interface              | [[docs/integrations/bitcoin\|Bitcoin Integration]]           |
+| **Tor**          | Tor Network, Onion Router          | Tor relay/proxy for anonymous communication       | [[docs/integrations/tor\|Tor Integration]]                   |
+| **qBittorrent**  | qBit, qBittorrent WebUI            | BitTorrent client with web interface              | [[docs/integrations/qbittorrent\|qBittorrent Integration]]   |
+| **IPFS**         | InterPlanetary File System         | Decentralized file storage and content addressing | [[docs/integrations/ipfs\|IPFS Integration]]                 |
+| **Synology**     | Synology NAS, DiskStation          | Synology Network Attached Storage                 | [[docs/integrations/synology\|Synology Integration]]         |
+| **Roon**         | Roon Server, Roon Core             | Music server and streaming platform               | [[docs/integrations/roon\|Roon Integration]]                 |
+| **Philips Hue**  | Hue Bridge, Philips Smart Lighting | Smart lighting system bridge                      | [[docs/integrations/philips-hue\|Philips Hue Integration]]   |
+| **Homebridge**   | HomeKit Bridge                     | HomeKit to third-party smart home integration     | [[docs/integrations/homebridge\|Homebridge Integration]]     |
+| **Alby Hub**     | Alby, Alby Lightning               | Lightning Network wallet and node                 | [[docs/integrations/albyhub\|Alby Hub Integration]]          |
+| **Mac Mini**     | Mac Mini Server, macOS Server      | macOS-based server or device                      | [[docs/integrations/macmini\|Mac Mini Integration]]          |
+| **Raspberry Pi** | RPi, RasPi                         | Raspberry Pi single-board computer                | [[docs/integrations/raspberry-pi\|Raspberry Pi Integration]] |
+| **Router**       | Network Router, gateway            | Router monitoring over ping, TCP and SNMP         | [[docs/integrations/router\|Router Integration]]             |
 
 ## Technical Terms
 
-| Term                | Also Known As                            | Description                                                  | See Also                                 |
-| ------------------- | ---------------------------------------- | ------------------------------------------------------------ | ---------------------------------------- | ----------------------- |
-| **WebSocket**       | WS, Socket, real-time, live              | Real-time bidirectional communication for status updates     | [[docs/features/real-time-updates        | Real-Time Updates]]     |
-| **Master Key**      | encryption key, secret key, aes-256      | AES-256-GCM key for encrypting service credentials in DuckDB | [[docs/reference/environment-variables   | Environment Variables]] |
-| **Setup Wizard**    | first-run, configuration, initial setup  | Interactive UI for configuring services on first boot        | [[docs/features/ui-configuration         | UI Configuration]]      |
-| **Rate Limiting**   | rate limit, throttling, rate cap         | Tiered request throttling per IP (planned future feature)    | [[docs/security/rate-limiting            | Rate Limiting]]         |
-| **IP Control**      | IP whitelist, IP blacklist, IP filtering | Whitelist/blacklist for IP-based access                      | [[docs/security/ip-control               | IP Control]]            |
-| **OpenAPI**         | Swagger, API specification, OpenAPI spec | API specification format (Swagger)                           | [[docs/api/index                         | API Documentation]]     |
-| **Factory Pattern** | factory, service factory                 | Service instantiation pattern via `serviceFactoryConfig.js`  | [[docs/architecture/backend-architecture | Backend Architecture]]  |
-| **ARP Lookup**      | ARP, neighbor discovery, network scan    | Network neighbor discovery for router services               | [[docs/integrations/router               | Router Integration]]    |
+| Term                | Also Known As                            | Description                                                    | See Also                                                         |
+| ------------------- | ---------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **WebSocket**       | WS, Socket, real-time, live              | Real-time bidirectional communication for status updates       | [[docs/features/real-time-updates\|Real-Time Updates]]           |
+| **Master Key**      | encryption key, secret key, aes-256      | AES-256-GCM key for encrypting service credentials in DuckDB   | [[docs/reference/environment-variables\|Environment Variables]]  |
+| **Setup Wizard**    | first-run, configuration, initial setup  | Interactive UI for configuring services on first boot          | [[docs/features/ui-configuration\|UI Configuration]]             |
+| **Rate Limiting**   | rate limit, throttling, rate cap         | Not implemented, by design (trusted network, ADR-025)          | [[docs/security/rate-limiting\|Rate Limiting]]                   |
+| **IP Control**      | IP whitelist, IP blacklist, IP filtering | Removed v1 IP allow/deny lists; an origin allow-list is used   | [[docs/security/ip-control\|IP Control]]                         |
+| **OpenAPI**         | Swagger, API specification, OpenAPI spec | API spec in `apps/backend/openapi.yaml`; no Swagger UI         | [[docs/api/index\|API Documentation]]                            |
+| **Factory Pattern** | factory, service factory                 | Service instantiation via `createService()` (registerServices) | [[docs/architecture/backend-architecture\|Backend Architecture]] |
+| **ARP Lookup**      | ARP, neighbor discovery, network scan    | Network neighbor discovery for router services                 | [[docs/integrations/router\|Router Integration]]                 |
 
 ## UI Terms
 
@@ -112,15 +112,15 @@ aliases:
 
 ### Common Search Patterns
 
-| Search Query                             | Finds                             |
-| ---------------------------------------- | --------------------------------- | ------------------------------------------------- | ------------- |
-| `adguard`                                | [[docs/integrations/adguard       | AdGuard Integration]], [[docs/api/index           | API]]         |
-| `setup`, `wizard`, `configuration`       | [[docs/features/ui-configuration  | UI Configuration]], [[docs/guides/setup           | Setup Guide]] |
-| `multi-instance`, `multiple`, `instance` | [[docs/features/multi-instance    | Multi-Instance]], [[docs/integrations/qbittorrent | qBittorrent]] |
-| `websocket`, `real-time`, `live`         | [[docs/features/real-time-updates | Real-Time Updates]]                               |
-| `rate limit`, `throttle`                 | [[docs/security/rate-limiting     | Rate Limiting]]                                   |
-| `circuit breaker`, `failure`             | [[docs/performance/index          | Performance]]                                     |
-| `add service`, `new service`             | [[docs/guides/adding-services     | Adding Services Guide]]                           |
+| Search Query                             | Finds                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `adguard`                                | [[docs/integrations/adguard\|AdGuard Integration]], [[docs/api/index\|API]]                      |
+| `setup`, `wizard`, `configuration`       | [[docs/features/ui-configuration\|UI Configuration]], [[docs/guides/setup\|Setup Guide]]         |
+| `multi-instance`, `multiple`, `instance` | [[docs/features/multi-instance\|Multi-Instance]], [[docs/integrations/qbittorrent\|qBittorrent]] |
+| `websocket`, `real-time`, `live`         | [[docs/features/real-time-updates\|Real-Time Updates]]                                           |
+| `rate limit`, `throttle`                 | [[docs/security/rate-limiting\|Rate Limiting]]                                                   |
+| `circuit breaker`, `failure`             | [[docs/performance/index\|Performance]]                                                          |
+| `add service`, `new service`             | [[docs/guides/adding-services\|Adding Services Guide]]                                           |
 
 ### Quick Reference by Category
 

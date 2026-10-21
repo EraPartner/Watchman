@@ -2,7 +2,7 @@
 title: Reference
 type: index
 status: active
-date: 2026-04-09
+date: 2026-10-21
 tags: [reference, index]
 description: Index of all reference documentation for the Watchman project - environment variables, scripts, code patterns, and error codes
 aliases: [reference index, refs, quick reference]
@@ -46,7 +46,7 @@ SORT file.name ASC
 - **Service Registry**: [[apps/backend/src/domain/ServiceRegistry.ts]]
 - **Base Service**: [[apps/backend/src/domain/BaseService.ts]]
 - **Config Store**: [[apps/backend/src/config/store/ConfigStore.ts]]
-- **Background Poller**: `apps/backend/src/infra/scheduler/BackgroundPoller.ts`
+- **Background Poller**: [[apps/backend/src/infra/scheduler/poller.ts]]
 - **Frontend Entry**: [[apps/frontend/src/main.tsx]]
 - **OpenAPI Spec**: [[apps/backend/openapi.yaml]]
 
