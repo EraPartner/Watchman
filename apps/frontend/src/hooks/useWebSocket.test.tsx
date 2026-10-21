@@ -656,7 +656,9 @@ describe("useWebSocket", () => {
     await act(async () => {
       FakeWebSocket.instances[0].close(1006, "abnormal");
     });
-    expect(loggerDebug).toHaveBeenLastCalledWith(
+    // (not "last call": the mocked useQueryClient returns a new client each
+    // render, so the mount effect re-runs connect() and logs a throttle)
+    expect(loggerDebug).toHaveBeenCalledWith(
       "[WEBSOCKET] Scheduling reconnect",
       { attempt: 7, delay: 30_000 }
     );
