@@ -32,6 +32,15 @@ function invalidateDashboardQueries(
   qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
 }
 
+// SetupGate on "/" redirects to /setup while needsSetup is true. The status
+// query is inactive while the operator is in the wizard or settings, so a plain
+// invalidate keeps the cached needsSetup: true and the gate acts on it before
+// the refetch lands (Finish bounced back to the wizard). Reset drops the cached
+// value so the gate waits for a fresh answer.
+function resetSetupStatus(qc: ReturnType<typeof useQueryClient>): void {
+  void qc.resetQueries({ queryKey: KEYS.setup });
+}
+
 export function useSetupStatus() {
   return useQuery<SetupStatus>({
     queryKey: KEYS.setup,
@@ -87,6 +96,7 @@ export function useCreateService() {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
+      resetSetupStatus(qc);
     },
   });
 }
@@ -119,6 +129,7 @@ export function useDeleteService() {
       qc.invalidateQueries({ queryKey: KEYS.loadErrors });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
+      resetSetupStatus(qc);
     },
   });
 }
@@ -143,6 +154,7 @@ export function useImportConfig() {
       qc.invalidateQueries({ queryKey: KEYS.services });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
+      resetSetupStatus(qc);
     },
   });
 }

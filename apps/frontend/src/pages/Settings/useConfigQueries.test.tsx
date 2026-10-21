@@ -182,3 +182,61 @@ describe("useConfigQueries dashboard invalidation", () => {
     unmount();
   });
 });
+
+// Regression: the setup status was never refreshed after a create, so Finish in
+// the wizard navigated to "/" where SetupGate read the cached needsSetup: true
+// and bounced the operator straight back to /setup.
+describe("useConfigQueries setup status reset", () => {
+  const SETUP_KEY = ["config", "setup"];
+  let qc: QueryClient;
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(SETUP_KEY, { needsSetup: true, serviceCount: 0 });
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    qc.clear();
+    document.body.innerHTML = "";
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  });
+
+  async function run(useHook: () => unknown, input: unknown): Promise<void> {
+    const { result, unmount } = renderHook(useHook, qc);
+    await act(async () => {
+      await (result.current as MutationApi).mutateAsync(input);
+      await flushMicrotasks();
+    });
+    unmount();
+  }
+
+  it("useCreateService drops the cached setup status", async () => {
+    createServiceMock.mockResolvedValueOnce(makeFakeService());
+    await run(() => useCreateService(), {
+      kind: "bitcoin",
+      instanceId: "main",
+      enabled: true,
+      config: {},
+    } as ServiceInstanceInput);
+    expect(qc.getQueryData(SETUP_KEY)).toBeUndefined();
+  });
+
+  it("useDeleteService drops the cached setup status", async () => {
+    deleteServiceMock.mockResolvedValueOnce(undefined);
+    await run(() => useDeleteService(), "stored-1");
+    expect(qc.getQueryData(SETUP_KEY)).toBeUndefined();
+  });
+
+  it("useImportConfig drops the cached setup status", async () => {
+    const fakeResult: ImportResult = { imported: 1, updated: 0, skipped: 0, errors: [] };
+    importConfigMock.mockResolvedValueOnce(fakeResult);
+    await run(() => useImportConfig(), {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      payload: "{}",
+    } as ExportBundle);
+    expect(qc.getQueryData(SETUP_KEY)).toBeUndefined();
+  });
+});

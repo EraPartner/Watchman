@@ -65,6 +65,9 @@ dependency audit, and documentation aligned with the code.
 - Backend: deleting or renaming a failing service clears its alert state, so a
   later service with the same `kind:instanceId` gets its first error alert and
   no false "recovered" alert.
+- Setup wizard: pressing Finish after adding a service sent you back to the
+  wizard, because the dashboard gate used the cached "needs setup" answer.
+  Adding, deleting or importing services now clears that cached answer.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.
