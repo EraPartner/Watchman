@@ -1736,7 +1736,7 @@
                 "from": "dom.bus",
                 "to": "dom.broadcaster",
                 "payload": "broadcaster subscriber callback",
-                "annotation": "Broadcaster also subscribes to service.stats.updated, config:service.created/updated/deleted."
+                "annotation": "Broadcaster also subscribes to service.stats.updated and config:service.applied (emitted by ServiceLifecycle after a create/update/delete is applied)."
               },
               {
                 "from": "dom.broadcaster",
@@ -1883,8 +1883,8 @@
               {
                 "from": "app.lifecycle",
                 "to": "dom.broadcaster",
-                "payload": "(via bus) config:service.created",
-                "annotation": "Broadcaster fans out { type: 'service_config_changed', action: 'created' } so every open tab refreshes its registry view."
+                "payload": "(via bus) config:service.applied { action: 'created' }",
+                "annotation": "Emitted after bring-up finishes, so the registry already holds the service. Broadcaster fans out { type: 'service_config_changed', action: 'created' } so every open tab refreshes its registry view."
               },
               {
                 "from": "dom.broadcaster",
@@ -1945,7 +1945,7 @@
               {
                 "from": "app.lifecycle",
                 "to": "dom.broadcaster",
-                "payload": "config:service.updated → WS",
+                "payload": "config:service.applied { action: 'updated' } → WS",
                 "annotation": "Frontend updates form state and dashboard simultaneously."
               }
             ]
@@ -2001,7 +2001,7 @@
               {
                 "from": "app.lifecycle",
                 "to": "dom.broadcaster",
-                "payload": "config:service.deleted → WS",
+                "payload": "config:service.applied { action: 'deleted' } → WS",
                 "annotation": "Tile disappears from the dashboard within a second."
               }
             ]

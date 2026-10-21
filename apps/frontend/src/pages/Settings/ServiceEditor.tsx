@@ -54,6 +54,10 @@ function defaultFor(f: FieldMeta): FormValue {
   return "";
 }
 
+function isArrayField(f: FieldMeta): boolean {
+  return f.type === "stringArray" || f.type === "numberArray";
+}
+
 function initialValues(
   kind: KindSchema,
   existing?: ServiceInstance
@@ -62,11 +66,14 @@ function initialValues(
   for (const f of kind.fields) {
     if (COMMON_FIELD_NAMES.has(f.name)) continue;
     const current = existing?.config?.[f.name];
-    if (current !== undefined && current !== null) {
-      values[f.name] = current as FormValue;
-    } else {
-      values[f.name] = defaultFor(f);
-    }
+    const value =
+      current !== undefined && current !== null
+        ? (current as FormValue)
+        : defaultFor(f);
+    // List fields are edited as raw comma-separated text and parsed on submit.
+    // Parsing on every keystroke dropped the trailing comma, so a second item
+    // could never be typed.
+    values[f.name] = isArrayField(f) ? arrayToCsv(value) : value;
   }
   return values;
 }
@@ -161,7 +168,10 @@ export default function ServiceEditor({
 
     const config: Record<string, unknown> = {};
     for (const f of renderedFields) {
-      const v = values[f.name];
+      const raw = values[f.name];
+      const v = isArrayField(f)
+        ? parseCsv(arrayToCsv(raw), f.type === "numberArray")
+        : raw;
       if (f.secret && (v === "" || v === "***")) continue;
       if (v === "" && !f.required) continue;
       if (Array.isArray(v) && v.length === 0 && !f.required) continue;
@@ -415,9 +425,7 @@ function FieldInput({
           className={base}
           value={arrayToCsv(value as FormValue)}
           placeholder={field.placeholder ?? "comma-separated"}
-          onChange={(e) =>
-            onChange(parseCsv(e.target.value, field.type === "numberArray"))
-          }
+          onChange={(e) => onChange(e.target.value)}
         />
         <span className="text-xs text-muted-foreground">
           {field.help ?? "Comma-separated list."}

@@ -305,6 +305,16 @@ describe("ConfigStore", () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
+    it("reports schema failures on create as readable field errors", async () => {
+      const err = await store
+        .create({ kind: "ipfs", instanceId: "main", apiUrl: "not a url" })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ValidationError);
+      // Not the raw ZodError JSON dump that the UI used to show verbatim.
+      expect((err as Error).message).toMatch(/^apiUrl: /);
+      expect((err as Error).message).not.toContain("[");
+    });
+
     it("rejects invalid instance id on create (uppercase)", async () => {
       await expect(
         store.create({
