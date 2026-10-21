@@ -2,7 +2,7 @@
 title: AdGuard Home Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -139,15 +139,15 @@ The following 7 endpoints are optional and memoized. If any fails, it returns `n
 | `dnsPort`             | number         | DNS server port                                                                                               |
 | `httpPort`            | number         | HTTP API port                                                                                                 |
 | `totalQueries`        | number         | Total DNS queries processed                                                                                   |
-| `blockedQueries`      | number         | Sum of all blocked queries (filtering + safebrowsing + safesearch + parental)                                 |
+| `blockedQueries`      | number         | Blocked queries (filtering + safebrowsing + parental); safe-search rewrites are answered, so not counted     |
 | `allowedQueries`      | number         | Allowed queries = totalQueries - blockedQueries                                                               |
 | `blockingRate`        | number         | Percentage of blocked queries (0–100, rounded to 2 decimals)                                                  |
-| `avgProcessingTime`   | number         | Average DNS query processing time (milliseconds)                                                              |
+| `avgProcessingTime`   | number         | Average DNS query processing time in ms (AdGuard reports seconds; converted)                                 |
 | `topBlockedDomain`    | string         | Most-blocked domain name (or "N/A")                                                                           |
 | `topQueriedDomain`    | string         | Most-queried domain name (or "N/A")                                                                           |
 | `topClient`           | string         | Most-active client IP (or "N/A")                                                                              |
 | `safebrowsingBlocked` | number         | Queries blocked by SafeBrowsing filter                                                                        |
-| `safesearchBlocked`   | number         | Queries blocked by SafeSearch enforcement                                                                     |
+| `safesearchBlocked`   | number         | Queries rewritten by SafeSearch enforcement (not counted in `blockedQueries`)                                 |
 | `parentalBlocked`     | number         | Queries blocked by Parental Control filter                                                                    |
 | `topUpstream`         | string \| null | Most-used upstream DNS server address (from `top_upstreams_responses`; AdGuard ≥ 0.107.30)                    |
 | `topUpstreamAvgMs`    | number \| null | Average response time of the top upstream in milliseconds (from `top_upstreams_avg_time`; AdGuard ≥ 0.107.30) |

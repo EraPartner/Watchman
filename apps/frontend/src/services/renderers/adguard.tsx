@@ -150,7 +150,7 @@ export const adguardRenderer: ServiceRenderer<Stats> = {
   displayName: "AdGuard Home",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {
-      hostKeys: ["url", "host"],
+      hostKeys: ["baseUrl", "url", "host"],
       portKeys: ["uiPort", "port", "httpPort"],
       defaultPort: 80,
     }),
