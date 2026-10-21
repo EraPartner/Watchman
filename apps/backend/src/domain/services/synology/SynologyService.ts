@@ -27,34 +27,43 @@ export interface SynologyDeps {
   now: () => number;
 }
 
+// SYNOLOGY-SYSTEM-MIB (1.3.6.1.4.1.6574.1) has no CPU, memory or volume-size
+// scalars: .1.5.2 is serialNumber and .1.5.4 is upgradeAvailable. CPU and
+// memory come from UCD-SNMP-MIB, which Synology's MIB guide lists for DSM.
 const OIDS = {
   systemName: "1.3.6.1.2.1.1.5.0",
-  systemUptime: "1.3.6.1.2.1.1.3.0",
+  // hrSystemUptime: host uptime (sysUpTime is the SNMP agent's own uptime)
+  systemUptime: "1.3.6.1.2.1.25.1.1.0",
   systemModel: "1.3.6.1.4.1.6574.1.5.1.0",
   systemVersion: "1.3.6.1.4.1.6574.1.5.3.0",
   systemStatus: "1.3.6.1.4.1.6574.1.1.0",
-  cpuUsage: "1.3.6.1.4.1.6574.1.5.2.0",
+  cpuIdle: "1.3.6.1.4.1.2021.11.11.0", // ssCpuIdle, %
   cpuTemp: "1.3.6.1.4.1.6574.1.2.0",
-  memoryTotal: "1.3.6.1.4.1.6574.1.5.4.0",
-  memoryAvailable: "1.3.6.1.4.1.6574.1.5.5.0",
-  memoryUsage: "1.3.6.1.4.1.6574.1.5.6.0",
-  diskTotal: "1.3.6.1.4.1.6574.2.1.1.4.0",
-  diskUsed: "1.3.6.1.4.1.6574.2.1.1.5.0",
-  diskUsage: "1.3.6.1.4.1.6574.2.1.1.6.0",
-  // 32-bit per-interface counters (wrap at 4 GiB) — fallback only
-  networkRx: "1.3.6.1.2.1.2.2.1.10.1",
-  networkTx: "1.3.6.1.2.1.2.2.1.16.1",
+  memoryTotal: "1.3.6.1.4.1.2021.4.5.0", // memTotalReal, kB
+  memoryFree: "1.3.6.1.4.1.2021.4.6.0", // memAvailReal, kB
+  memoryBuffer: "1.3.6.1.4.1.2021.4.14.0", // memBuffer, kB
+  memoryCached: "1.3.6.1.4.1.2021.4.15.0", // memCached, kB
+  sysUpTime: "1.3.6.1.2.1.1.3.0", // fallback when hrSystemUptime is absent
 } as const;
 
-// 64-bit ifXTable counters for ifIndex=1 (no 4 GiB wrap)
-const HC_NET_OIDS: readonly string[] = [
-  "1.3.6.1.2.1.31.1.1.1.6.1",
-  "1.3.6.1.2.1.31.1.1.1.10.1",
-];
+// Interface counters are walked, not read at ifIndex=1: on Linux (DSM)
+// ifIndex 1 is the loopback interface.
+const NET_WALK = {
+  ifDescr: "1.3.6.1.2.1.2.2.1.2",
+  // 64-bit ifXTable counters (no 4 GiB wrap)
+  ifHCInOctets: "1.3.6.1.2.1.31.1.1.1.6",
+  ifHCOutOctets: "1.3.6.1.2.1.31.1.1.1.10",
+  // 32-bit counters (wrap at 4 GiB) — fallback only
+  ifInOctets: "1.3.6.1.2.1.2.2.1.10",
+  ifOutOctets: "1.3.6.1.2.1.2.2.1.16",
+} as const;
+
+type WalkRows = ReadonlyArray<{ oid: string; value: string }>;
 
 interface DsmInfoData {
   model?: string;
   version?: string;
+  version_string?: string;
   temperature?: number;
 }
 interface SysStatusData {
@@ -180,6 +189,43 @@ export class SynologyService extends BaseService {
     );
   }
 
+  /** Sums octet counters over the NAS's external interfaces. */
+  private async walkNetwork(
+    signal: AbortSignal
+  ): Promise<{ rx: number; tx: number }> {
+    const walk = (subtree: string): Promise<WalkRows> =>
+      this.snmp
+        .walk({
+          host: this.host,
+          subtree,
+          v3: this.credentials,
+          timeoutMs: this.timeoutMs,
+          signal,
+        })
+        .then((r) => r.rows)
+        .catch(() => []);
+    const [descr, hcIn, hcOut, in32, out32] = await Promise.all([
+      walk(NET_WALK.ifDescr),
+      walk(NET_WALK.ifHCInOctets),
+      walk(NET_WALK.ifHCOutOctets),
+      walk(NET_WALK.ifInOctets),
+      walk(NET_WALK.ifOutOctets),
+    ]);
+    const names = new Map<string, string>();
+    for (const row of descr) names.set(lastArc(row.oid), row.value);
+    const selected = selectExternalInterfaces(names);
+    const sum = (rows: WalkRows): number =>
+      rows.reduce((total, row) => {
+        if (!selected.has(lastArc(row.oid))) return total;
+        const n = Number(row.value);
+        return Number.isFinite(n) ? total + n : total;
+      }, 0);
+    const hasHc = hcIn.some((r) => selected.has(lastArc(r.oid)));
+    return hasHc
+      ? { rx: sum(hcIn), tx: sum(hcOut) }
+      : { rx: sum(in32), tx: sum(out32) };
+  }
+
   async getStats(signal: AbortSignal): Promise<StatsResult> {
     const dsmConfigured = this.dsm !== undefined;
     if (!this.credentialsReady && !dsmConfigured) {
@@ -195,7 +241,7 @@ export class SynologyService extends BaseService {
         Promise.reject(new UnavailableError("snmp not configured"));
       const [
         snmpResult,
-        hcNetResult,
+        netResult,
         utilizationResult,
         dsmInfoResult,
         sysStatusResult,
@@ -210,15 +256,7 @@ export class SynologyService extends BaseService {
               signal,
             })
           : snmpUnavailable(),
-        this.credentialsReady
-          ? this.snmp.get({
-              host: this.host,
-              oids: HC_NET_OIDS,
-              credentials: this.credentials,
-              timeoutMs: this.timeoutMs,
-              signal,
-            })
-          : snmpUnavailable(),
+        this.credentialsReady ? this.walkNetwork(signal) : snmpUnavailable(),
         this.dsm?.call<UtilizationData>(
           "SYNO.Core.System.Utilization",
           1,
@@ -226,8 +264,13 @@ export class SynologyService extends BaseService {
           {},
           signal
         ) ?? Promise.resolve(null),
-        this.dsm?.call<DsmInfoData>("SYNO.DSM.Info", 1, "get", {}, signal) ??
-          Promise.resolve(null),
+        this.dsm?.call<DsmInfoData>(
+          "SYNO.DSM.Info",
+          1,
+          "getinfo",
+          {},
+          signal
+        ) ?? Promise.resolve(null),
         this.dsm?.call<SysStatusData>(
           "SYNO.Core.System.Status",
           1,
@@ -251,12 +294,16 @@ export class SynologyService extends BaseService {
       const snmpOk = snmpResult.status === "fulfilled";
 
       const v = snmpOk ? snmpResult.value.values.map(clean) : [];
-      const uptimeTicks = toInt(v[1]);
+      const uptimeTicks = toInt(v[1]) || toInt(v[11]);
+      const cpuIdle = toOptInt(v[5]);
       const cpuTemp = toInt(v[6]);
-      const memoryTotalMB = toInt(v[7]);
-      const memoryAvailableMB = toInt(v[8]);
-      const diskTotalKB = toInt(v[10]);
-      const diskUsedKB = toInt(v[11]);
+      const memoryTotalKB = toInt(v[7]);
+      // reclaimable buffers/cache count as available, matching DSM's own
+      // "real usage" figure
+      const memoryAvailableKB = Math.min(
+        memoryTotalKB,
+        toInt(v[8]) + toInt(v[9]) + toInt(v[10])
+      );
 
       const utilization =
         utilizationResult.status === "fulfilled"
@@ -273,22 +320,15 @@ export class SynologyService extends BaseService {
         utilization?.network?.[0] ??
         null;
 
-      const cpuUsage = snmpOk ? toInt(v[5]) : (utilCpu ?? 0);
-      const memoryUsagePercent = snmpOk ? toInt(v[9]) : (utilMem ?? 0);
+      const cpuUsage =
+        snmpOk && cpuIdle !== undefined
+          ? Math.max(0, 100 - cpuIdle)
+          : (utilCpu ?? 0);
 
-      // Prefer 64-bit HC counters; fall back to the 32-bit values from the
-      // main get when the device doesn't expose ifXTable
-      let networkRx = toInt(v[13]);
-      let networkTx = toInt(v[14]);
-      if (hcNetResult.status === "fulfilled") {
-        const hc = hcNetResult.value.values.map(clean);
-        const hcRx = toInt(hc[0]);
-        const hcTx = toInt(hc[1]);
-        if (hcRx > 0 || hcTx > 0) {
-          networkRx = hcRx;
-          networkTx = hcTx;
-        }
-      }
+      const net =
+        netResult.status === "fulfilled" ? netResult.value : { rx: 0, tx: 0 };
+      const networkRx = net.rx;
+      const networkTx = net.tx;
 
       // Byte rates between polls; negative deltas (wrap/reboot) are skipped
       const at = this.now();
@@ -307,9 +347,13 @@ export class SynologyService extends BaseService {
         this.lastNet = { at, rx: networkRx, tx: networkTx };
       }
 
-      const memoryTotal = memoryTotalMB * 1024 * 1024;
-      const memoryAvailable = memoryAvailableMB * 1024 * 1024;
+      const memoryTotal = memoryTotalKB * 1024;
+      const memoryAvailable = memoryAvailableKB * 1024;
       const memoryUsed = Math.max(0, memoryTotal - memoryAvailable);
+      const memoryUsagePercent =
+        snmpOk && memoryTotal > 0
+          ? Math.round((memoryUsed / memoryTotal) * 100)
+          : (utilMem ?? 0);
 
       const dsmInfo =
         dsmInfoResult.status === "fulfilled" ? dsmInfoResult.value : null;
@@ -321,23 +365,18 @@ export class SynologyService extends BaseService {
       const volumes = storage?.volumes ?? null;
       const disks = storage?.disks ?? null;
 
-      // Disk totals: prefer DSM volume sizes (covers every volume) over the
-      // single-volume SNMP scalars
-      let diskTotal = diskTotalKB * 1024;
-      let diskUsed = diskUsedKB * 1024;
-      let diskUsagePercent = toInt(v[12]);
+      // Disk totals come from DSM volume sizes only; SNMP has no scalar for
+      // them (the SYNOLOGY-DISK-MIB columns are per-disk type/status/temp)
       const volumeSizes = (volumes ?? [])
         .map((vol) => ({
           total: toNum(vol.size?.total),
           used: toNum(vol.size?.used),
         }))
         .filter((s) => s.total > 0);
-      if (volumeSizes.length > 0) {
-        diskTotal = volumeSizes.reduce((sum, s) => sum + s.total, 0);
-        diskUsed = volumeSizes.reduce((sum, s) => sum + s.used, 0);
-        diskUsagePercent =
-          diskTotal > 0 ? Math.round((diskUsed / diskTotal) * 100) : 0;
-      }
+      const diskTotal = volumeSizes.reduce((sum, s) => sum + s.total, 0);
+      const diskUsed = volumeSizes.reduce((sum, s) => sum + s.used, 0);
+      const diskUsagePercent =
+        diskTotal > 0 ? Math.round((diskUsed / diskTotal) * 100) : 0;
       const diskFree = Math.max(0, diskTotal - diskUsed);
 
       return ok({
@@ -380,7 +419,7 @@ export class SynologyService extends BaseService {
           ...(dsmInfo !== null
             ? {
                 dsmModel: dsmInfo.model ?? "",
-                dsmVersion: dsmInfo.version ?? "",
+                dsmVersion: dsmInfo.version_string ?? dsmInfo.version ?? "",
                 dsmTemperature: dsmInfo.temperature ?? 0,
               }
             : {}),
@@ -428,6 +467,35 @@ function toNum(raw: number | string | undefined): number {
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
+}
+
+function lastArc(oid: string): string {
+  return oid.split(".").at(-1) ?? "";
+}
+
+const VIRTUAL_IF = /^(lo|docker|veth|br-|sit|tun|tap|dummy)/;
+
+/**
+ * Picks the interfaces whose counters represent the NAS's own traffic,
+ * avoiding double counting: bonds over their member NICs, Open vSwitch
+ * ports (Virtual Machine Manager) over the NICs they wrap, then plain NICs.
+ * Loopback and container/tunnel interfaces are always excluded.
+ */
+export function selectExternalInterfaces(
+  names: ReadonlyMap<string, string>
+): Set<string> {
+  const candidates = [...names].filter(([, n]) => !VIRTUAL_IF.test(n));
+  for (const prefix of ["bond", "ovs_", "eth"]) {
+    const hit = candidates.filter(([, n]) => n.startsWith(prefix));
+    if (hit.length > 0) return new Set(hit.map(([idx]) => idx));
+  }
+  return new Set(candidates.map(([idx]) => idx));
+}
+
+function toOptInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function toInt(raw: string | undefined): number {

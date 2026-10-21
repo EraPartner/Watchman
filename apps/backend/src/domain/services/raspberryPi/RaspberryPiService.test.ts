@@ -257,7 +257,8 @@ describe("RaspberryPiService.getStats", () => {
     if (res.ok) {
       expect(res.value.metrics["piModel"]).toBe("Pi 3B");
       expect(res.value.metrics["pigpioVersion"]).toBe(79);
-      expect(res.value.metrics["uptime"]).toBe(60);
+      // pigpio tick wraps every ~71.6 min, so it is no longer used as uptime
+      expect(res.value.metrics["uptime"]).toBeNull();
       expect(res.value.metrics["cpuTemp"]).toBe(50.1);
       expect(res.value.metrics["clockRate"]).toBe(1800);
       expect(res.value.metrics["rpiCliAvailable"]).toBe(true);

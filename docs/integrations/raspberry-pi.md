@@ -2,7 +2,7 @@
 title: Raspberry Pi Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -64,6 +64,8 @@ Configure direct SSH to the Pi for full system metrics (vcgencmd, /proc). Set th
 - `cat /proc/loadavg` — CPU load average (1-minute)
 - `cat /proc/meminfo` — Memory info (formatted as "X.X GB")
 - `cat /proc/uptime` — System uptime (seconds)
+
+Uptime comes from `/proc/uptime` (direct SSH) or the relay's `state.boot` time. pigpio's current tick is not used: it is an unsigned 32-bit microsecond counter that wraps every ~71.6 minutes. Without SSH or the relay, `uptime` is `null`.
 - `cat /proc/cpuinfo` — CPU model and hardware info
 - `cat /etc/os-release` — OS release info
 

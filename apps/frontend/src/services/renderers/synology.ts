@@ -119,8 +119,10 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
   tone: ({ stats, health }) => {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
+    // backend reports systemStatus as "Normal" | "Warning" | "Unknown"
+    // (SYNOLOGY-SYSTEM-MIB systemStatus 2 = Failed maps to "Warning")
     const status = stats ? dotGet(stats, "systemStatus") : undefined;
-    if (status === "error" || status === "offline") return "crit";
+    if (status === "Warning") return "crit";
     const cpu = getNum(stats, "cpuUsage");
     const temp = getNum(stats, "cpuTemp");
     if ((cpu ?? 0) >= 90 || (temp ?? 0) >= 80) return "crit";

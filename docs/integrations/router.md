@@ -2,7 +2,7 @@
 title: Router Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -83,7 +83,7 @@ When SNMP is enabled, `getStats()` returns additional metrics alongside base met
 | `ifInBps` / `ifOutBps` | derived                                                         | number | Byte rates computed from counter deltas between polls; omitted on the first poll and when a counter decreases (wrap/reboot)                                |
 | `ifDescr`              | `1.3.6.1.2.1.2.2.1.2`                                           | array  | Network interface names (collected to build active filter set)                                                                                             |
 
-**Graceful degradation**: If SNMP queries fail or timeout, the service returns base metrics (host, portCount, configured) without SNMP data. No error is raised. HC-counter walks degrade independently to the 32-bit fallback. All SNMP walks use parallel Promise.all() with a per-request timeout and AbortSignal propagation for clean cancellation.
+**Graceful degradation**: If SNMP queries fail or timeout, the service returns base metrics (host, portCount, configured) without SNMP data. No error is raised. HC-counter walks degrade independently to the 32-bit fallback. All SNMP walks run in parallel with a per-request timeout and AbortSignal propagation. Each walk degrades on its own: a router without HOST-RESOURCES-MIB (no `cpuLoad`) or a timed-out ARP walk (no `connectedClients`) keeps the other SNMP metrics; only when every walk fails are SNMP metrics omitted. Counter values that do not decode to a number are skipped, never summed as NaN.
 
 ### Interface Filtering
 

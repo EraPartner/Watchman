@@ -88,14 +88,17 @@ interface DsmClient {
 
 ### Network Counters
 
-- `networkRx`/`networkTx` prefer the 64-bit ifXTable HC counters (`1.3.6.1.2.1.31.1.1.1.6.1` / `.10.1`, ifIndex=1) fetched in a separate SNMP get; the 32-bit `1.3.6.1.2.1.2.2.1.10.1`/`.16.1` values are a fallback when ifXTable is unavailable (32-bit counters wrap at 4 GiB).
+- `networkRx`/`networkTx` sum the octet counters of the NAS's external interfaces, found by walking `ifDescr` (ifIndex 1 on DSM is loopback `lo`). Selection: `bond*` if present, else `ovs_*` (Virtual Machine Manager's Open vSwitch ports), else `eth*`, else every interface; `lo`, `docker*`, `veth*`, `br-*`, `sit*`, `tun*`, `tap*` and `dummy*` are always excluded. The 64-bit ifXTable HC counters (`1.3.6.1.2.1.31.1.1.1.6` / `.10`) are preferred; the 32-bit `1.3.6.1.2.1.2.2.1.10` / `.16` columns are a fallback (they wrap at 4 GiB).
+- CPU and memory use UCD-SNMP-MIB, which Synology's MIB guide lists for DSM: `cpuUsage` = 100 − `ssCpuIdle` (`1.3.6.1.4.1.2021.11.11.0`); memory from `memTotalReal`/`memAvailReal`/`memBuffer`/`memCached` (`1.3.6.1.4.1.2021.4.5/6/14/15.0`, kB), with buffers and cache counted as available like DSM's "real usage". SYNOLOGY-SYSTEM-MIB has no CPU or memory scalars (`.1.5.2` is `serialNumber`, `.1.5.4` is `upgradeAvailable`).
+- `uptime` uses `hrSystemUptime` (`1.3.6.1.2.1.25.1.1.0`, host uptime), falling back to `sysUpTime` (the SNMP agent's own uptime).
+- Disk totals (`diskTotal`, `diskUsed`, `diskFree`, `diskUsagePercent`) come only from the DSM storage API. SNMP has no volume-size scalar (`1.3.6.1.4.1.6574.2.1.1.*` are per-disk type/status/temperature columns), so they are 0 in SNMP-only mode.
 - `networkRxBps`/`networkTxBps` are byte rates derived from counter deltas between polls; omitted on the first poll and when a counter decreases (wrap/reboot).
 
 ### DSM API Calls
 
 | API                        | Method      | Field Keys                                                             |
 | -------------------------- | ----------- | ---------------------------------------------------------------------- |
-| `SYNO.DSM.Info`            | `get`       | `dsmModel`, `dsmVersion`, `dsmTemperature`                             |
+| `SYNO.DSM.Info`            | `getinfo`   | `dsmModel`, `dsmVersion` (`version_string`, else `version`), `dsmTemperature` |
 | `SYNO.Core.System.Status`  | `get`       | `cpuFanStatus`, `sysFanStatus`, `powerStatus`                          |
 | `SYNO.Storage.CGI.Storage` | `load_info` | `volumeCount`, `volumeDegradedCount`, `diskCount`, `diskDegradedCount` |
 
@@ -118,7 +121,7 @@ DSM metrics are enabled when **all three** of the DSM fields are non-empty in th
 Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to NAS host
-- **Service tier** — SNMP `sysUpTime` probe
+- **Service tier** — SNMPv3 get of system name, uptime, model, version and status
 - **Composite reachability** — `reachable = service.reachable` — daemon-primary: the SNMP/DSM probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
