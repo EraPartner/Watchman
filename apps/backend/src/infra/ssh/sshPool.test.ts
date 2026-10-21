@@ -255,4 +255,103 @@ describe('createSshPool', () => {
     expect(clientInstances[0]!.end).toHaveBeenCalled();
     expect(clientInstances[1]!.end).toHaveBeenCalled();
   });
+  it('does not reconnect in the background after a failure (error + close)', async () => {
+    // regression: ssh2 emits both 'error' and 'close' for one failure; each
+    // used to schedule its own reconnect, multiplying connect attempts
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq());
+    const client = clientInstances[0]!;
+    client.emitError('connect ECONNREFUSED');
+    client.emitClose();
+    await expect(execPromise).rejects.toBeInstanceOf(UnavailableError);
+
+    vi.advanceTimersByTime(30_000);
+    expect(client.connect).toHaveBeenCalledTimes(1);
+    expect(clientInstances).toHaveLength(1);
+
+    // the next exec opens a fresh connection
+    const next = pool.exec(makeReq());
+    expect(clientInstances).toHaveLength(2);
+    mockExecSuccess(clientInstances[1]!, 'ok');
+    clientInstances[1]!.emitReady();
+    await expect(next).resolves.toMatchObject({ stdout: 'ok', code: 0 });
+  });
+
+  it('rejects queued execs when the connection closes before ready', async () => {
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq());
+    clientInstances[0]!.emitClose();
+    await expect(execPromise).rejects.toBeInstanceOf(UnavailableError);
+  });
+
+  it('queued exec honours its timeout while the connection is not ready', async () => {
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq({ timeoutMs: 100 }));
+    vi.advanceTimersByTime(150);
+    await expect(execPromise).rejects.toBeInstanceOf(TimeoutError);
+  });
+
+  it('queued exec honours its abort signal while the connection is not ready', async () => {
+    const pool = createSshPool();
+    const ac = new AbortController();
+    const execPromise = pool.exec(makeReq({ timeoutMs: 5000, signal: ac.signal }));
+    ac.abort();
+    await expect(execPromise).rejects.toBeInstanceOf(TimeoutError);
+  });
+
+  it('opens a new connection when the password changes', async () => {
+    const pool = createSshPool();
+    const p1 = pool.exec(makeReq({ password: 'old' }));
+    const p2 = pool.exec(makeReq({ password: 'new' }));
+    expect(clientInstances).toHaveLength(2);
+    expect(clientInstances[0]!.end).toHaveBeenCalled();
+    await expect(p1).rejects.toBeInstanceOf(UnavailableError);
+    expect(clientInstances[1]!.connect).toHaveBeenCalledWith(expect.objectContaining({ password: 'new' }));
+    mockExecSuccess(clientInstances[1]!, 'ok');
+    clientInstances[1]!.emitReady();
+    await expect(p2).resolves.toMatchObject({ stdout: 'ok' });
+  });
+
+  it('rejects when the channel closes without an exit status (truncated output)', async () => {
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq());
+    const client = clientInstances[0]!;
+    client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
+      const stream = makeStream();
+      cb(null, stream);
+      stream.emit('data', Buffer.from('partial'));
+      stream.emit('close');
+    });
+    client.emitReady();
+    await expect(execPromise).rejects.toBeInstanceOf(UnavailableError);
+  });
+
+  it('rejects when the command is killed by a signal', async () => {
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq());
+    const client = clientInstances[0]!;
+    client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
+      const stream = makeStream();
+      cb(null, stream);
+      stream.emit('close', null, 'KILL');
+    });
+    client.emitReady();
+    await expect(execPromise).rejects.toThrow(/signal KILL/);
+  });
+
+  it('decodes multi-byte UTF-8 split across data chunks', async () => {
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq());
+    const client = clientInstances[0]!;
+    const bytes = Buffer.from('Küche', 'utf8');
+    client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
+      const stream = makeStream();
+      cb(null, stream);
+      stream.emit('data', bytes.subarray(0, 2));
+      stream.emit('data', bytes.subarray(2));
+      stream.emit('close', 0);
+    });
+    client.emitReady();
+    await expect(execPromise).resolves.toMatchObject({ stdout: 'Küche' });
+  });
 });

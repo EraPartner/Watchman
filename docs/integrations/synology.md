@@ -2,7 +2,7 @@
 title: Synology Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -36,7 +36,7 @@ aliases: [synology, nas, synology nas, dsm, synology dsm]
 - **Routing**: `SYNO.API.Auth` calls → `/webapi/auth.cgi`; all other API calls → `/webapi/entry.cgi`
 - **Session injection**: Sends `_sid=<sid>` (and all other params, including `passwd` at login) in a POST form body — never in the URL, which proxies/APM tooling routinely log
 - **Auto-login**: Performs login automatically on first call when no `initialSid` configured
-- **Session recovery**: On DSM error codes 105/106/107 (session expired/not found/user not found):
+- **Session recovery**: On DSM error codes 105/106/107/119 (permission denied / session timeout / duplicate-login interruption / SID not found):
   - Re-logs in once
   - Retries the original call
   - Throws `UnavailableError` if retry also fails

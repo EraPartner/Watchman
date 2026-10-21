@@ -65,6 +65,17 @@ describe('createJwtClient', () => {
     expect(secondReq![0].headers?.['authorization']).toBe('Bearer refreshed-token');
   });
 
+  it('consumes the discarded 401 body before retrying', async () => {
+    const first = fakeResponse(401);
+    const text = vi.fn(async () => '');
+    first.text = text;
+    const http = sequentialHttp([first, fakeResponse(200)]);
+    const client = createJwtClient(http, { refresh: async () => 'tok' });
+    const res = await client.send({ url: 'http://x/api' });
+    expect(res.status).toBe(200);
+    expect(text).toHaveBeenCalledTimes(1);
+  });
+
   it('does not refresh again after retry — only one attempt per 401', async () => {
     const refresh = vi.fn(async () => 'refreshed-token');
     // Both 401 and 401 means the retry also fails — no second refresh
