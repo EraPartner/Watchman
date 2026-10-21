@@ -3,12 +3,14 @@
 ## Security model — read this first
 
 Watchman is built for a **single user on a trusted network**. By deliberate
-design it has **no authentication, no CSRF protection, and no rate limiting**
+design it has **no authentication, no CSRF protection, and no HTTP rate limiting**
 (see [ADR-017](./docs/adr/) and
-[ADR-025 — trusted-network security model](./docs/adr/)).
+[ADR-025 — trusted-network security model](./docs/adr/)). The WebSocket only caps
+handshakes at 30 per IP per minute and open connections at 10 per IP.
 
 **Consequence:** anyone who can reach the backend port can read everything and
-reconfigure every monitored service. Therefore:
+change Watchman's configuration for every monitored service (Watchman itself only reads
+from those services; see ADR-032). Therefore:
 
 - **Do not expose the backend beyond your trusted network.** Bind it to a private
   interface and/or firewall the port (default `3001`). Do not port-forward it or

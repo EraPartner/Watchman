@@ -40,7 +40,8 @@ Validates the WebSocket upgrade request. Uses the **shared origin allow-list** f
 Manages active client connections:
 
 - Track each connection with unique ID
-- Track IP address per connection (for rate limiting, security alerts)
+- Track IP address per connection and cap open connections at 10 per IP (`maxConnectionsPerIp`)
+- Upgrade attempts are capped separately at 30 per IP per minute by `HandshakeLimiter.ts`; over the cap the route answers 429 before the upgrade
 - Clean up disconnected clients (idempotent handling)
 - Prevent double-processing on close/error
 

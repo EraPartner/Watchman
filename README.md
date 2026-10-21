@@ -45,7 +45,7 @@ If you run multiple services, Watchman gives you one dashboard instead of 10+ br
 | Fast visibility across services             | Unified health + stats endpoints and cards in a single UI                                                                                       |
 | Support for multiple instances of a service | Multiple instances per service type, configured in the UI (e.g. several qBittorrent or Synology instances)                                      |
 | Live status updates                         | WebSocket-based real-time updates                                                                                                               |
-| A trusted-network security model            | Origin allow-list (CORS + WebSocket), service secrets encrypted at rest, PII-redacted logs — no auth/CSRF/rate-limiting by design (single-user) |
+| A trusted-network security model            | Origin allow-list (CORS + WebSocket), service secrets encrypted at rest, PII-redacted logs — no auth/CSRF/HTTP rate limiting by design (single-user) |
 | Extensibility                               | Factory-driven service integration architecture                                                                                                 |
 
 ## Feature Highlights
@@ -220,7 +220,7 @@ Watchman/
 ## API and Security
 
 - OpenAPI 3.1 spec: [`apps/backend/openapi.yaml`](./apps/backend/openapi.yaml) — documentation only; no Swagger UI is served.
-- **Security model:** single user on a trusted network — **no authentication, CSRF, or rate limiting, by design** (ADR-017 / ADR-025). Anyone who can reach the port can read and reconfigure, so do **not** expose the backend beyond your trusted network.
+- **Security model:** single user on a trusted network — **no authentication, CSRF, or HTTP rate limiting, by design** (ADR-017 / ADR-025). The only limits are on the WebSocket: 30 handshakes per IP per minute and 10 open connections per IP (`apps/backend/src/transport/ws/`). Anyone who can reach the port can read everything and change Watchman's service configuration (Watchman itself never changes the monitored services), so do **not** expose the backend beyond your trusted network.
 - Browser cross-origin access is gated by an origin allow-list shared by CORS and the WebSocket upgrade: desktop `watchman://`, loopback, and anything in `CORS_ALLOWED_ORIGINS`.
 - Service secrets are encrypted at rest in the DuckDB config store (`WATCHMAN_MASTER_KEY`); secrets and PII are never logged.
 
