@@ -92,9 +92,11 @@ adds renderer hardening:
 - A **Content-Security-Policy** is attached to every `watchman://` response
   (`script-src 'self'`; `connect-src` allows only the loopback backend over
   HTTP/WS). Dev (Vite) loads from its own origin and is unaffected.
-- A **navigation allow-list** (`will-navigate`) pins the window to
-  `watchman://`, `file:`, and loopback; external links are bounced to the system
-  browser. `window.open` is denied and opened externally.
+- A **navigation allow-list** (`will-navigate`, `src/navigation.ts`) pins the
+  window to `watchman://`, the backend's exact origin and, in unpackaged dev
+  runs, the `WATCHMAN_DEV_URL` origin. Other URLs, including `file:` and other
+  loopback ports, are bounced to the system browser (non-web schemes are
+  dropped). `window.open` is denied and opened externally.
 - All web **permission requests are denied** (camera/mic/geolocation/etc.);
   notifications are fired natively from the main process.
 
@@ -265,7 +267,7 @@ The backend child process runs with Electron's own binary (`ELECTRON_RUN_AS_NODE
 
 ### Set for the Backend by the Desktop App
 
-The main process (`apps/desktop/src/backend.ts`) spawns the backend with these values; other backend variables pass through from the environment:
+The main process (`apps/desktop/src/backend.ts`) spawns the backend with these values; other backend variables pass through from the environment. The backend's working directory is `<userData>`, so `.env.local` / `.env` are read from there, not from wherever the app was launched:
 
 | Variable              | Value set by the desktop app                                         |
 | --------------------- | -------------------------------------------------------------------- |

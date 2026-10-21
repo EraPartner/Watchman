@@ -21,6 +21,7 @@ import {
   FRONTEND_ENTRY_URL,
 } from "./frontendProtocol";
 import { splashDataUrl, setSplashStatus } from "./splash";
+import { isAllowedNavigation, originOf } from "./navigation";
 import { initLogFile, appendLog, openLogs } from "./logs";
 import { setupApplicationMenu, setupDockMenu } from "./menu";
 import {
@@ -193,22 +194,19 @@ function createWindow(): void {
   });
 
   // Navigation allow-list: keep the window pinned to the frontend, the local
-  // backend, and bundled files. Anything else (an external link that slipped
-  // past the open-handler) is bounced to the system browser.
+  // backend's origin and, in dev, the Vite origin. Anything else (an external
+  // link that slipped past the open-handler) is bounced to the system browser;
+  // openExternalSafe drops non-web schemes such as file:.
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    try {
-      const target = new URL(url);
-      const allowed =
-        target.protocol === "watchman:" ||
-        target.protocol === "file:" ||
-        target.hostname === "127.0.0.1" ||
-        target.hostname === "localhost";
-      if (!allowed) {
-        event.preventDefault();
-        openExternalSafe(url);
-      }
-    } catch {
+    const allowed = isAllowedNavigation(url, {
+      backendOrigin: originOf(backendConfig.apiUrl),
+      devOrigin: app.isPackaged
+        ? undefined
+        : originOf(process.env.WATCHMAN_DEV_URL),
+    });
+    if (!allowed) {
       event.preventDefault();
+      openExternalSafe(url);
     }
   });
 
@@ -262,25 +260,30 @@ function loadErrorPage(message: string): void {
     });
 }
 
-let starting = false;
-async function attemptBackendStart(): Promise<void> {
-  if (starting) return;
-  starting = true;
-  try {
-    setSplashStatus(mainWindow, "Starting backend…");
-    const port = await getFreePort();
-    const dataDir = path.join(app.getPath("userData"), "data");
-    backend = await startBackend(port, dataDir, appendLog);
-    backendConfig = {
-      apiUrl: `http://${backend.host}:${backend.port}`,
-      wsUrl: `ws://${backend.host}:${backend.port}/ws`,
-    };
-    setSplashStatus(mainWindow, "Loading…");
-    await loadFrontend();
-    startWatchdog();
-  } finally {
-    starting = false;
+// A start already in flight is shared, so a second caller (recovery:retry,
+// macOS activate) waits for its outcome instead of reporting success early.
+let startInFlight: Promise<void> | null = null;
+function attemptBackendStart(): Promise<void> {
+  if (!startInFlight) {
+    startInFlight = runBackendStart().finally(() => {
+      startInFlight = null;
+    });
   }
+  return startInFlight;
+}
+
+async function runBackendStart(): Promise<void> {
+  setSplashStatus(mainWindow, "Starting backend…");
+  const port = await getFreePort();
+  const dataDir = path.join(app.getPath("userData"), "data");
+  backend = await startBackend(port, dataDir, appendLog);
+  backendConfig = {
+    apiUrl: `http://${backend.host}:${backend.port}`,
+    wsUrl: `ws://${backend.host}:${backend.port}/ws`,
+  };
+  setSplashStatus(mainWindow, "Loading…");
+  await loadFrontend();
+  startWatchdog();
 }
 
 // ── Health watchdog ───────────────────────────────────────────────────────────

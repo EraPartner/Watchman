@@ -116,6 +116,10 @@ export async function startBackend(
   const entry = resolveBackendEntry();
 
   const child = spawn(process.execPath, [entry], {
+    // The backend reads .env.local/.env from its working directory. Pin it to
+    // the app's user-data folder so they don't come from wherever the app
+    // happened to be launched.
+    cwd: app.getPath("userData"),
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",

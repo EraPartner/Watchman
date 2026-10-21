@@ -1,6 +1,7 @@
 import { protocol, net } from "electron";
 import * as path from "path";
 import { pathToFileURL } from "url";
+import { decodeRequestPath } from "./protocolPath";
 
 const SCHEME = "watchman";
 
@@ -53,9 +54,9 @@ export function registerFrontendScheme(): void {
 export function handleFrontendProtocol(frontendRoot: string): void {
   protocol.handle(SCHEME, async (request) => {
     const url = new URL(request.url);
-    let relative = decodeURIComponent(url.pathname);
-    if (relative === "/" || relative === "") {
-      relative = "/index.html";
+    const relative = decodeRequestPath(url.pathname);
+    if (relative === undefined) {
+      return new Response("Bad Request", { status: 400 });
     }
 
     const resolved = path.normalize(path.join(frontendRoot, relative));
