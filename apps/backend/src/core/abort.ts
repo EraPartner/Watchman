@@ -13,22 +13,28 @@ export function linkAbort(...signals: Array<AbortSignal | undefined>): AbortSign
   return controller.signal;
 }
 
+/**
+ * The timer is unref'd and, once it fires, the listener on `parent` is removed,
+ * so a request that finishes early never keeps the process alive and a
+ * long-lived parent signal does not collect one listener per call.
+ */
 export function withTimeout(ms: number, parent?: AbortSignal): AbortSignal {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new TimeoutError(`aborted after ${ms}ms`)), ms);
+  const onParentAbort = () => {
+    clearTimeout(timer);
+    controller.abort(parent?.reason);
+  };
+  const timer = setTimeout(() => {
+    parent?.removeEventListener('abort', onParentAbort);
+    controller.abort(new TimeoutError(`aborted after ${ms}ms`));
+  }, ms);
+  timer.unref?.();
   if (parent) {
     if (parent.aborted) {
       clearTimeout(timer);
       controller.abort(parent.reason);
     } else {
-      parent.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          controller.abort(parent.reason);
-        },
-        { once: true },
-      );
+      parent.addEventListener('abort', onParentAbort, { once: true });
     }
   }
   return controller.signal;
