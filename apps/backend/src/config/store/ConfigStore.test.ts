@@ -144,6 +144,109 @@ describe("ConfigStore", () => {
     expect(audit[0]!.action).toBe("delete");
   });
 
+  it("breaks audit ts ties by insertion order (newest id first)", async () => {
+    const ts = toTs(new Date("2026-01-01T00:00:00Z"));
+    await pool.withConnection(async (c) => {
+      for (const action of ["update", "rename"]) {
+        await c.run(
+          `INSERT INTO app_config_audit (ts, action, target_kind, target_id, diff, actor)
+           VALUES (?, ?, NULL, NULL, NULL, NULL)`,
+          [ts, action]
+        );
+      }
+    });
+    const audit = await store.listAudit();
+    expect(audit.map((e) => e.action)).toEqual(["rename", "update"]);
+  });
+
+  it("listAudit falls back to the default limit for a non-finite value", async () => {
+    await store.create({
+      kind: "ipfs",
+      instanceId: "a",
+      apiUrl: "http://127.0.0.1:5001",
+    });
+    await expect(store.listAudit(Number.NaN)).resolves.toHaveLength(1);
+  });
+
+  describe("export / import", () => {
+    it("round-trips services, secrets included, and updates matching entries", async () => {
+      const created = await store.create({
+        kind: "qbittorrent",
+        instanceId: "main",
+        baseUrl: "http://127.0.0.1:8069",
+        username: "admin",
+        password: "supersecret",
+      });
+      const bundle = await store.exportAll("alice");
+      expect(bundle.version).toBe(1);
+      expect(bundle.payload).not.toContain("supersecret");
+
+      await store.delete(created.id);
+      const restored = await store.importBundle(bundle, "alice");
+      expect(restored).toEqual({
+        imported: 1,
+        updated: 0,
+        skipped: 0,
+        errors: [],
+      });
+      const [svc] = await store.loadAll();
+      expect((svc!.config as { password: string }).password).toBe(
+        "supersecret"
+      );
+
+      const again = await store.importBundle(bundle);
+      expect(again.updated).toBe(1);
+      expect(again.imported).toBe(0);
+      expect(await store.loadAll()).toHaveLength(1);
+
+      const actions = (await store.listAudit()).map((e) => e.action);
+      expect(actions).toContain("export");
+      expect(actions).toContain("import");
+    });
+
+    it("updates instead of failing when a bundle repeats a (kind, instanceId)", async () => {
+      const encryptor = createEncryptor(deriveKey("unit-test-key"));
+      const entry = (apiUrl: string) => ({
+        kind: "ipfs",
+        instanceId: "dup",
+        enabled: true,
+        config: { kind: "ipfs", instanceId: "dup", apiUrl },
+      });
+      const payload = encryptor
+        .encryptJson([
+          entry("http://127.0.0.1:5001"),
+          entry("http://127.0.0.1:5002"),
+        ])
+        .toString("base64");
+
+      const result = await store.importBundle({
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        payload,
+      });
+
+      expect(result.errors).toEqual([]);
+      expect(result.imported).toBe(1);
+      expect(result.updated).toBe(1);
+      const all = await store.loadAll();
+      expect(all).toHaveLength(1);
+      expect((all[0]!.config as { apiUrl: string }).apiUrl).toBe(
+        "http://127.0.0.1:5002"
+      );
+    });
+
+    it("rejects a bundle encrypted with a different master key", async () => {
+      const other = createEncryptor(deriveKey("some-other-key"));
+      await expect(
+        store.importBundle({
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          payload: other.encryptJson([]).toString("base64"),
+        })
+      ).rejects.toThrow();
+    });
+  });
+
   it("loadAll returns all instances", async () => {
     await store.create({
       kind: "ipfs",

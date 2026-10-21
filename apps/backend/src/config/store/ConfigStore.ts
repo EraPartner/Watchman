@@ -657,9 +657,15 @@ export function createConfigStore(
     },
 
     async listAudit(limit = 100): Promise<ReadonlyArray<AuditEntry>> {
+      // The limit is interpolated into SQL, so a non-finite value must never reach it.
+      const safeLimit = Number.isFinite(limit)
+        ? Math.floor(Math.max(1, Math.min(limit, 1000)))
+        : 100;
       return withConn(async (c) => {
+        // id breaks ts ties: rows written in the same millisecond (update + rename)
+        // otherwise come back in arbitrary order.
         const result = await c.runAndReadAll(
-          `SELECT * FROM app_config_audit ORDER BY ts DESC LIMIT ${Math.floor(Math.max(1, Math.min(limit, 1000)))}`
+          `SELECT * FROM app_config_audit ORDER BY ts DESC, id DESC LIMIT ${safeLimit}`
         );
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
         return rows.map((r) => ({
@@ -759,7 +765,10 @@ export function createConfigStore(
             await this.update(match.id, cfg, actor);
             result.updated += 1;
           } else {
-            await this.create(cfg, actor);
+            const created = await this.create(cfg, actor);
+            // A later entry with the same (kind, instanceId) updates this one
+            // instead of failing as a duplicate.
+            byKey.set(`${kind}/${instanceId}`, created);
             result.imported += 1;
           }
         } catch (err) {

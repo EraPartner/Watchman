@@ -702,4 +702,18 @@ describe("GET /config/audit", () => {
 
     expect(listAuditMock).toHaveBeenCalledWith(50);
   });
+
+  it("falls back to the default limit for a non-numeric limit", async () => {
+    const listAuditMock = vi.fn(async () => []);
+    const store = makeFakeStore({ listAudit: listAuditMock });
+    const app = await makeApp(store);
+    const res = await app.inject({
+      method: "GET",
+      url: "/config/audit?limit=abc",
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(200);
+    expect(listAuditMock).toHaveBeenCalledWith(100);
+  });
 });

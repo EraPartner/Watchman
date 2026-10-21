@@ -73,6 +73,7 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
 
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Audit from "./Audit";
 import BackupRestore from "./BackupRestore";
 import Services from "./Services";
@@ -151,6 +152,39 @@ describe("Audit page", () => {
     expect(container.textContent).toContain("Config audit");
     act(() => root.unmount());
   });
+
+  it("omits the target for entries without one instead of rendering a bare slash", async () => {
+    vi.mocked(useQuery).mockReturnValueOnce({
+      data: [
+        {
+          id: 2,
+          ts: "2026-01-01T00:00:00Z",
+          action: "export",
+          targetKind: null,
+          targetId: null,
+          diff: { count: 1 },
+          actor: null,
+        },
+        {
+          id: 1,
+          ts: "2026-01-01T00:00:00Z",
+          action: "create",
+          targetKind: "ipfs",
+          targetId: "svc-1",
+          diff: {},
+          actor: "alice",
+        },
+      ],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useQuery>);
+    const { container, root } = await render(<Audit />);
+    const targets = Array.from(
+      container.querySelectorAll("li span.font-mono.text-\\[var\\(--text-hi\\)\\]")
+    ).map((el) => el.textContent);
+    expect(targets).toEqual(["ipfs/svc-1"]);
+    act(() => root.unmount());
+  });
 });
 
 // ─── BackupRestore ────────────────────────────────────────────────────────────
@@ -160,6 +194,41 @@ describe("BackupRestore page", () => {
     const { container, root } = await render(<BackupRestore />);
     expect(container.querySelector("main")).toBeTruthy();
     act(() => root.unmount());
+  });
+
+  it("does not leak an unhandled rejection when export fails", async () => {
+    const failing = {
+      mutateAsync: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("boom"),
+      reset: vi.fn(),
+    };
+    // First useMutation call in BackupRestore is the export mutation.
+    vi.mocked(useMutation).mockReturnValueOnce(
+      failing as unknown as ReturnType<typeof useMutation>
+    );
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const { container, root } = await render(<BackupRestore />);
+      const button = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent === "Download backup"
+      );
+      await act(async () => {
+        button!.click();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(failing.mutateAsync).toHaveBeenCalledTimes(1);
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(container.textContent).toContain("boom");
+      act(() => root.unmount());
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
   });
 });
 

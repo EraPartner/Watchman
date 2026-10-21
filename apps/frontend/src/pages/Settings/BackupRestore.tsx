@@ -12,7 +12,14 @@ export default function BackupRestore() {
   const [importError, setImportError] = useState<string | null>(null);
 
   async function handleExport() {
-    const bundle = await exportMut.mutateAsync();
+    let bundle: ExportBundle;
+    try {
+      bundle = await exportMut.mutateAsync();
+    } catch {
+      // Surfaced below via exportMut.error; swallowing here avoids an
+      // unhandled rejection from the click handler.
+      return;
+    }
     const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: "application/json",
     });
