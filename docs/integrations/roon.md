@@ -52,7 +52,7 @@ Configure via the Settings UI or the `/config` API (DuckDB config store). Legacy
 | `ports`      | number\[\] | —        | `[9100]` | TCP ports to probe for liveness               |
 | `usePing`    | boolean    | —        | `true`   | Enable ICMP ping probe                        |
 | `pingCount`  | number     | —        | `2`      | ICMP ping count per health check              |
-| `apiPort`    | number     | —        | `9100`   | Roon Core API (WebSocket) port                |
+| `apiPort`    | number     | —        | `9330`   | Roon Core API (WebSocket) port, see below     |
 | `useRoonApi` | boolean    | —        | `false`  | Enable zone/now-playing tracking via Roon API |
 | `timeoutMs`  | number     | —        | `5000`   | Probe timeout in ms                           |
 | `cacheTtlMs` | number     | —        | `10000`  | Health/stats cache TTL in ms                  |
@@ -156,7 +156,7 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 - `timeoutMs` — Probe timeout (default 5000)
 - `usePing` — Enable ICMP probing (default true)
 - `pingCount` — ICMP count (default 2)
-- **`apiPort`** (RN2) — WebSocket API port (default 9100)
+- **`apiPort`** (RN2) — WebSocket API port (default 9330). Roon assigns this port from a range rather than a fixed number: 9100 was the old start of the range, and current Cores commonly use 9330 (sometimes 9332, 9300 or 9400). Services saved before the default changed keep their stored port. If zones stay empty, check the port your Core listens on. Source: [Roon community, "What is Roon Core's (default) port?"](https://community.roonlabs.com/t/what-is-roon-cores-default-port/225103). Not verified against a live Core.
 - **`useRoonApi`** (RN2) — Enable zone tracking (default false)
 
 ### Methods

@@ -47,7 +47,10 @@ export const RoonInstanceSchema = BaseInstanceSchema.extend({
   ports: z.array(z.number().int().positive()).default([9100]),
   pingCount: z.number().int().positive().default(2),
   usePing: z.boolean().default(true),
-  apiPort: z.number().int().positive().default(9100),
+  // Roon Cores assign the API port from a range; current Cores commonly use
+  // 9330 (9100 was the old start). Unverified against a live Core. Stored
+  // services keep their port: the parsed config, defaults included, is stored.
+  apiPort: z.number().int().positive().default(9330),
   useRoonApi: z.boolean().default(false),
 });
 
