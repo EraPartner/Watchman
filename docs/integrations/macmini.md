@@ -2,7 +2,7 @@
 title: Mac Mini Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -72,11 +72,14 @@ All metrics are nullable (`null` if a command fails or is not available). All co
 | ------------------ | ------------------------------------------------ | ------ | -------------------------------- |
 | `cpuLoad`          | `uptime`                                         | number | 1-minute CPU load average        |
 | `cpuTemp`          | `smctemp -c`, fallback `osx-cpu-temp` (Homebrew) | number | CPU package temperature (°C)     |
-| `diskTotal`        | `df -k /`                                        | number | Root filesystem total bytes      |
-| `diskUsed`         | `df -k /`                                        | number | Root filesystem used bytes       |
-| `diskFree`         | `df -k /`                                        | number | Root filesystem available bytes  |
-| `diskUsagePercent` | `df -k /`                                        | number | Root filesystem usage percentage |
-| `uptime`           | `uptime`                                         | number | System uptime in seconds         |
+| `diskTotal`        | `df -k /System/Volumes/Data` (else `df -k /`)    | number | Data volume total bytes          |
+| `diskUsed`         | `df -k /System/Volumes/Data` (else `df -k /`)    | number | Data volume used bytes           |
+| `diskFree`         | `df -k /System/Volumes/Data` (else `df -k /`)    | number | Available bytes (shared APFS container) |
+| `diskUsagePercent` | `df -k /System/Volumes/Data` (else `df -k /`)    | number | (total − available) / total      |
+| `uptime`           | `uptime`                                         | number \| null | System uptime in seconds (BSD formats: `H:MM`, `N hrs`, `N mins`, `N secs`, with optional `N days`) |
+| `cpuUsagePercent`  | `top -l 1 -n 0 -s 0`                             | number \| null | `user + sys` CPU percent         |
+
+On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is only the OS; the Data volume holds user data. `cpuLoad`, `cpuTemp` and `uptime` are `null` when not measured (no load line, no `smctemp`/`osx-cpu-temp`), never a placeholder 0.
 
 ### Extended Memory Metrics (via `vm_stat`)
 
@@ -144,7 +147,7 @@ All metrics are nullable (`null` if a command fails or is not available). All co
 All commands travel in a single SSH exec ([[apps/backend/src/infra/ssh/compound.ts|compoundCommand]], `@@WATCHMAN_SEGMENT@@`-delimited, each segment subshelled with `|| true`), so a stats cycle costs one SSH round-trip instead of eight:
 
 1. `uptime` — system load and uptime
-2. `df -k /` — filesystem usage
+2. `df -k /System/Volumes/Data 2>/dev/null || df -k /` — Data volume usage (falls back to `/` before Catalina)
 3. temp probe — prefers `smctemp -c` (works on Apple Silicon, where the unmaintained `osx-cpu-temp` reads 0.0), falls back to `osx-cpu-temp`
 4. `vm_stat` — memory breakdown
 5. `pmset -g batt` — power state
@@ -152,7 +155,7 @@ All commands travel in a single SSH exec ([[apps/backend/src/infra/ssh/compound.
 7. `ifconfig en0` — network interface
 8. `smartctl -j -a disk0` (feature-detect) — disk SMART health
 
-A failing command yields an empty segment (its metrics become null/0); stats error only when both core segments (`uptime` and `df`) come back empty or the SSH exec itself fails.
+A failing command yields an empty segment (its metrics become null, or 0 for the disk fields); stats error only when both core segments (`uptime` and `df`) come back empty or the SSH exec itself fails.
 
 ## Frontend Component
 

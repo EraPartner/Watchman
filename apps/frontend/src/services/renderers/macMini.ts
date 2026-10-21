@@ -3,6 +3,7 @@ import { buildQuickLink } from "./quickLink";
 import {
   dotGet,
   fmtBytes,
+  fmtNumber,
   fmtPercent,
   fmtRaw,
   fmtTempC,
@@ -28,7 +29,7 @@ export const macMiniRenderer: ServiceRenderer<Stats> = {
   quickLinkLabel: "Open host",
 
   summary: [
-    { key: "cpuLoad", label: "CPU", format: fmtPercent(0, 100) },
+    { key: "cpuUsagePercent", label: "CPU", format: fmtPercent(0, 100) },
     { key: "cpuTemp", label: "Temp", format: fmtTempC },
     { key: "diskUsagePercent", label: "Disk", format: fmtPercent(0, 100) },
   ],
@@ -37,7 +38,9 @@ export const macMiniRenderer: ServiceRenderer<Stats> = {
     {
       title: "CPU",
       metrics: [
-        { key: "cpuLoad", label: "Load", format: fmtPercent(1, 100) },
+        { key: "cpuUsagePercent", label: "Usage", format: fmtPercent(1, 100) },
+        // cpuLoad is the 1-minute load average, not a percentage
+        { key: "cpuLoad", label: "Load avg (1m)", format: fmtNumber(2) },
         { key: "cpuTemp", label: "Temperature", format: fmtTempC },
       ],
     },
@@ -60,7 +63,8 @@ export const macMiniRenderer: ServiceRenderer<Stats> = {
   ],
 
   charts: [
-    { metric: "cpuLoad", label: "CPU load", kind: "area", format: fmtPercent(0, 100) },
+    { metric: "cpuUsagePercent", label: "CPU usage", kind: "area", format: fmtPercent(0, 100) },
+    { metric: "cpuLoad", label: "Load avg", kind: "line", format: fmtNumber(2) },
     { metric: "cpuTemp", label: "CPU temp", kind: "line", format: fmtTempC },
     { metric: "diskUsagePercent", label: "Disk used", kind: "area", format: fmtPercent(0, 100) },
   ],
@@ -68,7 +72,7 @@ export const macMiniRenderer: ServiceRenderer<Stats> = {
   tone: ({ stats, health }) => {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
-    const cpu = getNum(stats, "cpuLoad");
+    const cpu = getNum(stats, "cpuUsagePercent");
     const temp = getNum(stats, "cpuTemp");
     const disk = getNum(stats, "diskUsagePercent");
     if ((cpu ?? 0) >= 90 || (temp ?? 0) >= 90 || (disk ?? 0) >= 95) return "crit";
