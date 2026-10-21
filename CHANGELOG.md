@@ -25,6 +25,8 @@ dependency audit, and documentation aligned with the code.
 
 ### Added
 
+- Backups include profiles (#127). On import, each profile maps to a local one
+  by id, then by name; only unmatched profiles are created.
 - Desktop: native Electron experience, runtime hardening, and a distribution
   layer (ad-hoc signed macOS `.dmg`, arm64 + x64).
 - Per-location service **profiles** with automatic LAN-based switching.
@@ -39,6 +41,8 @@ dependency audit, and documentation aligned with the code.
 
 ### Changed
 
+- New Roon services default `apiPort` to 9330 instead of 9100 (#127). Saved
+  services keep their port.
 - Backend: shared origin policy extracted for HTTP CORS and the WebSocket upgrade.
 - Backend: config store, service schema, and field metadata overhauled; service
   config now lives in the DuckDB store (legacy `WATCHMAN_SERVICES_CONFIG` imported
@@ -57,6 +61,23 @@ dependency audit, and documentation aligned with the code.
   client. Watchman is monitoring-only and never changes a monitored service (ADR-032).
 
 ### Fixed
+
+- Audit leftovers (#127): request timers no longer keep the event loop alive
+  or collect abort listeners; Hue pairing validates `host` and caps
+  `timeoutMs`; Synology DSM 5xx/HTML replies, Tor dot-escaped data and
+  bracketed IPv6 ping hosts are handled; Homebridge shows no CPU temperature
+  for the `-1` no-sensor value; concurrent stats requests no longer fail
+  together when the first client disconnects; the circuit breaker ignores
+  late results from calls started before it tripped; the detail sheet follows
+  a service renamed in it; the Raspberry Pi relay command quotes its config
+  values; config writes and their audit entries commit together;
+  `GET /config/services/:id` returns 409 instead of 500 for a row that fails
+  to load; `writeAudit` keeps the timestamp it is given.
+- Desktop (#127): in-app navigation is limited to the app, the backend origin
+  and the dev server; a `null` `settings.json`, a work area smaller than the
+  minimum window and a malformed `%` escape no longer break the window; the
+  backend runs in the user-data folder; "Retry" waits for a start already in
+  progress.
 
 - Editing a service: saved secrets start blank ("leave blank to keep") instead
   of holding the redaction marker `***`, which typing appended to and saved as
