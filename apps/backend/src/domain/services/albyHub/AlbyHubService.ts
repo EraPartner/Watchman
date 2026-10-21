@@ -18,7 +18,8 @@ export interface AlbyHubDeps {
   now: () => number;
 }
 
-// Legacy probe paths — used when legacyProbe: true (default, backward-compatible)
+// Legacy probe paths — used when legacyProbe: true (opt-in, for hubs without
+// the /api/info endpoint; the schema default is the NWC API)
 const PROBE_PATHS = [
   "/api",
   "/api/info",
@@ -61,13 +62,19 @@ interface ResolvedInfo {
   endpoint: string;
 }
 
-// Alby Hub NWC API response shapes (used when legacyProbe: false)
+// Alby Hub API response shapes (used when legacyProbe: false), from
+// getAlby/hub api/models.go. Unsuffixed amount fields are deprecated upstream
+// in favour of explicit *Sat / *Msat ones; both are read, explicit first.
 interface NwcInfo {
   backendType?: string;
   setupCompleted?: boolean;
-  connected?: boolean;
+  /** node started (false until the hub is unlocked after a restart) */
+  running?: boolean;
+  /** true only when the request carried a valid JWT */
+  unlocked?: boolean;
   version?: string;
-  name?: string;
+  network?: string;
+  nodeAlias?: string;
 }
 
 interface NwcApp {
@@ -75,15 +82,33 @@ interface NwcApp {
   name?: string;
 }
 
+/** GET /api/apps: { apps, totalCount }; older hubs returned a bare array */
+interface NwcAppList {
+  apps?: NwcApp[];
+  totalCount?: number;
+}
+
 interface NwcBalances {
-  onchain?: { spendable?: number; total?: number };
-  lightning?: { totalSpendable?: number; totalReceivable?: number };
+  onchain?: {
+    spendable?: number;
+    spendableSat?: number;
+    total?: number;
+    totalSat?: number;
+  };
+  lightning?: {
+    totalSpendable?: number;
+    totalSpendableMsat?: number;
+    totalReceivable?: number;
+    totalReceivableMsat?: number;
+  };
 }
 
 interface NwcChannel {
   active?: boolean;
   localBalance?: number;
+  localBalanceMsat?: number;
   remoteBalance?: number;
+  remoteBalanceMsat?: number;
 }
 
 const NWC_INFO_PATH = "/api/info";
@@ -200,27 +225,36 @@ export class AlbyHubService extends BaseService {
     }
     const payload = (await this.parseJson(res)) as NwcInfo | null;
     const latencyMs = this.now() - started;
+    const running = payload?.running ?? null;
     return {
       reachable: true,
       latencyMs,
       details: {
         endpoint: NWC_INFO_PATH,
-        connected: payload?.connected ?? null,
+        // /api/info has no "connected" field; the kept key mirrors "running"
+        connected: running,
+        running,
         version: payload?.version ?? "unknown",
+        ...(running === false
+          ? { warning: "albyHub: node not running (hub locked or starting)" }
+          : {}),
       },
     };
   }
 
-  // NWC deterministic stats: GET /api/info + /api/apps (+ balances/channels
-  // when a token is configured — those endpoints require auth)
+  // NWC deterministic stats: GET /api/info (public) + /api/apps, balances and
+  // channels when a token is configured — those sit behind the hub's JWT
+  // middleware and answer 401 without one
   private async getStatsNwc(signal: AbortSignal): Promise<StatsResult> {
     try {
       const wantWallet = Boolean(this.authHeader);
       const [infoRes, appsRes, balancesRes, channelsRes] = await Promise.all([
         this.tryGet(NWC_INFO_PATH, signal),
-        this.tryGet(NWC_APPS_PATH, signal).catch(
-          (): HttpResponse | null => null
-        ),
+        wantWallet
+          ? this.tryGet(NWC_APPS_PATH, signal).catch(
+              (): HttpResponse | null => null
+            )
+          : Promise.resolve(null),
         wantWallet
           ? this.tryGet(NWC_BALANCES_PATH, signal).catch(
               (): HttpResponse | null => null
@@ -245,6 +279,14 @@ export class AlbyHubService extends BaseService {
         const appsPayload = await this.parseJson(appsRes);
         if (Array.isArray(appsPayload)) {
           appCount = (appsPayload as NwcApp[]).length;
+        } else if (appsPayload && typeof appsPayload === "object") {
+          const list = appsPayload as NwcAppList;
+          appCount =
+            typeof list.totalCount === "number"
+              ? list.totalCount
+              : Array.isArray(list.apps)
+                ? list.apps.length
+                : null;
         }
       }
 
@@ -270,31 +312,50 @@ export class AlbyHubService extends BaseService {
       return ok({
         at: this.now(),
         metrics: {
-          name: info?.name ?? "Alby Hub",
+          name: info?.nodeAlias || "Alby Hub",
           version: info?.version ?? "unknown",
           description: "",
           endpoint: NWC_INFO_PATH,
           url: `${this.baseUrl}${NWC_INFO_PATH}`,
           reachable,
-          connected: info?.connected ?? null,
+          // /api/info has no "connected" field; the kept key mirrors "running"
+          connected: info?.running ?? null,
+          running: info?.running ?? null,
+          unlocked: info?.unlocked ?? null,
+          network: info?.network ?? null,
           setupCompleted: info?.setupCompleted ?? null,
           backendType: info?.backendType ?? null,
           appCount,
           balanceLightningSpendableMsat:
-            balances?.lightning?.totalSpendable ?? null,
+            balances?.lightning?.totalSpendableMsat ??
+            balances?.lightning?.totalSpendable ??
+            null,
           balanceLightningReceivableMsat:
-            balances?.lightning?.totalReceivable ?? null,
-          balanceOnchainSpendableSat: balances?.onchain?.spendable ?? null,
-          balanceOnchainTotalSat: balances?.onchain?.total ?? null,
+            balances?.lightning?.totalReceivableMsat ??
+            balances?.lightning?.totalReceivable ??
+            null,
+          balanceOnchainSpendableSat:
+            balances?.onchain?.spendableSat ??
+            balances?.onchain?.spendable ??
+            null,
+          balanceOnchainTotalSat:
+            balances?.onchain?.totalSat ?? balances?.onchain?.total ?? null,
           channelCount: channels?.length ?? null,
           channelsActive: channels
             ? channels.filter((c) => c.active === true).length
             : null,
           channelLocalBalanceMsat: channels
-            ? channels.reduce((sum, c) => sum + (c.localBalance ?? 0), 0)
+            ? channels.reduce(
+                (sum, c) => sum + (c.localBalanceMsat ?? c.localBalance ?? 0),
+                0
+              )
             : null,
           channelRemoteBalanceMsat: channels
-            ? channels.reduce((sum, c) => sum + (c.remoteBalance ?? 0), 0)
+            ? channels.reduce(
+                (sum, c) =>
+                  sum + (c.remoteBalanceMsat ?? c.remoteBalance ?? 0),
+                0
+              )
             : null,
         },
       });

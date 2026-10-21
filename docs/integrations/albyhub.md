@@ -44,7 +44,7 @@ Configuration is stored in the DuckDB config store and managed via the `/config`
 | Field         | Type            | Required | Default | Description                                                                                                        |
 | ------------- | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
 | `baseUrl`     | URL             | yes      | —       | Base URL of the Alby Hub instance (e.g. `http://127.0.0.1:8080`)                                                   |
-| `token`       | string (secret) | no       | `""`    | Bearer token for authenticated endpoints (`/api/balances`, `/api/channels`). Leave empty for unauthenticated mode. |
+| `token`       | string (secret) | no       | `""`    | Alby Hub JWT, sent as `Bearer`, for the protected endpoints (`/api/apps`, `/api/balances`, `/api/channels`). Leave empty for health/info only. See [Token](#token). |
 | `legacyProbe` | boolean         | no       | `false` | Probe mode — see below.                                                                                            |
 
 ### Shared base fields (all services)
@@ -60,7 +60,7 @@ Configuration is stored in the DuckDB config store and managed via the `/config`
 ### `legacyProbe` Field
 
 - **When `true`**: Uses adaptive probing to discover working endpoints. Tries multiple candidate paths (`/api`, `/api/info`, `/api/v1/info`, `/info`, `/status`, `/health`, `/`) until finding a reachable one; the last known-good path is cached and reused on subsequent polls (re-scan only when it stops answering). Backward-compatible with pre-NWC deployments.
-- **When `false` (schema default)**: Uses deterministic NWC API endpoints (`/api/info` for health, `/api/info` + `/api/apps` for stats — 2 requests per cycle). Existing stored configs keep their persisted value.
+- **When `false` (schema default)**: Uses deterministic NWC API endpoints (`/api/info` for health; `/api/info` for stats, plus `/api/apps`, `/api/balances` and `/api/channels` when a token is set). Existing stored configs keep their persisted value.
 
 ## Stats Metrics
 
@@ -70,7 +70,7 @@ Stats are returned via `GET /services/albyHub/stats`. Metrics include:
 
 | Metric      | Type   | Description                            |
 | ----------- | ------ | -------------------------------------- |
-| `name`      | string | Service name (e.g., "Alby Hub")        |
+| `name`      | string | Node alias from `/api/info` (`nodeAlias`), else "Alby Hub" |
 | `version`   | string | Software version or "unknown"          |
 | `endpoint`  | string | API endpoint that responded            |
 | `url`       | string | Full URL to the endpoint               |
@@ -82,10 +82,13 @@ Additional metrics available when using deterministic NWC endpoints:
 
 | Metric           | Type           | Description                                                        |
 | ---------------- | -------------- | ------------------------------------------------------------------ |
-| `connected`      | bool \| null   | NWC connection status (from `/api/info`)                           |
+| `connected`      | bool \| null   | Kept for compatibility; mirrors `running` (`/api/info` has no `connected` field) |
+| `running`        | bool \| null   | Hub node started (`/api/info` `running`); false while locked after a restart |
+| `unlocked`       | bool \| null   | `/api/info` `unlocked`: true only when the request carried a valid token |
+| `network`        | string \| null | Bitcoin network (`/api/info` `network`)                             |
 | `setupCompleted` | bool \| null   | Whether wallet setup is complete                                   |
 | `backendType`    | string \| null | Backend type (e.g., "lnd", "cln")                                  |
-| `appCount`       | number \| null | Count of connected apps (from `/api/apps`); null if endpoint fails |
+| `appCount`       | number \| null | Count of connected apps (`/api/apps` `totalCount`; a bare array from older hubs is also accepted); null without a token or if the endpoint fails |
 
 ### Wallet and Channel Fields (NWC mode, token configured)
 
@@ -134,18 +137,27 @@ Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 When `legacyProbe: false`, the service fetches from `GET /api/info`:
 
 ```typescript
+// subset of getAlby/hub api/models.go InfoResponse
 interface NwcInfo {
-  backendType?: string; // Lightning backend type
-  setupCompleted?: boolean; // Wallet setup status
-  connected?: boolean; // Connection status
-  version?: string; // Software version
-  name?: string; // Service name
+  backendType?: string;
+  setupCompleted?: boolean;
+  running?: boolean;
+  unlocked?: boolean;
+  version?: string;
+  network?: string;
+  nodeAlias?: string;
 }
 ```
 
+Amounts: the hub marks unsuffixed amount fields (`totalSpendable`, `spendable`, `localBalance`, …) deprecated in favour of `*Sat` / `*Msat`. The service reads the explicit fields first and falls back to the deprecated ones.
+
+### Token
+
+Alby Hub has no static API key. `/api/info` is public; every other endpoint used here sits behind the hub's HS256 JWT middleware. Get a token from `POST /api/unlock` with `{"unlockPassword": "…", "permission": "readonly", "tokenExpiryDays": N}`. Watchman only reads, so use `readonly`. The token expires after `tokenExpiryDays` (default 30) and stops working if the unlock password changes; then wallet metrics turn null until a new token is saved. Source: getAlby/hub `http/http_service.go` at `d2c92a8`.
+
 ### NWC Apps Payload
 
-Parallel fetch from `GET /api/apps` returns an array of app objects. The service counts the array length; if the endpoint returns a non-array or fails, `appCount` is set to `null`.
+`GET /api/apps` (token required) returns `{ apps: App[], totalCount }`. The service uses `totalCount`, then `apps.length`, then a bare-array length for older hubs; otherwise `appCount` is `null`.
 
 ```typescript
 interface NwcApp {
@@ -163,8 +175,10 @@ Health snapshots include a `details` object:
 ```
 {
   endpoint: "/api/info",
-  connected: boolean | null,
-  version: string
+  connected: boolean | null, // mirrors running
+  running: boolean | null,
+  version: string,
+  warning?: string // set when running === false
 }
 ```
 
