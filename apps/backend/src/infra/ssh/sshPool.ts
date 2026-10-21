@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Client } from 'ssh2';
 import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/errors.js';
+import { expandHome } from '../../core/expandHome.js';
 import type { SshExecRequest, SshExecResult, SshExecutor } from './sshExecutor.js';
 import { exitResult } from './exitResult.js';
 
@@ -106,7 +107,7 @@ export function createSshPool(): SshPool {
     let privateKey: Buffer | undefined;
     if (connectArgs.privateKeyPath) {
       try {
-        privateKey = await readFile(connectArgs.privateKeyPath);
+        privateKey = await readFile(expandHome(connectArgs.privateKeyPath));
       } catch {
         // Drain pending with auth error — bad key path is a config error
         retire(key, entry, new UnauthorizedError(`ssh: cannot read key at ${connectArgs.privateKeyPath}`));

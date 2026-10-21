@@ -100,6 +100,11 @@ dependency audit, and documentation aligned with the code.
   accept a comma, so more than one value can be typed.
 - Adding a service: the Alby Hub form no longer pre-ticks "Legacy probe mode",
   so UI-added hubs use the NWC API like the schema default.
+- Adding a Hue bridge: the form has a **Pair with bridge** button that fills the
+  application key and cert pin. Pairing now runs over a client pinned to the
+  bridge's cert; before, it used CA verification, which the bridge's
+  self-signed cert always fails.
+- SSH key paths (Mac Mini, Raspberry Pi) and the Tor cookie file accept `~/…`.
 - Adding a service: a rejected config shows `field: problem` messages instead
   of the raw validation JSON.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
