@@ -31,11 +31,11 @@ None. Component is a page, not a reusable component.
 
 ### Export
 
-Exports all configured services to an encrypted JSON bundle:
+Exports all configured services, and the profiles they belong to, to an encrypted JSON bundle:
 
 - **Button**: "Download Backup"
 - **Encryption**: AES-256-GCM with server's `WATCHMAN_MASTER_KEY`
-- **Format**: `{ version: 1, exportedAt, payload: base64 }`
+- **Format**: `{ version: 1, exportedAt, payload: base64, profiles: base64 }` (`profiles` is absent in older bundles)
 - **Download**: Triggers browser download with `Content-Disposition: attachment`
 - **File name**: `watchman-backup-{date}.json`
 - **Error handling**: Shows toast on network failure

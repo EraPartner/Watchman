@@ -169,4 +169,48 @@ describe("SnapshotCache", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("UNAVAILABLE");
   });
+
+  it("does not fail other waiters when the first caller aborts", async () => {
+    const bus = createEventBus();
+    const cache = new SnapshotCache({ bus, clock: createFakeClock() });
+    let release!: () => void;
+    let seenSignal: AbortSignal | undefined;
+    const svc = new (class extends Stub {
+      override async getStats(s: AbortSignal): Promise<StatsResult> {
+        seenSignal = s;
+        await new Promise<void>((r) => (release = r));
+        if (s.aborted) return err(new UnavailableError("aborted"));
+        return ok({ metrics: { n: 1 }, at: 1 });
+      }
+    })();
+    cache.register(svc, 10_000);
+
+    const first = new AbortController();
+    const firstRes = cache.stats(svc, first.signal);
+    const secondRes = cache.stats(svc, signal());
+    first.abort(new UnavailableError("client disconnected"));
+    expect((await firstRes).ok).toBe(false);
+
+    // Regression: the shared fetch ran on the first caller's signal.
+    expect(seenSignal?.aborted).toBe(false);
+    release();
+    const second = await secondRes;
+    expect(second.ok).toBe(true);
+  });
+
+  it("times out a shared stats fetch on the registered timeout", async () => {
+    const bus = createEventBus();
+    const cache = new SnapshotCache({ bus, clock: createFakeClock() });
+    const svc = new (class extends Stub {
+      override async getStats(s: AbortSignal): Promise<StatsResult> {
+        await new Promise<void>((r) =>
+          s.addEventListener("abort", () => r(), { once: true })
+        );
+        return err(new UnavailableError("timed out"));
+      }
+    })();
+    cache.register(svc, 10_000, 20);
+    const res = await cache.stats(svc, signal());
+    expect(res.ok).toBe(false);
+  });
 });

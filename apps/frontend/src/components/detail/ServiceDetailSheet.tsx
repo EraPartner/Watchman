@@ -66,7 +66,7 @@ type View = "detail" | "edit";
 
 export function ServiceDetailSheet({
   kind,
-  instanceId,
+  instanceId: requestedInstanceId,
   open,
   onOpenChange,
 }: ServiceDetailSheetProps) {
@@ -76,25 +76,49 @@ export function ServiceDetailSheet({
     [renderer]
   );
 
-  const health = useServiceHealth(kind ?? "", instanceId);
-  const stats = useServiceStats(kind ?? "", instanceId, !!kind, trackedMetrics);
   const { data: allServices } = useServices();
   const updateMut = useUpdateService();
   const deleteMut = useDeleteService();
 
-  const service = useMemo(
-    () =>
-      Array.isArray(allServices)
-        ? allServices.find(
-            (s) =>
-              s.kind === kind &&
-              (instanceId
-                ? s.instanceId === instanceId
-                : s.instanceId === "main")
-          )
-        : undefined,
-    [allServices, kind, instanceId]
-  );
+  // After an edit in this sheet, follow the stored row by its id: an edit
+  // that renames the instance would otherwise leave the sheet looking up the
+  // old instanceId (empty footer, no data) until it was reopened.
+  const [followId, setFollowId] = useState<string | undefined>(undefined);
+  const [followFor, setFollowFor] = useState({ kind, requestedInstanceId });
+  if (
+    followFor.kind !== kind ||
+    followFor.requestedInstanceId !== requestedInstanceId
+  ) {
+    setFollowFor({ kind, requestedInstanceId });
+    setFollowId(undefined);
+  }
+
+  const service = useMemo(() => {
+    if (!Array.isArray(allServices)) return undefined;
+    const followed = followId
+      ? allServices.find((s) => s.id === followId)
+      : undefined;
+    return (
+      followed ??
+      allServices.find(
+        (s) =>
+          s.kind === kind &&
+          (requestedInstanceId
+            ? s.instanceId === requestedInstanceId
+            : s.instanceId === "main")
+      )
+    );
+  }, [allServices, kind, requestedInstanceId, followId]);
+
+  const instanceId =
+    followId &&
+    service?.id === followId &&
+    service.instanceId !== (requestedInstanceId ?? "main")
+      ? service.instanceId
+      : requestedInstanceId;
+
+  const health = useServiceHealth(kind ?? "", instanceId);
+  const stats = useServiceStats(kind ?? "", instanceId, !!kind, trackedMetrics);
 
   const statsSnapshot = stats.data;
   const statsMetrics = statsSnapshot?.metrics as
@@ -135,6 +159,7 @@ export function ServiceDetailSheet({
       if (!nextOpen) {
         setView("detail");
         setConfirmDelete(false);
+        setFollowId(undefined);
       }
       onOpenChange(nextOpen);
     },
@@ -320,6 +345,7 @@ export function ServiceDetailSheet({
                       id: service.id,
                       input,
                     });
+                    setFollowId(service.id);
                     setView("detail");
                   }}
                 />

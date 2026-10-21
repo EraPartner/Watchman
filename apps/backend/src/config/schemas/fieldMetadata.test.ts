@@ -30,3 +30,19 @@ describe("KIND_META field defaults", () => {
     }
   );
 });
+
+describe("Roon apiPort default", () => {
+  it("defaults new Roon services to 9330 and keeps a stored port", () => {
+    const schema = KIND_META.roon.schema;
+    const fresh = schema.parse({ kind: "roon", host: "core" }) as {
+      apiPort: number;
+    };
+    expect(fresh.apiPort).toBe(9330);
+    const stored = schema.parse({
+      kind: "roon",
+      host: "core",
+      apiPort: 9100,
+    }) as { apiPort: number };
+    expect(stored.apiPort).toBe(9100);
+  });
+});

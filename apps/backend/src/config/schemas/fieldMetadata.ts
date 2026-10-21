@@ -177,7 +177,7 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
       { name: "ports", label: "Ports", type: "numberArray", default: [9100] },
       { name: "pingCount", label: "Ping count", type: "number", default: 2 },
       { name: "usePing", label: "Use ping", type: "boolean", default: true },
-      { name: "apiPort", label: "API port", type: "number", default: 9100 },
+      { name: "apiPort", label: "API port", type: "number", default: 9330 },
       {
         name: "useRoonApi",
         label: "Use Roon API",

@@ -94,6 +94,36 @@ describe("PiStatsCollector uptime", () => {
   });
 });
 
+describe("PiStatsCollector relay command", () => {
+  it("quotes config values in the command it runs on the relay host", async () => {
+    const commands: string[] = [];
+    const collector = new PiStatsCollector({
+      pigpio: fakePigpio(1_000),
+      ssh: {
+        exec: async (req) => {
+          commands.push(req.command);
+          return { stdout: "{}", stderr: "", code: 0 };
+        },
+      },
+      config: makeConfig({
+        host: "192.168.1.40",
+        macMiniHost: "192.168.1.50",
+        macMiniSshUser: "me",
+        macMiniSshKeyPath: "/tmp/id_rsa",
+        nodePath: "/opt/node 22/bin/node",
+        rpiCliPath: "/opt/rpi/cli.js; touch /tmp/pwned",
+      }),
+      now: () => 0,
+    });
+    await collector.collect(new AbortController().signal);
+    // Regression: the values were interpolated unquoted, so the `;` ran a
+    // second command on the relay host.
+    expect(commands).toContain(
+      "'/opt/node 22/bin/node' '/opt/rpi/cli.js; touch /tmp/pwned' -H '192.168.1.40:8888' info"
+    );
+  });
+});
+
 describe("getPiModel revision table", () => {
   it.each([
     [0xd04180, "Pi CM5"],

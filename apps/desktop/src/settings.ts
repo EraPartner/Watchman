@@ -1,21 +1,19 @@
 import { app, screen } from "electron";
 import * as fs from "fs";
 import * as path from "path";
+import {
+  clampBounds,
+  parseWindowBounds,
+  type WindowBounds,
+} from "./windowBounds";
 
-export interface WindowBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export type { WindowBounds };
 
 interface DesktopSettings {
   windowBounds?: WindowBounds;
   [key: string]: unknown;
 }
 
-const MIN_WIDTH = 900;
-const MIN_HEIGHT = 600;
 const WINDOW_BOUNDS_KEY = "windowBounds";
 
 function settingsPath(): string {
@@ -29,8 +27,9 @@ export function loadSettings(): DesktopSettings {
   } catch {
     return {};
   }
+  let parsed: unknown;
   try {
-    return JSON.parse(raw) as DesktopSettings;
+    parsed = JSON.parse(raw);
   } catch {
     // Quarantine a corrupt file rather than clobbering it, so a bad write is
     // recoverable instead of silently lost.
@@ -41,6 +40,12 @@ export function loadSettings(): DesktopSettings {
     }
     return {};
   }
+  // Valid JSON that isn't an object (`null`, a number, an array) used to throw
+  // in readSavedWindowBounds and stop the window from being created.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {};
+  }
+  return parsed as DesktopSettings;
 }
 
 export function saveSettings(data: DesktopSettings): void {
@@ -53,30 +58,13 @@ export function saveSettings(data: DesktopSettings): void {
 }
 
 export function readSavedWindowBounds(): WindowBounds | undefined {
-  const bounds = loadSettings()[WINDOW_BOUNDS_KEY] as WindowBounds | undefined;
-  if (!bounds) return undefined;
-  if (
-    ![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)
-  ) {
-    return undefined;
-  }
-  return bounds;
+  return parseWindowBounds(loadSettings()[WINDOW_BOUNDS_KEY]);
 }
 
 export function clampBoundsToWorkArea(bounds: WindowBounds): WindowBounds {
   const display =
     screen.getDisplayMatching(bounds) ?? screen.getPrimaryDisplay();
-  const wa = display.workArea;
-  const width = Math.max(MIN_WIDTH, Math.min(bounds.width, wa.width));
-  const height = Math.max(MIN_HEIGHT, Math.min(bounds.height, wa.height));
-  const clamp = (v: number, lo: number, hi: number) =>
-    Math.min(Math.max(v, lo), hi);
-  return {
-    width,
-    height,
-    x: clamp(bounds.x, wa.x, wa.x + wa.width - width),
-    y: clamp(bounds.y, wa.y, wa.y + wa.height - height),
-  };
+  return clampBounds(bounds, display.workArea);
 }
 
 export function saveWindowBounds(bounds: WindowBounds): void {

@@ -1956,31 +1956,31 @@
                 "from": "fe.setup",
                 "to": "fe.api",
                 "payload": "DELETE /config/services/{id}",
-                "annotation": ""
+                "annotation": "configApi.deleteService; {id} is the stored row UUID, not the instanceId."
               },
               {
                 "from": "fe.api",
                 "to": "be.routes.cfg",
                 "payload": "route handler",
-                "annotation": ""
+                "annotation": "Always 204: deleting an unknown id is idempotent, so a retry or double-click is not an error."
               },
               {
                 "from": "be.routes.cfg",
                 "to": "data.duckdb",
                 "payload": "ConfigStore.delete(id)",
-                "annotation": "Row marked removed + audit entry; encryption keys retained for replay during incident response."
+                "annotation": "Hard DELETE of the row (encrypted secrets included) plus a 'delete' audit entry. Identity is read without decrypting, so a row listed in load-errors can still be deleted."
               },
               {
                 "from": "data.duckdb",
                 "to": "dom.bus",
                 "payload": "config:service.deleted",
-                "annotation": ""
+                "annotation": "Emitted after the row and audit entry are written, with { id, kind, instanceId }."
               },
               {
                 "from": "dom.bus",
                 "to": "app.lifecycle",
                 "payload": "applyDelete(id)",
-                "annotation": ""
+                "annotation": "Serialized with other lifecycle changes, with the poller paused, so a late bring-up can't revive the deleted service."
               },
               {
                 "from": "app.lifecycle",

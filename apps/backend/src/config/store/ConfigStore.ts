@@ -14,6 +14,7 @@ import {
 } from "../schemas/index.js";
 import type { ServiceInstance } from "../services.js";
 import type { Encryptor } from "./encryption.js";
+import type { ProfileStore } from "./ProfileStore.js";
 
 const INSTANCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const INSTANCE_ID_MAX_LENGTH = 64;
@@ -83,6 +84,20 @@ export interface ExportBundle {
   version: 1;
   exportedAt: string;
   payload: string;
+  /**
+   * Base64 ciphertext of the exported profiles. A separate optional field
+   * (not part of `payload`) so older versions still import the services.
+   */
+  profiles?: string;
+}
+
+/** A profile as carried in a bundle (inside the encrypted `profiles` field). */
+interface ExportedProfile {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  networkSigs: unknown[];
 }
 
 export interface ImportResult {
@@ -189,6 +204,8 @@ function toBuffer(value: unknown): Buffer | null {
 export interface ConfigStoreOptions {
   /** Resolves the profile a newly-created service should land in when none is given (the active profile). */
   resolveDefaultProfileId?: () => Promise<string | undefined>;
+  /** Lets export/import carry profiles. Without it, bundles hold services only. */
+  profiles?: Pick<ProfileStore, "listProfiles" | "createProfile">;
 }
 
 export function createConfigStore(
@@ -202,6 +219,62 @@ export function createConfigStore(
     fn: (c: DuckDBConnection) => Promise<T>
   ): Promise<T> {
     return pool.withConnection(fn);
+  }
+
+  // A row change and its audit entry commit together: a failed audit insert
+  // must not leave a changed row with no audit entry and no config:* event.
+  async function inTransaction<T>(
+    fn: (c: DuckDBConnection) => Promise<T>
+  ): Promise<T> {
+    return withConn(async (c) => {
+      await c.run("BEGIN TRANSACTION");
+      try {
+        const result = await fn(c);
+        await c.run("COMMIT");
+        return result;
+      } catch (e) {
+        // A failed COMMIT has already rolled back; ignore "no transaction".
+        await c.run("ROLLBACK").catch(() => undefined);
+        throw e;
+      }
+    });
+  }
+
+  async function instanceIdTaken(
+    kind: string,
+    instanceId: string,
+    exceptId?: string
+  ): Promise<boolean> {
+    const rows = await withConn(async (c) => {
+      const res = await c.runAndReadAll(
+        `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
+        [kind, instanceId]
+      );
+      return res.getRowObjects() as Array<Record<string, unknown>>;
+    });
+    return rows.some((r) => String(r["id"]) !== exceptId);
+  }
+
+  function duplicateInstanceId(kind: string, instanceId: string) {
+    return new ValidationError(
+      `instance id '${instanceId}' already in use for kind '${kind}'`
+    );
+  }
+
+  // Two concurrent writes can both pass the duplicate pre-check; the loser
+  // then hits the unique index. Report that as the same ValidationError
+  // instead of a raw constraint error.
+  async function asDuplicateError(
+    e: unknown,
+    kind: string,
+    instanceId: string,
+    exceptId?: string
+  ): Promise<unknown> {
+    if (e instanceof ValidationError) return e;
+    const taken = await instanceIdTaken(kind, instanceId, exceptId).catch(
+      () => false
+    );
+    return taken ? duplicateInstanceId(kind, instanceId) : e;
   }
 
   // Single DB read, partitioned into usable services and per-row failures. A row that
@@ -348,19 +421,13 @@ export function createConfigStore(
     kind: string | null,
     targetId: string | null,
     diff: unknown,
-    actor: string | null
+    actor: string | null,
+    ts: Date = new Date()
   ): Promise<void> {
     await c.run(
       `INSERT INTO app_config_audit (ts, action, target_kind, target_id, diff, actor)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        toTs(new Date()),
-        action,
-        kind,
-        targetId,
-        JSON.stringify(diff ?? null),
-        actor,
-      ]
+      [toTs(ts), action, kind, targetId, JSON.stringify(diff ?? null), actor]
     );
   }
 
@@ -397,15 +464,13 @@ export function createConfigStore(
       assertValidInstanceId(parts.instanceId);
       const resolvedProfileId =
         profileId ?? (await storeOpts?.resolveDefaultProfileId?.()) ?? "";
-      const stored = await withConn(async (c): Promise<StoredService> => {
+      const stored = await inTransaction(async (c): Promise<StoredService> => {
         const dup = await c.runAndReadAll(
           `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
           [parts.kind, parts.instanceId]
         );
         if (dup.getRowObjects().length > 0) {
-          throw new ValidationError(
-            `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`
-          );
+          throw duplicateInstanceId(parts.kind, parts.instanceId);
         }
         const id = randomUUID();
         const now = new Date();
@@ -454,6 +519,8 @@ export function createConfigStore(
           createdAt: now,
           updatedAt: now,
         };
+      }).catch(async (e: unknown) => {
+        throw await asDuplicateError(e, parts.kind, parts.instanceId);
       });
       bus.emit("config:service.created", {
         id: stored.id,
@@ -484,7 +551,7 @@ export function createConfigStore(
       const parts = extractStorable(config);
       assertValidInstanceId(parts.instanceId);
       const isRename = parts.instanceId !== existing.instanceId;
-      const stored = await withConn(async (c): Promise<StoredService> => {
+      const stored = await inTransaction(async (c): Promise<StoredService> => {
         if (isRename) {
           const dup = await c.runAndReadAll(
             `SELECT id FROM app_service_instance
@@ -492,9 +559,7 @@ export function createConfigStore(
             [parts.kind, parts.instanceId, id]
           );
           if (dup.getRowObjects().length > 0) {
-            throw new ValidationError(
-              `instance id '${parts.instanceId}' already in use for kind '${parts.kind}'`
-            );
+            throw duplicateInstanceId(parts.kind, parts.instanceId);
           }
         }
         const now = new Date();
@@ -556,6 +621,10 @@ export function createConfigStore(
           createdAt: existing.createdAt,
           updatedAt: now,
         };
+      }).catch(async (e: unknown) => {
+        throw isRename
+          ? await asDuplicateError(e, parts.kind, parts.instanceId, id)
+          : e;
       });
       bus.emit("config:service.updated", {
         id,
@@ -596,7 +665,7 @@ export function createConfigStore(
         kind = String(identity[0]!["kind"] ?? "");
         instanceId = String(identity[0]!["instance_id"] ?? "");
       }
-      await withConn(async (c) => {
+      await inTransaction(async (c) => {
         await c.run(`DELETE FROM app_service_instance WHERE id = ?`, [id]);
         await insertAudit(
           c,
@@ -618,7 +687,7 @@ export function createConfigStore(
       const existing = await this.get(id);
       if (!existing) throw new Error(`Not found: ${id}`);
       if (existing.profileId === profileId) return;
-      await withConn(async (c) => {
+      await inTransaction(async (c) => {
         const now = new Date();
         await c.run(
           `UPDATE app_service_instance SET profile_id = ?, updated_at = ? WHERE id = ?`,
@@ -689,7 +758,8 @@ export function createConfigStore(
           entry.targetKind,
           entry.targetId,
           entry.diff,
-          entry.actor ?? null
+          entry.actor ?? null,
+          entry.ts
         )
       );
     },
@@ -711,13 +781,32 @@ export function createConfigStore(
         exportedAt: new Date().toISOString(),
         payload: cipher.toString("base64"),
       };
+      // Profiles hold captured network fingerprints, so they are encrypted too.
+      const profiles: ExportedProfile[] = storeOpts?.profiles
+        ? (await storeOpts.profiles.listProfiles()).map((p) => ({
+            id: p.id,
+            name: p.name,
+            ...(p.description !== undefined
+              ? { description: p.description }
+              : {}),
+            ...(p.color !== undefined ? { color: p.color } : {}),
+            networkSigs: p.networkSigs,
+          }))
+        : [];
+      if (storeOpts?.profiles) {
+        bundle.profiles = encryptor.encryptJson(profiles).toString("base64");
+      }
       await withConn((c) =>
         insertAudit(
           c,
           "export",
           null,
           null,
-          { count: plaintext.length, skipped: unloadable.length },
+          {
+            count: plaintext.length,
+            skipped: unloadable.length,
+            ...(storeOpts?.profiles ? { profiles: profiles.length } : {}),
+          },
           actor ?? null
         )
       );
@@ -760,6 +849,61 @@ export function createConfigStore(
         skipped: 0,
         errors: [],
       };
+
+      // Map each exported profile to a local one: the same id, else the same
+      // name, else a newly created profile. Existing profiles are never
+      // modified, and the active profile is not changed.
+      const profileMap = new Map<string, string>();
+      let profilesCreated = 0;
+      if (typeof b["profiles"] === "string" && storeOpts?.profiles) {
+        const exported = encryptor.decryptJson(
+          Buffer.from(b["profiles"], "base64")
+        );
+        if (!Array.isArray(exported))
+          throw new Error("Invalid bundle: decoded profiles must be array");
+        const local = await storeOpts.profiles.listProfiles();
+        const localIds = new Set(local.map((p) => p.id));
+        const localByName = new Map(
+          local.map((p) => [p.name.trim().toLowerCase(), p.id])
+        );
+        for (const raw of exported) {
+          if (typeof raw !== "object" || raw === null) continue;
+          const p = raw as Partial<ExportedProfile>;
+          const name = typeof p.name === "string" ? p.name : "";
+          if (typeof p.id !== "string" || name.trim() === "") continue;
+          if (localIds.has(p.id)) {
+            profileMap.set(p.id, p.id);
+            continue;
+          }
+          const sameName = localByName.get(name.trim().toLowerCase());
+          if (sameName) {
+            profileMap.set(p.id, sameName);
+            continue;
+          }
+          try {
+            const created = await storeOpts.profiles.createProfile(
+              {
+                name,
+                description: p.description,
+                color: p.color,
+                networkSigs: p.networkSigs,
+              },
+              actor
+            );
+            profileMap.set(p.id, created.id);
+            localByName.set(name.trim().toLowerCase(), created.id);
+            profileIds.add(created.id);
+            profilesCreated += 1;
+          } catch (err) {
+            result.errors.push({
+              kind: "profile",
+              instanceId: name,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
       for (const raw of plaintext) {
         if (typeof raw !== "object" || raw === null) {
           result.skipped += 1;
@@ -788,10 +932,14 @@ export function createConfigStore(
           } else {
             // Restore the exported profile when it still exists here; otherwise
             // (older bundle, or a profile that is gone) create() uses the active one.
+            const exportedProfileId =
+              typeof entry.profileId === "string"
+                ? (profileMap.get(entry.profileId) ?? entry.profileId)
+                : undefined;
             const profileId =
-              typeof entry.profileId === "string" &&
-              profileIds.has(entry.profileId)
-                ? entry.profileId
+              exportedProfileId !== undefined &&
+              profileIds.has(exportedProfileId)
+                ? exportedProfileId
                 : undefined;
             const created = await this.create(cfg, actor, profileId);
             // A later entry with the same (kind, instanceId) updates this one
@@ -819,6 +967,7 @@ export function createConfigStore(
             updated: result.updated,
             skipped: result.skipped,
             errors: result.errors.length,
+            profilesCreated,
           },
           actor ?? null
         )

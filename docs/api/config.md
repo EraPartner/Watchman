@@ -287,8 +287,7 @@ Same as `GET /config/services/{id}` below. Also emits `config:service.created` e
 
 **Error Codes:**
 
-- `400 VALIDATION` — Config missing required fields or invalid per kind schema
-- `409 CONFLICT` — Duplicate name or kind+instanceId already exists
+- `400 VALIDATION` — Config missing required fields or invalid per kind schema, unknown `profileId`, or kind+instanceId already exists
 
 ---
 
@@ -326,6 +325,7 @@ Fetch a single service instance.
 **Error Codes:**
 
 - `404 NOT_FOUND` — Service instance not found
+- `409 CONFLICT` — The stored row fails to load (it is listed in `GET /config/load-errors`); delete it and add the service again
 
 ---
 
@@ -490,10 +490,13 @@ Export all service configurations as an encrypted bundle.
   version: 1; // Bundle format version (always 1)
   exportedAt: string; // ISO 8601 timestamp of export
   payload: string; // Base64 AES-256-GCM encrypted JSON array of service configurations
+  profiles?: string; // Base64 AES-256-GCM encrypted JSON array of profiles (id, name, description, color, networkSigs)
 }
 ```
 
 **Details:**
+
+- Profiles travel in the separate optional `profiles` field, so a bundle from this version still imports its services on an older version (which ignores the field)
 
 - Encrypts all service configurations (including secrets) with `WATCHMAN_MASTER_KEY`
 - Payload contains plaintext JSON array of all `app_service_instance` rows
@@ -505,6 +508,8 @@ Export all service configurations as an encrypted bundle.
 #### `POST /config/import`
 
 Import a previously exported bundle. Upserts services by `(kind, instanceId)`.
+
+When the bundle has `profiles`, each exported profile is matched to a local one by id, then by name (case-insensitive); only profiles with no match are created. Existing profiles are never modified and the active profile is not changed. A newly created service goes into the profile it was exported from; an updated service keeps its current profile. A profile that can't be created is reported in `errors` with `kind: "profile"` and the profile name as `instanceId`.
 
 **Request Body:**
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { linkAbort, withTimeout } from './abort.js';
 import { TimeoutError } from './errors.js';
 
@@ -44,5 +44,26 @@ describe('withTimeout', () => {
     const s = withTimeout(1000, parent.signal);
     parent.abort(new Error('bye'));
     expect(s.aborted).toBe(true);
+  });
+
+  it('does not keep the event loop alive', () => {
+    const spy = vi.spyOn(globalThis, 'setTimeout');
+    withTimeout(60_000);
+    const timer = spy.mock.results[0]!.value as NodeJS.Timeout;
+    spy.mockRestore();
+    expect(timer.hasRef()).toBe(false);
+    clearTimeout(timer);
+  });
+
+  it('removes its listener from the parent once the timeout fires', async () => {
+    const parent = new AbortController();
+    const remove = vi.spyOn(parent.signal, 'removeEventListener');
+    const s = withTimeout(5, parent.signal);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.reason).toBeInstanceOf(TimeoutError);
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    // A later parent abort no longer reaches the already-timed-out signal.
+    parent.abort(new Error('late'));
+    expect(s.reason).toBeInstanceOf(TimeoutError);
   });
 });

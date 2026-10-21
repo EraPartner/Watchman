@@ -46,10 +46,11 @@ export const roonRenderer: ServiceRenderer<Stats> = {
     { metric: "activeZones", label: "Active zones", kind: "line", format: fmtNumber(0) },
   ],
 
-  tone: ({ stats, health }) => {
+  // Reachability lives in health (stats never carry `reachable`), and an
+  // unreachable core already reports status "offline".
+  tone: ({ health }) => {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
-    if (stats && dotGet(stats, "reachable") === false) return "crit";
     return "ok";
   },
 

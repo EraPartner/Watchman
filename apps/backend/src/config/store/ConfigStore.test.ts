@@ -10,6 +10,7 @@ import { ValidationError } from "../../core/errors.js";
 import { createEncryptor, deriveKey } from "./encryption.js";
 import { runConfigMigrations } from "./migrations.js";
 import { createConfigStore, type ConfigStore } from "./ConfigStore.js";
+import { createProfileStore } from "./ProfileStore.js";
 
 describe("ConfigStore", () => {
   let pool: DuckDbPool;
@@ -597,6 +598,190 @@ describe("ConfigStore", () => {
 
       expect(await store.loadErrors()).toEqual([]);
       expect(await store.get(badId)).toBeNull();
+    });
+  });
+
+  describe("audit timestamps and atomic writes", () => {
+    const ipfs = (instanceId: string) => ({
+      kind: "ipfs",
+      instanceId,
+      apiUrl: "http://127.0.0.1:5001",
+    });
+
+    // Make every audit insert fail, then recreate the table.
+    async function withBrokenAudit(fn: () => Promise<void>) {
+      await pool.withConnection(async (c) => {
+        await c.run("DROP INDEX IF EXISTS idx_audit_ts");
+        await c.run("DROP TABLE app_config_audit");
+      });
+      try {
+        await fn();
+      } finally {
+        await pool.withConnection((c) => runConfigMigrations(c));
+      }
+    }
+
+    it("writeAudit stores the timestamp it is given", async () => {
+      const ts = new Date("2026-01-02T03:04:05.000Z");
+      await store.writeAudit({
+        action: "import",
+        targetKind: null,
+        targetId: null,
+        diff: { source: "env" },
+        actor: "env-migration",
+        ts,
+      });
+      const [entry] = await store.listAudit(1);
+      // Regression: ts was ignored and the row got the current time.
+      expect(entry!.ts.getTime()).toBe(ts.getTime());
+    });
+
+    it("create leaves no row when its audit entry can't be written", async () => {
+      await withBrokenAudit(async () => {
+        await expect(store.create(ipfs("one"))).rejects.toThrow();
+      });
+      // Regression: the row was committed without its audit entry, so the
+      // id stayed taken although create() had failed.
+      expect(await store.loadAll()).toEqual([]);
+      await expect(store.create(ipfs("one"))).resolves.toMatchObject({
+        instanceId: "one",
+      });
+    });
+
+    it("update keeps the old row when its audit entry can't be written", async () => {
+      const svc = await store.create(ipfs("one"));
+      await withBrokenAudit(async () => {
+        await expect(
+          store.update(svc.id, { ...ipfs("renamed") })
+        ).rejects.toThrow();
+      });
+      const reloaded = await store.get(svc.id);
+      expect(reloaded!.instanceId).toBe("one");
+      expect(renamedEvents).toEqual([]);
+    });
+
+    it("delete keeps the row when its audit entry can't be written", async () => {
+      const svc = await store.create(ipfs("one"));
+      await withBrokenAudit(async () => {
+        await expect(store.delete(svc.id)).rejects.toThrow();
+      });
+      expect(await store.get(svc.id)).not.toBeNull();
+    });
+
+    it("still reports a duplicate instance id as a ValidationError", async () => {
+      await store.create(ipfs("one"));
+      await expect(store.create(ipfs("one"))).rejects.toBeInstanceOf(
+        ValidationError
+      );
+    });
+  });
+
+  describe("profiles in backups", () => {
+    async function makeInstall() {
+      const p = await createDuckDbPool({ path: ":memory:" });
+      await p.withConnection((c) => runConfigMigrations(c));
+      const profiles = createProfileStore(p);
+      await profiles.ensureBootstrap();
+      const s = createConfigStore(
+        p,
+        createEncryptor(deriveKey("unit-test-key")),
+        createEventBus(),
+        undefined,
+        {
+          resolveDefaultProfileId: () => profiles.getActiveProfileId(),
+          profiles,
+        }
+      );
+      return { pool: p, profiles, store: s };
+    }
+
+    const sig = {
+      gatewayMac: "aa:bb:cc:dd:ee:ff",
+      gatewayIp: "10.0.0.1",
+      capturedAt: "2026-10-21T00:00:00.000Z",
+    };
+
+    it("restores profiles and puts services back in them on a new install", async () => {
+      const a = await makeInstall();
+      const b = await makeInstall();
+      try {
+        const travel = await a.profiles.createProfile({
+          name: "Travel",
+          color: "#123456",
+          networkSigs: [sig],
+        });
+        await a.store.create(
+          { kind: "ipfs", instanceId: "laptop", apiUrl: "http://h:5001" },
+          undefined,
+          travel.id
+        );
+        const bundle = await a.store.exportAll();
+        expect(typeof bundle.profiles).toBe("string");
+
+        const result = await b.store.importBundle(bundle);
+        expect(result).toMatchObject({ imported: 1, errors: [] });
+
+        // Regression: profiles weren't exported, so the service fell back to
+        // the active (Default) profile on another install.
+        const restored = (await b.profiles.listProfiles()).find(
+          (p) => p.name === "Travel"
+        );
+        expect(restored).toMatchObject({
+          color: "#123456",
+          networkSigs: [expect.objectContaining({ gatewayIp: "10.0.0.1" })],
+        });
+        const [svc] = await b.store.loadAll();
+        expect(svc!.profileId).toBe(restored!.id);
+      } finally {
+        await a.pool.close();
+        await b.pool.close();
+      }
+    });
+
+    it("reuses a local profile with the same name and leaves it unchanged", async () => {
+      const a = await makeInstall();
+      const b = await makeInstall();
+      try {
+        const exported = await a.profiles.createProfile({
+          name: "Home",
+          description: "from backup",
+        });
+        await a.store.create(
+          { kind: "ipfs", instanceId: "nas", apiUrl: "http://h:5001" },
+          undefined,
+          exported.id
+        );
+        const local = await b.profiles.createProfile({
+          name: "home",
+          description: "local",
+        });
+
+        await b.store.importBundle(await a.store.exportAll());
+
+        const homes = (await b.profiles.listProfiles()).filter(
+          (p) => p.name.toLowerCase() === "home"
+        );
+        expect(homes).toHaveLength(1);
+        expect(homes[0]!.description).toBe("local");
+        const [svc] = await b.store.loadAll();
+        expect(svc!.profileId).toBe(local.id);
+      } finally {
+        await a.pool.close();
+        await b.pool.close();
+      }
+    });
+
+    it("still imports a bundle without profiles", async () => {
+      const a = await makeInstall();
+      try {
+        const bundle = await a.store.exportAll();
+        delete bundle.profiles;
+        await expect(a.store.importBundle(bundle)).resolves.toMatchObject({
+          errors: [],
+        });
+      } finally {
+        await a.pool.close();
+      }
     });
   });
 });

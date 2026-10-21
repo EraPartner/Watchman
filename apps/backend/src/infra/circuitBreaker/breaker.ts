@@ -64,7 +64,10 @@ export function createBreaker(name: string, policy: BreakerPolicy, clock: Clock)
       try {
         const result = await fn(signal);
         m.successes++;
-        if (state === 'half-open') {
+        // Only the half-open probe decides whether to close: a call acquired
+        // while closed that finishes after another call tripped the breaker
+        // says nothing about the service's current state.
+        if (state === 'half-open' && acquiredHalfOpen) {
           state = 'closed';
           consecutiveFailures = 0;
           openedAt = null;
@@ -76,10 +79,12 @@ export function createBreaker(name: string, policy: BreakerPolicy, clock: Clock)
       } catch (e) {
         m.failures++;
         consecutiveFailures++;
-        if (state === 'half-open') {
+        if (state === 'half-open' && acquiredHalfOpen) {
           trip();
           halfOpenInFlight = 0;
-        } else if (consecutiveFailures >= policy.failureThreshold) {
+        } else if (state === 'closed' && consecutiveFailures >= policy.failureThreshold) {
+          // Already open (another concurrent call tripped it): tripping again
+          // would double-count trips and push openedAt back.
           trip();
         } else if (acquiredHalfOpen && halfOpenInFlight > 0) {
           halfOpenInFlight--;

@@ -24,6 +24,8 @@ let state: {
   responses: Record<string, unknown>;
   firstCallErrors: Record<string, number>;
   persistentErrors: Record<string, number>;
+  /** Non-envelope replies, e.g. a proxy's HTML 502 page. */
+  rawReplies: Record<string, { status: number; body: string }>;
   calls: Array<{
     path: string;
     rawUrl: string;
@@ -45,6 +47,13 @@ function handler(req: IncomingMessage, res: ServerResponse) {
     const api = params["api"] ?? "";
     const method = params["method"] ?? "";
     const key = `${api}/${method}`;
+
+    const raw = state.rawReplies[key];
+    if (raw) {
+      res.writeHead(raw.status, { "content-type": "text/html" });
+      res.end(raw.body);
+      return;
+    }
 
     // Login
     if (api === "SYNO.API.Auth" && method === "login") {
@@ -115,6 +124,7 @@ beforeEach(() => {
     },
     firstCallErrors: {},
     persistentErrors: {},
+    rawReplies: {},
     calls: [],
   };
 });
@@ -374,5 +384,47 @@ describe("createDsmClient", () => {
     expect(entryCalls.every((c) => c.params["_sid"] === "persistent-sid")).toBe(
       true
     );
+  });
+
+  it("turns a non-2xx HTML reply into UnavailableError, not a SyntaxError", async () => {
+    state.rawReplies["SYNO.DSM.Info/get"] = {
+      status: 502,
+      body: "<html>Bad Gateway</html>",
+    };
+    const client = createDsmClient({
+      http: createHttpClient(),
+      config: makeConfig({ initialSid: "sid" }),
+    });
+    const err = await client
+      .call("SYNO.DSM.Info", 1, "get")
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnavailableError);
+    expect((err as Error).message).toContain("HTTP 502");
+  });
+
+  it("turns a 200 reply that is not JSON into UnavailableError", async () => {
+    state.rawReplies["SYNO.DSM.Info/get"] = { status: 200, body: "<html>" };
+    const client = createDsmClient({
+      http: createHttpClient(),
+      config: makeConfig({ initialSid: "sid" }),
+    });
+    const err = await client
+      .call("SYNO.DSM.Info", 1, "get")
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnavailableError);
+    expect((err as Error).message).toContain("not JSON");
+  });
+
+  it("reports a non-2xx login reply as UnavailableError", async () => {
+    state.rawReplies["SYNO.API.Auth/login"] = { status: 503, body: "busy" };
+    const client = createDsmClient({
+      http: createHttpClient(),
+      config: makeConfig(),
+    });
+    const err = await client
+      .call("SYNO.DSM.Info", 1, "get")
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnavailableError);
+    expect((err as Error).message).toContain("login: HTTP 503");
   });
 });

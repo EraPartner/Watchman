@@ -296,7 +296,9 @@ function parseGetInfoLines(lines: string[]): Map<string, string> {
         currentData.length = 0;
         inMultiLine = false;
       } else {
-        currentData.push(line);
+        // Data lines are dot-escaped: a line starting with "." is sent with
+        // an extra leading "." (control-spec 2.3), which we strip again.
+        currentData.push(line.startsWith('.') ? line.slice(1) : line);
       }
       continue;
     }

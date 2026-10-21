@@ -221,6 +221,8 @@ export interface ExportBundle {
   version: 1;
   exportedAt: string;
   payload: string;
+  /** Encrypted profiles; absent in bundles from older versions. */
+  profiles?: string;
 }
 
 export interface ImportResult {

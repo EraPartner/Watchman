@@ -102,6 +102,7 @@ async function main(): Promise<void> {
   const encryptor = loadEncryptorFromEnv(masterKey, dataDir);
   const store = createConfigStore(dbPool, encryptor, bus, logger, {
     resolveDefaultProfileId: () => profileStore.getActiveProfileId(),
+    profiles: profileStore,
   });
   const migResult = await migrateEnvServicesIfNeeded(store, logger);
   if (migResult.migrated > 0) {

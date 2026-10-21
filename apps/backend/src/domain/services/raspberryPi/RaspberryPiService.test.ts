@@ -260,7 +260,7 @@ describe("RaspberryPiService.getStats", () => {
       expect(res.value.metrics["rpiCliAvailable"]).toBe(true);
     }
     expect(calls[0]?.command).toContain("/opt/rpi/cli.js");
-    expect(calls[0]?.command).toContain("-H 192.168.1.40:8888");
+    expect(calls[0]?.command).toContain("-H '192.168.1.40:8888'");
   });
 
   it("skips ssh when not configured", async () => {

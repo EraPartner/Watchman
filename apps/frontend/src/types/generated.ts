@@ -435,10 +435,10 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        /** @description IP or hostname of the Hue bridge */
+                        /** @description IP address or hostname of the Hue bridge, without scheme, port or path */
                         host: string;
                         /**
-                         * @description Request timeout in milliseconds
+                         * @description Timeout in milliseconds for each of the cert probe and the pair request (max 12000)
                          * @default 10000
                          */
                         timeoutMs?: number;
@@ -462,7 +462,7 @@ export interface paths {
                         };
                     };
                 };
-                /** @description Missing host or link button not pressed */
+                /** @description Invalid host or timeoutMs, or link button not pressed */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -665,6 +665,7 @@ export interface paths {
                     };
                 };
                 404: components["responses"]["DomainError"];
+                409: components["responses"]["DomainError"];
             };
         };
         /**
@@ -1641,6 +1642,8 @@ export interface components {
             exportedAt: string;
             /** @description Base64 AES-256-GCM ciphertext of JSON service array */
             payload: string;
+            /** @description Base64 AES-256-GCM ciphertext of JSON profile array (optional; older bundles have none) */
+            profiles?: string;
         };
         ImportResult: {
             imported: number;
