@@ -175,6 +175,22 @@ describe("HomebridgeService", () => {
     }
   });
 
+  it("getStats reports no CPU temperature for systeminformation's -1 sentinel", async () => {
+    for (const cpuTemperature of [{ main: -1 }, -1]) {
+      const svc = new HomebridgeService({
+        client: fakeClient((p) =>
+          p === "/api/status/cpu" ? { cpuTemperature } : null
+        ),
+        ping: fakePing(),
+        config: cfg,
+        now,
+      });
+      const r = await svc.getStats(new AbortController().signal);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.metrics["cpuTemp"]).toBeNull();
+    }
+  });
+
   it("getStats surfaces extended status API telemetry", async () => {
     const svc = new HomebridgeService({
       client: fakeClient((p) => {

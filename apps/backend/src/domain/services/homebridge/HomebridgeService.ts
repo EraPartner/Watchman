@@ -238,7 +238,10 @@ export class HomebridgeService extends BaseService {
             load !== undefined ? Math.round(load * 100) / 100 : null)(
             numAt(cpu?.currentLoad, "currentLoad")
           ),
-          cpuTemp: numAt(cpu?.cpuTemperature, "main") ?? null,
+          // Older systeminformation reports -1 when there is no sensor.
+          cpuTemp: ((t) => (t === undefined || t === -1 ? null : t))(
+            numAt(cpu?.cpuTemperature, "main")
+          ),
           memTotalBytes: ram?.mem?.total ?? null,
           memUsedBytes: ram?.mem?.active ?? ram?.mem?.used ?? null,
           hostUptime: uptimeStatus?.time?.uptime ?? null,
