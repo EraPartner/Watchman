@@ -52,24 +52,6 @@ dependency audit, and documentation aligned with the code.
 
 ### Fixed
 
-- Adding a service: the dashboard tile now appears right after saving. The
-  `service_config_changed` WebSocket frame is sent once the backend has brought
-  the service up, not before, so the client's `/instances` refetch no longer
-  misses it and waits for the 60-second poll.
-- Adding a service: list fields (router ports, interface filter, Roon ports)
-  accept a comma, so more than one value can be typed.
-- Adding a service: the Alby Hub form no longer pre-ticks "Legacy probe mode",
-  so UI-added hubs use the NWC API like the schema default.
-- Adding a Hue bridge: the form has a **Pair with bridge** button that fills the
-  application key and cert pin. Pairing now runs over a client pinned to the
-  bridge's cert; before, it used CA verification, which the bridge's
-  self-signed cert always fails.
-- SSH key paths (Mac Mini, Raspberry Pi) and the Tor cookie file accept `~/…`.
-- Roon: "Use Roon API" declares the transport service when registering with the
-  Core, as Roon's extension API requires; without it the zone subscription got
-  no data. Not verified against a live Roon Core.
-- Adding a service: a rejected config shows `field: problem` messages instead
-  of the raw validation JSON.
 - Editing a service: saved secrets start blank ("leave blank to keep") instead
   of holding the redaction marker `***`, which typing appended to and saved as
   `***<new secret>`.
@@ -96,6 +78,51 @@ dependency audit, and documentation aligned with the code.
 - Backend: deleting or renaming a failing service clears its alert state, so a
   later service with the same `kind:instanceId` gets its first error alert and
   no false "recovered" alert.
+- Setup wizard: pressing Finish after adding a service sent you back to the
+  wizard, because the dashboard gate used the cached "needs setup" answer.
+  Adding, deleting or importing services now clears that cached answer.
+- Profiles: a manual profile switch is no longer undone when one network check
+  misses the gateway's MAC address or finds no default route on an unchanged
+  LAN.
+- Profiles: a failed automatic switch is retried on the next network check
+  instead of being recorded as done.
+- Profiles: shutdown waits for a network check in progress, so it cannot switch
+  profiles after services have stopped.
+- Profiles: clearing a profile's description in Settings now saves. Renaming a
+  profile to a name that contains "not found" returns 400, not 404.
+- Frontend: the dashboard shows a "Couldn't load services" error with a Retry
+  button when `/instances` fails, instead of the "No services configured yet"
+  empty state.
+- Frontend: a tile for a specific instance no longer shows another instance's
+  error while its own health entry is missing from `/services`.
+- Frontend: navigating to another route clears the app error screen; before, it
+  stayed until a full reload.
+- Frontend: the console logger no longer leaks a secret that also appears in its
+  key (e.g. `password=pass`), and data fields named `level`, `message` or
+  `timestamp` no longer overwrite the log entry's own fields.
+- Frontend: the API client no longer retries a 503 whose error code is
+  `UNAVAILABLE` or `CIRCUIT_OPEN`, so a down service shows its error after one
+  request instead of after up to four retried calls per fetch.
+- Frontend: `formatBytes` returns `0 B` for negative values and keeps values
+  below 1 in bytes, instead of `NaN undefined` or a missing unit.
+- Adding a service: the dashboard tile now appears right after saving. The
+  `service_config_changed` WebSocket frame is sent once the backend has brought
+  the service up, not before, so the client's `/instances` refetch no longer
+  misses it and waits for the 60-second poll.
+- Adding a service: list fields (router ports, interface filter, Roon ports)
+  accept a comma, so more than one value can be typed.
+- Adding a service: the Alby Hub form no longer pre-ticks "Legacy probe mode",
+  so UI-added hubs use the NWC API like the schema default.
+- Adding a Hue bridge: the form has a **Pair with bridge** button that fills the
+  application key and cert pin. Pairing now runs over a client pinned to the
+  bridge's cert; before, it used CA verification, which the bridge's
+  self-signed cert always fails.
+- SSH key paths (Mac Mini, Raspberry Pi) and the Tor cookie file accept `~/…`.
+- Roon: "Use Roon API" declares the transport service when registering with the
+  Core, as Roon's extension API requires; without it the zone subscription got
+  no data. Not verified against a live Roon Core.
+- Adding a service: a rejected config shows `field: problem` messages instead
+  of the raw validation JSON.
 - Backend: loads `apps/backend/.env.local` first and `apps/backend/.env` as a
   fallback. Before, only `.env` was read, so settings placed in `.env.local` as
   the documentation instructs were silently ignored.

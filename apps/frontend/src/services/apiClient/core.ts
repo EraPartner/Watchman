@@ -1,7 +1,12 @@
 import { APP_CONFIG } from "../../lib/constants";
 import { getBackendUrl } from "../../lib/backendUrl";
 import { extractApiError, unwrapApiResponse } from "../../lib/apiResponse";
-import type { ApiRequestOptions } from "./types";
+import { parseApiErrorCode, type ApiRequestOptions } from "./types";
+
+// Backend domain errors that a retry seconds later can't fix: the service is
+// reported down, or its circuit breaker is open and rejects calls until its
+// cool-down ends. The tile shows the error instead of waiting out retries.
+const NON_RETRYABLE_CODES = new Set(["UNAVAILABLE", "CIRCUIT_OPEN"]);
 
 const backendUrl = getBackendUrl();
 
@@ -42,8 +47,14 @@ export class ApiClientCore {
             ? String((error as { name?: unknown }).name)
             : undefined;
 
+        const code =
+          error instanceof Error
+            ? parseApiErrorCode(error.message).code
+            : undefined;
+
         const isRetryable =
           shouldRetryMethod &&
+          !(code !== undefined && NON_RETRYABLE_CODES.has(code)) &&
           ((status !== undefined && RETRYABLE_STATUSES.includes(status)) ||
             name === "AbortError" ||
             (error instanceof TypeError && error.message?.includes("fetch")));

@@ -24,6 +24,37 @@ describe("logger", () => {
     expect(payload).not.toContain("a@b.com");
   });
 
+  it("does not leak a value that is a substring of its key", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { logger } = await import("./logger");
+
+    logger.info("login password=pass token=t");
+
+    const [payload] = logSpy.mock.calls[0] as [string];
+    const { message } = JSON.parse(payload) as { message: string };
+    expect(message).toBe("login password=[REDACTED] token=[REDACTED]");
+  });
+
+  it("keeps its own level and message when data has the same keys", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { logger } = await import("./logger");
+
+    logger.warn("[WEBSOCKET] Alert message received", {
+      level: "error",
+      message: "disk full",
+    });
+
+    const [payload] = logSpy.mock.calls[0] as [string];
+    const parsed = JSON.parse(payload) as {
+      level: string;
+      message: string;
+      data?: { level: string; message: string };
+    };
+    expect(parsed.level).toBe("WARN");
+    expect(parsed.message).toBe("[WEBSOCKET] Alert message received");
+    expect(parsed.data).toEqual({ level: "error", message: "disk full" });
+  });
+
   it("serializes Error data with message and stack", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const { logger } = await import("./logger");

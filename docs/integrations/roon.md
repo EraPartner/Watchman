@@ -2,7 +2,7 @@
 title: Roon Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-21
 tags:
   [
     integration,
@@ -79,6 +79,7 @@ Located in `[[apps/backend/src/infra/roon/]]`:
 
 - Uses `@roonlabs/node-roon-api` (CJS via `createRequire`)
 - Wraps `init_services()` + `ws_connect()`
+- Reconnects after the Core connection drops or fails to open (5 s backoff doubling to 60 s, reset on pairing); zones are cleared and `onZonesChanged([])` fires while disconnected
 - Subscribes to `com.roonlabs.transport:2` zones via `core.moo._subscribe_helper()`
 - Handles zone subscription events: `Subscribed`, `Changed`, `zones_added`, `zones_changed`, `zones_removed`
 - Exposes zone snapshot via `getZones()` and pairing status via `isPaired()`
@@ -86,6 +87,7 @@ Located in `[[apps/backend/src/infra/roon/]]`:
 **Tests** (`roonClient.test.ts`):
 
 - 7 contract tests with `makeFakeRoon()` factory covering connection, pairing, zone updates, cleanup
+- `roonClientImpl.test.ts`: reconnect, backoff, single reconnect per drop, no reconnect after `close()`
 
 ### Stats with API
 

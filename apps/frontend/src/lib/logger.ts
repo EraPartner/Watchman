@@ -27,7 +27,17 @@ class Logger {
           logEntry.stack = data.stack;
         }
       } else if (typeof data === "object" && data !== null) {
-        Object.assign(logEntry, data);
+        // Data keys must not overwrite the entry's own timestamp/level/message;
+        // keep the full payload under `data` when they collide.
+        const collides = ["timestamp", "level", "message"].some(
+          (key) => key in data
+        );
+        Object.assign(logEntry, data, {
+          timestamp: logEntry.timestamp,
+          level: logEntry.level,
+          message: logEntry.message,
+        });
+        if (collides) logEntry.data = data;
       } else {
         logEntry.data = data;
       }
@@ -52,7 +62,11 @@ class Logger {
         if (typeof group !== "string" || group.length === 0) {
           return "[REDACTED]";
         }
-        return match.replace(group, "[REDACTED]");
+        // The captured value sits at the end of the match; replacing its first
+        // occurrence would hit the key instead when the value is a substring of
+        // it (e.g. "password=pass") and leak the value.
+        const at = match.lastIndexOf(group);
+        return `${match.slice(0, at)}[REDACTED]${match.slice(at + group.length)}`;
       });
     });
 

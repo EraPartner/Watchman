@@ -59,6 +59,15 @@ describe("formatBytes", () => {
     expect(formatBytes(1536, 2)).toBe("1.5 KB");
     expect(formatBytes(1048576)).toBe("1 MB");
   });
+
+  it("clamps negative values to 0 B instead of NaN", () => {
+    expect(formatBytes(-5)).toBe("0 B");
+  });
+
+  it("keeps sub-byte values in bytes", () => {
+    expect(formatBytes(0.5)).toBe("0.5 B");
+    expect(formatSpeed(0.5)).toBe("0.5 B/s");
+  });
 });
 
 describe("formatUptime", () => {

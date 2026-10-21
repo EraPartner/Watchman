@@ -87,6 +87,7 @@ vi.mock("../../pages/Settings/ServiceEditor", () => ({
 }));
 
 import BentoDashboard from "./BentoDashboard";
+import { useServiceInstances } from "../../hooks/useServiceInstances";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -151,5 +152,34 @@ describe("BentoDashboard", () => {
     const buttons = container.querySelectorAll("button");
     expect(buttons.length).toBeGreaterThan(0);
     act(() => root.unmount());
+  });
+
+  it("shows a load error, not the empty state, when instances fail to load", async () => {
+    const refetch = vi.fn();
+    const mocked = vi.mocked(useServiceInstances);
+    const previous = mocked.getMockImplementation();
+    mocked.mockImplementation(
+      () =>
+        ({
+          data: undefined,
+          isLoading: false,
+          isError: true,
+          error: new Error("Network error: Cannot connect to backend"),
+          refetch,
+        }) as unknown as ReturnType<typeof useServiceInstances>
+    );
+    const { container, root } = await render(h(BentoDashboard));
+    expect(container.textContent).toContain("Couldn't load services");
+    expect(container.textContent).toContain("Cannot connect to backend");
+    expect(container.textContent).not.toContain("No services configured yet");
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "Retry"
+    );
+    await act(async () => {
+      retry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+    await act(async () => root.unmount());
+    if (previous) mocked.mockImplementation(previous);
   });
 });
