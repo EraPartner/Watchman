@@ -144,21 +144,17 @@ When direct SSH is used (PI1):
 | ------------------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
 | `GET /services/raspberryPi/health`   | Health check (two-tier)            | `instance`                                                       |
 | `GET /services/raspberryPi/stats`    | Stats (vcgencmd, /proc, pigpio)    | `instance`                                                       |
-| `POST /services/raspberryPi/control` | GPIO control (see below)           | `instance`; body `{ "action": "gpio:..." }`                      |
 | `GET /services/raspberryPi/history`  | Time-series history for any metric | `instance`, `metric`, `from`, `to`, `resolution`, `agg`, `limit` |
 
-## GPIO Control
+## Monitoring only
 
-`RaspberryPiService` implements the `Controllable` interface via [[apps/backend/src/domain/services/raspberryPi/GpioController.ts|GpioController]]. Action grammar for `POST /services/raspberryPi/control`:
-
-- `gpio:write:<pin>:<0|1>` — set an output pin level (pins 0–53 validated)
-- `gpio:mode:<pin>:<input|output>` — switch a pin's mode
-
-Invalid pins/levels/modes return `400 VALIDATION`; pigpiod connection failures return `503 UNAVAILABLE`.
+Watchman reads the Pi and never drives it. The former `POST /services/raspberryPi/control`
+route and its `gpio:write` / `gpio:mode` actions were removed ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]). The pigpiod handle
+exposes only reads (`read`, `getHardwareRevision`, `getPigpioVersion`, `getCurrentTick`).
 
 ## Shared pigpiod Connection
 
-Health checks, stats collection and GPIO control share one persistent pigpiod TCP connection per instance ([[apps/backend/src/infra/gpio/sharedPigpioClient.ts|sharedPigpioClient]]) instead of opening/tearing down two connections per poll cycle. Liveness is verified with a `getCurrentTick()` round-trip; a failed command invalidates the connection (next call reconnects), and the connection is closed on service teardown (`onStop`).
+Health checks and stats collection share one persistent pigpiod TCP connection per instance ([[apps/backend/src/infra/gpio/sharedPigpioClient.ts|sharedPigpioClient]]) instead of opening/tearing down two connections per poll cycle. Liveness is verified with a `getCurrentTick()` round-trip; a failed command invalidates the connection (next call reconnects), and the connection is closed on service teardown (`onStop`).
 
 ## SSH Connection Pool (I4)
 

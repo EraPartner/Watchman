@@ -5,7 +5,6 @@ import { buildServer } from "./transport/http/server.js";
 import { registerShutdown, runShutdownSteps } from "./bootstrap/shutdown.js";
 import { GetServiceStatus } from "./application/GetServiceStatus.js";
 import { GetAggregatedHealth } from "./application/GetAggregatedHealth.js";
-import { ControlService } from "./application/ControlService.js";
 import { ListInstances } from "./application/ListInstances.js";
 import { createMetricsRegistry } from "./core/metrics.js";
 import { createEventBus } from "./core/eventBus.js";
@@ -186,7 +185,6 @@ async function main(): Promise<void> {
     services: {
       getStatus: new GetServiceStatus({ registry, snapshots }),
       aggregated: new GetAggregatedHealth(registry, snapshots),
-      control: new ControlService(registry),
     },
     listInstances: new ListInstances(registry),
     metrics,

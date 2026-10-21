@@ -2,7 +2,7 @@
 title: API Documentation
 type: index
 status: active
-date: 2026-06-12
+date: 2026-10-21
 tags:
   [
     api,
@@ -122,14 +122,13 @@ Operational health and version information.
 
 ### Services Endpoints
 
-Service health, stats, and control.
+Service health and stats. These routes are read-only: Watchman never changes a monitored service ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]).
 
 | Endpoint                        | Method | Description                          | Query Parameters      | Since |
 | ------------------------------- | ------ | ------------------------------------ | --------------------- | ----- |
 | `GET /services`                 | GET    | Aggregated health for all services   | -                     | v1.0  |
 | `GET /services/{kind}/health`   | GET    | Health for specific service instance | `instance` (optional) | v1.0  |
 | `GET /services/{kind}/stats`    | GET    | Stats for specific service instance  | `instance` (optional) | v1.0  |
-| `POST /services/{kind}/control` | POST   | Issue control action to service      | `instance` (optional) | v1.0  |
 
 **Path Parameters:**
 
@@ -193,14 +192,6 @@ See [[docs/api/services-health|Services Health]] for full details.
 - **Roon** (RN1/RN2) — Zone tracking and now-playing metadata when API enabled (optional). Includes paired, zoneCount, activeZones, nowPlaying. See [[docs/integrations/roon#stats-with-api|Roon Integration]].
 - **qBittorrent** (QB1) — Per-torrent stats with speeds, progress, ETA, and incremental update windows.
 - **AdGuard Home** (AG1) — Filtering, clients, DHCP, security features. See [[docs/integrations/adguard|AdGuard Integration]].
-
-**Control Request Body** (`/services/{kind}/control`):
-
-```json
-{
-  "action": "restart"
-}
-```
 
 ### Configuration & Setup Endpoints
 

@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { ServiceRegistry } from '../domain/ServiceRegistry.js';
-import { BaseService, type Controllable, type HealthResult, type StatsResult, type PollPolicy } from '../domain/BaseService.js';
+import { BaseService, type HealthResult, type StatsResult, type PollPolicy } from '../domain/BaseService.js';
 import { ok, err } from '../core/result.js';
-import { UnavailableError, ValidationError } from '../core/errors.js';
+import { UnavailableError } from '../core/errors.js';
 import { GetServiceStatus } from './GetServiceStatus.js';
 import { GetAggregatedHealth } from './GetAggregatedHealth.js';
-import { ControlService } from './ControlService.js';
 import { ListInstances } from './ListInstances.js';
 
 class FakeSvc extends BaseService {
@@ -23,14 +22,6 @@ class FakeSvc extends BaseService {
   }
   async getStats(): Promise<StatsResult> {
     return ok({ metrics: { count: 1 }, at: 1 });
-  }
-}
-
-class ControllableSvc extends FakeSvc implements Controllable {
-  lastAction: string | null = null;
-  async control(action: string) {
-    this.lastAction = action;
-    return ok<void>(undefined);
   }
 }
 
@@ -65,27 +56,6 @@ describe('GetAggregatedHealth', () => {
     expect(out).toHaveLength(2);
     expect(out[0]!.result.ok).toBe(true);
     expect(out[1]!.result.ok).toBe(false);
-  });
-});
-
-describe('ControlService', () => {
-  it('errors when not controllable', async () => {
-    const r = new ServiceRegistry();
-    r.register(new FakeSvc('bitcoin', 'main'));
-    const uc = new ControlService(r);
-    const res = await uc.run('bitcoin', undefined, 'restart', s());
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toBeInstanceOf(ValidationError);
-  });
-
-  it('invokes control on controllable service', async () => {
-    const r = new ServiceRegistry();
-    const svc = new ControllableSvc('bitcoin', 'main');
-    r.register(svc);
-    const uc = new ControlService(r);
-    const res = await uc.run('bitcoin', undefined, 'restart', s());
-    expect(res.ok).toBe(true);
-    expect(svc.lastAction).toBe('restart');
   });
 });
 

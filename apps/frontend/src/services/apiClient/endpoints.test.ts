@@ -48,23 +48,9 @@ describe("ApiClientEndpoints", () => {
     );
   });
 
-  it("controlService POSTs an action-only body", async () => {
-    await endpoints.controlService("qbittorrent", "pause");
-    const [url, opts] = requestMock.mock.calls[0];
-    expect(url).toBe("/services/qbittorrent/control");
-    expect(opts.method).toBe("POST");
-    expect(JSON.parse(opts.body)).toEqual({ action: "pause" });
-  });
-
-  it("controlService includes params and instance when provided", async () => {
-    await endpoints.controlService("qbittorrent", "limit", { rate: 5 }, "seed");
-    const [url, opts] = requestMock.mock.calls[0];
-    expect(url).toBe("/services/qbittorrent/control?instance=seed");
-    expect(JSON.parse(opts.body)).toEqual({
-      action: "limit",
-      params: { rate: 5 },
-    });
-    expect(opts.headers["Content-Type"]).toBe("application/json");
+  // Watchman is monitoring-only: the client must not offer a control call.
+  it("has no controlService", () => {
+    expect("controlService" in endpoints).toBe(false);
   });
 
   it("getInstances hits /instances", async () => {

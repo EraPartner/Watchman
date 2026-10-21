@@ -134,41 +134,6 @@ paths:
                   data: { $ref: "#/components/schemas/StatsSnapshot" }
         "404": { $ref: "#/components/responses/DomainError" }
         "503": { $ref: "#/components/responses/DomainError" }
-  /services/{kind}/control:
-    post:
-      tags: [services]
-      summary: Issue a control action to a service instance
-      parameters:
-        - $ref: "#/components/parameters/Kind"
-        - $ref: "#/components/parameters/Instance"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [action]
-              properties:
-                action:
-                  type: string
-                  example: restart
-      responses:
-        "200":
-          description: Action accepted
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: object
-                    required: [ok]
-                    properties:
-                      ok: { type: boolean }
-        "400": { $ref: "#/components/responses/DomainError" }
-        "404": { $ref: "#/components/responses/DomainError" }
-        "503": { $ref: "#/components/responses/DomainError" }
   /instances:
     get:
       tags: [instances]

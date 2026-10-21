@@ -2,7 +2,7 @@
 title: Multi-Instance Support
 type: feature
 status: active
-date: 2026-10-20
+date: 2026-10-21
 tags: [feature, backend, services, configuration]
 description: Multi-instance service support - run multiple nodes of the same service type
 aliases: [multi-instance, multiple instances, service instances]
@@ -36,7 +36,6 @@ The kind is a path parameter and the instance is an optional `instance` query pa
 ```
 GET  /services/{kind}/health?instance={instanceId}
 GET  /services/{kind}/stats?instance={instanceId}
-POST /services/{kind}/control?instance={instanceId}
 ```
 
 Examples:
