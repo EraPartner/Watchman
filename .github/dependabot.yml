@@ -11,10 +11,14 @@ updates:
     schedule:
       interval: "weekly"
     groups:
+      # Majors stay out of the groups so one breaking bump can't block
+      # the patch/minor updates; each major gets its own PR.
       dev-deps:
         dependency-type: "development"
+        update-types: ["minor", "patch"]
       prod-deps:
         dependency-type: "production"
+        update-types: ["minor", "patch"]
 
   # Desktop Electron app has its own pinned deps outside the root workspace.
   - package-ecosystem: "npm"
@@ -24,6 +28,7 @@ updates:
     groups:
       desktop-deps:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -32,3 +37,4 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
