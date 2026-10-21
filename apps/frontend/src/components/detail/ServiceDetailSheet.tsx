@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import { toast } from "sonner";
 import { ExternalLink, Check, X } from "lucide-react";
 import { EventLog, type ServiceEvent } from "./EventLog";
 import { ChartsPanel } from "./ChartsPanel";
@@ -194,10 +195,15 @@ export function ServiceDetailSheet({
 
   const handleToggleEnabled = () => {
     if (!service) return;
-    updateMut.mutate({
-      id: service.id,
-      input: { enabled: !service.enabled },
-    });
+    updateMut.mutate(
+      { id: service.id, input: { enabled: !service.enabled } },
+      {
+        onError: (err) =>
+          toast.error(
+            `Could not ${service.enabled ? "disable" : "enable"} ${service.kind}/${service.instanceId}: ${err.message}`
+          ),
+      }
+    );
   };
 
   const handleDelete = async () => {

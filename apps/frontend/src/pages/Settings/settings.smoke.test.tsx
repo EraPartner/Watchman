@@ -171,4 +171,61 @@ describe("Services page", () => {
     expect(container.querySelector("main")).toBeTruthy();
     act(() => root.unmount());
   });
+
+  it("reports a failed enable/disable instead of failing silently", async () => {
+    const { useQuery, useMutation } = await import("@tanstack/react-query");
+    const { toast } = await import("sonner");
+    const svc = {
+      id: "svc-1",
+      kind: "ipfs",
+      instanceId: "main",
+      enabled: true,
+      profileId: "p1",
+      config: {},
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    vi.mocked(useQuery).mockImplementation(((opts: { queryKey: unknown[] }) => ({
+      data:
+        opts.queryKey[0] === "config" && opts.queryKey[1] === "services"
+          ? [svc]
+          : undefined,
+      isLoading: false,
+      error: null,
+    })) as unknown as typeof useQuery);
+    vi.mocked(useMutation).mockImplementation((() => ({
+      mutateAsync: vi.fn(async () => ({})),
+      mutate: vi.fn((_vars: unknown, opts?: { onError?: (e: Error) => void }) =>
+        opts?.onError?.(new Error("server said no"))
+      ),
+      isPending: false,
+    })) as unknown as typeof useMutation);
+    try {
+      const { container, root } = await render(<Services />);
+      const btn = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent === "Disable"
+      )!;
+      await act(async () => {
+        btn.click();
+      });
+      expect(toast.error).toHaveBeenCalledWith(
+        "Could not disable ipfs/main: server said no"
+      );
+      act(() => root.unmount());
+    } finally {
+      vi.mocked(useQuery).mockImplementation((() => ({
+        data: undefined,
+        isLoading: false,
+        error: null,
+      })) as unknown as typeof useQuery);
+      vi.mocked(useMutation).mockImplementation((() => ({
+        mutateAsync: vi.fn(async () => ({})),
+        mutate: vi.fn(),
+        isPending: false,
+        isError: false,
+        error: null,
+        reset: vi.fn(),
+      })) as unknown as typeof useMutation);
+    }
+  });
 });

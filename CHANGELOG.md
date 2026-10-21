@@ -52,6 +52,19 @@ dependency audit, and documentation aligned with the code.
 
 ### Fixed
 
+- Editing a service: saved secrets start blank ("leave blank to keep") instead
+  of holding the redaction marker `***`, which typing appended to and saved as
+  `***<new secret>`.
+- Editing or deleting a service: a delete that landed while an update or
+  create was being applied no longer leaves the deleted service running and
+  polled until restart. Applying a create for a service a profile switch
+  already started no longer starts it twice.
+- Moving or adding a service to a profile rejects an unknown `profileId` with
+  400 instead of parking the service in a profile that can never be active.
+- Service detail: a failed connection test shows its message instead of
+  `[object Object]`.
+- A failed delete shows its error in the confirm dialog, and a failed
+  enable/disable or profile move shows a toast. Before, they failed silently.
 - Frontend: the WebSocket no longer stops reconnecting after a short backend
   outage. A retry that landed inside the 5 s connection throttle was dropped
   with no further retry, so live updates stayed off until a page reload; it is

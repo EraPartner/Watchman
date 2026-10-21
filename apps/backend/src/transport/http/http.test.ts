@@ -65,7 +65,12 @@ async function makeApp(registry: ServiceRegistry) {
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
-    config: { store: fakeStore, lifecycle: fakeLifecycle, registry },
+    config: {
+      store: fakeStore,
+      lifecycle: fakeLifecycle,
+      registry,
+      profiles: { getProfile: async () => undefined },
+    },
     profiles: {
       profiles: {} as never,
       store: fakeStore,

@@ -994,7 +994,7 @@ export interface paths {
                         };
                     };
                 };
-                /** @description Missing profileId */
+                /** @description Missing or unknown profileId */
                 400: {
                     headers: {
                         [name: string]: unknown;

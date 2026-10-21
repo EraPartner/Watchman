@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     },
     listInstances: new ListInstances(registry),
     metrics,
-    config: { store, lifecycle, registry },
+    config: { store, lifecycle, registry, profiles: profileStore },
     profiles: {
       profiles: profileStore,
       store,

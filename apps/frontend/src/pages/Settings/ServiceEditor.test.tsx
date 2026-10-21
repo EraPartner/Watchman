@@ -45,6 +45,17 @@ const KINDS: KindSchema[] = [
     ],
     secretFields: ["applicationKey"],
   },
+  {
+    kind: "adguard",
+    label: "AdGuard Home",
+    fields: [
+      { name: "instanceId", label: "Instance ID", type: "text", required: true, default: "main" },
+      { name: "enabled", label: "Enabled", type: "boolean", default: true },
+      { name: "baseUrl", label: "Base URL", type: "url", required: true },
+      { name: "password", label: "Password", type: "password", secret: true },
+    ],
+    secretFields: ["password"],
+  },
 ];
 
 const { pairMock } = vi.hoisted(() => ({ pairMock: vi.fn() }));
@@ -386,6 +397,60 @@ describe("ServiceEditor Hue pairing", () => {
     expect(container.querySelector('[data-testid="pair-result"]')?.textContent).toMatch(
       /link button/i,
     );
+    await cleanup();
+  });
+});
+
+describe("ServiceEditor saved secrets in edit mode", () => {
+  const adguard: ServiceInstance = {
+    id: "adguard-1",
+    kind: "adguard",
+    instanceId: "main",
+    enabled: true,
+    profileId: "p1",
+    // Secrets arrive redacted from GET /config/services.
+    config: { kind: "adguard", instanceId: "main", enabled: true, baseUrl: "http://10.0.0.2", password: "***" },
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  it("starts a saved secret blank with the keep-placeholder, not the redaction marker", async () => {
+    const { container, cleanup } = await render({ existing: adguard });
+    const input = getFieldInput(container, /^Password/);
+    expect(input.value).toBe("");
+    expect(input.placeholder).toMatch(/leave blank to keep/i);
+    await cleanup();
+  });
+
+  it("saves a newly typed secret as typed, without the redaction marker", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({ existing: adguard, onSubmit });
+    await typeInto(getFieldInput(container, /^Password/), "new-secret");
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config?.["password"]).toBe("new-secret");
+    await cleanup();
+  });
+
+  it("omits an untouched saved secret so the server keeps it", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({ existing: adguard, onSubmit });
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).not.toHaveProperty("password");
     await cleanup();
   });
 });

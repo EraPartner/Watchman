@@ -70,6 +70,13 @@ function initialValues(
   for (const f of kind.fields) {
     if (COMMON_FIELD_NAMES.has(f.name)) continue;
     const current = existing?.config?.[f.name];
+    // A saved secret comes back redacted as "***". Start the field blank so
+    // the "leave blank to keep" placeholder shows; prefilling "***" meant any
+    // typing was appended to it and saved as "***<new secret>".
+    if (f.secret && current === "***") {
+      values[f.name] = "";
+      continue;
+    }
     const value =
       current !== undefined && current !== null
         ? (current as FormValue)

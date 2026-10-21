@@ -62,6 +62,7 @@ function makeApp(opts: {
     idByStoredId: vi.fn(() => undefined),
     ...opts.lifecycle,
   } as unknown as ServiceLifecycle;
+  const profileStore = makeProfileStore(opts.profiles);
   const detector: NetworkDetector = opts.detector ?? {
     detect: vi.fn(async () => ({})),
   };
@@ -74,9 +75,9 @@ function makeApp(opts: {
     },
     listInstances: new ListInstances(registry),
     metrics: createMetricsRegistry(),
-    config: { store, lifecycle, registry },
+    config: { store, lifecycle, registry, profiles: profileStore },
     profiles: {
-      profiles: makeProfileStore(opts.profiles),
+      profiles: profileStore,
       store,
       lifecycle,
       detector,
