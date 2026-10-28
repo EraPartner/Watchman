@@ -7,7 +7,11 @@ import {
 import { withHostPing } from "../../health.js";
 import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
 import { ok, err } from "../../../core/result.js";
-import { UnavailableError, isDomainError } from "../../../core/errors.js";
+import {
+  UnauthorizedError,
+  UnavailableError,
+  isDomainError,
+} from "../../../core/errors.js";
 import { ttlMemo, type TtlMemo } from "../../../core/ttlMemo.js";
 import type { AdGuardInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
@@ -262,6 +266,11 @@ export class AdGuardService extends BaseService {
   private async parse<T>(res: HttpResponse, path: string): Promise<T> {
     if (res.status < 200 || res.status >= 300) {
       const text = await res.text().catch(() => "");
+      if (res.status === 401 || res.status === 403) {
+        throw new UnauthorizedError(
+          `adguard ${path} returned ${res.status}: check the username and password`
+        );
+      }
       throw new UnavailableError(
         `adguard ${path} returned ${res.status}: ${text.slice(0, 200)}`
       );

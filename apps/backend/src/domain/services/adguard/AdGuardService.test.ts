@@ -252,6 +252,19 @@ describe("AdGuardService", () => {
     expect(state.lastAuth).toBe(expected);
   });
 
+  it("missing or wrong credentials report UNAUTHORIZED, not UNAVAILABLE", async () => {
+    state.authRequired = true;
+    const svc = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("UNAUTHORIZED");
+  });
+
   it("getStats computes blocking rate", async () => {
     const svc = new AdGuardService({
       http: createHttpClient(),
