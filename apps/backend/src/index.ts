@@ -9,7 +9,10 @@ import { ListInstances } from "./application/ListInstances.js";
 import { createMetricsRegistry } from "./core/metrics.js";
 import { createEventBus } from "./core/eventBus.js";
 import { systemClock } from "./core/clock.js";
-import { createBackgroundPoller } from "./infra/scheduler/poller.js";
+import {
+  createBackgroundPoller,
+  pollBudgetMs,
+} from "./infra/scheduler/poller.js";
 import { createHttpClient } from "./infra/http/client.js";
 import { createInsecureHttpClient } from "./infra/http/insecureClient.js";
 import { createPingProber } from "./infra/net/pingProbe.js";
@@ -138,7 +141,11 @@ async function main(): Promise<void> {
       metrics.registerBreaker(health);
       metrics.registerBreaker(stats);
       const guarded = withBreakers(svc, { health, stats });
-      snapshots.register(guarded, stored.config.cacheTtlMs);
+      snapshots.register(
+        guarded,
+        stored.config.cacheTtlMs,
+        pollBudgetMs(stored.config.timeoutMs)
+      );
       return guarded;
     },
     release(svcId) {

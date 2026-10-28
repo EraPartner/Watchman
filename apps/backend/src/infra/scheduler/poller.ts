@@ -11,8 +11,25 @@ export interface PollerOptions {
   defaultTimeoutMs?: number;
 }
 
+const DEFAULT_POLL_BUDGET_MS = 10_000;
+
+/**
+ * Time a single poll of one service may take. A probe can chain several
+ * requests that are each bounded by the instance's `timeoutMs` (ping then
+ * API, pigpio then SSH, …), so allow two of them, and never less than the
+ * default. At the default timeoutMs (5 s) this equals the 10 s default.
+ */
+export function pollBudgetMs(
+  timeoutMs: number,
+  defaultBudgetMs = DEFAULT_POLL_BUDGET_MS
+): number {
+  if (!Number.isFinite(timeoutMs)) return defaultBudgetMs;
+  return Math.max(defaultBudgetMs, 2 * timeoutMs);
+}
+
 export interface Poller {
-  track(svc: BaseService): void;
+  /** budgetMs: per-poll time limit for this service (default: poller's). */
+  track(svc: BaseService, budgetMs?: number): void;
   untrack(id: string): void;
   pause(): void;
   resume(): void;
@@ -29,7 +46,7 @@ type Runner = (taskSignal: AbortSignal) => Promise<void>;
 
 export function createBackgroundPoller(opts: PollerOptions): Poller {
   const { clock, bus, logger } = opts;
-  const timeoutMs = opts.defaultTimeoutMs ?? 10_000;
+  const defaultBudgetMs = opts.defaultTimeoutMs ?? DEFAULT_POLL_BUDGET_MS;
   const tasks = new Map<string, Task[]>();
   const services = new Map<string, BaseService>();
   let paused = false;
@@ -84,8 +101,9 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
   };
 
   return {
-    track(svc) {
+    track(svc, budgetMs) {
       if (tasks.has(svc.id)) return;
+      const timeoutMs = budgetMs ?? defaultBudgetMs;
       services.set(svc.id, svc);
       const healthTask = schedule(
         svc,

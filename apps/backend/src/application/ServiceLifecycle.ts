@@ -2,7 +2,7 @@ import type { Logger } from "pino";
 import type { EventBus } from "../core/eventBus.js";
 import type { BaseService } from "../domain/BaseService.js";
 import type { ServiceRegistry } from "../domain/ServiceRegistry.js";
-import type { Poller } from "../infra/scheduler/poller.js";
+import { pollBudgetMs, type Poller } from "../infra/scheduler/poller.js";
 import type {
   ConfigStore,
   StoredService,
@@ -115,7 +115,7 @@ export function createServiceLifecycle(
       }
     }
     registry.register(svc);
-    poller.track(svc);
+    poller.track(svc, pollBudgetMs(stored.config.timeoutMs));
     storedIdToSvcId.set(stored.id, svc.id);
     return svc;
   }
