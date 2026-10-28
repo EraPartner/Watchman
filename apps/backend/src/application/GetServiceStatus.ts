@@ -16,11 +16,8 @@ export class GetServiceStatus {
     signal: AbortSignal
   ): Promise<HealthResult> {
     const svc = this.deps.registry.getByKind(kind, instanceId);
-    const cached = this.deps.snapshots?.latestHealth(svc.id);
-    if (cached) return cached;
-    const live = await svc.checkHealth(signal);
-    this.deps.snapshots?.setHealth(svc.id, live);
-    return live;
+    if (this.deps.snapshots) return this.deps.snapshots.readHealth(svc, signal);
+    return svc.checkHealth(signal);
   }
 
   async stats(

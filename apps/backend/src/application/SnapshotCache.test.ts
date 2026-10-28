@@ -213,4 +213,81 @@ describe("SnapshotCache", () => {
     const res = await cache.stats(svc, signal());
     expect(res.ok).toBe(false);
   });
+
+  describe("readHealth live fallback", () => {
+    class Deferred extends Stub {
+      release!: (r: HealthResult) => void;
+      seenSignal: AbortSignal | undefined;
+      override checkHealth(sig: AbortSignal): Promise<HealthResult> {
+        this.seenSignal = sig;
+        return new Promise((r) => (this.release = r));
+      }
+    }
+    const up: HealthResult = ok({ reachable: true, at: 5 });
+
+    it("caches a live probe for the registered instance", async () => {
+      const cache = new SnapshotCache({ bus: createEventBus(), clock: createFakeClock() });
+      const svc = new Stub();
+      cache.register(svc, 10_000);
+      await cache.readHealth(svc, signal());
+      expect(cache.latestHealth(svc.id)?.ok).toBe(true);
+    });
+
+    it("does not cache a probe the caller aborted", async () => {
+      const cache = new SnapshotCache({ bus: createEventBus(), clock: createFakeClock() });
+      const svc = new Deferred();
+      cache.register(svc, 10_000);
+      const ac = new AbortController();
+      const p = cache.readHealth(svc, ac.signal);
+      ac.abort();
+      svc.release(up);
+      await p;
+      expect(cache.latestHealth(svc.id)).toBeUndefined();
+    });
+
+    it("does not cache the old instance's result after it was replaced", async () => {
+      const cache = new SnapshotCache({ bus: createEventBus(), clock: createFakeClock() });
+      const old = new Deferred();
+      cache.register(old, 10_000);
+      const p = cache.readHealth(old, signal());
+      cache.unregister(old.id);
+      cache.register(new Stub(), 10_000);
+      old.release(up);
+      await p;
+      expect(cache.latestHealth(old.id)).toBeUndefined();
+    });
+
+    it("keeps a poll result published while the live probe ran", async () => {
+      const bus = createEventBus();
+      const cache = new SnapshotCache({ bus, clock: createFakeClock() });
+      cache.start();
+      const svc = new Deferred();
+      cache.register(svc, 10_000);
+      const p = cache.readHealth(svc, signal());
+      bus.emit("service.health.updated", {
+        id: svc.id,
+        kind: svc.kind,
+        instanceId: svc.instanceId,
+        at: 9,
+        snapshot: { reachable: false, at: 9 },
+      });
+      svc.release(up);
+      await p;
+      const cached = cache.latestHealth(svc.id);
+      expect(cached?.ok && cached.value.at).toBe(9);
+      cache.stop();
+    });
+
+    it("bounds the live probe with its own timeout", async () => {
+      const cache = new SnapshotCache({ bus: createEventBus(), clock: createFakeClock() });
+      const svc = new Deferred();
+      cache.register(svc, 10_000);
+      const parent = new AbortController();
+      void cache.readHealth(svc, parent.signal);
+      // a derived signal, not the request's own: it aborts on its own timer
+      expect(svc.seenSignal).toBeDefined();
+      expect(svc.seenSignal).not.toBe(parent.signal);
+      svc.release(up);
+    });
+  });
 });
