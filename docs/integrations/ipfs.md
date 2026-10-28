@@ -2,7 +2,7 @@
 title: IPFS Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-28
 tags:
   [
     integration,
