@@ -40,6 +40,7 @@ import {
   rendererTrackedMetrics,
 } from "@/services/renderers";
 import type { ServiceKind, Tone } from "@/services/renderers/types";
+import { toggleEnabledInput } from "@/lib/serviceInput";
 
 const TONE_TO_STATUS: Record<Tone, "neutral" | "ok" | "warn" | "crit"> = {
   neutral: "neutral",
@@ -84,6 +85,7 @@ export function ServiceDetailSheet({
   // that renames the instance would otherwise leave the sheet looking up the
   // old instanceId (empty footer, no data) until it was reopened.
   const [followId, setFollowId] = useState<string | undefined>(undefined);
+  const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [followFor, setFollowFor] = useState({ kind, requestedInstanceId });
   if (
     followFor.kind !== kind ||
@@ -91,6 +93,9 @@ export function ServiceDetailSheet({
   ) {
     setFollowFor({ kind, requestedInstanceId });
     setFollowId(undefined);
+    // The sheet is reused across tiles; the live events belong to the
+    // previous service, not the one now shown.
+    setEvents([]);
   }
 
   const service = useMemo(() => {
@@ -149,7 +154,6 @@ export function ServiceDetailSheet({
     }
   }, [renderer, statsMetrics, healthShape]);
 
-  const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [view, setView] = useState<View>("detail");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const serviceKey = instanceId ?? kind ?? "";
@@ -221,7 +225,7 @@ export function ServiceDetailSheet({
   const handleToggleEnabled = () => {
     if (!service) return;
     updateMut.mutate(
-      { id: service.id, input: { enabled: !service.enabled } },
+      { id: service.id, input: toggleEnabledInput(service) },
       {
         onError: (err) =>
           toast.error(

@@ -243,6 +243,9 @@ export function ServiceTile({
 
   const handleKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!onOpenDetail) return;
+    // Keys pressed on a focused child (the quick link) bubble up here; taking
+    // them would block the link and open the sheet instead.
+    if (e.target !== e.currentTarget) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       handleOpen();
@@ -284,7 +287,11 @@ export function ServiceTile({
       )}
       role={onOpenDetail ? "button" : undefined}
       tabIndex={onOpenDetail ? 0 : undefined}
-      aria-label={`${renderer.displayName} tile`}
+      aria-label={
+        instanceId && instanceId !== "main"
+          ? `${renderer.displayName} (${instanceId}) tile`
+          : `${renderer.displayName} tile`
+      }
       onClick={onOpenDetail ? handleOpen : undefined}
       onKeyDown={onOpenDetail ? handleKey : undefined}
     >

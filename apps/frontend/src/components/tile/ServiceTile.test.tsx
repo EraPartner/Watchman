@@ -348,3 +348,73 @@ describe("ServiceTile stats-error badge", () => {
     await cleanup();
   });
 });
+
+describe("ServiceTile keyboard and labels", () => {
+  beforeEach(resetState);
+  afterEach(teardownState);
+
+  async function renderTile(instanceId?: string) {
+    const onOpenDetail = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <ServiceTile
+          kind="bitcoin"
+          instanceId={instanceId}
+          onOpenDetail={onOpenDetail}
+        />
+      );
+    });
+    const tile = container.querySelector('[role="button"]') as HTMLElement;
+    return {
+      tile,
+      onOpenDetail,
+      cleanup: () => act(() => root.unmount()),
+    };
+  }
+
+  function pressEnter(target: Element) {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    );
+  }
+
+  it("opens the detail on Enter when the tile itself has focus", async () => {
+    const { tile, onOpenDetail, cleanup } = await renderTile();
+    await act(async () => pressEnter(tile));
+    expect(onOpenDetail).toHaveBeenCalledTimes(1);
+    await cleanup();
+  });
+
+  it("leaves Enter on a focused child (the quick link) alone", async () => {
+    // The tile's handler used to take the key, block the link and open the
+    // sheet instead.
+    const { tile, onOpenDetail, cleanup } = await renderTile();
+    const child = document.createElement("a");
+    child.href = "http://example.test";
+    tile.appendChild(child);
+    const ev = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      child.dispatchEvent(ev);
+    });
+    expect(onOpenDetail).not.toHaveBeenCalled();
+    expect(ev.defaultPrevented).toBe(false);
+    child.remove();
+    await cleanup();
+  });
+
+  it("names the instance in the tile label so sibling tiles differ", async () => {
+    const a = await renderTile("backup");
+    expect(a.tile.getAttribute("aria-label")).toBe("Bitcoin (backup) tile");
+    await a.cleanup();
+    const b = await renderTile("main");
+    expect(b.tile.getAttribute("aria-label")).toBe("Bitcoin tile");
+    await b.cleanup();
+  });
+});

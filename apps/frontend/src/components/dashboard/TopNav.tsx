@@ -43,7 +43,11 @@ function StatusSummary({ ok, warn, crit, total, fetchedAt }: SummaryProps) {
   }, []);
 
   return (
-    <div className="flex shrink-0 items-center gap-s-3 rounded-r-pill border border-[var(--hairline)] bg-[var(--surface-1)] px-s-3 py-s-1 font-mono tabular-nums text-fs-label">
+    <div
+      role="group"
+      aria-label={`Service status: ${ok} ok, ${warn} warning, ${crit} critical, of ${total}`}
+      className="flex shrink-0 items-center gap-s-3 rounded-r-pill border border-[var(--hairline)] bg-[var(--surface-1)] px-s-3 py-s-1 font-mono tabular-nums text-fs-label"
+    >
       <span className="flex items-center gap-s-1 text-[var(--ok)]">
         <span
           className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--ok)]"
@@ -112,7 +116,7 @@ export function TopNav({ onAddService }: TopNavProps) {
 
   return (
     <header className="glass-topbar sticky top-0 z-40">
-      <div className="mx-auto flex max-w-screen-2xl items-center gap-s-6 px-s-8 py-s-4">
+      <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center gap-x-s-6 gap-y-s-3 px-s-8 py-s-4 md:flex-nowrap">
         <div className="flex items-baseline gap-s-3">
           <span
             aria-hidden
@@ -126,7 +130,12 @@ export function TopNav({ onAddService }: TopNavProps) {
           </span>
         </div>
 
-        <nav className="ml-s-4 hidden items-center gap-s-1 md:flex">
+        {/* Below md the links wrap to their own scrollable row; hiding them
+            left narrow windows with no way to reach Settings. */}
+        <nav
+          aria-label="Main"
+          className="order-last flex w-full items-center gap-s-1 overflow-x-auto md:order-none md:ml-s-4 md:w-auto"
+        >
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
@@ -134,7 +143,7 @@ export function TopNav({ onAddService }: TopNavProps) {
               end={item.to === "/"}
               className={({ isActive }) =>
                 cn(
-                  "rounded-r-2 px-s-3 py-s-1 text-fs-label uppercase tracking-[0.06em] transition-colors",
+                  "shrink-0 rounded-r-2 px-s-3 py-s-1 text-fs-label uppercase tracking-[0.06em] transition-colors",
                   isActive
                     ? "bg-[var(--accent-soft)] text-[var(--text-hi)] shadow-[inset_0_0_0_1px_oklch(80%_0.13_85_/_0.25)]"
                     : "text-[var(--text-md)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
@@ -168,6 +177,7 @@ export function TopNav({ onAddService }: TopNavProps) {
           ) : null}
 
           <span
+            role="img"
             title={
               ws.isConnected ? "WebSocket connected" : "WebSocket disconnected"
             }

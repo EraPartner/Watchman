@@ -617,6 +617,13 @@ describe("useWebSocket", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["services", "health"],
     });
+    // Settings' stored rows, so a change from another window shows up.
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["config", "services"],
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["config", "load-errors"],
+    });
 
     act(() => {
       root.unmount();

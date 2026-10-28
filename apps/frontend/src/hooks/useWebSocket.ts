@@ -222,6 +222,14 @@ export const useWebSocket = (url?: string) => {
             queryClient.invalidateQueries({
               queryKey: queryKeys.servicesHealth(),
             });
+            // Settings and the detail sheet read the stored rows; a change
+            // made elsewhere (another window, an import) left them stale.
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.configServices(),
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.configLoadErrors(),
+            });
             break;
 
           case "profile_switched":

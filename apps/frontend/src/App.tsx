@@ -48,9 +48,11 @@ const queryClient = new QueryClient({
       refetchOnReconnect: true,
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
+    // Writes are not retried, matching the API client (it retries only GET
+    // and HEAD). A retried create after a lost response failed as a
+    // duplicate, and a retried 4xx just repeated the same error a second later.
     mutations: {
-      retry: 1,
-      retryDelay: 1000,
+      retry: false,
     },
   },
 });

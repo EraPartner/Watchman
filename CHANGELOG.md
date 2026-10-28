@@ -66,6 +66,17 @@ dependency audit, and documentation aligned with the code.
 
 ### Fixed
 
+- UI bug pass: Enable/Disable (Settings and detail sheet) resends the stored
+  config, so the save no longer fails validation or wipes optional fields;
+  "Test connection" reports an unreachable service as failed instead of "OK";
+  the detail sheet no longer shows the previous tile's live events, or "No
+  renderer for this service." while it closes; Enter on a tile's quick link
+  follows the link; tiles of the same kind have distinct screen-reader labels;
+  the top nav stays reachable below 768px; failed profile switch, auto-switch
+  and network capture show a toast; a restore refreshes profiles and
+  failed-to-load rows; config changes pushed over the WebSocket refresh the
+  Settings list; a failed kinds/schema load shows an error with Retry instead
+  of "No kinds match"; mutations are no longer retried.
 - Audit leftovers (#127): request timers no longer keep the event loop alive
   or collect abort listeners; Hue pairing validates `host` and caps
   `timeoutMs`; Synology DSM 5xx/HTML replies, Tor dot-escaped data and

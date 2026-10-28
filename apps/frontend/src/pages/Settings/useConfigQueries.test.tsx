@@ -179,6 +179,9 @@ describe("useConfigQueries dashboard invalidation", () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["services", "instances"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["services", "health"] });
+    // Bundles carry profiles and can replace rows that failed to load.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["profiles"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["config", "load-errors"] });
     unmount();
   });
 });

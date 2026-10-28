@@ -235,6 +235,37 @@ describe("ConfigPanel", () => {
     expect(toast.error).toHaveBeenCalledWith("Connection failed: connection refused");
     act(() => root.unmount());
   });
+
+  it("reports an unreachable service as a failed test, not OK", async () => {
+    const { toast } = await import("sonner");
+    const { useTestService } = await import("@/pages/Settings/useConfigQueries");
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(useTestService).mockReturnValueOnce({
+      mutateAsync: vi.fn(async () => ({
+        ok: true,
+        latencyMs: 40,
+        snapshot: { reachable: false, message: "ECONNREFUSED", at: 0 },
+      })),
+      isPending: false,
+    } as unknown as ReturnType<typeof useTestService>);
+    const service = {
+      id: "tor:main",
+      kind: "tor",
+      instanceId: "main",
+      enabled: true,
+      config: {},
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    };
+    const { container, root } = await render(<ConfigPanel service={service} />);
+    const testBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Test connection")
+    );
+    await act(async () => { testBtn?.click(); });
+    expect(toast.error).toHaveBeenCalledWith("Connection failed: ECONNREFUSED");
+    expect(toast.success).not.toHaveBeenCalled();
+    act(() => root.unmount());
+  });
 });
 
 // ─── RawStatsPanel ────────────────────────────────────────────────────────────

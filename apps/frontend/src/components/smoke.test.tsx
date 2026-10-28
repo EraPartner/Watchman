@@ -614,6 +614,25 @@ describe("TopNav", () => {
     act(() => root.unmount());
   });
 
+  it("keeps the nav links reachable on narrow screens", async () => {
+    // The nav used to be `hidden md:flex`, so below 768px there was no way
+    // to reach Settings.
+    const { container, root } = await render(<TopNav />);
+    const nav = container.querySelector("nav")!;
+    expect(nav.className.split(/\s+/)).not.toContain("hidden");
+    expect(nav.getAttribute("aria-label")).toBe("Main");
+    act(() => root.unmount());
+  });
+
+  it("labels the status counts for screen readers", async () => {
+    const { container, root } = await render(<TopNav />);
+    const group = container.querySelector('[role="group"]');
+    expect(group?.getAttribute("aria-label")).toMatch(
+      /^Service status: \d+ ok, \d+ warning, \d+ critical, of \d+$/
+    );
+    act(() => root.unmount());
+  });
+
   it("renders without onAddService", async () => {
     const { container, root } = await render(<TopNav />);
     expect(container.querySelector("header")).toBeTruthy();
