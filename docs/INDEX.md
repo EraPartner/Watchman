@@ -2,7 +2,7 @@
 title: Watchman Project Knowledge Base
 type: index
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags: [knowledge-base, index, project, overview, ai-agent-friendly, design-system, primitives, electron, desktop, setup-wizard, single-user, v2, startup-flows]
 description: Main entry point to the Watchman project documentation - single-user self-hosted service monitoring dashboard with dark-luxury bento design system, no authentication
 aliases: [KB, docs, documentation, knowledge base, home, README]
@@ -34,6 +34,7 @@ Or jump to:
 | **Looking for an API**               | [[docs/api/index | API Overview]] or [[docs/integrations/index | Service Integrations]] |
 | **Making an architectural decision** | [[docs/adr/index | ADR Index]] → [[docs/adr/template | ADR Template]] |
 | **Understanding the architecture**   | [[docs/architecture/index | Architecture Overview]] |
+| **Setting up a service to monitor**  | [[docs/guides/service-setup/index\|Service Setup Guides]] |
 | **Adding a service**                 | [[docs/guides/adding-services | Adding Services Guide]] |
 | **An AI agent**                      | [[docs/guides/ai-agent-workflow | AI Agent Workflow]] (start here!) |
 
@@ -52,7 +53,7 @@ Or jump to:
 | ---------------------------- | ------------------------ | ------------------------------------ | ------------------- |
 | 🏗️ [[docs/adr/index          | Architecture Decisions]] | Major design decisions and rationale | 32 ADRs             |
 | 📡 [[docs/api/index          | API Documentation]]      | REST API endpoints and schemas       | 34 HTTP routes + /ws |
-| 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, Pi deploy, contributing, and wizard  | 8 guides            |
+| 📖 [[docs/guides/index       | Guides]]                 | Setup, deployment, service setup, contributing, and wizard  | 9 guides + 13 service setup guides |
 | ⚡ [[docs/features/index     | Features]]               | Feature documentation                | 5 features          |
 | 🔌 [[docs/integrations/index | Integrations]]           | External service integrations        | 15 integrations     |
 | 🔒 [[docs/security/index     | Security]]               | Security policies and practices      | 4 security docs     |

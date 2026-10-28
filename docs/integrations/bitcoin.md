@@ -26,7 +26,7 @@ aliases: [bitcoin, btc, bitcoin node, rpc, zmq]
 # Bitcoin Integration
 
 > [!abstract] Overview
-> Monitors a Bitcoin full node via RPC, optionally through Tor for privacy. Two-tier health model: ICMP ping to the host, plus RPC probe to `getblockchaininfo`.
+> Monitors a Bitcoin full node via JSON-RPC. Two-tier health model: ICMP ping to the host, plus a batched RPC probe (`getblockchaininfo` + `getnetworkinfo`).
 
 ## Health Model (Phase 0a)
 
@@ -148,7 +148,7 @@ Then set the corresponding Watchman config fields:
 | Field                  | Value                              |
 | ---------------------- | ---------------------------------- |
 | `zmqHashblockEndpoint` | `tcp://127.0.0.1:28332`            |
-| `zmqRawtxEndpoint`     | `tcp://127.0.0.1:28333` (optional) |
+| `zmqRawtxEndpoint`     | leave empty (not used yet)         |
 
 ### Real-Time Metrics
 
@@ -223,6 +223,7 @@ Removed in Phase 3. Replaced by `ServiceTile` with `bitcoinRenderer` from the re
 
 ## Related
 
+- [[docs/guides/service-setup/bitcoin|Setup guide]]: what to enable on the service, least-privilege credentials, and how to add it in Watchman
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 Phase 0a — Two-Tier Health]]
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 — Two-Tier Health + Monitoring Upgrades]]
 - [[docs/architecture/backend-architecture#zmq-subscriber-i6---real-time-zeromq-subscriptions|Backend Architecture — ZMQ Infra Primitive]]

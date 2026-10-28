@@ -2,7 +2,7 @@
 title: Service Integrations
 type: index
 status: active
-date: 2026-06-13
+date: 2026-10-28
 tags:
   [
     integration,
@@ -33,6 +33,11 @@ aliases: [integrations index, services, service docs]
 
 > [!abstract] Overview
 > Watchman integrates with 13 self-hosted service types. Each integration extends [[apps/backend/src/domain/BaseService.ts|BaseService]] and implements `checkHealth()` and `getStats()` methods. Services are registered via [[apps/backend/src/domain/ServiceRegistry.ts|ServiceRegistry]] using keys like `${kind}:${instanceId}` (e.g., `qbittorrent:main`, `qbittorrent:seedbox` for multi-instance support). Instances are configured in the DuckDB config store via the `/config` API or the Settings UI — not via environment variables (legacy `{SERVICE}_*` env vars are imported once on first boot, then ignored; see [[docs/adr/015-ui-driven-service-configuration|ADR-015]]).
+
+> [!tip] Setting up a service?
+> These pages are the developer reference. For step-by-step setup (what to enable on the service,
+> which least-privilege credentials to create, and what to type into Watchman), see
+> [[docs/guides/service-setup/index|Service Setup Guides]].
 
 ## Integration Index
 

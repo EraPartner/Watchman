@@ -25,6 +25,10 @@ dependency audit, and documentation aligned with the code.
 
 ### Added
 
+- Service setup guides (`docs/guides/service-setup/`): for each of the 13
+  service kinds, what to enable on the service, which least-privilege
+  (read-only where possible) credentials to create, and how to add it in
+  Watchman, checked against the code.
 - Backups include profiles (#127). On import, each profile maps to a local one
   by id, then by name; only unmatched profiles are created.
 - Desktop: native Electron experience, runtime hardening, and a distribution

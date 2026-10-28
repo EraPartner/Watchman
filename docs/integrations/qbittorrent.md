@@ -153,6 +153,7 @@ The `qbittorrent` renderer tile summary displays:
 
 ## Related
 
+- [[docs/guides/service-setup/qbittorrent|Setup guide]]: what to enable on the service, least-privilege credentials, and how to add it in Watchman
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 Two-Tier Health Model]]
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/features/multi-instance|Multi-Instance Support]]
