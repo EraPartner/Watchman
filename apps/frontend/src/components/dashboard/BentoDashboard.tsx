@@ -25,7 +25,11 @@ interface OpenCtx {
 type EditorState = { mode: "closed" } | { mode: "create" };
 
 export default function BentoDashboard() {
+  // The last opened tile stays set after close so the sheet keeps its
+  // content while the exit animation runs (clearing it flashed "No renderer
+  // for this service." as the sheet slid out).
   const [openCtx, setOpenCtx] = useState<OpenCtx | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
   const { data, isLoading, isError, error, refetch } = useServiceInstances();
   const createMut = useCreateService();
@@ -126,9 +130,10 @@ export default function BentoDashboard() {
                     kind={entry.kind}
                     instanceId={inst.id}
                     size={entry.size}
-                    onOpenDetail={({ kind, instanceId }) =>
-                      setOpenCtx({ kind, instanceId })
-                    }
+                    onOpenDetail={({ kind, instanceId }) => {
+                      setOpenCtx({ kind, instanceId });
+                      setSheetOpen(true);
+                    }}
                   />
                 ));
               })}
@@ -139,8 +144,8 @@ export default function BentoDashboard() {
         <ServiceDetailSheet
           kind={openCtx?.kind}
           instanceId={openCtx?.instanceId}
-          open={!!openCtx}
-          onOpenChange={(o) => (o ? null : setOpenCtx(null))}
+          open={sheetOpen && !!openCtx}
+          onOpenChange={setSheetOpen}
         />
 
         <Dialog

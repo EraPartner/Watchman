@@ -26,7 +26,7 @@
     "precommit": "npm run typecheck && npm run lint"
   },
   "dependencies": {
-    "@duckdb/node-api": "^1.4.0-r.2",
+    "@duckdb/node-api": "^2.0.0-r.1",
     "@fastify/compress": "^8.3.1",
     "@fastify/websocket": "^11.3.4",
     "@roonlabs/node-roon-api": "^1.2.3",

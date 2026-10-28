@@ -159,6 +159,9 @@ export function useImportConfig() {
     mutationFn: (bundle) => configApi.importConfig(bundle),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.services });
+      // A bundle can restore profiles and replace rows that failed to load.
+      qc.invalidateQueries({ queryKey: KEYS.loadErrors });
+      qc.invalidateQueries({ queryKey: queryKeys.profiles() });
       qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
       resetSetupStatus(qc);

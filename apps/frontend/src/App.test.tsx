@@ -126,4 +126,12 @@ describe("App routes", () => {
     expect(retry?.(3, { status: 503 })).toBe(false);
     expect(retry?.(0, new Error("network"))).toBe(true);
   });
+
+  it("does not retry mutations", () => {
+    // A retried create after a lost response failed as a duplicate.
+    const config = queryClientConfigRef.config as {
+      defaultOptions?: { mutations?: { retry?: unknown } };
+    };
+    expect(config.defaultOptions?.mutations?.retry).toBe(false);
+  });
 });

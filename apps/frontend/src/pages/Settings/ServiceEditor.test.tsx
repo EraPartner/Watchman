@@ -58,11 +58,19 @@ const KINDS: KindSchema[] = [
   },
 ];
 
-const { pairMock } = vi.hoisted(() => ({ pairMock: vi.fn() }));
+const { pairMock, testMock, kindsState } = vi.hoisted(() => ({
+  pairMock: vi.fn(),
+  testMock: vi.fn(),
+  kindsState: {
+    current: undefined as
+      | { data?: unknown; isLoading: boolean; isError?: boolean; error?: unknown; refetch?: () => void }
+      | undefined,
+  },
+}));
 
 vi.mock("./useConfigQueries", () => ({
-  useKinds: () => ({ data: KINDS, isLoading: false }),
-  useTestService: () => ({ mutateAsync: vi.fn() }),
+  useKinds: () => kindsState.current ?? { data: KINDS, isLoading: false },
+  useTestService: () => ({ mutateAsync: testMock }),
   usePairPhilipsBridge: () => ({ mutateAsync: pairMock, isPending: false }),
 }));
 
@@ -451,6 +459,61 @@ describe("ServiceEditor saved secrets in edit mode", () => {
     });
     const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
     expect(payload.config).not.toHaveProperty("password");
+    await cleanup();
+  });
+});
+
+describe("ServiceEditor load and test feedback", () => {
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    kindsState.current = undefined;
+    testMock.mockReset();
+  });
+
+  afterEach(() => {
+    kindsState.current = undefined;
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    document.body.innerHTML = "";
+  });
+
+  it("shows the load error with a Retry when the schemas fail to load", async () => {
+    const refetch = vi.fn();
+    kindsState.current = {
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Network error"),
+      refetch,
+    };
+    const { container, cleanup } = await render({ presetKind: "ipfs" });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't load service schemas: Network error"
+    );
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "Retry"
+    )!;
+    await act(async () => {
+      retry.click();
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+    await cleanup();
+  });
+
+  it("reports an unreachable service as a failed test, not OK", async () => {
+    testMock.mockResolvedValueOnce({
+      ok: true,
+      latencyMs: 12,
+      snapshot: { reachable: false, message: "ECONNREFUSED", at: 0 },
+    });
+    const { container, cleanup } = await render({ existing: existingService });
+    const btn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "Test connection"
+    )!;
+    await act(async () => {
+      btn.click();
+    });
+    expect(container.textContent).toContain("Failed: ECONNREFUSED");
+    expect(container.textContent).not.toContain("OK (");
     await cleanup();
   });
 });

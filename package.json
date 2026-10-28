@@ -50,6 +50,7 @@
     "deps:ci": "npm run verify:git-dependencies && npm ci --allow-git=all",
     "deps:ci:portable": "npm run verify:git-dependencies && npm ci --allow-git=all --workspace=apps/backend --workspace=apps/frontend --include-workspace-root",
     "verify:git-dependencies": "node scripts/verify-git-dependencies.mjs",
+    "verify:backend-lockfile": "node scripts/verify-backend-lockfile.mjs",
     "hooks:setup": "node scripts/setup-git-hooks.mjs",
     "prepare": "node scripts/setup-git-hooks.mjs"
   },
@@ -62,7 +63,7 @@
     "esbuild": "^0.28.1"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.3",
+    "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.0.2",
     "audit-ci": "^7.1.0",
     "concurrently": "^10.0.3",

@@ -11,6 +11,7 @@ import {
   usePairPhilipsBridge,
   useTestService,
 } from "./useConfigQueries";
+import { readConnectionTest } from "@/lib/connectionTest";
 
 interface ServiceEditorProps {
   existing?: ServiceInstance;
@@ -112,7 +113,13 @@ export default function ServiceEditor({
   onCancel,
   submitting,
 }: ServiceEditorProps) {
-  const { data: kinds, isLoading } = useKinds();
+  const {
+    data: kinds,
+    isLoading,
+    isError: kindsFailed,
+    error: kindsError,
+    refetch: refetchKinds,
+  } = useKinds();
   const testMut = useTestService();
   const pairMut = usePairPhilipsBridge();
   const [pairResult, setPairResult] = useState<string | null>(null);
@@ -171,7 +178,26 @@ export default function ServiceEditor({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (isLoading) return <p>Loading schemas…</p>;
-  if (!kinds) return <p>No schemas available.</p>;
+  if (!kinds) {
+    return (
+      <div role={kindsFailed ? "alert" : undefined} className="space-y-2">
+        <p>
+          {kindsFailed
+            ? `Couldn't load service schemas${kindsError instanceof Error ? `: ${kindsError.message}` : "."}`
+            : "No schemas available."}
+        </p>
+        {kindsFailed && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void refetchKinds()}
+          >
+            Retry
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -234,11 +260,9 @@ export default function ServiceEditor({
     }
     setTestResult("Testing…");
     try {
-      const res = await testMut.mutateAsync(existing.id);
+      const res = readConnectionTest(await testMut.mutateAsync(existing.id));
       setTestResult(
-        res.ok
-          ? `OK (${res.latencyMs}ms)`
-          : `Failed: ${res.error?.message ?? "unknown"}`
+        res.ok ? `OK (${res.latencyMs}ms)` : `Failed: ${res.error}`
       );
     } catch (err) {
       setTestResult(err instanceof Error ? err.message : "Test failed");

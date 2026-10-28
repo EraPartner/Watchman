@@ -2,6 +2,7 @@ import type { ServiceInstance } from "@/services/configApi";
 import { Button } from "@/components/primitives/Button";
 import { useTestService } from "@/pages/Settings/useConfigQueries";
 import { toast } from "sonner";
+import { readConnectionTest } from "@/lib/connectionTest";
 
 export interface ConfigPanelProps {
   service: ServiceInstance | undefined;
@@ -42,7 +43,7 @@ export function ConfigPanel({ service }: ConfigPanelProps) {
 
   const handleTest = async () => {
     try {
-      const result = await test.mutateAsync(service.id);
+      const result = readConnectionTest(await test.mutateAsync(service.id));
       if (result.ok) {
         toast.success(
           `Connection ok${
@@ -52,9 +53,7 @@ export function ConfigPanel({ service }: ConfigPanelProps) {
           }`
         );
       } else {
-        toast.error(
-          `Connection failed${result.error ? `: ${result.error.message}` : ""}`
-        );
+        toast.error(`Connection failed: ${result.error}`);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Test failed");

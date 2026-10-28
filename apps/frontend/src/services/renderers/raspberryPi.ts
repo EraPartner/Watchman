@@ -12,6 +12,19 @@ function fmtThrottled(v: unknown): string {
   return String(v);
 }
 
+// vcgencmd get_throttled: bits 0-3 are the current state, bits 16-19 record
+// that the same condition happened since boot and stay set until reboot.
+const THROTTLED_NOW_MASK = 0xf;
+
+/** Current throttling bits; prefers the backend's split `throttledNow`. */
+export function currentThrottled(stats: Stats | undefined): number | undefined {
+  if (!stats) return undefined;
+  const now = dotGet(stats, "throttledNow");
+  if (typeof now === "number") return now;
+  const raw = dotGet(stats, "throttled");
+  return typeof raw === "number" ? raw & THROTTLED_NOW_MASK : undefined;
+}
+
 export const raspberryPiRenderer: ServiceRenderer<Stats> = {
   kind: "raspberryPi",
   displayName: "Raspberry Pi",
@@ -70,8 +83,10 @@ export const raspberryPiRenderer: ServiceRenderer<Stats> = {
   tone: ({ stats, health }) => {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
-    const throttled = stats ? dotGet(stats, "throttled") : undefined;
-    if (typeof throttled === "number" && throttled !== 0) return "warn";
+    // Only current throttling warns: the since-boot bits stay set after a
+    // single brown-out, which kept the tile amber until the next reboot.
+    const throttled = currentThrottled(stats);
+    if (throttled !== undefined && throttled !== 0) return "warn";
     const temp = stats ? dotGet(stats, "cpuTemp") : undefined;
     if (typeof temp === "number") {
       if (temp >= 80) return "crit";
