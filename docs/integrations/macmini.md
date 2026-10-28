@@ -58,10 +58,20 @@ Configuration lives in the **DuckDB config store** — manage via the Settings U
 | `sshPort`       | number  |          | `22`                                               |        | SSH port.                                                 |
 | `sshKeyPath`    | string  |          | `""`                                               |        | Path to the SSH private key file.                         |
 | `sshPassphrase` | string  |          | `""`                                               | yes    | Passphrase for the SSH private key (stored encrypted).    |
+| `sshHostKey`    | string  |          | `""`                                               |        | Pinned SSH host key fingerprint (`SHA256:…`). Empty: not pinned. |
 | `pingCount`     | number  |          | `1`                                                |        | Number of ICMP pings per health check.                    |
 | `timeoutMs`     | number  |          | `5000`                                             |        | Per-request timeout in milliseconds.                      |
 | `cacheTtlMs`    | number  |          | `10000`                                            |        | How long to serve a cached result before re-polling (ms). |
 | `pollPolicy`    | object  |          | `{healthMs:10000, statsMs:30000, jitterRatio:0.1}` |        | Override polling intervals and jitter for this instance.  |
+
+### SSH host key pinning (optional)
+
+Without a pinned key, Watchman accepts whatever host key the server presents, so a machine that takes over the host's IP address would receive Watchman's login. To pin the key:
+
+1. On the Mac, run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`.
+2. Copy the `SHA256:…` part of the output into **SSH host key fingerprint** (`sshHostKey`).
+
+Watchman then refuses any server whose host key does not match, before it sends any credentials. The service reports `UNAUTHORIZED` with the message `ssh host key mismatch for <host>: expected SHA256:…, server presented SHA256:…`. If the host was reinstalled and the new key is expected, paste the presented fingerprint into the field. Watchman offers ed25519 first, so the ed25519 fingerprint is the one it checks on a standard OpenSSH server.
 
 ## Endpoints
 

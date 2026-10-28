@@ -4,6 +4,7 @@ import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/er
 import { expandHome } from '../../core/expandHome.js';
 import type { SshExecRequest, SshExecResult, SshExecutor } from './sshExecutor.js';
 import { exitResult } from './exitResult.js';
+import { hostKeyMismatch } from './hostKey.js';
 
 export interface SshPool extends SshExecutor {
   /** Close all persistent connections and release resources. */
@@ -24,6 +25,9 @@ interface PoolEntry {
   state: PoolState;
   pending: PendingExec[];
   connectArgs: ConnectArgs;
+  /** Set when the server's host key did not match the pin; reported instead
+   *  of ssh2's generic handshake error. */
+  hostKeyError?: UnauthorizedError;
 }
 
 interface ConnectArgs {
@@ -33,6 +37,7 @@ interface ConnectArgs {
   privateKeyPath: string | undefined;
   passphrase: string | undefined;
   password: string | undefined;
+  hostKey: string | undefined;
   timeoutMs: number;
 }
 
@@ -41,7 +46,11 @@ function entryKey(req: SshExecRequest): PoolKey {
 }
 
 function sameCredentials(args: ConnectArgs, req: SshExecRequest): boolean {
-  return args.password === req.password && args.passphrase === req.passphrase;
+  return (
+    args.password === req.password &&
+    args.passphrase === req.passphrase &&
+    args.hostKey === req.hostKey
+  );
 }
 
 interface ClosableChannel {
@@ -144,7 +153,19 @@ export function createSshPool(): SshPool {
       ...(privateKey ? { privateKey } : {}),
       ...(connectArgs.passphrase ? { passphrase: connectArgs.passphrase } : {}),
       ...(connectArgs.password ? { password: connectArgs.password } : {}),
+      ...(connectArgs.hostKey ? { hostVerifier: (key: Buffer) => verifyHostKey(entry, key) } : {}),
     });
+  }
+
+  /** Runs during the handshake, before any credentials are sent. */
+  function verifyHostKey(entry: PoolEntry, key: Buffer): boolean {
+    const { host, hostKey } = entry.connectArgs;
+    const actual = hostKey ? hostKeyMismatch(key, hostKey) : null;
+    if (actual === null) return true;
+    entry.hostKeyError = new UnauthorizedError(
+      `ssh host key mismatch for ${host}: expected ${hostKey}, server presented ${actual}`,
+    );
+    return false;
   }
 
   function drainPending(entry: PoolEntry, error: Error): void {
@@ -180,6 +201,7 @@ export function createSshPool(): SshPool {
       privateKeyPath: req.privateKeyPath,
       passphrase: req.passphrase,
       password: req.password,
+      hostKey: req.hostKey,
       timeoutMs: req.timeoutMs,
     };
 
@@ -204,14 +226,14 @@ export function createSshPool(): SshPool {
     // ssh2 emits 'error' and then 'close' for one failure; retire() is idempotent
     client.on('error', (err: Error) => {
       const msg = err.message || String(err);
-      const error = /auth|permission|denied/i.test(msg)
+      const error = entry.hostKeyError ?? (/auth|permission|denied/i.test(msg)
         ? new UnauthorizedError(`ssh auth failed: ${msg}`)
-        : new UnavailableError(`ssh connect failed: ${msg}`);
+        : new UnavailableError(`ssh connect failed: ${msg}`));
       retire(key, entry, error);
     });
 
     client.on('close', () => {
-      retire(key, entry, new UnavailableError('ssh connection closed'));
+      retire(key, entry, entry.hostKeyError ?? new UnavailableError('ssh connection closed'));
     });
 
     // Kick off initial connection

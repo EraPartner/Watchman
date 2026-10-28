@@ -18,6 +18,27 @@ const BaseInstanceSchema = z.object({
   timeoutMs: z.number().int().positive().default(5_000),
 });
 
+/** Pinned SSH host-key fingerprint, as `ssh-keygen -lf` prints it
+ *  ("SHA256:" + 43 base64 chars). Empty means not pinned. */
+const SshHostKeySchema = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^(SHA256:)?[A-Za-z0-9+/]{43}=?$/.test(v), {
+    message:
+      'expected a SHA-256 host key fingerprint like "SHA256:…" (ssh-keygen -lf)',
+  })
+  .default("");
+
+/** Pinned SHA-256 fingerprint of a TLS certificate: 64 hex digits, colons
+ *  allowed. Empty means not pinned. */
+const CertSha256Schema = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^[0-9a-f]{64}$/i.test(v.replace(/:/g, "")), {
+    message: "expected a SHA-256 certificate fingerprint (64 hex digits)",
+  })
+  .default("");
+
 export const IpfsInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("ipfs"),
   apiUrl: z.string().url().default("http://127.0.0.1:5001"),
@@ -102,6 +123,7 @@ export const SynologyInstanceSchema = BaseInstanceSchema.extend({
   dsmUrl: z.string().default(""),
   dsmAccount: z.string().default(""),
   dsmPassword: z.string().default(""),
+  dsmCertSha256: CertSha256Schema,
 });
 
 export const MacMiniInstanceSchema = BaseInstanceSchema.extend({
@@ -111,6 +133,7 @@ export const MacMiniInstanceSchema = BaseInstanceSchema.extend({
   sshPort: z.number().int().positive().default(22),
   sshKeyPath: z.string().default(""),
   sshPassphrase: z.string().default(""),
+  sshHostKey: SshHostKeySchema,
   pingCount: z.number().int().positive().default(1),
 });
 
@@ -123,12 +146,14 @@ export const RaspberryPiInstanceSchema = BaseInstanceSchema.extend({
   sshPort: z.number().int().positive().default(22),
   sshKeyPath: z.string().default(""),
   sshPassphrase: z.string().default(""),
+  sshHostKey: SshHostKeySchema,
   // Legacy macMini relay (used when direct SSH not configured)
   macMiniHost: z.string().default(""),
   macMiniSshPort: z.number().int().positive().default(22),
   macMiniSshUser: z.string().default(""),
   macMiniSshKeyPath: z.string().default(""),
   macMiniSshPassphrase: z.string().default(""),
+  macMiniSshHostKey: SshHostKeySchema,
   nodePath: z.string().default("/usr/local/bin/node"),
   rpiCliPath: z.string().default(""),
   pingCount: z.number().int().positive().default(1),

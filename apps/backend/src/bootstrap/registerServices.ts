@@ -1,4 +1,5 @@
 import type { HttpClient } from "../infra/http/client.js";
+import { createPinnedClient } from "../infra/http/pinnedClient.js";
 import type { PingProber } from "../infra/net/pingProbe.js";
 import type { TcpProber } from "../infra/net/tcpProbe.js";
 import type { SshExecutor } from "../infra/ssh/sshExecutor.js";
@@ -32,6 +33,9 @@ export interface ServiceInfra {
   /** TLS-permissive client for instances that opt into `allowSelfSigned`.
    *  Falls back to `http` (strict) when not provided. */
   insecureHttp?: HttpClient;
+  /** Builds a client that trusts only the TLS certificate with this SHA-256
+   *  fingerprint. Defaults to createPinnedClient. */
+  pinnedHttp?: (certSha256: string) => HttpClient;
   ping: PingProber;
   tcp: TcpProber;
   ssh: SshExecutor;
@@ -57,6 +61,7 @@ function buildService(
   const {
     http,
     insecureHttp,
+    pinnedHttp,
     ping,
     tcp,
     ssh,
@@ -111,7 +116,12 @@ function buildService(
       const dsmClient =
         instance.dsmUrl && instance.dsmAccount && instance.dsmPassword
           ? createDsmClient({
-              http,
+              // A pinned fingerprint lets DSM's self-signed HTTPS certificate
+              // through, and only that certificate, so the DSM password is
+              // never sent to anything else.
+              http: instance.dsmCertSha256
+                ? (pinnedHttp ?? createPinnedClient)(instance.dsmCertSha256)
+                : http,
               config: {
                 baseUrl: instance.dsmUrl,
                 account: instance.dsmAccount,

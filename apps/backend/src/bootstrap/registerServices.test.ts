@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createService } from "./registerServices.js";
 import type { ServiceInfra } from "./registerServices.js";
-import type { HomebridgeInstance } from "../config/services.js";
+import type { HomebridgeInstance, SynologyInstance } from "../config/services.js";
 import type { HttpClient } from "../infra/http/client.js";
 import type { PingProber } from "../infra/net/pingProbe.js";
 
@@ -97,6 +97,77 @@ describe("createService — homebridge TLS client selection", () => {
       { ...baseCfg, allowSelfSigned: true },
       infraWith(strict, undefined)
     );
+
+    await svc.checkHealth(new AbortController().signal);
+
+    expect(new Set(calls)).toEqual(new Set(["strict"]));
+  });
+});
+
+describe("createService — synology DSM certificate pin", () => {
+  const synologyCfg: SynologyInstance = {
+    kind: "synology",
+    instanceId: "main",
+    enabled: true,
+    pollPolicy: { healthMs: 10_000, statsMs: 30_000, jitterRatio: 0.1 },
+    cacheTtlMs: 10_000,
+    timeoutMs: 5_000,
+    host: "nas.local",
+    snmpUser: "",
+    snmpAuthKey: "",
+    snmpPrivKey: "",
+    snmpAuthProtocol: "SHA",
+    snmpPrivProtocol: "AES",
+    dsmUrl: "https://nas.local:5001",
+    dsmAccount: "admin",
+    dsmPassword: "pass",
+    dsmCertSha256: "",
+  };
+
+  /** Answers every DSM call (login and SYNO.DSM.Info) with success. */
+  function dsmHttp(tag: string, calls: string[]): HttpClient {
+    return {
+      async send() {
+        calls.push(tag);
+        const body = { success: true, data: { sid: "sid", model: "DS920+" } };
+        return {
+          status: 200,
+          headers: { "content-type": "application/json" },
+          text: async () => JSON.stringify(body),
+          json: async () => body as never,
+        };
+      },
+    };
+  }
+
+  it("sends DSM requests only through a client pinned to the fingerprint", async () => {
+    const calls: string[] = [];
+    const pins: string[] = [];
+    const infra: ServiceInfra = {
+      ...infraWith(dsmHttp("strict", calls), undefined),
+      pinnedHttp: (sha) => {
+        pins.push(sha);
+        return dsmHttp("pinned", calls);
+      },
+    };
+    const svc = createService({ ...synologyCfg, dsmCertSha256: "AB:CD" }, infra);
+
+    await svc.checkHealth(new AbortController().signal);
+
+    expect(pins).toEqual(["AB:CD"]);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(new Set(calls)).toEqual(new Set(["pinned"]));
+  });
+
+  it("uses the strict client when no fingerprint is set", async () => {
+    const calls: string[] = [];
+    const infra: ServiceInfra = {
+      ...infraWith(dsmHttp("strict", calls), undefined),
+      pinnedHttp: () => {
+        throw new Error("no pinned client expected");
+      },
+    };
+    const svc = createService(synologyCfg, infra);
 
     await svc.checkHealth(new AbortController().signal);
 
