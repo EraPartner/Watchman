@@ -37,8 +37,15 @@ export interface PiStatsSnapshot {
   cpuTemp: number | null;
   clockRate: number | null;
   voltage: number | null;
-  /** vcgencmd get_throttled hex value. Non-zero = throttling/undervoltage active. */
+  /**
+   * vcgencmd get_throttled raw value. Bits 0-3 are active now; bits 16-19 are
+   * sticky "has occurred since boot" flags, so non-zero alone is not "active".
+   */
   throttled: number | null;
+  /** Bits 0-3 of throttled: undervoltage/capped/throttled/soft-temp-limit now. */
+  throttledNow: number | null;
+  /** Bits 16-19 of throttled, shifted down: the same conditions since boot. */
+  throttledSinceBoot: number | null;
   load: number | null;
   swap: number | null;
   memory: string | null;
@@ -47,6 +54,8 @@ export interface PiStatsSnapshot {
   isRpi: boolean;
   rpiCliAvailable: boolean;
   rpiCliError?: string;
+  /** Set when pigpiod could not be reached; SSH data may still be present. */
+  pigpioError?: string;
 }
 
 export interface PiStatsDeps {
@@ -92,6 +101,8 @@ export class PiStatsCollector {
       clockRate: null,
       voltage: null,
       throttled: null,
+      throttledNow: null,
+      throttledSinceBoot: null,
       load: null,
       swap: null,
       memory: null,
@@ -101,6 +112,10 @@ export class PiStatsCollector {
       rpiCliAvailable: false,
     };
 
+    // pigpiod is optional when SSH or the relay is configured: it doesn't run
+    // on the Pi 5 family, and SSH supplies everything except hwRevision and
+    // pigpioVersion. Its failure only fails stats when no other source works.
+    let pigpioError: string | null = null;
     let handle;
     try {
       handle = await this.deps.pigpio.connect({
@@ -109,25 +124,27 @@ export class PiStatsCollector {
         timeoutMs: cfg.timeoutMs,
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new UnavailableError(`pigpiod connect failed: ${msg}`);
+      pigpioError = e instanceof Error ? e.message : String(e);
     }
 
-    try {
-      // pigpio's current tick is not an uptime source: it is an unsigned
-      // 32-bit microsecond counter that wraps every ~71.6 minutes. Uptime
-      // comes from /proc/uptime (direct SSH) or the relay's boot time.
-      const [revRes, verRes] = await Promise.allSettled([
-        handle.getHardwareRevision(),
-        handle.getPigpioVersion(),
-      ]);
-      if (revRes.status === "fulfilled") {
-        snapshot.hwRevision = revRes.value;
-        snapshot.piModel = getPiModel(revRes.value);
+    if (handle) {
+      try {
+        // pigpio's current tick is not an uptime source: it is an unsigned
+        // 32-bit microsecond counter that wraps every ~71.6 minutes. Uptime
+        // comes from /proc/uptime (direct SSH) or the relay's boot time.
+        const [revRes, verRes] = await Promise.allSettled([
+          handle.getHardwareRevision(),
+          handle.getPigpioVersion(),
+        ]);
+        if (revRes.status === "fulfilled") {
+          snapshot.hwRevision = revRes.value;
+          snapshot.piModel = getPiModel(revRes.value);
+        }
+        if (verRes.status === "fulfilled")
+          snapshot.pigpioVersion = verRes.value;
+      } finally {
+        await handle.end().catch(() => undefined);
       }
-      if (verRes.status === "fulfilled") snapshot.pigpioVersion = verRes.value;
-    } finally {
-      await handle.end().catch(() => undefined);
     }
 
     // Prefer direct SSH; fall back to Mac Mini relay if direct fails or isn't configured.
@@ -155,6 +172,22 @@ export class PiStatsCollector {
       }
     } else if (directError && !directSucceeded) {
       snapshot.rpiCliError = directError;
+    }
+
+    if (pigpioError !== null) {
+      if (!snapshot.rpiCliAvailable) {
+        throw new UnavailableError(
+          snapshot.rpiCliError
+            ? `pigpiod connect failed: ${pigpioError}; ${snapshot.rpiCliError}`
+            : `pigpiod connect failed: ${pigpioError}`
+        );
+      }
+      snapshot.pigpioError = pigpioError;
+    }
+
+    if (snapshot.throttled !== null) {
+      snapshot.throttledNow = snapshot.throttled & 0xf;
+      snapshot.throttledSinceBoot = (snapshot.throttled >>> 16) & 0xf;
     }
 
     return snapshot;

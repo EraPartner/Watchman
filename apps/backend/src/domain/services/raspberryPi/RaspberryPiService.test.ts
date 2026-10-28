@@ -278,7 +278,7 @@ describe("RaspberryPiService.getStats", () => {
     expect(calls.length).toBe(0);
   });
 
-  it("returns UnavailableError when pigpiod connect fails", async () => {
+  it("returns UnavailableError when pigpiod and the relay both fail", async () => {
     const svc = new RaspberryPiService({
       pigpio: fakePigpio(new Error("no route")),
       ping: fakePing({ success: false }),
@@ -402,7 +402,70 @@ describe("RaspberryPiService.getStats — direct SSH path", () => {
     });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.value.metrics["throttled"]).toBe(0x50005);
+    if (res.ok) {
+      expect(res.value.metrics["throttled"]).toBe(0x50005);
+      expect(res.value.metrics["throttledNow"]).toBe(0x5);
+      expect(res.value.metrics["throttledSinceBoot"]).toBe(0x5);
+    }
+  });
+
+  it("splits a past-only throttle event from an active one", async () => {
+    // 0x50000: undervoltage + throttling occurred since boot, nothing active
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(fakeHandle()),
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh({
+        ...DIRECT_SSH_MAP,
+        get_throttled: { stdout: "throttled=0x50000", stderr: "", code: 0 },
+      }),
+      config: makeDirectConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics["throttledNow"]).toBe(0);
+      expect(res.value.metrics["throttledSinceBoot"]).toBe(0x5);
+    }
+  });
+
+  it("still reports SSH stats when pigpiod is unreachable (e.g. Pi 5)", async () => {
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(new Error("connect ECONNREFUSED")),
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh(DIRECT_SSH_MAP),
+      config: makeDirectConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics["cpuTemp"]).toBe(49.5);
+      expect(res.value.metrics["hwRevision"]).toBeNull();
+      expect(res.value.metrics["pigpioVersion"]).toBeNull();
+      expect(res.value.metrics["pigpioError"]).toContain("ECONNREFUSED");
+    }
+  });
+
+  it("fails stats when pigpiod and SSH both fail", async () => {
+    const svc = new RaspberryPiService({
+      pigpio: fakePigpio(new Error("connect ECONNREFUSED")),
+      ping: fakePing({ success: true }),
+      ssh: {
+        exec: async () => {
+          throw new Error("ssh down");
+        },
+      },
+      config: makeDirectConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error.code).toBe("UNAVAILABLE");
+      expect(res.error.message).toContain("pigpiod connect failed");
+      expect(res.error.message).toContain("ssh down");
+    }
   });
 
   it("direct SSH takes priority over macMini relay when both configured", async () => {
