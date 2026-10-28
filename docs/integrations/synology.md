@@ -2,7 +2,7 @@
 title: Synology Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -36,10 +36,11 @@ aliases: [synology, nas, synology nas, dsm, synology dsm]
 - **Routing**: `SYNO.API.Auth` calls → `/webapi/auth.cgi`; all other API calls → `/webapi/entry.cgi`
 - **Session injection**: Sends `_sid=<sid>` (and all other params, including `passwd` at login) in a POST form body — never in the URL, which proxies/APM tooling routinely log
 - **Auto-login**: Performs login automatically on first call when no `initialSid` configured
-- **Session recovery**: On DSM error codes 105/106/107/119 (permission denied / session timeout / duplicate-login interruption / SID not found):
+- **Session recovery**: On DSM error codes 106/107/119 (session timeout / duplicate-login interruption / SID not found):
   - Re-logs in once
   - Retries the original call
   - Throws `UnavailableError` if retry also fails
+- **Permission denied (105)**: the account lacks privilege for that API. No re-login (a new session can't fix it); throws `UnauthorizedError` asking for an account in the `administrators` group
 - **Other errors**: DSM error codes → `UnavailableError`; missing credentials → `UnauthorizedError`
 - **Concurrency**: Concurrent calls share a single pending login (thundering herd prevention via `pendingLogin: Promise<string> | null` pattern)
 - **Test coverage**: 12 tests covering all branches including concurrent access
@@ -93,6 +94,7 @@ interface DsmClient {
 - `uptime` uses `hrSystemUptime` (`1.3.6.1.2.1.25.1.1.0`, host uptime), falling back to `sysUpTime` (the SNMP agent's own uptime).
 - Disk totals (`diskTotal`, `diskUsed`, `diskFree`, `diskUsagePercent`) come only from the DSM storage API. SNMP has no volume-size scalar (`1.3.6.1.4.1.6574.2.1.1.*` are per-disk type/status/temperature columns), so they are 0 in SNMP-only mode.
 - `networkRxBps`/`networkTxBps` are byte rates derived from counter deltas between polls; omitted on the first poll and when a counter decreases (wrap/reboot).
+- If the `ifDescr` walk or a needed counter walk fails, `networkRx`/`networkTx` and the rates are omitted for that poll and the previous sample stays the rate baseline. A failed HC walk is not replaced by the 32-bit sum, and rates are only computed between two samples of the same counter kind (HC or 32-bit), so a partial walk can't produce a fake traffic spike.
 
 ### DSM API Calls
 
@@ -121,7 +123,7 @@ DSM metrics are enabled when **all three** of the DSM fields are non-empty in th
 Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to NAS host
-- **Service tier** — SNMPv3 get of system name, uptime, model, version and status
+- **Service tier** — SNMPv3 get of system name, uptime, model, version and status. In DSM-only mode (no SNMPv3 credentials, DSM configured) it is a DSM `SYNO.DSM.Info getinfo` call instead
 - **Composite reachability** — `reachable = service.reachable` — daemon-primary: the SNMP/DSM probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
@@ -157,7 +159,7 @@ Service instances are configured via the Settings UI or the `/config` API — no
 | `dsmPassword`      | password | `""`    | —        | **yes** | DSM login password                                                                                                               |
 
 > [!tip] DSM-only mode
-> If `snmpUser`/`snmpAuthKey`/`snmpPrivKey` are left empty, the service falls back to DSM-only stats mode (no SNMP metrics). DSM extended stats are fetched whenever all three of `dsmUrl`, `dsmAccount`, and `dsmPassword` are non-empty.
+> If `snmpUser`/`snmpAuthKey`/`snmpPrivKey` are left empty, the service falls back to DSM-only mode (no SNMP metrics): health probes DSM, and if every DSM call fails, stats return that error instead of zeros. DSM extended stats are fetched whenever all three of `dsmUrl`, `dsmAccount`, and `dsmPassword` are non-empty.
 
 Multi-instance support follows the standard pattern — add additional instances via the Settings UI or `/config` API, each with a distinct `instanceId`. See [[docs/features/multi-instance|Multi-Instance Support]].
 
