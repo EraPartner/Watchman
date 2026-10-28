@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   TooltipProvider,
   Button,
@@ -6,6 +7,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/primitives";
+import { buttonVariants } from "@/components/primitives/Button";
 import { DashboardGrid } from "./DashboardGrid";
 import { TopNav } from "./TopNav";
 import { ServiceTile } from "@/components/tile/ServiceTile";
@@ -13,7 +15,14 @@ import { ServiceDetailSheet } from "@/components/detail/ServiceDetailSheet";
 import { BENTO_LAYOUT } from "@/config/bentoLayout";
 import { getRenderer } from "@/services/renderers";
 import { useServiceInstances } from "@/hooks/useServiceInstances";
-import { useCreateService } from "@/pages/Settings/useConfigQueries";
+import {
+  useAggregatedHealth,
+  staleHealthSince,
+} from "@/hooks/useAggregatedHealth";
+import {
+  useCreateService,
+  useServices,
+} from "@/pages/Settings/useConfigQueries";
 import ServiceEditor from "@/pages/Settings/ServiceEditor";
 import type { ServiceKind } from "@/services/renderers/types";
 
@@ -33,6 +42,14 @@ export default function BentoDashboard() {
   const [editor, setEditor] = useState<EditorState>({ mode: "closed" });
   const { data, isLoading, isError, error, refetch } = useServiceInstances();
   const createMut = useCreateService();
+  // /instances lists only what runs in the active profile; the config list
+  // tells "nothing configured" apart from "nothing active in this profile".
+  const { data: configuredServices } = useServices();
+  const configuredCount = Array.isArray(configuredServices)
+    ? configuredServices.length
+    : 0;
+  const aggHealth = useAggregatedHealth();
+  const staleSince = staleHealthSince(aggHealth);
 
   const configuredKinds = data?.instances ?? {};
   const entries = BENTO_LAYOUT.filter(
@@ -79,6 +96,18 @@ export default function BentoDashboard() {
             </div>
           </header>
 
+          {staleSince !== undefined ? (
+            // The health poll keeps its last result on error, so tiles would
+            // keep showing "online" with no hint the backend went away.
+            <div
+              role="alert"
+              className="mb-s-6 rounded-r-3 border border-[var(--warn)] bg-[var(--warn-soft)] px-s-4 py-s-3 text-fs-body text-[var(--warn)]"
+            >
+              Backend unreachable — showing data from{" "}
+              {new Date(staleSince).toLocaleTimeString()}
+            </div>
+          ) : null}
+
           {isError && !data ? (
             // Without instance data we can't tell "none configured" from
             // "backend unreachable", so don't show the empty state.
@@ -101,6 +130,28 @@ export default function BentoDashboard() {
                 <Button variant="accent" onClick={() => void refetch()}>
                   Retry
                 </Button>
+              </div>
+            </div>
+          ) : !isLoading && entries.length === 0 && configuredCount > 0 ? (
+            <div className="glass-regular relative overflow-hidden rounded-r-3 p-s-12 text-center">
+              <p className="font-mono text-fs-label uppercase tracking-[0.18em] text-[var(--accent)]">
+                quiet observatory
+              </p>
+              <h2 className="mt-s-3 text-fs-h2 font-[600] tracking-[-0.02em] text-[var(--text-hi)]">
+                Nothing active in this profile
+              </h2>
+              <p className="mt-s-2 text-fs-body text-[var(--text-md)]">
+                {configuredCount} service
+                {configuredCount === 1 ? " is" : "s are"} configured, but none
+                is enabled in the active profile.
+              </p>
+              <div className="mt-s-6 flex justify-center">
+                <Link
+                  to="/settings/services"
+                  className={buttonVariants({ variant: "accent" })}
+                >
+                  Open settings
+                </Link>
               </div>
             </div>
           ) : !isLoading && entries.length === 0 ? (

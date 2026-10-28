@@ -18,6 +18,7 @@ import {
   useAggregatedHealth,
   pickHealth,
   pickError,
+  staleHealthSince,
   type AggregatedHealth,
 } from "./useAggregatedHealth";
 import { queryKeys } from "../lib/queryKeys";
@@ -181,5 +182,25 @@ describe("useAggregatedHealth", () => {
     };
     const result = await opts.queryFn();
     expect(result.byKey.has("tor::main")).toBe(true);
+  });
+});
+
+// ─── staleHealthSince ─────────────────────────────────────────────────────────
+
+describe("staleHealthSince", () => {
+  it("returns undefined while the poll is healthy", () => {
+    const agg = { ...makeAgg([]), fetchedAt: 1234 };
+    expect(staleHealthSince({ isError: false, data: agg })).toBeUndefined();
+  });
+
+  it("returns the last fetch time when the poll errors with data held", () => {
+    const agg = { ...makeAgg([makeOkEntry("bitcoin", "main")]), fetchedAt: 1234 };
+    expect(staleHealthSince({ isError: true, data: agg })).toBe(1234);
+  });
+
+  it("returns undefined on error with only the empty placeholder or no data", () => {
+    expect(staleHealthSince({ isError: true, data: undefined })).toBeUndefined();
+    const empty = { ...makeAgg([]), fetchedAt: 0 };
+    expect(staleHealthSince({ isError: true, data: empty })).toBeUndefined();
   });
 });

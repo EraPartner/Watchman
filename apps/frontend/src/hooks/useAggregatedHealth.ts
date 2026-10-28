@@ -92,3 +92,18 @@ export function pickError(
   if (entry && !entry.result.ok) return entry.result.error;
   return undefined;
 }
+
+/**
+ * When the aggregated health poll is failing but React Query still holds an
+ * earlier successful result, return that result's fetch time so the UI can
+ * flag the tiles as stale. Returns undefined while the poll is healthy, and
+ * when there is no real data yet (the empty placeholder has fetchedAt 0).
+ */
+export function staleHealthSince(query: {
+  isError?: boolean;
+  data?: AggregatedHealth;
+}): number | undefined {
+  if (!query.isError) return undefined;
+  const fetchedAt = query.data?.fetchedAt ?? 0;
+  return fetchedAt > 0 ? fetchedAt : undefined;
+}

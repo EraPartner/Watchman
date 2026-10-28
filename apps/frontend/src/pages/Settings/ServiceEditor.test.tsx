@@ -461,6 +461,57 @@ describe("ServiceEditor saved secrets in edit mode", () => {
     expect(payload.config).not.toHaveProperty("password");
     await cleanup();
   });
+
+  function findButton(container: HTMLElement, text: RegExp): HTMLButtonElement | undefined {
+    return Array.from(container.querySelectorAll("button")).find((b) =>
+      text.test(b.textContent ?? ""),
+    );
+  }
+
+  it("shows no keep-placeholder or Clear control when no secret is stored", async () => {
+    // ConfigStore redacts only non-empty secrets, so an unset one arrives as "" or absent.
+    const unset: ServiceInstance = {
+      ...adguard,
+      config: { kind: "adguard", instanceId: "main", enabled: true, baseUrl: "http://10.0.0.2", password: "" },
+    };
+    const { container, cleanup } = await render({ existing: unset });
+    const input = getFieldInput(container, /^Password/);
+    expect(input.placeholder).not.toMatch(/leave blank to keep/i);
+    expect(findButton(container, /^Clear/)).toBeUndefined();
+    await cleanup();
+  });
+
+  it("sends null for a saved secret the operator clears", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({ existing: adguard, onSubmit });
+    await act(async () => {
+      findButton(container, /^Clear Password/)!.click();
+    });
+    expect(getFieldInput(container, /^Password/).placeholder).toMatch(/cleared on save/i);
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).toHaveProperty("password", null);
+    await cleanup();
+  });
+
+  it("keeps the saved secret when a clear is undone", async () => {
+    const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
+    const { container, cleanup } = await render({ existing: adguard, onSubmit });
+    await act(async () => {
+      findButton(container, /^Clear Password/)!.click();
+    });
+    await act(async () => {
+      findButton(container, /^Keep saved Password/)!.click();
+    });
+    await act(async () => {
+      getSubmitButton(container).click();
+    });
+    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    expect(payload.config).not.toHaveProperty("password");
+    await cleanup();
+  });
 });
 
 describe("ServiceEditor load and test feedback", () => {

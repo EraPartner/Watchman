@@ -109,6 +109,8 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
     if (stats && dotGet(stats, "reachable") === false) return "crit";
+    // hub answers but its node is locked or still starting
+    if (stats && dotGet(stats, "running") === false) return "warn";
     return "ok";
   },
 };

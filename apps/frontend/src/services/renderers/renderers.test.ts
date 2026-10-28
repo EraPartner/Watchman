@@ -13,6 +13,7 @@ import { raspberryPiRenderer } from "./raspberryPi";
 import { roonRenderer } from "./roon";
 import { synologyRenderer } from "./synology";
 import { getRenderer, rendererTrackedMetrics } from "./index";
+import { healthStatus } from "@/lib/healthStatus";
 
 // ─── torRenderer ──────────────────────────────────────────────────────────────
 
@@ -193,5 +194,104 @@ describe("raspberryPiRenderer throttling tone", () => {
   it("prefers the backend's throttledNow when present", () => {
     expect(tone({ throttled: 0x50005, throttledNow: 0, cpuTemp: 50 })).toBe("ok");
     expect(tone({ throttled: 0, throttledNow: 4, cpuTemp: 50 })).toBe("warn");
+  });
+});
+
+// ─── regressions ──────────────────────────────────────────────────────────────
+
+describe("bitcoinRenderer sync progress", () => {
+  const sync = (spec: { key: string; format: (v: unknown) => string }[]) =>
+    spec.find((m) => m.key === "verificationProgress")!;
+
+  it("formats Bitcoin Core's 0..1 verificationProgress as a percent", () => {
+    // regression: treated as already-a-percent, so 0.9995 showed "1.00%"
+    expect(sync(bitcoinRenderer.summary).format(0.9995)).toBe("99.95%");
+    const detail = bitcoinRenderer.detail.flatMap((g) => g.metrics);
+    expect(sync(detail).format(0.5)).toBe("50.000%");
+  });
+
+  it("shows the ZMQ rawtx count in the detail sheet", () => {
+    const keys = bitcoinRenderer.detail.flatMap((g) => g.metrics.map((m) => m.key));
+    expect(keys).toContain("zmqTxCount");
+  });
+});
+
+describe("torRenderer ControlPort mode", () => {
+  it("tile hero reads bandwidthCurrent, which ControlPort stats now fill", () => {
+    const hero = torRenderer.summary[0]!;
+    expect(hero.key).toBe("bandwidthCurrent");
+    expect(hero.format(2048)).toBe("2.00 KiB");
+  });
+
+  it("warns when the host answers but the tor daemon does not", () => {
+    // ControlPort health: ICMP up (overall reachable) but no circuit/daemon
+    const status = healthStatus({
+      reachable: true,
+      host: { reachable: true },
+      service: { reachable: false },
+    });
+    expect(torRenderer.tone({ stats: undefined, health: { status } })).toBe("warn");
+  });
+});
+
+describe("albyHubRenderer tone", () => {
+  it("warns when the hub reports its node is not running (locked/starting)", () => {
+    expect(
+      albyHubRenderer.tone({ stats: { running: false }, health: { status: "online" } })
+    ).toBe("warn");
+    expect(
+      albyHubRenderer.tone({ stats: { running: true }, health: { status: "online" } })
+    ).toBe("ok");
+  });
+});
+
+describe("ipfsRenderer quickLink", () => {
+  it("links to the WebUI under the configured apiUrl", () => {
+    // regression: the config only has apiUrl, so no link was ever built
+    expect(
+      ipfsRenderer.quickLink?.({ config: { apiUrl: "http://ipfs.local:5001" } })
+    ).toBe("http://ipfs.local:5001/webui");
+  });
+});
+
+describe("synologyRenderer network", () => {
+  it("shows byte rates, not cumulative counters, in summary and charts", () => {
+    const rx = synologyRenderer.summary.find((m) => m.label === "Net RX")!;
+    expect(rx.key).toBe("networkRxBps");
+    expect(rx.format(2048)).toBe("2.00 KiB/s");
+    expect(synologyRenderer.charts.map((c) => c.metric)).toEqual(
+      expect.arrayContaining(["networkRxBps", "networkTxBps"])
+    );
+    expect(synologyRenderer.charts.map((c) => c.metric)).not.toContain("networkRx");
+    const detailKeys = synologyRenderer.detail.flatMap((g) => g.metrics.map((m) => m.key));
+    expect(detailKeys).toEqual(expect.arrayContaining(["networkRx", "networkTx"]));
+  });
+});
+
+describe("synologyRenderer DSM error", () => {
+  const tone = (stats: Record<string, unknown>, status: "online" | "offline" = "online") =>
+    synologyRenderer.tone({ stats, health: { status } });
+
+  it("shows dsmError in the detail sheet", () => {
+    const metric = synologyRenderer.detail
+      .flatMap((g) => g.metrics)
+      .find((m) => m.key === "dsmError")!;
+    expect(metric).toBeDefined();
+    expect(metric.format("synology dsm login failed")).toBe("synology dsm login failed");
+    expect(metric.format(undefined)).toBe("—");
+  });
+
+  it("warns when the DSM API failed but the NAS is otherwise up", () => {
+    // regression: a rejected DSM password only showed as missing metrics
+    const base = { systemStatus: "Normal", cpuUsage: 10, cpuTemp: 40 };
+    expect(tone(base)).toBe("ok");
+    expect(tone({ ...base, dsmError: "" })).toBe("ok");
+    expect(tone({ ...base, dsmError: null })).toBe("ok");
+    expect(tone({ ...base, dsmError: "synology dsm login failed (code 400)" })).toBe("warn");
+  });
+
+  it("keeps crit ahead of the DSM warning", () => {
+    expect(tone({ systemStatus: "Warning", dsmError: "x" })).toBe("crit");
+    expect(tone({ dsmError: "x" }, "offline")).toBe("crit");
   });
 });

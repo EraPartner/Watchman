@@ -9,6 +9,7 @@ import { useWebSocketContext } from "@/providers/WebSocketProvider";
 import { Button } from "@/components/primitives";
 import { ProfileSwitcher } from "./ProfileSwitcher";
 import { cn } from "@/lib/utils";
+import { healthStatus } from "@/lib/healthStatus";
 
 const NAV_ITEMS: ReadonlyArray<{ to: string; label: string }> = [
   { to: "/", label: "Dashboard" },
@@ -99,15 +100,10 @@ export function TopNav({ onAddService }: TopNavProps) {
         crit += 1;
         continue;
       }
-      const snap = e.result.value;
-      if (snap.reachable) {
-        const hostDown = snap.host && snap.host.reachable === false;
-        const serviceDown = snap.service && snap.service.reachable === false;
-        if (hostDown || serviceDown) warn += 1;
-        else ok += 1;
-      } else {
-        crit += 1;
-      }
+      const status = healthStatus(e.result.value);
+      if (status === "online") ok += 1;
+      else if (status === "warning") warn += 1;
+      else crit += 1;
     }
     return { ok, warn, crit, total: agg.entries.length };
   })();
@@ -185,7 +181,7 @@ export function TopNav({ onAddService }: TopNavProps) {
               ws.isConnected ? "WebSocket connected" : "WebSocket disconnected"
             }
             className={cn(
-              "hidden h-2 w-2 rounded-full md:inline-block",
+              "inline-block h-2 w-2 shrink-0 rounded-full",
               ws.isConnected
                 ? "bg-[var(--ok)] shadow-[0_0_8px_var(--ok)]"
                 : "bg-[var(--text-dim)]"

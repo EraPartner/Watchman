@@ -418,3 +418,70 @@ describe("ServiceTile keyboard and labels", () => {
     await b.cleanup();
   });
 });
+
+describe("ServiceTile warning status", () => {
+  beforeEach(resetState);
+  afterEach(teardownState);
+
+  function warnOnWarningRenderer(seen: Array<string | undefined>) {
+    currentRenderer = {
+      ...defaultRenderer(),
+      tone: ({ health }) => {
+        seen.push(health?.status);
+        if (health?.status === "offline") return "crit";
+        if (health?.status === "warning") return "warn";
+        return "ok";
+      },
+    };
+  }
+
+  it("passes 'warning' to the renderer when reachable but the host tier is down", async () => {
+    const seen: Array<string | undefined> = [];
+    warnOnWarningRenderer(seen);
+    healthData = {
+      reachable: true,
+      host: { reachable: false },
+      service: { reachable: true, latencyMs: 10 },
+    };
+
+    const { container, cleanup } = await render();
+
+    expect(seen).toContain("warning");
+    expect(seen).not.toContain("online");
+    expect(container.textContent).toContain("warning");
+    expect(container.textContent).not.toContain("Unavailable");
+
+    await cleanup();
+  });
+
+  it("passes 'warning' when reachable but the service tier is down", async () => {
+    const seen: Array<string | undefined> = [];
+    warnOnWarningRenderer(seen);
+    healthData = { reachable: true, service: { reachable: false } };
+
+    const { container, cleanup } = await render();
+
+    expect(seen).toContain("warning");
+    expect(container.textContent).toContain("warning");
+
+    await cleanup();
+  });
+
+  it("stays 'online' when reachable and every tier is up", async () => {
+    const seen: Array<string | undefined> = [];
+    warnOnWarningRenderer(seen);
+    healthData = {
+      reachable: true,
+      host: { reachable: true },
+      service: { reachable: true },
+    };
+
+    const { container, cleanup } = await render();
+
+    expect(seen).toContain("online");
+    expect(container.textContent).toContain("online");
+    expect(container.textContent).not.toContain("warning");
+
+    await cleanup();
+  });
+});
