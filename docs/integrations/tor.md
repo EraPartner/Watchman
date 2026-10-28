@@ -2,7 +2,7 @@
 title: Tor Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -46,7 +46,7 @@ Configure via the Settings UI or the `/config` API (DuckDB config store). Enviro
 | `controlPort`     | number  | `9051`                           | no       | no      | TCP port for the Tor control protocol                                  |
 | `controlPassword` | string  | —                                | no       | **yes** | Plaintext ControlPort password; leave empty for cookie auth or no auth |
 | `cookieAuthFile`  | string  | —                                | no       | no      | Path to `control_auth_cookie`; takes precedence over password when set |
-| `pingCount`       | number  | `1`                              | no       | no      | Number of ICMP pings per health check                                  |
+| `pingCount`       | number  | `1`                              | no       | no      | Number of ICMP pings per health check (capped at `timeoutMs` / 1000)   |
 
 ### Shared base fields
 
@@ -66,7 +66,7 @@ Tor integration supports two distinct health-check methodologies via the `useCon
 
 ### Control Port Mode (useControlPort: true)
 
-The **Tor Control Protocol** (RFC 5050) path probes circuit establishment directly:
+The **Tor control protocol** ([control-spec](https://spec.torproject.org/control-spec/)) path probes circuit establishment directly:
 
 - **Host tier** (ICMP): `ping` to the relay host with configurable count and timeout
 - **Service tier** (protocol): TCP connection to ControlPort (default 9051), authentication, and `GETINFO status/circuit-established` check
@@ -91,7 +91,10 @@ The **Tor Control Protocol** (RFC 5050) path probes circuit establishment direct
 2. **Password Auth** (if password is non-empty): Send `AUTHENTICATE "<password>"\r\n` with quotes and escaping.
 3. **No Auth** (if both empty): Send bare `AUTHENTICATE\r\n`.
 
-This hierarchy allows secure deployment where the control auth cookie is stored at a configurable path (default: `/var/lib/tor/control_auth_cookie` when Tor is installed with `--enable-control-socket-is-world-writable=no`).
+Cookie auth needs `CookieAuthentication 1` in `torrc`. The cookie file is `<DataDirectory>/control_auth_cookie` by default (`/var/lib/tor/control_auth_cookie` on most Linux installs); Debian and Ubuntu packages put it at `/run/tor/control.authcookie`. `CookieAuthFile` in `torrc` overrides the path. Two things to check:
+
+- The file must be readable by the user Watchman runs as. Set `CookieAuthFileGroupReadable 1` and add that user to Tor's group (`debian-tor` on Debian/Ubuntu).
+- Watchman reads the cookie from its own filesystem, so cookie auth only works when Watchman runs on the Tor host (or the file is copied to it). For a remote relay, use `HashedControlPassword` and set `controlPassword`.
 
 **Protocol Details** (Phase 0b+, Task B3/B4):
 
@@ -131,6 +134,7 @@ The legacy **Onionoo** HTTP API path queries Tor Project public consensus data:
 - **Relay lookup**: Fetches relay metadata by nickname
 - **Bandwidth and flags**: Reads `observed_bandwidth`, `running`, `hibernating` flags
 - No host-level ICMP tier (reliance on external HTTP service)
+- **Cached for 10 minutes**: health and stats share one lookup per instance, so the public service is queried at most every 10 minutes (Onionoo itself refreshes about hourly). Failed lookups are not cached.
 
 ### Off-LAN Fallback (Automatic)
 
@@ -191,7 +195,8 @@ When `useControlPort=true`, `TorService.onStart()` creates an event subscription
 - Parses `650 BW <bytes read> <bytes written>` async events (positional, one per second)
 - Updates instance fields `bwRead` and `bwWritten` for inclusion in next stats poll
 - If no BW event has arrived for 30 s (subscription failed at start or the socket dropped), stats report `bwRead`/`bwWritten` as `null` and the subscription is reopened in the background
-- Closes gracefully on `TorService.onStop()`
+- Every command reply is awaited for at most `timeoutMs`; a missing reply means the connection is dead, so the socket is dropped
+- Closes on `TorService.onStop()`: sends `SETEVENTS` and `QUIT`, each bounded by `timeoutMs`, then destroys the socket, so a half-open connection can't stall a stop
 
 **Traffic Deltas** (Task B6):
 
@@ -199,11 +204,12 @@ To track network activity, the ControlPort path maintains cumulative traffic rea
 
 - Instance fields `lastTrafficRead` and `lastTrafficWritten` store the previous poll's cumulative byte counts (initialized to -1 as "no baseline" sentinel)
 - On each `getStatsControlPort()` call, reads `traffic/read` and `traffic/written`, computes:
-  - `trafficDeltaRead = traffic/read[current] - traffic/read[previous]` (bytes sent to wire since last poll)
-  - `trafficDeltaWritten = traffic/written[current] - traffic/written[previous]` (bytes received from wire since last poll)
+  - `trafficDeltaRead = traffic/read[current] - traffic/read[previous]` (bytes received since last poll)
+  - `trafficDeltaWritten = traffic/written[current] - traffic/written[previous]` (bytes sent since last poll)
 - First poll returns deltas of 0 because sentinel -1 means no baseline yet
+- If a counter went down (Tor restarted and reset it), that poll's delta is `null` and the new value becomes the baseline
 - State (`lastTrafficRead`, `lastTrafficWritten`) is updated after each successful poll
-- Metrics exposed: `trafficDeltaRead`, `trafficDeltaWritten` (both integers, bytes)
+- Metrics exposed: `trafficDeltaRead`, `trafficDeltaWritten` (integers in bytes, or `null` after a counter reset)
 
 **Onionoo Supplemental Enrichment** (Task B7):
 
