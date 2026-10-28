@@ -220,10 +220,11 @@ export class HomebridgeService extends BaseService {
       return ok({
         at: this.now(),
         metrics: {
-          hostname: info.hostname ?? info.os?.hostname ?? "",
-          platform: info.platform ?? info.os?.platform ?? "",
-          homebridgeVersion: info.homebridgeVersion ?? "",
-          serverVersion: info.serverVersion ?? "",
+          // null like the other missing metrics, so the detail sheet shows "—"
+          hostname: info.hostname ?? info.os?.hostname ?? null,
+          platform: info.platform ?? info.os?.platform ?? null,
+          homebridgeVersion: info.homebridgeVersion ?? null,
+          serverVersion: info.serverVersion ?? null,
           uptime:
             typeof info.uptime === "number"
               ? info.uptime

@@ -641,7 +641,12 @@ describe("Broadcaster error-state reset", () => {
     statsFail();
     health(true);
     statsFail();
-    expect(alerts()).toEqual(["adguard:main: down"]);
+    // the health lane alerts and recovers on its own; stats stays failed
+    expect(alerts()).toEqual([
+      "adguard:main: down",
+      "adguard:main: unreachable",
+      "adguard:main: recovered",
+    ]);
 
     bus.emit("service.stats.updated", {
       id: "adguard:main",
@@ -650,7 +655,12 @@ describe("Broadcaster error-state reset", () => {
       at: 0,
       snapshot: { metrics: {}, at: 0 },
     });
-    expect(alerts()).toEqual(["adguard:main: down", "adguard:main: recovered"]);
+    expect(alerts()).toEqual([
+      "adguard:main: down",
+      "adguard:main: unreachable",
+      "adguard:main: recovered",
+      "adguard:main: recovered",
+    ]);
     bc.stop();
   });
 
@@ -665,6 +675,44 @@ describe("Broadcaster error-state reset", () => {
       snapshot: { reachable: false, at: 0 },
     });
     expect(alerts()).toEqual(["bitcoin:main: down"]);
+    bc.stop();
+  });
+
+  it("alerts once when a probe reports unreachable, and once on recovery", () => {
+    const { bus, bc, alerts } = setup();
+    const health = (reachable: boolean, message?: string) =>
+      bus.emit("service.health.updated", {
+        id: "bitcoin:main",
+        kind: "bitcoin",
+        instanceId: "main",
+        at: 0,
+        snapshot: {
+          reachable,
+          at: 0,
+          ...(message !== undefined ? { message } : {}),
+        },
+      });
+    health(false, "connection refused");
+    health(false, "connection refused");
+    health(true);
+    expect(alerts()).toEqual([
+      "bitcoin:main: connection refused",
+      "bitcoin:main: recovered",
+    ]);
+    bc.stop();
+  });
+
+  it("does not repeat the alert when a failed probe follows an unreachable one", () => {
+    const { bus, bc, fail, alerts } = setup();
+    bus.emit("service.health.updated", {
+      id: "bitcoin:main",
+      kind: "bitcoin",
+      instanceId: "main",
+      at: 0,
+      snapshot: { reachable: false, at: 0 },
+    });
+    fail("main");
+    expect(alerts()).toEqual(["bitcoin:main: unreachable"]);
     bc.stop();
   });
 

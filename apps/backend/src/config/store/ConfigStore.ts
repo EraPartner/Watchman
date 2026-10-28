@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 import { DuckDBBlobValue, type DuckDBConnection } from "@duckdb/node-api";
 import type { DuckDbPool } from "../../infra/db/DuckDbPool.js";
-import { toTs } from "../../infra/db/DuckDbPool.js";
+import { fromTs, toTs } from "../../infra/db/DuckDbPool.js";
 import type { EventBus } from "../../core/eventBus.js";
 import { ValidationError } from "../../core/errors.js";
 import {
@@ -340,14 +340,8 @@ export function createConfigStore(
       ...mergeSecrets(publicPart, secretPart),
     };
     const config = ServiceInstanceSchema.parse(merged);
-    const createdAt =
-      row["created_at"] instanceof Date
-        ? row["created_at"]
-        : new Date(String(row["created_at"]));
-    const updatedAt =
-      row["updated_at"] instanceof Date
-        ? row["updated_at"]
-        : new Date(String(row["updated_at"]));
+    const createdAt = fromTs(row["created_at"]);
+    const updatedAt = fromTs(row["updated_at"]);
     return {
       id: String(row["id"]),
       kind,
@@ -739,7 +733,7 @@ export function createConfigStore(
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
         return rows.map((r) => ({
           id: Number(r["id"]),
-          ts: r["ts"] instanceof Date ? r["ts"] : new Date(String(r["ts"])),
+          ts: fromTs(r["ts"]),
           action: String(r["action"]) as AuditEntry["action"],
           targetKind:
             r["target_kind"] == null ? null : String(r["target_kind"]),
@@ -998,6 +992,12 @@ function mergeSecretsWithExisting(
   const existingConfig = existing.config as unknown as Record<string, unknown>;
   for (const field of secretFields) {
     const incoming = clone[field];
+    // An explicit null clears a saved secret: drop the key so the schema
+    // default applies. Blank, "***" and absent still mean "keep".
+    if (incoming === null) {
+      delete clone[field];
+      continue;
+    }
     if (incoming === undefined || incoming === REDACTED || incoming === "") {
       if (existingConfig[field] !== undefined) {
         clone[field] = existingConfig[field];

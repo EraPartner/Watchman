@@ -223,11 +223,12 @@ describe("SynologyService", () => {
         memoryAvailable: 2048 * 1024 * 1024,
         memoryUsed: (8192 - 2048) * 1024 * 1024,
         memoryUsagePercent: 75,
-        // no SNMP source for volume sizes; only DSM provides them
-        diskTotal: 0,
-        diskUsed: 0,
-        diskFree: 0,
-        diskUsagePercent: 0,
+        // no SNMP source for volume sizes; only DSM provides them, so
+        // without DSM they are "no data", not an empty 0-byte disk
+        diskTotal: null,
+        diskUsed: null,
+        diskFree: null,
+        diskUsagePercent: null,
         // regression: ovs_eth0 HC counters only — not loopback (ifIndex 1),
         // not eth0 (wrapped by ovs_eth0), not docker0
         networkRx: 5123456789,
@@ -668,6 +669,138 @@ describe("SynologyService", () => {
     // previously ok() with cpuUsage 0, memoryUsagePercent 0, diskTotal 0
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("UNAUTHORIZED");
+  });
+
+  it("getStats in DSM-only mode reports null, not 0, for SNMP-only metrics and uses DSM info", async () => {
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => {
+        throw new Error("snmp must not be called in DSM-only mode");
+      }),
+      config: makeConfig(DSM_ONLY),
+      ping: fakePing(),
+      dsm: fakeDsm({
+        "SYNO.Core.System.Utilization/get": {},
+        "SYNO.DSM.Info/getinfo": {
+          model: "DS920+",
+          version: "64570",
+          version_string: "DSM 7.2-64570",
+          temperature: 38,
+        },
+        "SYNO.Core.System.Status/get": {},
+        "SYNO.Storage.CGI.Storage/load_info": {},
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const m = res.value.metrics;
+      // previously cpuTemp 0, uptime 0, memoryTotal 0, systemModel ""
+      expect(m.cpuTemp).toBe(38);
+      expect(m.systemModel).toBe("DS920+");
+      expect(m.systemVersion).toBe("DSM 7.2-64570");
+      expect(m.systemName).toBeNull();
+      expect(m.uptime).toBeNull();
+      expect(m.cpuUsage).toBeNull();
+      expect(m.memoryTotal).toBeNull();
+      expect(m.memoryAvailable).toBeNull();
+      expect(m.memoryUsed).toBeNull();
+      expect(m.memoryUsagePercent).toBeNull();
+      expect(m.diskTotal).toBeNull();
+      expect(m.diskUsagePercent).toBeNull();
+      expect(m.systemStatus).toBe("Unknown");
+      expect(m.dsmError).toBeUndefined();
+    }
+  });
+
+  it("getStats reports null for SNMP varbind errors and falls back to DSM", async () => {
+    // snmpGetterImpl maps a varbind error (noSuchObject etc.) to ""
+    const values = Array.from({ length: 12 }, (_, i) => (i === 5 ? "63" : ""));
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values })),
+      config: makeConfig({
+        dsmUrl: "http://nas:5000",
+        dsmAccount: "admin",
+        dsmPassword: "pass",
+      }),
+      ping: fakePing(),
+      dsm: fakeDsm({
+        "SYNO.Core.System.Utilization/get": {},
+        "SYNO.DSM.Info/getinfo": {
+          model: "DS920+",
+          version: "DSM 7.2",
+          temperature: 41,
+        },
+        "SYNO.Core.System.Status/get": {},
+        "SYNO.Storage.CGI.Storage/load_info": {},
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const m = res.value.metrics;
+      expect(m.cpuUsage).toBe(37);
+      expect(m.cpuTemp).toBe(41);
+      expect(m.systemModel).toBe("DS920+");
+      expect(m.systemVersion).toBe("DSM 7.2");
+      expect(m.uptime).toBeNull();
+      expect(m.memoryTotal).toBeNull();
+      expect(m.memoryUsagePercent).toBeNull();
+      // an unreadable systemStatus is not a "Warning" (critical tile)
+      expect(m.systemStatus).toBe("Unknown");
+    }
+  });
+
+  it("getStats in SNMP+DSM mode surfaces a DSM login failure as dsmError", async () => {
+    const values = Array.from({ length: 12 }, () => "1");
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values })),
+      config: makeConfig({
+        dsmUrl: "http://nas:5000",
+        dsmAccount: "admin",
+        dsmPassword: "wrong",
+      }),
+      ping: fakePing(),
+      dsm: {
+        call: async () => {
+          throw new UnauthorizedError("synology dsm login failed: code 400");
+        },
+      },
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    // SNMP still answers, so stats stay ok; the DSM failure is not silent
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.dsmError).toBe(
+        "synology dsm login failed: code 400"
+      );
+      expect(res.value.metrics.systemStatus).toBe("Normal");
+    }
+  });
+
+  it("getStats omits dsmError when every DSM call succeeds", async () => {
+    const values = Array.from({ length: 12 }, () => "1");
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values })),
+      config: makeConfig({
+        dsmUrl: "http://nas:5000",
+        dsmAccount: "admin",
+        dsmPassword: "pass",
+      }),
+      ping: fakePing(),
+      dsm: fakeDsm({
+        "SYNO.Core.System.Utilization/get": {},
+        "SYNO.DSM.Info/getinfo": {},
+        "SYNO.Core.System.Status/get": {},
+        "SYNO.Storage.CGI.Storage/load_info": {},
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics.dsmError).toBeUndefined();
   });
 
   describe("network rates", () => {

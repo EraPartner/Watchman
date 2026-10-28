@@ -7,6 +7,31 @@ import {
 export const toTs = (d: Date): DuckDBTimestampValue =>
   new DuckDBTimestampValue(BigInt(d.getTime()) * 1000n);
 
+const NAIVE_TS = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
+
+/**
+ * Inverse of toTs for values read back from a TIMESTAMP column. DuckDB
+ * TIMESTAMP is zone-less and toTs stores UTC epoch micros, so read the micros
+ * directly; never `new Date(String(v))`, which parses the naive
+ * "YYYY-MM-DD HH:MM:SS.ffffff" text as host-local time.
+ */
+export function fromTs(v: unknown): Date {
+  if (v instanceof Date) return v;
+  if (
+    v instanceof DuckDBTimestampValue ||
+    (typeof v === "object" &&
+      v !== null &&
+      typeof (v as { micros?: unknown }).micros === "bigint")
+  ) {
+    return new Date(Number((v as { micros: bigint }).micros / 1000n));
+  }
+  if (typeof v === "bigint") return new Date(Number(v / 1000n));
+  const s = String(v);
+  const naive = NAIVE_TS.exec(s);
+  if (naive) return new Date(`${naive[1]}T${naive[2]}Z`);
+  return new Date(s);
+}
+
 export interface DuckDbPoolOptions {
   path: string;
   /** Maximum simultaneously borrowed connections (default 4). */
