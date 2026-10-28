@@ -191,26 +191,18 @@ describe("createDsmClient", () => {
     expect(paths).toContain("/webapi/entry.cgi");
   });
 
-  it("retries with fresh SID on error code 105", async () => {
+  it("does not re-login on error code 105 (permission denied)", async () => {
+    // 105 means the account lacks permission, not an expired session; a
+    // re-login would fail the same way and open a new DSM session every poll
     state.firstCallErrors["SYNO.DSM.Info/get"] = 105;
-    state.loginSid = "fresh-sid-105";
     const client = createDsmClient({
       http: createHttpClient(),
       config: makeConfig({ initialSid: "stale-sid" }),
     });
-    const data = await client.call<{ model: string }>(
-      "SYNO.DSM.Info",
-      1,
-      "get",
-      {},
-      new AbortController().signal
-    );
-    expect(data.model).toBe("DS920+");
-    expect(state.loginCallCount).toBe(1);
-    const entryCalls = state.calls.filter(
-      (c) => c.path === "/webapi/entry.cgi"
-    );
-    expect(entryCalls.at(-1)?.params["_sid"]).toBe("fresh-sid-105");
+    await expect(
+      client.call("SYNO.DSM.Info", 1, "get", {}, new AbortController().signal)
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(state.loginCallCount).toBe(0);
   });
 
   it("retries with fresh SID on error code 106", async () => {
@@ -265,7 +257,7 @@ describe("createDsmClient", () => {
   });
 
   it("throws UnavailableError if retry also fails with auth code", async () => {
-    state.persistentErrors["SYNO.DSM.Info/get"] = 105;
+    state.persistentErrors["SYNO.DSM.Info/get"] = 106;
     const client = createDsmClient({
       http: createHttpClient(),
       config: makeConfig({ initialSid: "stale" }),
