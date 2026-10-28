@@ -11,7 +11,7 @@ aliases: [adguard setup, set up adguard home]
 # Set up AdGuard Home
 
 > [!abstract] What Watchman reads
-> Status, query statistics, filter lists, clients, DHCP leases and protection toggles, all through
+> Status, query statistics, filter lists, clients, DHCP leases and which protections are on, all through
 > `GET /control/*` with HTTP Basic auth. It never changes settings
 > (`apps/backend/src/domain/services/adguard/AdGuardService.ts`). Details:
 > [[docs/integrations/adguard|AdGuard Home integration]].

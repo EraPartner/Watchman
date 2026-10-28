@@ -2,123 +2,77 @@
 title: "Hook: useServiceHealth"
 type: component
 status: active
-date: 2026-04-09
-tags: [hook, frontend, react, health, stats, mutation, query]
-description: React Query hooks for individual service health, stats, mutations, and cache management
-aliases: [use service health, service stats, protection toggle, cache clear]
+date: 2026-10-28
+tags: [hook, frontend, react, health, stats, query]
+description: Read-only React Query hooks for per-service health (from the aggregated endpoint) and per-tile stats
+aliases: [use service health, service stats]
 ---
 
 # Hook: useServiceHealth
 
 > [!abstract] Overview
-> A collection of React Query hooks for fetching individual service health/stats and performing mutations (AdGuard protection toggle, cache clearing).
+> Read-only hooks for one service's health and stats. Health comes from the shared aggregated
+> `/services` query, so many tiles cost one request. Stats are fetched per tile. There are no
+> mutation hooks here: Watchman never changes a monitored service
+> ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]).
 
 ## Exports
 
-### `useServiceHealth(serviceName, options?)`
+### `useServiceHealth(kind, instance?)`
 
-Fetches health status for a single service.
+Picks one service's health from the aggregated query.
 
 ```typescript
-const { data, isLoading, error } = useServiceHealth("adguard");
+const { data, isLoading, error } = useServiceHealth("adguard", "main");
+```
+
+- Backed by `useAggregatedHealth()` (query key `queryKeys.servicesHealth()`).
+- Returns `{ data: HealthSnapshot | undefined, isLoading, error: { code, message } | undefined }`.
+
+### `useServiceStats(kind, instance?, enabled = true, trackedMetrics = [])`
+
+Fetches one service's stats.
+
+```typescript
+const { data, isLoading, error } = useServiceStats("adguard", "main", true, ["totalQueries"]);
 ```
 
 **Query Configuration:**
 
-- Query key: `queryKeys.serviceStatus(serviceName)`
-- `refetchInterval`: 10 seconds
-- `staleTime`: 5 seconds
-- `retry`: 2 with exponential backoff (max 30s)
-
-### `useServiceStats(serviceName, enabled?)`
-
-Fetches detailed statistics for a single service.
-
-```typescript
-const { data, isLoading } = useServiceStats("adguard", true);
-```
-
-**Query Configuration:**
-
-- Query key: `queryKeys.serviceStats(serviceName)`
+- Query key: `queryKeys.serviceStats(kind)`, plus `instance` when given
 - `refetchInterval`: 30 seconds
 - `staleTime`: 15 seconds
 - `retry`: 1
+- Errors are thrown as `StatsApiError` with the parsed API error `code`.
+- Each new snapshot records `trackedMetrics` into the in-memory metric history (sparklines).
 
-### `useAllServicesHealth()`
+### `useAggregatedHealth(refetchInterval = 10000)` / `useAllServicesHealth`
 
-Fetches aggregate health for enabled services.
-
-```typescript
-const { data } = useAllServicesHealth();
-```
-
-**Query Configuration:**
+Re-exported from `useAggregatedHealth.ts`; `useAllServicesHealth` is an alias.
 
 - Query key: `queryKeys.servicesHealth()`
-- `refetchInterval`: 15 seconds
-- `staleTime`: 7.5 seconds
-- `retry`: 2
+- `refetchInterval`: 10 seconds by default, `staleTime` half of it, `retry`: 2
 
-> [!note]
-> Legacy `useServicesHealth.ts` has been removed. This hook now provides the aggregate-health path through `useAllServicesHealth()`.
+### `StatsApiError`
 
-### `useAdGuardProtectionToggle()`
-
-Mutation hook for toggling AdGuard DNS protection.
-
-```typescript
-const toggle = useAdGuardProtectionToggle();
-toggle.mutate({ enabled: true, duration: 3600 });
-```
-
-**Behavior:**
-
-- Calls `POST /api/adguard/protection`
-- Invalidates `queryKeys.serviceStatus("adguard")`, `queryKeys.serviceStats("adguard")`, `queryKeys.adguardFull()`, and `queryKeys.servicesHealth()` on success
-
-### `useClearCache()`
-
-Mutation hook for clearing backend response cache.
-
-```typescript
-const clearCache = useClearCache();
-clearCache.mutate();
-```
-
-**Behavior:**
-
-- Calls `POST /api/cache/clear` with type `"all"`
-- Invalidates ALL React Query caches on success
+`Error` subclass with a `code` field, so tiles can branch on the API error code.
 
 ## Usage Example
 
 ```tsx
-import {
-  useServiceHealth,
-  useServiceStats,
-  useAdGuardProtectionToggle,
-} from "../hooks/useServiceHealth";
+import { useServiceHealth, useServiceStats } from "../hooks/useServiceHealth";
 
-function AdGuardPanel() {
+function AdGuardSummary() {
   const health = useServiceHealth("adguard");
   const stats = useServiceStats("adguard");
-  const toggle = useAdGuardProtectionToggle();
 
-  return (
-    <div>
-      <p>Status: {health.data?.status}</p>
-      <button onClick={() => toggle.mutate({ enabled: false })}>
-        Disable Protection
-      </button>
-    </div>
-  );
+  return <p>{health.data?.reachable ? "up" : "down"} · {String(stats.data?.metrics.totalQueries ?? "—")}</p>;
 }
 ```
 
 ## Dependencies
 
-- `@tanstack/react-query` — `useQuery`, `useMutation`, `useQueryClient`
+- `@tanstack/react-query` — `useQuery`
 - `[[apps/frontend/src/services/ApiClient|apiClient]]`
 - `[[apps/frontend/src/lib/queryKeys.ts]]`
 
@@ -131,4 +85,3 @@ function AdGuardPanel() {
 - [[docs/components/index|Components Index]]
 - [[docs/api/services-health|Services Health API]]
 - [[docs/components/use-services-health|useServicesHealth]]
-- [[docs/api/adguard|AdGuard API]]

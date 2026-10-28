@@ -66,13 +66,8 @@ Then:
    service dot is the one that counts. Services with one check show one dot. Stats fill in on the
    first stats cycle (30 s by default).
 4. Optionally open the service again (**Settings → Services → Edit**) and click **Test connection**
-   to run one health check now. The button only works on a saved, enabled service.
-
-> [!warning] Known issue: Test connection can say OK for a down service
-> For most services the health check reports an unreachable service as a successful check with
-> `reachable: false` (`withHostPing` in `apps/backend/src/domain/health.ts`), and the editor only
-> shows `Failed: …` for a check that errors. So `OK (… ms)` means "the check ran", not "the service
-> is up". Trust the tile's status dot until this is fixed.
+   to run one health check now. It shows `OK (… ms)` when the service answers, or
+   `Failed: <reason>` when it can't be reached. The button only works on a saved, enabled service.
 
 Secret fields (passwords, tokens, keys) are encrypted at rest with the server master key (see
 [[docs/reference/environment-variables|Environment Variables]], `WATCHMAN_MASTER_KEY`) and are never
