@@ -2,7 +2,7 @@
 title: qBittorrent Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -31,8 +31,12 @@ aliases: [qbittorrent, bittorrent, torrent, downloads]
 Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to qBittorrent host
-- **Service tier** — HTTP `/api/v2/app/webapiVersion` probe
+- **Service tier** — HTTP `/api/v2/app/version` probe
 - **Composite reachability** — `reachable = service.reachable` — daemon-primary: the Web UI/API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
+
+## Login
+
+Watchman logs in with `POST /api/v2/auth/login` (the only non-GET call) and reuses the `SID` cookie. Parallel requests share one login. After a rejected login it waits 5 minutes before trying again, because qBittorrent bans the client IP after 5 failed logins by default (`WebUI\MaxAuthenticationFailCount`), and that ban would also lock out your browser on the same machine. Saving new credentials restarts the service, which clears the wait.
 
 ## Configuration
 

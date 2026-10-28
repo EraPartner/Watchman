@@ -71,6 +71,10 @@ interface LogEntry {
 }
 
 const COOKIE_TTL_MS = 60 * 60 * 1000;
+// qBittorrent bans the client IP after WebUI\MaxAuthenticationFailCount (default
+// 5) failed logins. After a rejected login, stop retrying for this long so
+// health and stats polls can't trigger (or keep renewing) that ban.
+const AUTH_FAILURE_BACKOFF_MS = 5 * 60 * 1000;
 const MAX_ACTIVE_TORRENTS = 20;
 // log/main is a cursor (only entries after last_known_id), so keep a rolling
 // window of the newest warnings/errors instead of only the last poll's delta
@@ -120,6 +124,9 @@ export class QBittorrentService extends BaseService {
   private readonly now: () => number;
   private cookie: string | null = null;
   private cookieExpiresAt = 0;
+  private loginInflight: Promise<void> | null = null;
+  private authFailure: { error: UnauthorizedError; until: number } | null =
+    null;
   private rid = 0;
   private lastLogId = -1;
   private recentErrors: string[] = [];
@@ -245,7 +252,22 @@ export class QBittorrentService extends BaseService {
       // derived from the incrementally-synced maindata cache instead of
       // re-fetching the full torrent list every poll.
       const activeTorrents = Object.entries(torrents)
-        .map(([hash, t]) => ({ hash, ...t }))
+        // maindata torrents carry ~50 fields (magnet_uri, save_path, ...);
+        // keep only the documented ones so snapshots stay small and don't
+        // leak paths or magnet links into history and the WebSocket feed
+        .map(([hash, t]) => ({
+          hash,
+          name: t.name,
+          state: t.state,
+          progress: t.progress,
+          dlspeed: t.dlspeed,
+          upspeed: t.upspeed,
+          size: t.size,
+          downloaded: t.downloaded,
+          uploaded: t.uploaded,
+          eta: t.eta,
+          category: t.category,
+        }))
         .filter((t) => (t.dlspeed ?? 0) + (t.upspeed ?? 0) > 0)
         .sort(
           (a, b) =>
@@ -302,6 +324,7 @@ export class QBittorrentService extends BaseService {
     await this.ensureAuth(signal);
     let res = await this.request(path, signal);
     if (res.status === 403) {
+      await res.text().catch(() => "");
       this.cookie = null;
       await this.ensureAuth(signal);
       res = await this.request(path, signal);
@@ -326,6 +349,33 @@ export class QBittorrentService extends BaseService {
 
   private async ensureAuth(signal: AbortSignal): Promise<void> {
     if (this.cookie && this.now() < this.cookieExpiresAt) return;
+    if (this.authFailure && this.now() < this.authFailure.until) {
+      throw this.authFailure.error;
+    }
+    // getStats fans out several requests in parallel; share one login so a
+    // cold start or expired session costs one attempt, not one per request.
+    this.loginInflight ??= this.login(signal).finally(() => {
+      this.loginInflight = null;
+    });
+    return this.loginInflight;
+  }
+
+  private async login(signal: AbortSignal): Promise<void> {
+    try {
+      await this.loginOnce(signal);
+      this.authFailure = null;
+    } catch (e) {
+      if (e instanceof UnauthorizedError) {
+        this.authFailure = {
+          error: e,
+          until: this.now() + AUTH_FAILURE_BACKOFF_MS,
+        };
+      }
+      throw e;
+    }
+  }
+
+  private async loginOnce(signal: AbortSignal): Promise<void> {
     const form = new URLSearchParams({
       username: this.username,
       password: this.password,
@@ -338,13 +388,21 @@ export class QBittorrentService extends BaseService {
       signal,
       timeoutMs: this.timeoutMs,
     });
+    const body = await res.text().catch(() => "");
     if (res.status < 200 || res.status >= 300) {
+      // 403 here means qBittorrent has banned this IP for failed logins
       throw new UnauthorizedError(`qbittorrent auth returned ${res.status}`);
     }
     const setCookie = res.headers["set-cookie"];
     const cookieStr = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-    if (!cookieStr)
-      throw new UnauthorizedError("qbittorrent login missing set-cookie");
+    if (!cookieStr) {
+      // wrong credentials: 200 with body "Fails." and no cookie
+      throw new UnauthorizedError(
+        body.trim() === "Fails."
+          ? "qbittorrent rejected the username or password"
+          : "qbittorrent login missing set-cookie"
+      );
+    }
     const first = cookieStr.split(";")[0];
     if (!first)
       throw new UnauthorizedError("qbittorrent login cookie malformed");

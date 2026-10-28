@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createBackgroundPoller } from './poller.js';
+import { createBackgroundPoller, pollBudgetMs } from './poller.js';
 import { createFakeClock } from '../../core/clock.js';
 import { createEventBus } from '../../core/eventBus.js';
 import { BaseService, type HealthResult, type StatsResult, type PollPolicy } from '../../domain/BaseService.js';
@@ -152,5 +152,38 @@ describe('BackgroundPoller', () => {
 
     expect(seen).toEqual([true]);
     await poller.stop();
+  });
+
+  it('uses the per-service budget passed to track() for the probe timeout', async () => {
+    const clock = createFakeClock();
+    const bus = createEventBus();
+    let reason: unknown;
+    const svc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, () =>
+      new Promise<HealthResult>((resolve) => {
+        const sig = svc.lastHealthSignal!;
+        sig.addEventListener('abort', () => {
+          reason = sig.reason;
+          resolve(ok({ reachable: false, at: 0 }));
+        });
+      }),
+    );
+    const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
+    poller.track(svc, 30);
+    clock.advance(110);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(String((reason as Error | undefined)?.message)).toContain('aborted after 30ms');
+    await poller.stop();
+  });
+});
+
+describe('pollBudgetMs', () => {
+  it('allows two instance timeouts, never less than the default', () => {
+    expect(pollBudgetMs(5_000)).toBe(10_000);
+    expect(pollBudgetMs(2_000)).toBe(10_000);
+    expect(pollBudgetMs(20_000)).toBe(40_000);
+  });
+
+  it('falls back to the default for a missing timeout', () => {
+    expect(pollBudgetMs(undefined as unknown as number)).toBe(10_000);
   });
 });

@@ -2,7 +2,7 @@
 title: Raspberry Pi Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -30,15 +30,15 @@ aliases: [raspberry pi, rpi, pi device]
 # Raspberry Pi Integration
 
 > [!abstract] Overview
-> Monitors a Raspberry Pi device with two-tier health model (ICMP ping host + service tier), direct SSH via persistent connection pool ([[docs/architecture/backend-architecture#ssh-connection-pool|SshPool]]), and detailed system metrics from vcgencmd and /proc. Includes throttling/undervoltage detection. Legacy Mac Mini relay supported as fallback when direct SSH not configured.
+> Monitors a Raspberry Pi device with two-tier health model (ICMP ping host + service tier), direct SSH via persistent connection pool ([[docs/architecture/backend-architecture#ssh-connection-pool|SshPool]]), and detailed system metrics from vcgencmd and /proc. Includes throttling/undervoltage detection. Legacy Mac Mini relay supported as fallback when direct SSH is not configured or fails. pigpiod is optional when SSH or the relay is set up (it does not run on the Pi 5 family).
 
 ## Health Model (Phase 0a)
 
-Two-tier health with inline parallel probe:
+Two-tier health, probed in parallel:
 
-- **Host tier** — ICMP ping to Pi host
-- **Service tier** — SSH uptime + pigpio reachability probe
-- **Composite reachability** — `host.reachable` (device is up if ping succeeds)
+- **Host tier** — ICMP ping to the Pi host
+- **Service tier** — pigpiod round-trip (`getCurrentTick()` on the shared connection, bounded by `timeoutMs`)
+- **Composite reachability** — `host.reachable || service.reachable`: the Pi is up if either ping or pigpiod answers. A pigpiod failure while ping works shows as a warning.
 
 ## Direct SSH Configuration (Preferred, PI1)
 
@@ -55,7 +55,7 @@ Configure direct SSH to the Pi for full system metrics (vcgencmd, /proc). Set th
 | `pingCount`     | number   | `1`     |          |         | ICMP ping probes per health check                |
 | `timeoutMs`     | number   | `5000`  |          |         | Request timeout (ms)                             |
 
-**Preferred path** — when `sshUser` and `sshKeyPath` are set, direct SSH is used. The backend runs 9 SSH commands concurrently on the Pi:
+**Preferred path** — when `sshUser` and `sshKeyPath` are set, direct SSH is used. Each stats poll runs these commands as **one compound SSH exec** on the Pi (each in its own subshell, so one failing command only blanks its own field):
 
 - `vcgencmd measure_temp` — CPU temperature (°C)
 - `vcgencmd measure_clock arm` — ARM clock rate (MHz after conversion)
@@ -69,16 +69,22 @@ Uptime comes from `/proc/uptime` (direct SSH) or the relay's `state.boot` time. 
 - `cat /proc/cpuinfo` — CPU model and hardware info
 - `cat /etc/os-release` — OS release info
 
-All commands execute in parallel with `Promise.allSettled`. If all fail, the first error is re-thrown (total SSH failure). Partial failures are acceptable (e.g., single command timeout).
+`/proc/cpuinfo` and `/etc/os-release` are read on the first successful poll only and then cached. If the exec produces no output at all, direct SSH counts as failed and the relay (if configured) is tried.
+
+### pigpiod is optional
+
+pigpiod supplies only `hwRevision`/`piModel` and `pigpioVersion`. When it can't be reached but direct SSH or the relay works, stats still succeed with those fields `null` and the reason in `pigpioError`. Stats fail only when pigpiod **and** every SSH path fail. pigpiod does not support the Pi 5 / CM5 / Pi 500, so on those boards use SSH.
 
 ### Throttling Detection
 
-The `throttled` field (from `vcgencmd get_throttled`) is a decimal value where:
+The `throttled` field is the raw `vcgencmd get_throttled` value as a decimal number. Bits 0-3 mean the condition is active **now** (under-voltage, ARM frequency capped, throttled, soft temperature limit). Bits 16-19 are sticky flags meaning the same conditions **have occurred since boot**; they stay set until the next reboot. So a non-zero `throttled` does not by itself mean throttling is active.
 
-- **0** = No throttling or undervoltage
-- **Non-zero** = Throttling or undervoltage event active
+Two derived fields split them:
 
-Bit flags indicate: under-voltage, ARM frequency capped, currently throttled, etc. See [[#metrics|Metrics]] for API representation.
+- `throttledNow` = `throttled & 0xF` (non-zero = active now)
+- `throttledSinceBoot` = `(throttled >> 16) & 0xF` (non-zero = happened earlier since boot)
+
+Both are `null` when `throttled` is unknown (relay path or no SSH).
 
 ## Legacy Mac Mini Relay (Fallback, Backward Compatible)
 
@@ -94,7 +100,7 @@ If `sshUser` and `sshKeyPath` are **not** set, the backend uses a Mac Mini relay
 | `nodePath`             | text     | `/usr/local/bin/node` |          |         | Path to Node.js binary on the Mac Mini       |
 | `rpiCliPath`           | text     | —                     |          |         | Path to the `rpi-cli` script on the Mac Mini |
 
-**Used only when direct SSH not configured.** The Mac Mini runs a Node.js CLI (`rpi-cli`) to fetch Pi stats remotely. Less direct, subject to Mac sleep and relay availability.
+**Used when direct SSH is not configured, or when it is configured but fails.** The Mac Mini runs a Node.js CLI (`rpi-cli`) to fetch Pi stats remotely. Less direct, subject to Mac sleep and relay availability.
 
 ## Metrics
 
@@ -104,17 +110,19 @@ When direct SSH is used (PI1):
 
 ```json
 {
-  "piModel": "Raspberry Pi 4 Model B",
+  "piModel": "Pi 4B",
   "hwRevision": 3355443,
   "cpuTemp": 45.1,
   "clockRate": 1500,
   "voltage": 1.2,
   "throttled": 0,
+  "throttledNow": 0,
+  "throttledSinceBoot": 0,
   "load": 0.5,
   "memory": "3.8 GB",
   "uptime": 86400,
   "prettyName": "Debian GNU/Linux 12 (bookworm)",
-  "processor": "ARMv7 Processor rev 4 (v7l)",
+  "processor": "BCM2835",
   "isRpi": true,
   "rpiCliAvailable": true,
   "pigpioVersion": 79
@@ -128,7 +136,9 @@ When direct SSH is used (PI1):
 | `cpuTemp`         | number  | CPU temperature (°C)                                                |
 | `clockRate`       | number  | ARM clock speed (MHz)                                               |
 | `voltage`         | number  | Core voltage (V)                                                    |
-| **`throttled`**   | number  | Throttling status (0 = healthy, non-zero = throttling/undervoltage) |
+| **`throttled`**   | number  | Raw `get_throttled` value (see [[#throttling-detection|Throttling Detection]]) |
+| `throttledNow`    | number  | Bits 0-3: conditions active now (0 = none)                          |
+| `throttledSinceBoot` | number | Bits 16-19 shifted down: conditions seen since boot              |
 | `load`            | number  | 1-minute load average                                               |
 | `memory`          | string  | Total memory formatted (e.g., "3.8 GB")                             |
 | `uptime`          | number  | Uptime in seconds                                                   |
@@ -137,6 +147,7 @@ When direct SSH is used (PI1):
 | `isRpi`           | boolean | True if running on Raspberry Pi                                     |
 | `rpiCliAvailable` | boolean | True if stats fetched (direct SSH or relay succeeded)               |
 | `pigpioVersion`   | number  | pigpio daemon version (if available)                                |
+| `pigpioError`     | string  | Present when pigpiod was unreachable but SSH data was collected     |
 
 ## Endpoints
 
@@ -154,16 +165,16 @@ exposes only reads (`read`, `getHardwareRevision`, `getPigpioVersion`, `getCurre
 
 ## Shared pigpiod Connection
 
-Health checks and stats collection share one persistent pigpiod TCP connection per instance ([[apps/backend/src/infra/gpio/sharedPigpioClient.ts|sharedPigpioClient]]) instead of opening/tearing down two connections per poll cycle. Liveness is verified with a `getCurrentTick()` round-trip; a failed command invalidates the connection (next call reconnects), and the connection is closed on service teardown (`onStop`).
+Health checks and stats collection share one persistent pigpiod TCP connection per instance ([[apps/backend/src/infra/gpio/sharedPigpioClient.ts|sharedPigpioClient]]) instead of opening/tearing down two connections per poll cycle. Liveness is verified with a `getCurrentTick()` round-trip. Every command is bounded by `timeoutMs` (pigpiod that loses power never answers), and a failed or timed-out command invalidates the connection so the next call reconnects. The connection is closed on service teardown (`onStop`), including one that finishes connecting after teardown. A failed connect attempt is closed instead of being left to retry in the background.
 
 ## SSH Connection Pool (I4)
 
 Direct SSH uses a persistent [[docs/architecture/backend-architecture#ssh-connection-pool|SshPool]] for connection reuse across requests:
 
 - One persistent `ssh2.Client` per `host:port:user:keyPath` tuple
-- Automatic reconnect on disconnect (2-second delay)
-- Pending requests queued during reconnection
-- No reconnect on auth errors (bad key path is a config error)
+- No background reconnect: a dropped or failed connection is forgotten, and the next exec opens a new one
+- Execs queued while the connection is opening, each bounded by its own timeout and abort signal
+- An exec that times out or is aborted has its channel closed, so a hung remote command can't use up sshd's `MaxSessions`
 - `destroy()` called on backend shutdown
 
 See [[docs/architecture/backend-architecture#ssh-connection-pool|Backend Architecture — SSH Connection Pool]] for implementation details.

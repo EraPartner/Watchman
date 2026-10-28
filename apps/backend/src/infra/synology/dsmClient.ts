@@ -51,10 +51,14 @@ async function readEnvelope<T>(
   }
 }
 
-/** DSM error codes that indicate the session has expired and re-login is needed.
- *  119 ("SID not found") is what DSM returns for a sid it no longer knows,
+/** DSM error codes that indicate the session has expired and re-login is needed:
+ *  106 session timeout, 107 session interrupted by a duplicate login, and
+ *  119 ("SID not found"), which DSM returns for a sid it no longer knows,
  *  e.g. after a NAS reboot. */
-const AUTH_RETRY_CODES = new Set([105, 106, 107, 119]);
+const AUTH_RETRY_CODES = new Set([106, 107, 119]);
+/** 105: the logged-in account lacks permission for this API. Logging in
+ *  again cannot fix that, and doing it every poll piles up DSM sessions. */
+const PERMISSION_DENIED_CODE = 105;
 
 /**
  * Minimal Synology DSM HTTP client.
@@ -62,7 +66,8 @@ const AUTH_RETRY_CODES = new Set([105, 106, 107, 119]);
  * - Routes `SYNO.API.Auth` → `/webapi/auth.cgi`; all other APIs → `/webapi/entry.cgi`
  * - Sends all parameters (including credentials and `_sid`) in a POST form
  *   body — never in the URL, which proxies/APM tooling routinely log
- * - On auth error codes 105/106/107: re-logs in once, retries the original call
+ * - On session error codes 106/107/119: re-logs in once, retries the original call
+ * - Code 105 (insufficient privilege) is an UnauthorizedError, with no re-login
  * - Concurrent calls share a single pending login — no thundering herd
  */
 export function createDsmClient(deps: DsmClientDeps): DsmClient {
@@ -151,31 +156,30 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       params: Record<string, string> = {},
       signal?: AbortSignal
     ): Promise<T> {
-      if (!currentSid) {
-        await doLogin(signal);
-      }
+      const sid = currentSid ?? (await doLogin(signal));
 
-      const env = await callOnce<T>(
-        api,
-        version,
-        method,
-        params,
-        currentSid!,
-        signal
-      );
+      const env = await callOnce<T>(api, version, method, params, sid, signal);
       if (env.success) return env.data as T;
 
       const code = env.error?.code ?? 0;
 
+      if (code === PERMISSION_DENIED_CODE) {
+        throw new UnauthorizedError(
+          `synology dsm account lacks permission for ${api}.${method} (code 105); use an account in the administrators group`
+        );
+      }
+
       if (AUTH_RETRY_CODES.has(code)) {
-        currentSid = undefined;
-        await doLogin(signal);
+        // only drop the sid this call used; a concurrent call may already
+        // have replaced it with a fresh one
+        if (currentSid === sid) currentSid = undefined;
+        const freshSid = currentSid ?? (await doLogin(signal));
         const retried = await callOnce<T>(
           api,
           version,
           method,
           params,
-          currentSid!,
+          freshSid,
           signal
         );
         if (retried.success) return retried.data as T;

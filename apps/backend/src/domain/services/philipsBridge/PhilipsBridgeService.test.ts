@@ -233,6 +233,39 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
     }
   });
 
+  it("health probes the small bridge resource, reads its body and times the API call", async () => {
+    let t = 0;
+    let bodyRead = false;
+    const http: HttpClient = {
+      send: vi.fn(async (_req: HttpRequest) => {
+        t += 40;
+        return {
+          status: 200,
+          headers: {},
+          text: async () => {
+            bodyRead = true;
+            return "{}";
+          },
+          json: async <T>() => {
+            bodyRead = true;
+            return {} as T;
+          },
+        };
+      }),
+    };
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: false }),
+      http,
+      config: hueConfig({ usePing: false }),
+      now: () => t,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    const url = vi.mocked(http.send).mock.calls[0]![0].url;
+    expect(url).toContain("/clip/v2/resource/bridge");
+    expect(bodyRead).toBe(true);
+    expect(res.ok && res.value.latencyMs).toBe(40);
+  });
+
   it("service unreachable when API call throws", async () => {
     const http: HttpClient = {
       send: vi.fn(async () => {

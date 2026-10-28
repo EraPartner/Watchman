@@ -18,6 +18,10 @@ import { withTimeout } from "../core/abort.js";
 
 // Same as the poller's default probe timeout.
 const DEFAULT_STATS_TIMEOUT_MS = 10_000;
+// A read that finds no polled health yet probes live. Keep it under the
+// frontend's 10 s request timeout so one unreachable host can't fail
+// GET /services for every other service.
+const LIVE_HEALTH_TIMEOUT_MS = 5_000;
 
 export interface SnapshotCacheDeps {
   bus: EventBus;
@@ -39,6 +43,7 @@ export class SnapshotCache {
   private readonly health = new Map<string, HealthResult>();
   private readonly statsCaches = new Map<string, SwrCache<StatsSnapshot>>();
   private readonly statsTimeouts = new Map<string, number>();
+  private readonly instances = new Map<string, BaseService>();
   private unsubs: Array<() => void> = [];
 
   constructor(private readonly deps: SnapshotCacheDeps) {}
@@ -76,6 +81,7 @@ export class SnapshotCache {
     );
     this.statsCaches.set(svc.id, cache);
     this.statsTimeouts.set(svc.id, timeoutMs);
+    this.instances.set(svc.id, svc);
     this.deps.metrics?.registerCache(`${svc.id}:stats`, {
       snapshot: () => {
         const s = cache.stats();
@@ -87,6 +93,7 @@ export class SnapshotCache {
   unregister(svcId: string): void {
     this.statsCaches.delete(svcId);
     this.statsTimeouts.delete(svcId);
+    this.instances.delete(svcId);
     this.health.delete(svcId);
     this.deps.metrics?.removeCache(`${svcId}:stats`);
   }
@@ -97,6 +104,28 @@ export class SnapshotCache {
 
   setHealth(svcId: string, result: HealthResult): void {
     this.health.set(svcId, result);
+  }
+
+  /**
+   * Health for a read: the polled result, or a bounded live probe before the
+   * first poll. The live result is cached only if it is still the newest
+   * thing known about this exact instance: not cut short (by the caller or
+   * the time limit), the
+   * instance not replaced or removed meanwhile, and no poll published first.
+   */
+  async readHealth(svc: BaseService, signal: AbortSignal): Promise<HealthResult> {
+    const cached = this.health.get(svc.id);
+    if (cached) return cached;
+    const probeSignal = withTimeout(LIVE_HEALTH_TIMEOUT_MS, signal);
+    const live = await svc.checkHealth(probeSignal);
+    if (
+      !probeSignal.aborted &&
+      this.instances.get(svc.id) === svc &&
+      !this.health.has(svc.id)
+    ) {
+      this.health.set(svc.id, live);
+    }
+    return live;
   }
 
   async stats(svc: BaseService, signal: AbortSignal): Promise<StatsResult> {

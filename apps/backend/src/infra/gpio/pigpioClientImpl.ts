@@ -60,7 +60,32 @@ export function createPigpioClient(): PigpioClient {
       const pi = (pigpio as { pigpio: (o: { host: string; port: number; timeout: number }) => RawPi })
         .pigpio({ host: req.host, port: req.port, timeout: Math.max(1, Math.ceil(req.timeoutMs / 60000)) });
 
-      await waitConnected(pi, req.timeoutMs);
+      try {
+        await waitConnected(pi, req.timeoutMs);
+      } catch (e) {
+        // pigpio-client keeps retrying in the background for `timeout`
+        // minutes; without end() each failed poll would leave a client that
+        // may later connect and stay open.
+        try {
+          pi.end();
+        } catch {
+          // already torn down
+        }
+        throw e;
+      }
+
+      // waitConnected's error listener is gone now. Keep one for the life of
+      // the connection so a later socket error can't surface as an unhandled
+      // 'error' event; mark the handle dead so the next command fails and the
+      // shared client reconnects.
+      let deadReason: string | null = null;
+      pi.on('error', (...args: unknown[]) => {
+        const err = args[0];
+        deadReason = err instanceof Error ? err.message : String(err);
+      });
+      const assertAlive = (): void => {
+        if (deadReason !== null) throw new UnavailableError(`pigpio connection lost: ${deadReason}`);
+      };
 
       const gpioCache = new Map<number, RawGpio>();
       const getGpio = (n: number): RawGpio => {
@@ -80,15 +105,19 @@ export function createPigpioClient(): PigpioClient {
 
       return {
         async read(gpio) {
+          assertAlive();
           return await promisify0<number>((cb) => getGpio(gpio).read(cb));
         },
         async getHardwareRevision() {
+          assertAlive();
           return toNum(pi.getInfo().hwVersion);
         },
         async getPigpioVersion() {
+          assertAlive();
           return toNum(pi.getInfo().pigpioVersion);
         },
         async getCurrentTick() {
+          assertAlive();
           return await promisify0<number>((cb) => pi.getCurrentTick(cb));
         },
         async end() {

@@ -2,7 +2,7 @@
 title: "API: Services Health"
 type: api
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     api,
@@ -323,7 +323,7 @@ All frames are JSON. A `timestamp` (ISO-8601) is always included.
 }
 ```
 
-Recovery alert uses `level: "info"` and `message: "{id}: recovered"`.
+Recovery alert uses `level: "info"` and `message: "{id}: recovered"`. Health and stats errors are tracked separately, so a recovery is announced only when the lane that failed succeeds again; a health snapshot with `reachable: false` does not count.
 
 | `level`     | When                                            |
 | ----------- | ----------------------------------------------- |

@@ -1,4 +1,6 @@
 import { createRequire } from "module";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import type {
   RoonConnectFn,
   RoonConnectOptions,
@@ -27,6 +29,9 @@ export interface RoonApiOptions {
   log_level?: string;
   core_paired?: (core: RoonCore) => void;
   core_unpaired?: (core: RoonCore) => void;
+  /** Without these, node-roon-api reads and writes ./config.json in the cwd. */
+  get_persisted_state?: () => unknown;
+  set_persisted_state?: (state: unknown) => void;
 }
 
 export interface RoonCore {
@@ -140,8 +145,61 @@ function applyZoneUpdate(
 
 // ─── Public implementation ────────────────────────────────────────────────────
 
+/**
+ * Where the pairing state (the Core's token for this extension) is kept.
+ * Keyed per Core address so two Roon instances don't overwrite each other.
+ */
+export interface RoonStateStore {
+  get(key: string): unknown;
+  set(key: string, value: unknown): void;
+}
+
+/**
+ * JSON file store for Roon pairing state, written with mode 0600. Without it
+ * node-roon-api writes the token to ./config.json in the process cwd: an
+ * untracked secret in a dev checkout, or silently lost on a read-only cwd so
+ * every restart asks the user to enable the extension again.
+ *
+ * A key with no entry falls back (read-only) to the "roonstate" that older
+ * versions left in `legacyPath`, so existing pairings keep working.
+ */
+export function createFileRoonStateStore(
+  path: string,
+  legacyPath = resolve(process.cwd(), "config.json")
+): RoonStateStore {
+  const readJson = (file: string): Record<string, unknown> => {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+      return parsed && typeof parsed === "object"
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  };
+  return {
+    get(key) {
+      const value = readJson(path)[key];
+      if (value !== undefined) return value;
+      return readJson(legacyPath)["roonstate"];
+    },
+    set(key, value) {
+      const all = readJson(path);
+      all[key] = value;
+      try {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, JSON.stringify(all, null, 2), { mode: 0o600 });
+      } catch {
+        // same as node-roon-api: losing the token only means re-pairing
+      }
+    },
+  };
+}
+
 export interface RoonConnectDeps {
   RoonApi: RoonApiConstructor;
+  /** Pairing-state store; see createFileRoonStateStore. */
+  stateStore?: RoonStateStore;
   /** First reconnect delay after the Core connection drops (doubles up to maxReconnectDelayMs). */
   reconnectDelayMs?: number;
   maxReconnectDelayMs?: number;
@@ -182,6 +240,8 @@ export function createRoonConnect(deps: RoonConnectDeps): RoonConnectFn {
       subscription = undefined;
     };
 
+    const stateStore = deps.stateStore;
+    const stateKey = `${opts.host}:${opts.port}`;
     const roon = new deps.RoonApi({
       extension_id: opts.extensionId,
       display_name: opts.displayName,
@@ -189,6 +249,13 @@ export function createRoonConnect(deps: RoonConnectDeps): RoonConnectFn {
       publisher: "Watchman",
       email: "watchman@localhost",
       log_level: "none",
+      ...(stateStore
+        ? {
+            get_persisted_state: () => stateStore.get(stateKey) ?? {},
+            set_persisted_state: (state: unknown) =>
+              stateStore.set(stateKey, state),
+          }
+        : {}),
 
       core_paired(core: RoonCore): void {
         paired = true;
@@ -276,4 +343,10 @@ export function createRoonConnect(deps: RoonConnectDeps): RoonConnectFn {
   };
 }
 
-export const roonConnect: RoonConnectFn = createRoonConnect({ RoonApi: RoonApiCtor });
+/** The real connector, keeping pairing state in `stateFile` (under DATA_DIR). */
+export function createDefaultRoonConnect(stateFile: string): RoonConnectFn {
+  return createRoonConnect({
+    RoonApi: RoonApiCtor,
+    stateStore: createFileRoonStateStore(stateFile),
+  });
+}

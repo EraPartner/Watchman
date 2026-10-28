@@ -604,4 +604,180 @@ describe("SynologyService", () => {
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.metrics.cpuUsage).toBe(15);
   });
+
+  const DSM_ONLY = {
+    snmpUser: "",
+    snmpAuthKey: "",
+    snmpPrivKey: "",
+    dsmUrl: "http://nas:5000",
+    dsmAccount: "admin",
+    dsmPassword: "pass",
+  };
+
+  it("checkHealth in DSM-only mode is reachable when DSM answers", async () => {
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => {
+        throw new Error("snmp must not be called in DSM-only mode");
+      }),
+      config: makeConfig(DSM_ONLY),
+      ping: fakePing(),
+      dsm: fakeDsm({
+        "SYNO.DSM.Info/getinfo": { model: "DS920+", version: "DSM 7.2" },
+      }),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.reachable).toBe(true);
+      expect(res.value.details?.source).toBe("dsm");
+      expect(res.value.details?.systemModel).toBe("DS920+");
+    }
+  });
+
+  it("checkHealth in DSM-only mode is unreachable when DSM fails", async () => {
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values: [] })),
+      config: makeConfig(DSM_ONLY),
+      ping: fakePing(),
+      dsm: {
+        call: async () => {
+          throw new UnauthorizedError("synology dsm login failed: code 400");
+        },
+      },
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok && res.value.reachable).toBe(false);
+    if (res.ok) expect(res.value.message).toContain("login failed");
+  });
+
+  it("getStats in DSM-only mode returns the error when every DSM call fails", async () => {
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values: [] })),
+      config: makeConfig(DSM_ONLY),
+      ping: fakePing(),
+      dsm: {
+        call: async () => {
+          throw new UnauthorizedError("synology dsm login failed: code 400");
+        },
+      },
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    // previously ok() with cpuUsage 0, memoryUsagePercent 0, diskTotal 0
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("UNAUTHORIZED");
+  });
+
+  describe("network rates", () => {
+    const values = Array.from({ length: 12 }, () => "0");
+    // mutable copy of IF_WALK; ovs_eth0 (ifIndex 3) is the selected interface
+    function table(rx: string, tx: string) {
+      return {
+        ...IF_WALK,
+        "1.3.6.1.2.1.31.1.1.1.6": [["3", rx]] as Array<[string, string]>,
+        "1.3.6.1.2.1.31.1.1.1.10": [["3", tx]] as Array<[string, string]>,
+      };
+    }
+
+    it("a failed ifDescr walk reports no traffic and keeps the rate baseline", async () => {
+      let t = 0;
+      let current = table("1000000000000", "2000000000000");
+      let failDescr = false;
+      const svc = new SynologyService({
+        snmp: fakeSnmp(
+          () => ({ values }),
+          [],
+          (req) => {
+            if (failDescr && req.subtree === "1.3.6.1.2.1.2.2.1.2") {
+              throw new Error("walk timed out");
+            }
+            return walkFrom(current)(req);
+          }
+        ),
+        config: makeConfig(),
+        ping: fakePing(),
+        now: () => t,
+      });
+      await svc.getStats(new AbortController().signal);
+
+      t = 30_000;
+      failDescr = true;
+      const partial = await svc.getStats(new AbortController().signal);
+      expect(partial.ok).toBe(true);
+      if (partial.ok) {
+        expect(partial.value.metrics.networkRx).toBeUndefined();
+        expect(partial.value.metrics.networkRxBps).toBeUndefined();
+      }
+
+      t = 60_000;
+      failDescr = false;
+      current = table("1000003000000", "2000006000000");
+      const next = await svc.getStats(new AbortController().signal);
+      expect(next.ok).toBe(true);
+      if (next.ok) {
+        // 3e6 bytes over 60 s since the last good sample, not ~1e12 / 30 s
+        expect(next.value.metrics.networkRxBps).toBe(50_000);
+        expect(next.value.metrics.networkTxBps).toBe(100_000);
+      }
+    });
+
+    it("a failed HC walk is not replaced by the 32-bit sum", async () => {
+      let failHc = false;
+      let t = 0;
+      const svc = new SynologyService({
+        snmp: fakeSnmp(
+          () => ({ values }),
+          [],
+          (req) => {
+            if (failHc && req.subtree === "1.3.6.1.2.1.31.1.1.1.6") {
+              throw new Error("walk timed out");
+            }
+            return walkFrom(IF_WALK)(req);
+          }
+        ),
+        config: makeConfig(),
+        ping: fakePing(),
+        now: () => t,
+      });
+      await svc.getStats(new AbortController().signal);
+      t = 30_000;
+      failHc = true;
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.networkRx).toBeUndefined();
+        expect(res.value.metrics.networkRxBps).toBeUndefined();
+      }
+    });
+
+    it("no rate across a switch between 32-bit and HC counters", async () => {
+      let hc = false;
+      let t = 0;
+      const noHc: Record<string, Array<[string, string]>> = { ...IF_WALK };
+      delete noHc["1.3.6.1.2.1.31.1.1.1.6"];
+      delete noHc["1.3.6.1.2.1.31.1.1.1.10"];
+      const svc = new SynologyService({
+        snmp: fakeSnmp(
+          () => ({ values }),
+          [],
+          (req) => walkFrom(hc ? IF_WALK : noHc)(req)
+        ),
+        config: makeConfig(),
+        ping: fakePing(),
+        now: () => t,
+      });
+      await svc.getStats(new AbortController().signal);
+      t = 30_000;
+      hc = true;
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.networkRx).toBe(5123456789);
+        expect(res.value.metrics.networkRxBps).toBeUndefined();
+      }
+    });
+  });
 });
+

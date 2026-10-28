@@ -2,7 +2,7 @@
 title: Philips Hue Bridge Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 last-updated: 2026-10-21
 tags:
   [
@@ -45,7 +45,7 @@ The Philips Hue Bridge service provides:
 Two-tier health with inline parallel probe:
 
 - **Host tier** — ICMP ping to Hue Bridge host (`PING_COUNT` probes)
-- **Service tier** — HTTP `GET /clip/v2/resource/light` probe (when `applicationKey` is configured)
+- **Service tier** — HTTP `GET /clip/v2/resource/bridge` probe (when `applicationKey` is configured); its round trip is the reported latency
 - **Composite reachability** — `host.reachable OR service.reachable` (bridge considered up if either tier responds)
 
 Health snapshot includes `host` and `service` tiers:
@@ -129,7 +129,7 @@ When `applicationKey` is set, `getStats` returns:
 }
 ```
 
-Light counts are served from the live SSE map (no HTTP fetch) when the eventstream is healthy and seeded by a full light fetch; otherwise they fall back to `GET /clip/v2/resource/light`, which rebuilds the map. SSE `delete` events remove lights, and an eventstream error forces a re-seed on the next poll. The Zigbee, battery, device, and room values are fetched via slow-lane TTL-memoized calls (`/resource/zigbee_connectivity`, `/resource/device_power`, `/resource/device`, `/resource/room`) that refresh every 5 minutes.
+Light counts are served from the live SSE map (no HTTP fetch) when the eventstream is healthy and seeded by a full light fetch; otherwise they fall back to `GET /clip/v2/resource/light`, which rebuilds the map. SSE `delete` events remove lights, and an eventstream error, or the bridge closing the stream, forces a re-seed on the next poll. The Zigbee, battery, device, and room values are fetched via slow-lane TTL-memoized calls (`/resource/zigbee_connectivity`, `/resource/device_power`, `/resource/device`, `/resource/room`) that refresh every 5 minutes.
 
 ### Charts (X3 Task)
 

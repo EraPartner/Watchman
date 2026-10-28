@@ -2,7 +2,7 @@
 title: Service Monitoring
 type: feature
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags: [feature, monitoring, backend, frontend, services, two-tier, health-check, icmp, timeseries, phase-0a, status-dots]
 description: Core service monitoring feature - two-tier health checks (ICMP + protocol) with persistence to time-series store, real-time WebSocket updates, and frontend two-tier status rendering (Phase 0a F1 + F2)
 aliases: [monitoring, health checks, service status, two-tier health]
@@ -94,7 +94,7 @@ Each instance has separate breakers for health and stats (`apps/backend/src/inde
 
 - **Failure threshold**: 5 consecutive failures
 - **Reset timeout**: 60 seconds, then one half-open trial call
-- **Request timeout**: per-instance `timeoutMs` (default 5 seconds)
+- **Request timeout**: per-instance `timeoutMs` (default 5 seconds). One poll of a service may take up to `max(10 s, 2 × timeoutMs)`, since a probe can chain two bounded requests
 
 ## Frontend Coverage Notes (Monitoring UI)
 

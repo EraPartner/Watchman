@@ -2,7 +2,7 @@
 title: AdGuard Home Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -25,7 +25,7 @@ aliases: [adguard, adguard home, dns, ad blocker]
 # AdGuard Home Integration
 
 > [!abstract] Overview
-> Monitors AdGuard Home DNS-level ad blocker with two-tier health model: ICMP ping to the host, plus HTTP probe to the AdGuard API. Provides query statistics, filter status, and protection toggle control.
+> Monitors AdGuard Home DNS-level ad blocker with two-tier health model: ICMP ping to the host, plus HTTP probe to the AdGuard API. Provides query statistics and filter status. Read-only: it never changes AdGuard settings.
 
 ## Health Model (Phase 0a)
 

@@ -365,6 +365,51 @@ describe("TorService", () => {
     if (!res.ok) expect(res.error).toBeInstanceOf(UnavailableError);
   });
 
+  it("reuses one Onionoo lookup for health and stats within the TTL", async () => {
+    let t = 0;
+    let searches = 0;
+    const http = createHttpClient();
+    const counting = {
+      send: (req: Parameters<typeof http.send>[0]) => {
+        searches++;
+        return http.send(req);
+      },
+    };
+    const svc = new TorService({
+      http: counting,
+      ping: fakePing(),
+      torControl: fakeTorControl(),
+      config: makeConfig(),
+      now: () => t,
+    });
+    await svc.checkHealth(new AbortController().signal);
+    t = 30_000;
+    await svc.getStats(new AbortController().signal);
+    t = 9 * 60_000;
+    await svc.checkHealth(new AbortController().signal);
+    expect(searches).toBe(1);
+    t = 10 * 60_000;
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    expect(searches).toBe(2);
+  });
+
+  it("does not cache a failed Onionoo lookup", async () => {
+    state.status = 500;
+    const svc = new TorService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      torControl: fakeTorControl(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const failed = await svc.checkHealth(new AbortController().signal);
+    expect(failed.ok).toBe(false);
+    state.status = 200;
+    const recovered = await svc.checkHealth(new AbortController().signal);
+    expect(recovered.ok).toBe(true);
+  });
+
   describe("ControlPort path", () => {
     it("checkHealth circuit established → reachable", async () => {
       const info = new Map([["status/circuit-established", "1"]]);
@@ -567,6 +612,23 @@ describe("TorService", () => {
       await svc.onStop?.();
     });
 
+    it("closes the subscription when SETEVENTS fails", async () => {
+      const sub = makeFakeSub();
+      sub.setevents = async () => {
+        throw new UnavailableError("tor SETEVENTS failed 552");
+      };
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: makeFakeSubFactory(sub),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      await expect(svc.onStart?.()).rejects.toThrow("SETEVENTS");
+      expect(sub.wasClosed).toBe(true);
+    });
+
     it("onStart is a no-op when useControlPort=false", async () => {
       const svc = new TorService({
         http: createHttpClient(),
@@ -639,6 +701,46 @@ describe("TorService", () => {
         expect(res.value.metrics.trafficDeltaRead).toBe(3000);
         expect(res.value.metrics.trafficDeltaWritten).toBe(2000);
       }
+    });
+
+    it("reports null, not a negative delta, after Tor restarts and resets its counters", async () => {
+      const before = new Map([
+        ["traffic/read", "1000000"],
+        ["traffic/written", "500000"],
+      ]);
+      const afterRestart = new Map([
+        ["traffic/read", "10"],
+        ["traffic/written", "20"],
+      ]);
+      const later = new Map([
+        ["traffic/read", "110"],
+        ["traffic/written", "70"],
+      ]);
+      const empty = (): Map<string, string> => new Map();
+      const torControl = sequenceTorControl(
+        [before, afterRestart, later].flatMap((core) => [
+          core,
+          empty(),
+          empty(),
+          empty(),
+        ])
+      );
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl,
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      await svc.getStats(new AbortController().signal);
+      const reset = await svc.getStats(new AbortController().signal);
+      const next = await svc.getStats(new AbortController().signal);
+      if (!reset.ok || !next.ok) throw new Error("expected ok stats");
+      expect(reset.value.metrics.trafficDeltaRead).toBeNull();
+      expect(reset.value.metrics.trafficDeltaWritten).toBeNull();
+      // rebased on the post-restart value
+      expect(next.value.metrics.trafficDeltaRead).toBe(100);
+      expect(next.value.metrics.trafficDeltaWritten).toBe(50);
     });
   });
 

@@ -40,6 +40,58 @@ function decodeUnsignedBE(buf: Buffer): string {
   return n.toString();
 }
 
+interface NetSnmpSession {
+  close(): void;
+  on(event: 'error', listener: (err: Error) => void): unknown;
+}
+
+/**
+ * Run one request on a net-snmp session and settle exactly once: on the
+ * request's own callback, the outer timer, the caller's abort, or a session
+ * 'error' event. net-snmp emits 'error' when an incoming datagram fails to
+ * parse; with no listener that is an uncaught exception that kills the
+ * process, so every session gets one.
+ */
+function runOnSession<T>(
+  session: NetSnmpSession,
+  op: 'get' | 'walk',
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  start: (done: (err: Error | null, value?: T) => void) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      try { session.close(); } catch { /* ignore */ }
+      fn();
+    };
+    const timer = setTimeout(() => {
+      settle(() => reject(new TimeoutError(`snmp ${op} timed out after ${timeoutMs}ms`)));
+    }, timeoutMs + 500);
+    const onAbort = (): void => {
+      settle(() => reject(new TimeoutError(`snmp ${op} aborted`)));
+    };
+    session.on('error', (err: Error) => {
+      settle(() => reject(new UnavailableError(`snmp ${op} failed: ${err.message}`)));
+    });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+    start((err, value) => {
+      settle(() => {
+        if (err) reject(new UnavailableError(`snmp ${op} failed: ${err.message}`));
+        else resolve(value as T);
+      });
+    });
+  });
+}
+
 export function createSnmpGetter(): SnmpGetter {
   return {
     async get(req: SnmpGetRequest): Promise<SnmpGetResult> {
@@ -62,38 +114,17 @@ export function createSnmpGetter(): SnmpGetter {
       };
       const session = snmp.createV3Session(req.host, user, options);
 
-      return await new Promise<SnmpGetResult>((resolve, reject) => {
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          try { session.close(); } catch { /* ignore */ }
-          reject(new TimeoutError(`snmp get timed out after ${req.timeoutMs}ms`));
-        }, req.timeoutMs + 500);
-
-        const onAbort = (): void => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          try { session.close(); } catch { /* ignore */ }
-          reject(new TimeoutError('snmp get aborted'));
-        };
-        req.signal?.addEventListener('abort', onAbort, { once: true });
-
+      return await runOnSession<SnmpGetResult>(session, 'get', req.timeoutMs, req.signal, (done) => {
         session.get([...req.oids], (err: Error | null, varbinds: Varbind[]) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          try { session.close(); } catch { /* ignore */ }
           if (err) {
-            reject(new UnavailableError(`snmp get failed: ${err.message}`));
+            done(err);
             return;
           }
           const values = varbinds.map((vb) => {
             if (snmp.isVarbindError(vb)) return '';
             return varbindToString(vb);
           });
-          resolve({ values });
+          done(null, { values });
         });
       });
     },
@@ -119,26 +150,8 @@ export function createSnmpGetter(): SnmpGetter {
             { port: 161, version: snmp.Version3, timeout: req.timeoutMs, retries: 1 },
           );
 
-      return await new Promise<SnmpWalkResult>((resolve, reject) => {
-        let settled = false;
-        const collected: SnmpWalkRow[] = [];
-
-        const timer = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          try { session.close(); } catch { /* ignore */ }
-          reject(new TimeoutError(`snmp walk timed out after ${req.timeoutMs}ms`));
-        }, req.timeoutMs + 500);
-
-        const onAbort = (): void => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          try { session.close(); } catch { /* ignore */ }
-          reject(new TimeoutError('snmp walk aborted'));
-        };
-        req.signal?.addEventListener('abort', onAbort, { once: true });
-
+      const collected: SnmpWalkRow[] = [];
+      return await runOnSession<SnmpWalkResult>(session, 'walk', req.timeoutMs, req.signal, (done) => {
         session.subtree(
           req.subtree,
           20,
@@ -150,15 +163,8 @@ export function createSnmpGetter(): SnmpGetter {
             }
           },
           (err: Error | null) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            try { session.close(); } catch { /* ignore */ }
-            if (err) {
-              reject(new UnavailableError(`snmp walk failed: ${err.message}`));
-              return;
-            }
-            resolve({ rows: collected });
+            if (err) done(err);
+            else done(null, { rows: collected });
           },
         );
       });

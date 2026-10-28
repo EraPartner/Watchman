@@ -246,4 +246,46 @@ describe('createTorEventSubscriptionFactory', () => {
       factory.create({ ...OPTS, port: 1, password: '' }, new AbortController().signal),
     ).rejects.toBeInstanceOf(UnavailableError);
   });
+
+  // Tor accepts the connection and authenticates, then goes silent (a
+  // half-open connection after the network changed).
+  function silentAfterAuth(): (socket: net.Socket) => void {
+    return (socket) => {
+      socket.setEncoding('utf8');
+      socket.on('error', () => undefined);
+      socket.on('data', (chunk: string) => {
+        if (chunk.startsWith('AUTHENTICATE')) socket.write('250 OK\r\n');
+      });
+    };
+  }
+
+  it('setevents times out instead of waiting forever for a reply', async () => {
+    serverHandler = silentAfterAuth();
+    const factory = createTorEventSubscriptionFactory();
+    const sub = await factory.create(
+      { ...OPTS, timeoutMs: 200, port, password: '' },
+      new AbortController().signal,
+    );
+    const started = Date.now();
+    await expect(
+      sub.setevents(['BW'], new AbortController().signal),
+    ).rejects.toThrow(/timed out/);
+    expect(Date.now() - started).toBeLessThan(1_500);
+    await sub.close();
+  });
+
+  it('close resolves promptly when the peer never answers', async () => {
+    serverHandler = silentAfterAuth();
+    const factory = createTorEventSubscriptionFactory();
+    const sub = await factory.create(
+      { ...OPTS, timeoutMs: 200, port, password: '' },
+      new AbortController().signal,
+    );
+    const started = Date.now();
+    await sub.close();
+    expect(Date.now() - started).toBeLessThan(1_500);
+    await expect(
+      sub.setevents(['BW'], new AbortController().signal),
+    ).rejects.toBeInstanceOf(UnavailableError);
+  });
 });

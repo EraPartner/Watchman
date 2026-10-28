@@ -34,6 +34,13 @@ const CONTROL_PORT_FALLBACK_COOLDOWN_MS = 5 * 60 * 1000;
  */
 const BW_STALE_MS = 30 * 1000;
 
+/**
+ * Onionoo refreshes relay details about once an hour, so a relay lookup is
+ * reused for this long by both health and stats instead of hitting the
+ * public service on every poll (10 s health + 30 s stats by default).
+ */
+const ONIONOO_RELAY_TTL_MS = 10 * 60 * 1000;
+
 export interface TorDeps {
   http: HttpClient;
   ping: PingProber;
@@ -103,6 +110,10 @@ export class TorService extends BaseService {
   private lastTrafficWritten = -1;
   /** Until this timestamp, skip ControlPort and serve Onionoo (off-LAN cooldown). */
   private controlPortUnreachableUntil = 0;
+  /** Last successful Onionoo relay lookup (see ONIONOO_RELAY_TTL_MS). */
+  private relayCache:
+    | { at: number; latencyMs: number; relay: OnionooRelay | null }
+    | undefined;
 
   constructor(deps: TorDeps) {
     super();
@@ -148,7 +159,13 @@ export class TorService extends BaseService {
       this.bwWritten = parseInt(args[1] ?? "0", 10);
       this.lastBwAt = this.now();
     });
-    await sub.setevents(["BW"], this.subAbort.signal);
+    try {
+      await sub.setevents(["BW"], this.subAbort.signal);
+    } catch (e) {
+      // the socket is open and authenticated; don't leak it
+      await sub.close().catch(() => undefined);
+      throw e;
+    }
     if (this.stopped) {
       await sub.close().catch(() => undefined);
       return;
@@ -385,12 +402,14 @@ export class TorService extends BaseService {
 
         const trafficRead = parseIntMetric(coreInfo.get("traffic/read"));
         const trafficWritten = parseIntMetric(coreInfo.get("traffic/written"));
-        const trafficDeltaRead =
-          this.lastTrafficRead >= 0 ? trafficRead - this.lastTrafficRead : 0;
-        const trafficDeltaWritten =
-          this.lastTrafficWritten >= 0
-            ? trafficWritten - this.lastTrafficWritten
-            : 0;
+        const trafficDeltaRead = counterDelta(
+          trafficRead,
+          this.lastTrafficRead
+        );
+        const trafficDeltaWritten = counterDelta(
+          trafficWritten,
+          this.lastTrafficWritten
+        );
         this.lastTrafficRead = trafficRead;
         this.lastTrafficWritten = trafficWritten;
 
@@ -466,10 +485,8 @@ export class TorService extends BaseService {
   // ─── Onionoo path ──────────────────────────────────────────────────────────
 
   private async checkHealthOnionoo(signal: AbortSignal): Promise<HealthResult> {
-    const started = this.now();
     try {
-      const relay = await this.searchRelay(signal);
-      const latencyMs = this.now() - started;
+      const { relay, latencyMs } = await this.cachedRelay(signal);
       if (!relay) {
         return err(
           new NotFoundError(`tor relay "${this.relayNickname}" not found`)
@@ -497,7 +514,7 @@ export class TorService extends BaseService {
 
   private async getStatsOnionoo(signal: AbortSignal): Promise<StatsResult> {
     try {
-      const relay = await this.searchRelay(signal);
+      const { relay } = await this.cachedRelay(signal);
       if (!relay) {
         return err(
           new NotFoundError(`tor relay "${this.relayNickname}" not found`)
@@ -530,6 +547,23 @@ export class TorService extends BaseService {
       const msg = e instanceof Error ? e.message : String(e);
       return err(new UnavailableError(`tor stats failed: ${msg}`));
     }
+  }
+
+  /** searchRelay, reused for ONIONOO_RELAY_TTL_MS. Failures are not cached. */
+  private async cachedRelay(
+    signal: AbortSignal
+  ): Promise<{ relay: OnionooRelay | null; latencyMs: number }> {
+    if (
+      this.relayCache &&
+      this.now() - this.relayCache.at < ONIONOO_RELAY_TTL_MS
+    ) {
+      return this.relayCache;
+    }
+    const started = this.now();
+    const relay = await this.searchRelay(signal);
+    const at = this.now();
+    this.relayCache = { at, latencyMs: at - started, relay };
+    return this.relayCache;
   }
 
   private async searchRelay(signal: AbortSignal): Promise<OnionooRelay | null> {
@@ -630,6 +664,14 @@ function determineRelayType(flags: string[]): string {
   if (flags.includes("Guard")) return "guard";
   if (flags.includes("Bridge")) return "bridge";
   return "relay";
+}
+
+/** Bytes since the last poll. 0 without a baseline; null when the counter
+ *  went backwards (Tor restarted and reset it), so no bogus negative delta. */
+function counterDelta(current: number, last: number): number | null {
+  if (last < 0) return 0;
+  if (current < last) return null;
+  return current - last;
 }
 
 function parseIntMetric(value: string | undefined): number {

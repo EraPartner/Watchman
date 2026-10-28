@@ -2,7 +2,7 @@
 title: Real-Time Updates
 type: feature
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     feature,
@@ -61,7 +61,7 @@ Publishes status changes and alert transitions to connected clients:
 
 - Subscribes to `service.health.updated`, `service.stats.updated`, `service.error`, and `config:service.*` events from the EventBus
 - Includes full `snapshot` (HealthSnapshot or StatsSnapshot) in `service_update` payload when present (Phase 0a+)
-- **Alert frames** — deduped on state transitions: emits `{ type: "alert", level: "error" }` on a service's **first** poll failure (`service.error`); emits `{ type: "alert", level: "info", message: "…recovered" }` on the next successful poll. Subsequent failures while already errored are suppressed until recovery clears the set. Deleting a service (`config:service.deleted`) or renaming it (`config:service.renamed`, old id) also clears its entry, so a later service with the same `kind:instanceId` starts clean.
+- **Alert frames** — deduped on state transitions, tracked separately per lane (health, stats): emits `{ type: "alert", level: "error" }` on a lane's **first** poll failure (`service.error`); emits `{ type: "alert", level: "info", message: "…recovered" }` on that same lane's next successful poll. A health snapshot with `reachable: false` is not a success. Subsequent failures while already errored are suppressed until recovery clears the entry. Deleting a service (`config:service.deleted`) or renaming it (`config:service.renamed`, old id) also clears its entry, so a later service with the same `kind:instanceId` starts clean.
 - Serializes all events to JSON before sending
 - Handles send errors gracefully (dead clients are removed, not crashed on)
 
@@ -201,12 +201,12 @@ loop Every 15 seconds
     alt Poll succeeds
         Poller -> Bus : service.health.updated\nor service.stats.updated
         Bus -> Bcast : event payload
-        Bcast -> Bcast : clear erroredIds\n(recovery check)
+        Bcast -> Bcast : clear error entry for this lane\n(recovery check; reachable:false is not recovery)
         Bcast -> Hook : service_update frame\n{type,scope,id,kind,snapshot}
         Hook -> Query : invalidateQueries\n([kind, ...]) prefix match
         Query -> Query : Refetch affected queries
 
-        note over Bcast : if id was in erroredIds\nemit alert "recovered" first
+        note over Bcast : if id|scope was errored\nemit alert "recovered" first
     else Poll fails (first failure)
         Poller -> Bus : service.error {id,kind,scope,error}
         Bus -> Bcast : error payload

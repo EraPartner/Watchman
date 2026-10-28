@@ -216,11 +216,18 @@ export class AlbyHubService extends BaseService {
     message?: string;
   }> {
     const started = this.now();
-    const res = await this.tryGet(NWC_INFO_PATH, signal);
-    if (!res || res.status < 200 || res.status >= 300) {
+    const res = await this.getOrError(NWC_INFO_PATH, signal);
+    if (res instanceof Error) {
       return {
         reachable: false,
-        message: `albyHub: ${NWC_INFO_PATH} returned ${res?.status ?? "no response"}`,
+        message: `albyHub: ${NWC_INFO_PATH} failed: ${res.message}`,
+      };
+    }
+    if (res.status < 200 || res.status >= 300) {
+      await discard(res);
+      return {
+        reachable: false,
+        message: `albyHub: ${NWC_INFO_PATH} returned ${res.status}`,
       };
     }
     const payload = (await this.parseJson(res)) as NwcInfo | null;
@@ -266,6 +273,14 @@ export class AlbyHubService extends BaseService {
             )
           : Promise.resolve(null),
       ]);
+
+      // bodies of responses that are not parsed below must still be read, or
+      // undici keeps their sockets until GC (e.g. 401s once the JWT expires)
+      await Promise.all(
+        [infoRes, appsRes, balancesRes, channelsRes].map((r) =>
+          r && (r.status < 200 || r.status >= 300) ? discard(r) : undefined
+        )
+      );
 
       const reachable =
         infoRes !== null && infoRes.status >= 200 && infoRes.status < 300;
@@ -371,6 +386,7 @@ export class AlbyHubService extends BaseService {
   ): Promise<{ path: string; status: number } | null> {
     if (this.probedPath) {
       const res = await this.tryGet(this.probedPath, signal);
+      if (res) await discard(res);
       if (res && res.status >= 200 && res.status < 400) {
         return { path: this.probedPath, status: res.status };
       }
@@ -380,6 +396,7 @@ export class AlbyHubService extends BaseService {
     for (const path of PROBE_PATHS) {
       const res = await this.tryGet(path, signal);
       if (!res) continue;
+      await discard(res);
       if (res.status >= 200 && res.status < 400) {
         this.probedPath = path;
         return { path, status: res.status };
@@ -410,7 +427,11 @@ export class AlbyHubService extends BaseService {
     signal: AbortSignal
   ): Promise<ResolvedInfo | null> {
     const res = await this.tryGet(path, signal);
-    if (!res || res.status < 200 || res.status >= 300) return null;
+    if (!res) return null;
+    if (res.status < 200 || res.status >= 300) {
+      await discard(res);
+      return null;
+    }
     const payload = await this.parseJson(res);
     if (!payload || typeof payload !== "object") return null;
     const body = (payload as InfoPayload).data ?? (payload as InfoPayload);
@@ -426,6 +447,15 @@ export class AlbyHubService extends BaseService {
     path: string,
     signal: AbortSignal
   ): Promise<HttpResponse | null> {
+    const res = await this.getOrError(path, signal);
+    return res instanceof Error ? null : res;
+  }
+
+  // Like tryGet, but keeps the failure (e.g. a TimeoutError) for messages.
+  private async getOrError(
+    path: string,
+    signal: AbortSignal
+  ): Promise<HttpResponse | Error> {
     const headers: Record<string, string> = { accept: "application/json" };
     if (this.authHeader) headers["authorization"] = this.authHeader;
     try {
@@ -436,8 +466,8 @@ export class AlbyHubService extends BaseService {
         signal,
         timeoutMs: this.timeoutMs,
       });
-    } catch {
-      return null;
+    } catch (e) {
+      return e instanceof Error ? e : new Error(String(e));
     }
   }
 
@@ -450,4 +480,8 @@ export class AlbyHubService extends BaseService {
       return null;
     }
   }
+}
+
+async function discard(res: HttpResponse): Promise<void> {
+  await res.text().catch(() => "");
 }

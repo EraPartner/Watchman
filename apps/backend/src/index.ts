@@ -9,7 +9,10 @@ import { ListInstances } from "./application/ListInstances.js";
 import { createMetricsRegistry } from "./core/metrics.js";
 import { createEventBus } from "./core/eventBus.js";
 import { systemClock } from "./core/clock.js";
-import { createBackgroundPoller } from "./infra/scheduler/poller.js";
+import {
+  createBackgroundPoller,
+  pollBudgetMs,
+} from "./infra/scheduler/poller.js";
 import { createHttpClient } from "./infra/http/client.js";
 import { createInsecureHttpClient } from "./infra/http/insecureClient.js";
 import { createPingProber } from "./infra/net/pingProbe.js";
@@ -18,7 +21,7 @@ import { createSshPool } from "./infra/ssh/sshPool.js";
 import { createSnmpGetter } from "./infra/snmp/snmpGetterImpl.js";
 import { createPigpioClient } from "./infra/gpio/pigpioClientImpl.js";
 import { createTorControlClient } from "./infra/tor/controlClient.js";
-import { roonConnect } from "./infra/roon/roonClientImpl.js";
+import { createDefaultRoonConnect } from "./infra/roon/roonClientImpl.js";
 import { zmqConnect } from "./infra/zmq/zmqSubscriberImpl.js";
 import { wsPlugin } from "./transport/ws/wsPlugin.js";
 import { hostname } from "node:os";
@@ -69,6 +72,10 @@ async function main(): Promise<void> {
   );
   const metrics = createMetricsRegistry();
 
+  const dataDir = isAbsolute(env.DATA_DIR)
+    ? env.DATA_DIR
+    : resolve(process.cwd(), env.DATA_DIR);
+
   const sshPool = createSshPool();
   const infra = {
     http: createHttpClient(),
@@ -79,14 +86,11 @@ async function main(): Promise<void> {
     snmp: createSnmpGetter(),
     pigpio: createPigpioClient(),
     torControl: createTorControlClient(),
-    roonConnect,
+    roonConnect: createDefaultRoonConnect(join(dataDir, "roon-state.json")),
     zmqConnect,
     now: () => systemClock.now(),
   };
 
-  const dataDir = isAbsolute(env.DATA_DIR)
-    ? env.DATA_DIR
-    : resolve(process.cwd(), env.DATA_DIR);
   const dbPath = join(dataDir, "watchman.duckdb");
   await mkdir(dirname(dbPath), { recursive: true });
   const dbPool = await createDuckDbPool({ path: dbPath });
@@ -138,7 +142,11 @@ async function main(): Promise<void> {
       metrics.registerBreaker(health);
       metrics.registerBreaker(stats);
       const guarded = withBreakers(svc, { health, stats });
-      snapshots.register(guarded, stored.config.cacheTtlMs);
+      snapshots.register(
+        guarded,
+        stored.config.cacheTtlMs,
+        pollBudgetMs(stored.config.timeoutMs)
+      );
       return guarded;
     },
     release(svcId) {

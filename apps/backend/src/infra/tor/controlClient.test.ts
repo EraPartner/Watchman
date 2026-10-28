@@ -203,6 +203,46 @@ describe('createTorControlClient', () => {
       handle.getinfo(['traffic/read'], new AbortController().signal),
     ).rejects.toBeInstanceOf(UnavailableError);
   });
+
+  it('a connection reset between commands rejects reads instead of crashing', async () => {
+    serverHandler = (socket) => {
+      socket.setEncoding('utf8');
+      socket.on('error', () => undefined);
+      socket.on('data', (chunk: string) => {
+        if (chunk.startsWith('AUTHENTICATE')) socket.write('250 OK\r\n');
+        else socket.resetAndDestroy();
+      });
+    };
+    const client = createTorControlClient();
+    const handle = await client.connect({ ...OPTS, port, password: '' }, new AbortController().signal);
+    await expect(
+      handle.getinfo(['traffic/read'], new AbortController().signal),
+    ).rejects.toBeInstanceOf(UnavailableError);
+    // the socket is gone now; a further command fails fast rather than hanging
+    await expect(
+      handle.getinfo(['traffic/written'], AbortSignal.timeout(1_000)),
+    ).rejects.toThrow(/closed|write failed|socket error/);
+    await handle.close();
+  });
+
+  it('a peer FIN closes the socket so a pending read fails without waiting for abort', async () => {
+    serverHandler = (socket) => {
+      socket.setEncoding('utf8');
+      socket.on('error', () => undefined);
+      socket.on('data', (chunk: string) => {
+        if (chunk.startsWith('AUTHENTICATE')) socket.write('250 OK\r\n');
+        else socket.end();
+      });
+    };
+    const client = createTorControlClient();
+    const handle = await client.connect({ ...OPTS, port, password: '' }, new AbortController().signal);
+    const err = await handle
+      .getinfo(['traffic/read'], AbortSignal.timeout(1_500))
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnavailableError);
+    expect((err as Error).message).not.toBe('tor control read aborted');
+    await handle.close();
+  });
 });
 
 describe('cookie auth', () => {

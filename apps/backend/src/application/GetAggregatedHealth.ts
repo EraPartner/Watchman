@@ -22,11 +22,8 @@ export class GetAggregatedHealth {
       services.map(async (s) => {
         // Serve the poller-published snapshot; only probe live before the
         // first poll has completed (e.g. right after startup/registration).
-        const cached = this.snapshots?.latestHealth(s.id);
-        if (cached) return cached;
-        const live = await s.checkHealth(signal);
-        this.snapshots?.setHealth(s.id, live);
-        return live;
+        if (this.snapshots) return this.snapshots.readHealth(s, signal);
+        return s.checkHealth(signal);
       })
     );
     return services.map((s, i) => {

@@ -2,7 +2,7 @@
 title: Bitcoin Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -165,13 +165,15 @@ Then set the corresponding Watchman config fields:
 
 ### Real-Time Metrics
 
-When `zmqHashblockEndpoint` is configured, `getStats()` exposes three additional metrics:
+When `zmqHashblockEndpoint` is configured, `getStats()` exposes these additional metrics:
 
 | Metric             | Type   | Description                                                   |
 | ------------------ | ------ | ------------------------------------------------------------- |
 | `zmqLastBlockHash` | string | Hex hash of the most-recent block via ZMQ (empty if none yet) |
 | `zmqLastBlockAt`   | number | Epoch-ms timestamp of last `hashblock` event                  |
 | `zmqBlockCount`    | number | Count of ZMQ `hashblock` events since service start           |
+| `zmqConnected`     | boolean | Whether the ZMQ subscription is running                      |
+| `zmqError`         | string \| null | Why the subscription failed to start (null when connected) |
 
 These appear in the stats JSON only when the endpoint is configured:
 
@@ -191,7 +193,7 @@ These appear in the stats JSON only when the endpoint is configured:
 ZMQ connection failure in `onStart()` is **non-fatal**:
 
 - Service continues polling via RPC (`getblockchaininfo`)
-- ZMQ metrics are not populated
+- `zmqConnected` is `false` and `zmqError` says why (for example `zeromq` not installed, or a malformed endpoint); the other ZMQ metrics stay at their empty values
 - No error is raised; fallback to poll-only mode
 - Suitable for environments where ZMQ is not available or misconfigured
 

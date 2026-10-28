@@ -18,6 +18,8 @@ let server: Server;
 let port: number;
 let state: {
   loginStatus: number;
+  // qBittorrent answers wrong credentials with 200 "Fails." and no cookie
+  loginRejects: boolean;
   cookie: string;
   expireNextRequest: boolean;
   loginCalls: number;
@@ -48,6 +50,8 @@ const TORRENT_LIST = [
     uploaded: 50_000_000,
     eta: 500,
     category: "movies",
+    magnet_uri: "magnet:?xt=urn:btih:abc",
+    save_path: "/data/private/movies",
   },
   {
     hash: "def",
@@ -82,6 +86,11 @@ function handler(req: IncomingMessage, res: ServerResponse) {
       if (state.loginStatus !== 200) {
         res.writeHead(state.loginStatus);
         res.end();
+        return;
+      }
+      if (state.loginRejects) {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("Fails.");
         return;
       }
       res.setHeader("set-cookie", `SID=${state.cookie}; path=/`);
@@ -195,6 +204,7 @@ afterAll(
 beforeEach(() => {
   state = {
     loginStatus: 200,
+    loginRejects: false,
     cookie: "abc123",
     expireNextRequest: false,
     loginCalls: 0,
@@ -356,6 +366,92 @@ describe("QBittorrentService", () => {
       expect(active[0]?.name).toBe("movie.mkv");
       expect(active[1]?.name).toBe("album.zip");
     }
+  });
+
+  it("activeTorrents keep only the documented fields", async () => {
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const active = res.value.metrics.activeTorrents as Array<
+        Record<string, unknown>
+      >;
+      expect(Object.keys(active[0] ?? {}).sort()).toEqual(
+        [
+          "hash",
+          "name",
+          "state",
+          "progress",
+          "dlspeed",
+          "upspeed",
+          "size",
+          "downloaded",
+          "uploaded",
+          "eta",
+          "category",
+        ].sort()
+      );
+      expect(active[0]).not.toHaveProperty("magnet_uri");
+    }
+  });
+
+  it("parallel requests on a cold start share one login", async () => {
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const [stats, health] = await Promise.all([
+      svc.getStats(new AbortController().signal),
+      svc.checkHealth(new AbortController().signal),
+    ]);
+    expect(stats.ok).toBe(true);
+    expect(health.ok && health.value.reachable).toBe(true);
+    expect(state.loginCalls).toBe(1);
+  });
+
+  it("a rejected login is not retried until the backoff passes", async () => {
+    state.loginStatus = 403;
+    let t = 1;
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => t,
+    });
+    const first = await svc.getStats(new AbortController().signal);
+    const second = await svc.getStats(new AbortController().signal);
+    const health = await svc.checkHealth(new AbortController().signal);
+    expect(state.loginCalls).toBe(1);
+    expect(!first.ok && first.error.code).toBe("UNAUTHORIZED");
+    expect(!second.ok && second.error.code).toBe("UNAUTHORIZED");
+    expect(health.ok && health.value.reachable).toBe(false);
+
+    t += 5 * 60 * 1000;
+    state.loginStatus = 200;
+    const recovered = await svc.getStats(new AbortController().signal);
+    expect(recovered.ok).toBe(true);
+    expect(state.loginCalls).toBe(2);
+  });
+
+  it("wrong credentials report a clear message", async () => {
+    state.loginRejects = true;
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(!res.ok && res.error.message).toContain(
+      "rejected the username or password"
+    );
   });
 
   it("recentErrors and recentWarnings extracted from log entries", async () => {

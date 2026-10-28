@@ -104,4 +104,48 @@ describe("createSharedPigpioClient", () => {
     await client.close();
     expect(inner.ended()).toBe(true);
   });
+
+  it("times out a command pigpiod never answers and reconnects next time", async () => {
+    vi.useFakeTimers();
+    try {
+      const hung = fakeHandle({ getCurrentTick: () => new Promise(() => {}) });
+      const fresh = fakeHandle();
+      const connect = vi
+        .fn<PigpioClient["connect"]>()
+        .mockResolvedValueOnce(hung)
+        .mockResolvedValueOnce(fresh);
+      const client = createSharedPigpioClient({ connect });
+
+      const h = await client.connect(REQ);
+      const tick = h.getCurrentTick();
+      const assertion = expect(tick).rejects.toMatchObject({ code: "TIMEOUT" });
+      await vi.advanceTimersByTimeAsync(REQ.timeoutMs);
+      await assertion;
+      expect(hung.ended()).toBe(true);
+
+      const h2 = await client.connect(REQ);
+      expect(await h2.getCurrentTick()).toBe(1000);
+      expect(connect).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends a connection that completes after close()", async () => {
+    let resolveConnect: (h: PigpioHandle) => void = () => undefined;
+    const late = fakeHandle();
+    const client = createSharedPigpioClient({
+      connect: () =>
+        new Promise<PigpioHandle>((r) => {
+          resolveConnect = r;
+        }),
+    });
+
+    const pending = client.connect(REQ);
+    await client.close();
+    resolveConnect(late);
+    await expect(pending).rejects.toThrow("closed");
+    expect(late.ended()).toBe(true);
+  });
 });
+

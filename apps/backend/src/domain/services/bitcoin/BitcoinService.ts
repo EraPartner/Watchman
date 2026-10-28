@@ -96,6 +96,9 @@ export class BitcoinService extends BaseService {
 
   /** Live ZMQ subscription handle — set in onStart, cleared in onStop. */
   private zmqHandle: ZmqSubscriberHandle | null = null;
+  /** Why the ZMQ subscription is not running (null when connected or unused). */
+  private zmqError: string | null = null;
+  private stopped = false;
   /** Hex hash of the most-recent block seen via ZMQ (empty = none yet). */
   private lastBlockHashZmq = "";
   /** Epoch-ms timestamp of the most-recent ZMQ hashblock event (0 = none). */
@@ -133,9 +136,17 @@ export class BitcoinService extends BaseService {
     if (!this.zmqConnectFn || !this.zmqHashblockEndpoint) return;
 
     try {
-      this.zmqHandle = await this.zmqConnectFn(this.zmqHashblockEndpoint, [
+      const handle = await this.zmqConnectFn(this.zmqHashblockEndpoint, [
         "hashblock",
       ]);
+      // onStart is time-boxed by the lifecycle; if the service was stopped
+      // while connecting, nothing else would ever close this handle
+      if (this.stopped) {
+        await handle.close();
+        return;
+      }
+      this.zmqHandle = handle;
+      this.zmqError = null;
       this.zmqHandle.onMessage((msg) => {
         if (msg.topic === "hashblock") {
           this.lastBlockHashZmq = msg.data.toString("hex");
@@ -143,9 +154,11 @@ export class BitcoinService extends BaseService {
           this.zmqBlockCount += 1;
         }
       });
-    } catch {
-      // ZMQ connection failure is non-fatal — service continues with poll-only mode
+    } catch (e) {
+      // ZMQ connection failure is non-fatal — service continues with poll-only
+      // mode, but stats say why no blocks arrive
       this.zmqHandle = null;
+      this.zmqError = e instanceof Error ? e.message : String(e);
     }
 
     await this.verifyZmqConfig();
@@ -185,6 +198,7 @@ export class BitcoinService extends BaseService {
   }
 
   override async onStop(): Promise<void> {
+    this.stopped = true;
     if (this.zmqHandle) {
       await this.zmqHandle.close();
       this.zmqHandle = null;
@@ -201,7 +215,10 @@ export class BitcoinService extends BaseService {
       },
       async (sig) => {
         const started = this.now();
-        const [chainRaw, netRaw] = await this.rpcBatch(
+        const {
+          results: [chainRaw, netRaw],
+          errors,
+        } = await this.rpcBatch(
           [{ method: "getblockchaininfo" }, { method: "getnetworkinfo" }],
           sig
         );
@@ -209,9 +226,12 @@ export class BitcoinService extends BaseService {
         const net = netRaw as NetworkInfo | null;
         const latencyMs = this.now() - started;
         if (!chain || !chain.chain) {
+          // e.g. -28 "Loading block index…" while the node warms up
+          const reason = errors[0];
           return {
             reachable: false,
             latencyMs,
+            ...(reason ? { message: `bitcoin rpc: ${reason}` } : {}),
             details: { warning: "bitcoin responding but data incomplete" },
           };
         }
@@ -233,18 +253,21 @@ export class BitcoinService extends BaseService {
   async getStats(signal: AbortSignal): Promise<StatsResult> {
     try {
       // single batched JSON-RPC request — one HTTP round-trip per cycle
-      const [
-        chainRaw,
-        netRaw,
-        mempoolRaw,
-        uptimeRaw,
-        netTotalsRaw,
-        miningRaw,
-        indexRaw,
-        fee1Raw,
-        fee6Raw,
-        fee144Raw,
-      ] = await this.rpcBatch(
+      const {
+        results: [
+          chainRaw,
+          netRaw,
+          mempoolRaw,
+          uptimeRaw,
+          netTotalsRaw,
+          miningRaw,
+          indexRaw,
+          fee1Raw,
+          fee6Raw,
+          fee144Raw,
+        ],
+        errors,
+      } = await this.rpcBatch(
         [
           { method: "getblockchaininfo" },
           { method: "getnetworkinfo" },
@@ -263,7 +286,12 @@ export class BitcoinService extends BaseService {
       const net = netRaw as NetworkInfo | null;
       const mempool = mempoolRaw as MempoolInfo | null;
       if (!chain || !net || !mempool) {
-        throw new UnavailableError("bitcoin core rpc calls failed");
+        const reason = errors[0] ?? errors[1] ?? errors[2];
+        throw new UnavailableError(
+          reason
+            ? `bitcoin core rpc calls failed: ${reason}`
+            : "bitcoin core rpc calls failed"
+        );
       }
       const uptime = typeof uptimeRaw === "number" ? uptimeRaw : 0;
       const netTotals = netTotalsRaw as NetTotals | null;
@@ -309,6 +337,8 @@ export class BitcoinService extends BaseService {
                 zmqLastBlockHash: this.lastBlockHashZmq,
                 zmqLastBlockAt: this.lastBlockAtZmq,
                 zmqBlockCount: this.zmqBlockCount,
+                zmqConnected: this.zmqHandle !== null,
+                zmqError: this.zmqError,
                 zmqEndpointMatch: this.zmqEndpointMatch,
                 zmqServerHashblockEndpoint: this.zmqServerHashblockEndpoint,
               }
@@ -353,13 +383,16 @@ export class BitcoinService extends BaseService {
 
   /**
    * Batched JSON-RPC: every call in one HTTP request. Per-call errors yield
-   * null at that position (callers decide which results are required);
-   * transport/auth failures throw.
+   * null at that position plus the node's message in `errors` (callers decide
+   * which results are required); transport/auth failures throw.
    */
   private async rpcBatch(
     calls: ReadonlyArray<{ method: string; params?: unknown[] }>,
     signal: AbortSignal
-  ): Promise<Array<unknown | null>> {
+  ): Promise<{
+    results: Array<unknown | null>;
+    errors: Array<string | undefined>;
+  }> {
     if (!this.authHeader) {
       throw new UnauthorizedError("bitcoin rpc credentials not configured");
     }
@@ -388,6 +421,13 @@ export class BitcoinService extends BaseService {
         `bitcoin rpc auth failed: ${text.slice(0, 200)}`
       );
     }
+    if (res.status === 403) {
+      // rpcwhitelist rejects the whole batch when any method is not allowed
+      const text = await res.text().catch(() => "");
+      throw new UnauthorizedError(
+        `bitcoin rpc user is not allowed one of the read methods (rpcwhitelist): ${text.slice(0, 200)}`
+      );
+    }
     if (res.status < 200 || res.status >= 300) {
       const text = await res.text().catch(() => "");
       throw new UnavailableError(
@@ -399,11 +439,15 @@ export class BitcoinService extends BaseService {
       throw new UnavailableError("bitcoin rpc batch returned a non-array");
     }
     const byId = new Map(env.map((e) => [e.id, e]));
-    return calls.map((_, i) => {
-      const entry = byId.get(i);
-      if (!entry || entry.error) return null;
-      return entry.result ?? null;
-    });
+    const entries = calls.map((_, i) => byId.get(i));
+    return {
+      results: entries.map((entry) =>
+        !entry || entry.error ? null : (entry.result ?? null)
+      ),
+      errors: entries.map((entry) =>
+        entry?.error ? (entry.error.message ?? "unknown error") : undefined
+      ),
+    };
   }
 
   private async parse<T>(res: HttpResponse, method: string): Promise<T> {

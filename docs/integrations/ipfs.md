@@ -2,7 +2,7 @@
 title: IPFS Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-28
 tags:
   [
     integration,
@@ -87,7 +87,7 @@ All Kubo API calls are **POST-only** (Kubo ≥ 0.5 dropped GET support). The pre
 | `/api/v0/version`                          | `version`                                                                                                                          | IPFS version string                                                                                                                 |
 | `/api/v0/id`                               | `nodeId`, `addressCount`                                                                                                           | Node ID and multiaddr count                                                                                                         |
 | `/api/v0/swarm/peers?format=json`          | `peers`                                                                                                                            | Connected peer count                                                                                                                |
-| `/api/v0/repo/stat?format=json`            | `repoSize`, `numObjects`                                                                                                           | Repository size in bytes, object count                                                                                              |
+| `/api/v0/repo/stat?size-only=true` (every poll); `/api/v0/repo/stat` (slow lane, 10 min) | `repoSize`, `numObjects` | Repository size in bytes every poll; object count every 10 minutes, because counting walks the whole blockstore |
 | `/api/v0/stats/bw?format=json`             | `bwTotalIn`, `bwTotalOut`, `bwRateIn`, `bwRateOut`                                                                                 | Bandwidth totals and rates in bytes/sec                                                                                             |
 | `/api/v0/diag/sys`                         | `sysMemUsedMb`, `goroutines`, `numCPU` (`memAllocMb` legacy)                                                                       | `memory.virt` (host used memory, rounded MB; system-wide, not Kubo's own), `runtime.numgoroutines`, `runtime.numcpu`. `memAllocMb` reads a flat `MemoryAlloc` key Kubo does not emit, so it is null. Optional, null on failure. |
 | `/api/v0/stats/dht`                        | `dhtPeers`                                                                                                                         | **Slow lane (10-min ttlMemo).** Sum of `Buckets[].Peers` across all DHT routing tables (`wan`, `lan`). Parses NDJSON. Defaults to 0 on failure. Kubo marks this output unstable. |

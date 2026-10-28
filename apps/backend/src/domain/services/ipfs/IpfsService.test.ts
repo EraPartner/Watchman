@@ -18,6 +18,7 @@ let state: {
   pinLsCalls: number;
   dhtCalls: number;
   pinLsUrl: string;
+  repoStatUrls: string[];
 };
 
 // Kubo stats/dht shape: one object per table, peers grouped by bucket
@@ -84,6 +85,7 @@ beforeAll(
           res.writeHead(200);
           res.end(JSON.stringify({ Peers: [{}, {}, {}] }));
         } else if (url.startsWith("/api/v0/repo/stat")) {
+          state.repoStatUrls.push(url);
           res.writeHead(200);
           res.end(JSON.stringify({ RepoSize: 1234, NumObjects: 42 }));
         } else if (url.startsWith("/api/v0/stats/bw")) {
@@ -165,7 +167,7 @@ afterAll(
 );
 
 beforeEach(() => {
-  state = { failMode: "none", failOptional: false, methods: [], pinLsCalls: 0, dhtCalls: 0, pinLsUrl: "" };
+  state = { failMode: "none", failOptional: false, methods: [], pinLsCalls: 0, dhtCalls: 0, pinLsUrl: "", repoStatUrls: [] };
 });
 
 function makeConfig(overrides: Partial<IpfsInstance> = {}): IpfsInstance {
@@ -371,6 +373,25 @@ describe("IpfsService", () => {
     await svc.getStats(new AbortController().signal);
     expect(state.pinLsCalls).toBe(1);
     expect(state.dhtCalls).toBe(1);
+  });
+
+  it("repo/stat is size-only per poll; the object count rides the slow lane", async () => {
+    const svc = new IpfsService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const first = await svc.getStats(new AbortController().signal);
+    await svc.getStats(new AbortController().signal);
+    const sizeOnly = state.repoStatUrls.filter((u) =>
+      u.includes("size-only=true")
+    );
+    const full = state.repoStatUrls.filter((u) => !u.includes("size-only"));
+    expect(sizeOnly).toHaveLength(2);
+    expect(full).toHaveLength(1);
+    expect(first.ok && first.value.metrics.repoSize).toBe(1234);
+    expect(first.ok && first.value.metrics.numObjects).toBe(42);
   });
 
   it("pin/ls requests the quiet listing", async () => {

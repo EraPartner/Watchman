@@ -2,7 +2,7 @@
 title: Mac Mini Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -23,15 +23,25 @@ aliases: [mac mini, macos server, ssh]
 # Mac Mini Integration
 
 > [!abstract] Overview
-> Monitors a Mac Mini server via SSH with two-tier health model: ICMP ping to the host, plus SSH probe to verify connectivity. Extended stats gather 15+ metrics across memory, power, CPU utilization, network, and disk health in a single compound SSH exec per cycle.
+> Monitors a Mac Mini server: health is an ICMP ping to the host, and stats come over SSH. Extended stats gather 15+ metrics across memory, power, CPU utilization, network, and disk health in a single compound SSH exec per cycle.
 
 ## Health Model (Phase 0a)
 
-Two-tier health with inline parallel probe:
+Health is **ping only**:
 
-- **Host tier** — ICMP ping to Mac Mini host
-- **Service tier** — SSH uptime command probe
-- **Composite reachability** — `reachable = host.reachable` — host-primary: the box itself is the point (ICMP ping); the SSH probe is an auxiliary capability (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
+- **Host tier** — ICMP ping to the Mac Mini host
+- **Composite reachability** — `reachable = host.reachable` — host-primary: the box itself is the point (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]]). SSH is not probed by health; an SSH problem shows up as a stats error instead.
+
+macOS stealth mode (Firewall → Options) drops ICMP, which makes a running Mac show offline. Turn stealth mode off, or allow ping, for this host.
+
+## Prerequisites on the Mac
+
+- **Remote Login** on (System Settings → General → Sharing), with key-based login for the configured `sshUser`.
+- Optional Homebrew tools, looked up in `/opt/homebrew/bin` (Apple Silicon) and `/usr/local/bin` (Intel), because a non-interactive SSH session's PATH doesn't include them:
+  - `smctemp` (preferred on Apple Silicon) or `osx-cpu-temp` for `cpuTemp`
+  - `smartmontools` (`smartctl`) for `smartPassed`, `diskTemp`, `diskModel`
+
+Missing tools only leave their metrics `null`.
 
 ## Configuration
 
@@ -72,14 +82,14 @@ All metrics are nullable (`null` if a command fails or is not available). All co
 | ------------------ | ------------------------------------------------ | ------ | -------------------------------- |
 | `cpuLoad`          | `uptime`                                         | number | 1-minute CPU load average        |
 | `cpuTemp`          | `smctemp -c`, fallback `osx-cpu-temp` (Homebrew) | number | CPU package temperature (°C)     |
-| `diskTotal`        | `df -k /System/Volumes/Data` (else `df -k /`)    | number | Data volume total bytes          |
-| `diskUsed`         | `df -k /System/Volumes/Data` (else `df -k /`)    | number | Data volume used bytes           |
-| `diskFree`         | `df -k /System/Volumes/Data` (else `df -k /`)    | number | Available bytes (shared APFS container) |
-| `diskUsagePercent` | `df -k /System/Volumes/Data` (else `df -k /`)    | number | (total − available) / total      |
+| `diskTotal`        | `df -k /System/Volumes/Data` (else `df -k /`)    | number \| null | Data volume total bytes          |
+| `diskUsed`         | `df -k /System/Volumes/Data` (else `df -k /`)    | number \| null | Data volume used bytes           |
+| `diskFree`         | `df -k /System/Volumes/Data` (else `df -k /`)    | number \| null | Available bytes (shared APFS container) |
+| `diskUsagePercent` | `df -k /System/Volumes/Data` (else `df -k /`)    | number \| null | (total − available) / total      |
 | `uptime`           | `uptime`                                         | number \| null | System uptime in seconds (BSD formats: `H:MM`, `N hrs`, `N mins`, `N secs`, with optional `N days`) |
 | `cpuUsagePercent`  | `top -l 1 -n 0 -s 0`                             | number \| null | `user + sys` CPU percent         |
 
-On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is only the OS; the Data volume holds user data. `cpuLoad`, `cpuTemp` and `uptime` are `null` when not measured (no load line, no `smctemp`/`osx-cpu-temp`), never a placeholder 0.
+On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is only the OS; the Data volume holds user data. `cpuLoad`, `cpuTemp`, `uptime` and the disk fields are `null` when not measured (no load line, no `smctemp`/`osx-cpu-temp`, no usable `df` output), never a placeholder 0.
 
 ### Extended Memory Metrics (via `vm_stat`)
 
@@ -89,7 +99,7 @@ On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is onl
 | `memActiveBytes`   | number \| null | Active (in-use) memory pages × page size                               |
 | `memWiredBytes`    | number \| null | Kernel-wired memory pages × page size                                  |
 | `memInactiveBytes` | number \| null | Inactive (reclaimable) memory pages × page size                        |
-| `memTotalBytes`    | number \| null | Total used memory (active + inactive + wired + compressor) × page size |
+| `memTotalBytes`    | number \| null | Total memory: (active + inactive + wired + compressor + free + speculative) × page size |
 
 **Command**: `vm_stat` — parses page size and allocations to derive memory usage in bytes.
 
@@ -131,7 +141,7 @@ On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is onl
 | `diskTemp`    | number \| null  | Disk temperature (°C) from SMART data                                     |
 | `diskModel`   | string \| null  | Disk model name from SMART data                                           |
 
-**Command**: `which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true` — feature-detects `smartctl` binary; returns JSON output if available, silently succeeds with empty string if not installed.
+**Command**: `export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true` — adds the Homebrew prefixes (each compound segment runs in its own subshell, so it can't rely on the temperature segment's PATH), feature-detects `smartctl` binary; returns JSON output if available, silently succeeds with empty string if not installed.
 
 ## Service Class
 
@@ -155,7 +165,7 @@ All commands travel in a single SSH exec ([[apps/backend/src/infra/ssh/compound.
 7. `ifconfig en0` — network interface
 8. `smartctl -j -a disk0` (feature-detect) — disk SMART health
 
-A failing command yields an empty segment (its metrics become null, or 0 for the disk fields); stats error only when both core segments (`uptime` and `df`) come back empty or the SSH exec itself fails.
+A failing command yields an empty segment (its metrics become null); stats error only when both core segments (`uptime` and `df`) come back empty or the SSH exec itself fails.
 
 ## Frontend Component
 

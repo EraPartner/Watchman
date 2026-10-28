@@ -3,6 +3,7 @@ import type {
   PigpioClientRequest,
   PigpioHandle,
 } from "./pigpioClient.js";
+import { TimeoutError } from "../../core/errors.js";
 
 export interface SharedPigpioClient extends PigpioClient {
   /** Close the underlying connection (e.g. on service teardown). */
@@ -21,6 +22,9 @@ export function createSharedPigpioClient(
 ): SharedPigpioClient {
   let live: PigpioHandle | null = null;
   let connecting: Promise<PigpioHandle> | null = null;
+  // bumped by close(): a connect that was in flight when close() ran must
+  // not install its handle afterwards, or that connection leaks
+  let generation = 0;
 
   function invalidate(): void {
     const h = live;
@@ -31,17 +35,23 @@ export function createSharedPigpioClient(
   async function acquire(req: PigpioClientRequest): Promise<PigpioHandle> {
     if (live) return live;
     if (!connecting) {
-      connecting = inner.connect(req).then(
+      const gen = generation;
+      const attempt: Promise<PigpioHandle> = inner.connect(req).then(
         (h) => {
+          if (gen !== generation) {
+            void h.end().catch(() => undefined);
+            throw new Error("pigpio client closed");
+          }
           live = h;
-          connecting = null;
+          if (connecting === attempt) connecting = null;
           return h;
         },
         (e: unknown) => {
-          connecting = null;
+          if (connecting === attempt) connecting = null;
           throw e;
         }
       );
+      connecting = attempt;
     }
     return connecting;
   }
@@ -51,11 +61,26 @@ export function createSharedPigpioClient(
     fn: (h: PigpioHandle) => Promise<T>
   ): Promise<T> {
     const h = await acquire(req);
+    // A pigpiod that loses power mid-connection never answers, and pigpio
+    // commands have no timeout of their own; bound each one so a health
+    // check can't hang forever.
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new TimeoutError(`pigpio command timed out after ${req.timeoutMs}ms`)
+          ),
+        req.timeoutMs
+      );
+    });
     try {
-      return await fn(h);
+      return await Promise.race([fn(h), deadline]);
     } catch (e) {
-      invalidate();
+      if (live === h) invalidate();
       throw e;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -72,6 +97,7 @@ export function createSharedPigpioClient(
       };
     },
     async close(): Promise<void> {
+      generation++;
       const h = live;
       live = null;
       connecting = null;
