@@ -5,6 +5,7 @@ import {
   TEMP_CMD,
   SMART_CMD,
   DF_CMD,
+  TOP_CMD,
   parseUptimeSeconds,
 } from "./MacMiniService.js";
 import { SSH_SEGMENT_DELIMITER } from "../../../infra/ssh/compound.js";
@@ -378,7 +379,7 @@ describe("MacMiniService", () => {
         ssh: fakeSsh({
           uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
           [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
-          "top -l 1 -n 0 -s 0": { stdout: TOP_OUT, stderr: "", code: 0 },
+          [TOP_CMD]: { stdout: TOP_OUT, stderr: "", code: 0 },
         }),
         config: makeConfig(),
         now: () => 0,
@@ -392,6 +393,45 @@ describe("MacMiniService", () => {
       expect(m["cpuIdle"]).toBe(83.63);
       expect(m["cpuUsagePercent"]).toBe(16.37);
       expect(m["processCount"]).toBe(350);
+    });
+
+    it("uses the second top sample, not the first", async () => {
+      // the first sample of `top -l 2` has no prior sample to diff against
+      const twoSamples = [
+        "Processes: 340 total, 3 running, 337 sleeping, 1500 threads",
+        "Load Avg: 1.85, 1.42, 1.36",
+        "CPU usage: 3.10% user, 9.40% sys, 87.50% idle",
+        "SharedLibs: 400M resident, 60M data, 20M linkedit.",
+        "",
+        "Processes: 351 total, 4 running, 347 sleeping, 1610 threads",
+        "Load Avg: 1.85, 1.42, 1.36",
+        "CPU usage: 20.50% user, 5.25% sys, 74.25% idle",
+        "SharedLibs: 400M resident, 60M data, 20M linkedit.",
+      ].join("\n");
+      const svc = new MacMiniService({
+        ping: fakePing({ success: true }),
+        ssh: fakeSsh({
+          uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
+          [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
+          [TOP_CMD]: { stdout: twoSamples, stderr: "", code: 0 },
+        }),
+        config: makeConfig(),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      const m = res.value.metrics as Record<string, unknown>;
+      expect(m["cpuUser"]).toBe(20.5);
+      expect(m["cpuSys"]).toBe(5.25);
+      expect(m["cpuIdle"]).toBe(74.25);
+      expect(m["cpuUsagePercent"]).toBe(25.75);
+      expect(m["processCount"]).toBe(351);
+    });
+
+    it("samples top twice, one second apart", () => {
+      expect(TOP_CMD).toBe("top -l 2 -n 0 -s 1");
+      expect(MAC_STATS_COMMANDS).toContain(TOP_CMD);
     });
 
     it("parses IP and interface state from ifconfig", async () => {
@@ -483,7 +523,7 @@ describe("MacMiniService", () => {
         TEMP_CMD,
         "vm_stat",
         "pmset -g batt",
-        "top -l 1 -n 0 -s 0",
+        TOP_CMD,
         "ifconfig en0",
         SMART_CMD,
       ]) {

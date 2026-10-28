@@ -317,7 +317,7 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
         name: "rpcUser",
         label: "RPC user",
         type: "text",
-        help: "Needed for stats. Cookie auth is not supported; set rpcauth (or rpcuser/rpcpassword) in bitcoin.conf.",
+        help: "Required: without RPC credentials both health and stats fail, so the node shows offline. Cookie auth is not supported; set rpcauth (or rpcuser/rpcpassword) in bitcoin.conf.",
       },
       {
         name: "rpcPassword",

@@ -2,7 +2,7 @@
 title: Frontend Components
 type: index
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     component,
@@ -138,7 +138,7 @@ The service-specific card components below were **removed** in Phase 3; their pa
 | Hook                                                                       | Description                                        | File                                                |
 | -------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- |
 | [[docs/components/use-service-health\|useServiceHealth / useServiceStats]] | Query service health/stats snapshots               | [[apps/frontend/src/hooks/useServiceHealth.ts]]     |
-| `useAggregatedHealth`                                                      | Aggregated health for every instance (`/services`) | [[apps/frontend/src/hooks/useAggregatedHealth.ts]]  |
+| `useAggregatedHealth`                                                      | Aggregated health for every instance (`/services`); `staleHealthSince()` gives the last good fetch time while the poll fails | [[apps/frontend/src/hooks/useAggregatedHealth.ts]]  |
 | [[docs/components/use-service-instances\|useServiceInstances]]             | Multi-instance service management                  | [[apps/frontend/src/hooks/useServiceInstances.tsx]] |
 | `useBackendMetrics`                                                        | Breaker, cache and process metrics (`/metrics`)    | [[apps/frontend/src/hooks/useBackendMetrics.ts]]    |
 
@@ -191,6 +191,7 @@ Removed hooks: `useServiceHistory` (time-series layer, ADR-019), `useBackendReac
 | `apiClient/endpoints` | Endpoint method layer                          | [[apps/frontend/src/services/apiClient/endpoints.ts]]       |
 | `apiClient/types`     | Shared API response/request types              | [[apps/frontend/src/services/apiClient/types.ts]]           |
 | `queryKeys`           | Centralized React Query key factory            | [[apps/frontend/src/lib/queryKeys.ts]]                      |
+| `healthStatus`        | Snapshot → online/warning/offline, shared by ServiceTile, ServiceDetailSheet and TopNav | [[apps/frontend/src/lib/healthStatus.ts]] |
 | Dashboard helpers     | Extracted dashboard data helpers               | [[apps/frontend/src/components/dashboard/dashboardData.ts]] |
 
 ### Dashboard Helper Test Coverage Notes

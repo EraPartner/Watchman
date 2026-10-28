@@ -329,6 +329,53 @@ describe("createDsmClient", () => {
     expect(state.loginCallCount).toBe(1);
   });
 
+  it("does not retry a rejected login on the next call (Auto Block)", async () => {
+    // 400: wrong account or password. Retrying every poll would feed DSM's
+    // Auto Block failed-login counter.
+    state.loginErrorCode = 400;
+    let t = 1_000_000;
+    const client = createDsmClient({
+      http: createHttpClient(),
+      config: makeConfig(),
+      now: () => t,
+    });
+    await expect(
+      client.call("SYNO.DSM.Info", 1, "get", {}, new AbortController().signal)
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(
+      client.call("SYNO.DSM.Info", 1, "get", {}, new AbortController().signal)
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(state.loginCallCount).toBe(1);
+    expect(state.calls).toHaveLength(1);
+
+    // after the backoff a fixed password is tried again
+    state.loginErrorCode = null;
+    t += 5 * 60 * 1000;
+    const data = await client.call<{ model: string }>(
+      "SYNO.DSM.Info",
+      1,
+      "get",
+      {},
+      new AbortController().signal
+    );
+    expect(data.model).toBe("DS920+");
+    expect(state.loginCallCount).toBe(2);
+  });
+
+  it("retries a login that failed with a non-auth error on the next call", async () => {
+    state.rawReplies["SYNO.API.Auth/login"] = { status: 503, body: "busy" };
+    const client = createDsmClient({
+      http: createHttpClient(),
+      config: makeConfig(),
+    });
+    await expect(
+      client.call("SYNO.DSM.Info", 1, "get")
+    ).rejects.toBeInstanceOf(UnavailableError);
+    delete state.rawReplies["SYNO.API.Auth/login"];
+    await client.call("SYNO.DSM.Info", 1, "get");
+    expect(state.loginCallCount).toBe(1);
+  });
+
   it("never puts credentials or session ids in the request URL", async () => {
     const client = createDsmClient({
       http: createHttpClient(),

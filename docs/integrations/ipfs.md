@@ -126,7 +126,7 @@ Optional endpoints use `.catch()` to handle timeouts or 500 errors without faili
 
 ## Frontend Component
 
-Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
+Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry. The tile's WebUI quick link uses `webuiUrl`, else the configured `apiUrl` (the Kubo API URL, which is how the config stores the node), else `host`, and appends `/webui` (default port `5001`).
 
 ## Related
 

@@ -2,7 +2,7 @@
 title: Error Codes
 type: reference
 status: active
-date: 2026-10-20
+date: 2026-10-28
 tags: [reference, api, error-codes]
 description: API error responses and HTTP status codes for the Watchman project
 aliases: [error codes, http status, api errors, error responses]
@@ -34,7 +34,7 @@ Every JSON error uses one envelope (the `DomainError` schema in `apps/backend/op
 | `VALIDATION`   | `400`       | `ValidationError`   | Request body or parameters fail validation (also Fastify validation)  |
 | `UNAUTHORIZED` | `401`       | `UnauthorizedError` | A monitored service rejected Watchman's credentials, or a cert pin mismatch |
 | `UNAVAILABLE`  | `503`       | `UnavailableError`  | The monitored service could not be reached or returned an error       |
-| `CIRCUIT_OPEN` | `503`       | `CircuitOpenError`  | The per-instance circuit breaker is open after repeated failures      |
+| `CIRCUIT_OPEN` | `503`       | `CircuitOpenError`  | The per-instance circuit breaker is open after repeated failures (not used when the last failure was `UNAUTHORIZED`/`VALIDATION`; that error is returned instead) |
 | `TIMEOUT`      | `504`       | `TimeoutError`      | The upstream call exceeded its timeout                                |
 | `INTERNAL`     | `500` (or Fastify status) | —     | Unhandled error; message is `internal error` for `500`                |
 

@@ -10,6 +10,7 @@ import type {
   SshExecResult,
 } from "../../../infra/ssh/sshExecutor.js";
 import type { RaspberryPiInstance } from "../../../config/services.js";
+import { SSH_SEGMENT_DELIMITER } from "../../../infra/ssh/compound.js";
 
 function makeConfig(
   overrides: Partial<RaspberryPiInstance> = {}
@@ -137,5 +138,95 @@ describe("getPiModel revision table", () => {
   it("ignores the warranty prefix on old-style codes", () => {
     expect(getPiModel(0x1000002)).toBe("Pi B Rev 1.0");
     expect(getPiModel(0x1000010)).toBe("Pi B+");
+  });
+});
+
+describe("PiStatsCollector model from /proc/cpuinfo (direct SSH)", () => {
+  // Pi 5 /proc/cpuinfo tail: no pigpiod on the Pi 5 family
+  const PI5_CPUINFO = [
+    "processor\t: 3",
+    "BogoMIPS\t: 108.00",
+    "Features\t: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp",
+    "CPU implementer\t: 0x41",
+    "CPU part\t: 0xd0b",
+    "",
+    "Revision\t: d04170",
+    "Serial\t\t: 1234567890abcdef",
+    "Model\t\t: Raspberry Pi 5 Model B Rev 1.0",
+  ].join("\n");
+
+  function directConfig(): RaspberryPiInstance {
+    return makeConfig({ sshUser: "pi", sshKeyPath: "/tmp/pi_id_rsa" });
+  }
+
+  // answers the compound exec: cpuinfo is the 8th segment (after the 7
+  // dynamic commands), os-release the 9th
+  function cpuinfoSsh(cpuinfo: string): SshExecutor {
+    return {
+      exec: async (req) => {
+        const subs = req.command.split(`; echo "${SSH_SEGMENT_DELIMITER}"; `);
+        const segments = subs.map((sub) => {
+          if (sub.includes("/proc/cpuinfo")) return cpuinfo;
+          if (sub.includes("/proc/uptime")) return "12345.67 23456.78";
+          return "";
+        });
+        return {
+          stdout: segments.join(`\n${SSH_SEGMENT_DELIMITER}\n`),
+          stderr: "",
+          code: 0,
+        };
+      },
+    };
+  }
+
+  const noPigpiod: PigpioClient = {
+    connect: async () => {
+      throw new Error("connect ECONNREFUSED");
+    },
+  };
+
+  it("decodes the Revision line when pigpiod is absent (Pi 5)", async () => {
+    const collector = new PiStatsCollector({
+      pigpio: noPigpiod,
+      ssh: cpuinfoSsh(PI5_CPUINFO),
+      config: directConfig(),
+      now: () => 0,
+    });
+    const snap = await collector.collect(new AbortController().signal);
+    // previously piModel "Unknown" and hwRevision null
+    expect(snap.hwRevision).toBe(0xd04170);
+    expect(snap.piModel).toBe("Pi 5");
+    expect(snap.isRpi).toBe(true);
+    expect(snap.pigpioError).toContain("ECONNREFUSED");
+
+    // cached static info keeps the model on later polls
+    const again = await collector.collect(new AbortController().signal);
+    expect(again.piModel).toBe("Pi 5");
+  });
+
+  it("falls back to the Model text for a revision code it does not know", async () => {
+    const collector = new PiStatsCollector({
+      pigpio: noPigpiod,
+      ssh: cpuinfoSsh(
+        "Revision\t: d041f0\nModel\t\t: Raspberry Pi 9 Model Z Rev 1.0\n"
+      ),
+      config: directConfig(),
+      now: () => 0,
+    });
+    const snap = await collector.collect(new AbortController().signal);
+    expect(snap.hwRevision).toBe(0xd041f0);
+    expect(snap.piModel).toBe("Raspberry Pi 9 Model Z Rev 1.0");
+  });
+
+  it("keeps the pigpiod revision when pigpiod answered", async () => {
+    const collector = new PiStatsCollector({
+      pigpio: fakePigpio(0),
+      ssh: cpuinfoSsh(PI5_CPUINFO),
+      config: directConfig(),
+      now: () => 0,
+    });
+    const snap = await collector.collect(new AbortController().signal);
+    expect(snap.hwRevision).toBe(0xc03111);
+    expect(snap.piModel).toBe("Pi 4B");
   });
 });

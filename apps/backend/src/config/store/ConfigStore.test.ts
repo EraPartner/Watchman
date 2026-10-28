@@ -74,6 +74,46 @@ describe("ConfigStore", () => {
     expect(await store.get(created.id)).toBeNull();
   });
 
+  it("clears a saved secret when the update sends null, keeps it on blank", async () => {
+    const created = await store.create({
+      kind: "router",
+      instanceId: "main",
+      host: "192.168.1.1",
+      snmpCommunity: "public",
+    });
+
+    // Blank still means "keep the saved secret".
+    const kept = await store.update(created.id, {
+      kind: "router",
+      instanceId: "main",
+      host: "192.168.1.1",
+      snmpCommunity: "",
+    });
+    expect(
+      (kept.config as { snmpCommunity?: string }).snmpCommunity
+    ).toBe("public");
+
+    // null means "remove it" so SNMP stats can be turned off again.
+    const cleared = await store.update(created.id, {
+      kind: "router",
+      instanceId: "main",
+      host: "192.168.1.1",
+      snmpCommunity: null,
+    });
+    expect(
+      (cleared.config as { snmpCommunity?: string }).snmpCommunity
+    ).toBeUndefined();
+
+    const reloaded = await store.get(created.id);
+    expect(
+      (reloaded!.config as { snmpCommunity?: string }).snmpCommunity
+    ).toBeUndefined();
+    expect(
+      (store.redact(reloaded!).config as { snmpCommunity?: string })
+        .snmpCommunity
+    ).toBeUndefined();
+  });
+
   it("prevents duplicate kind+instanceId", async () => {
     await store.create({
       kind: "ipfs",
@@ -158,6 +198,8 @@ describe("ConfigStore", () => {
     });
     const audit = await store.listAudit();
     expect(audit.map((e) => e.action)).toEqual(["rename", "update"]);
+    // TIMESTAMP is read back as UTC regardless of the host time zone.
+    expect(audit[0]!.ts.toISOString()).toBe("2026-01-01T00:00:00.000Z");
   });
 
   it("listAudit falls back to the default limit for a non-finite value", async () => {

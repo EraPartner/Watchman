@@ -76,6 +76,10 @@ interface DirectPiInfo {
   prettyName: string | null;
   processor: string | null;
   isRpi: boolean;
+  /** /proc/cpuinfo `Revision` (hex), the same code pigpiod reports. */
+  hwRevision: number | null;
+  /** /proc/cpuinfo `Model` text, e.g. "Raspberry Pi 5 Model B Rev 1.0". */
+  modelName: string | null;
 }
 
 export class PiStatsCollector {
@@ -84,6 +88,8 @@ export class PiStatsCollector {
     prettyName: string | null;
     processor: string | null;
     isRpi: boolean;
+    hwRevision: number | null;
+    modelName: string | null;
   } | null = null;
 
   constructor(private readonly deps: PiStatsDeps) {}
@@ -208,6 +214,17 @@ export class PiStatsCollector {
     if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
     if (info.processor !== null) snapshot.processor = info.processor;
     if (info.isRpi) snapshot.isRpi = true;
+    // pigpiod (when it answered) already set the model; without it (Pi 5,
+    // no pigpiod) /proc/cpuinfo carries the same revision code
+    if (snapshot.hwRevision === null) {
+      if (info.hwRevision !== null) {
+        snapshot.hwRevision = info.hwRevision;
+        snapshot.piModel = getPiModel(info.hwRevision);
+      }
+      if (snapshot.piModel.startsWith("Unknown") && info.modelName !== null) {
+        snapshot.piModel = info.modelName;
+      }
+    }
   }
 
   private applyRelayInfo(snapshot: PiStatsSnapshot, info: RpiInfo): void {
@@ -283,6 +300,8 @@ export class PiStatsCollector {
         prettyName: parseOsRelease(osOut ?? ""),
         processor: cpuInfo.processor,
         isRpi: cpuInfo.isRpi,
+        hwRevision: cpuInfo.hwRevision,
+        modelName: cpuInfo.modelName,
       };
     }
 
@@ -297,6 +316,8 @@ export class PiStatsCollector {
       prettyName: this.staticInfo?.prettyName ?? null,
       processor: this.staticInfo?.processor ?? null,
       isRpi: this.staticInfo?.isRpi ?? false,
+      hwRevision: this.staticInfo?.hwRevision ?? null,
+      modelName: this.staticInfo?.modelName ?? null,
     };
   }
 
@@ -394,15 +415,21 @@ function parseProcUptime(out: string): number | null {
 interface CpuInfoResult {
   processor: string | null;
   isRpi: boolean;
+  hwRevision: number | null;
+  modelName: string | null;
 }
 
 function parseProcCpuinfo(out: string): CpuInfoResult {
   const hwMatch = out.match(/^Hardware\s*:\s*(.+)$/im);
   const modelMatch = out.match(/^Model\s*:\s*(.+)$/im);
+  // "Revision\t: d04170" (new-style) or "Revision\t: 000e" (old-style)
+  const revMatch = out.match(/^Revision\s*:\s*([0-9a-f]+)\s*$/im);
   const processor = hwMatch && hwMatch[1] ? hwMatch[1].trim() : null;
-  const isRpi =
-    modelMatch && modelMatch[1] ? /raspberry pi/i.test(modelMatch[1]) : false;
-  return { processor, isRpi };
+  const modelName = modelMatch && modelMatch[1] ? modelMatch[1].trim() : null;
+  const isRpi = modelName !== null ? /raspberry pi/i.test(modelName) : false;
+  const rev = revMatch && revMatch[1] ? parseInt(revMatch[1], 16) : NaN;
+  const hwRevision = Number.isFinite(rev) && rev > 0 ? rev : null;
+  return { processor, isRpi, hwRevision, modelName };
 }
 
 function parseOsRelease(out: string): string | null {

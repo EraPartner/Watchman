@@ -2,7 +2,7 @@
 title: ServiceTile Component
 type: component
 status: active
-date: 2026-06-13
+date: 2026-10-28
 tags: [component, bento, tile, frontend, phase3, two-tier, health, phase-0a]
 description: Generic single-tile component replacing all 18 service-specific *Card.tsx components. Driven by ServiceRenderer registry. Includes health query, metrics display, detail-sheet trigger, and two-tier status dots (Phase 0a F1).
 aliases:
@@ -40,7 +40,7 @@ export interface ServiceTileProps {
 
 ### Data Queries
 
-- **Health**: `useServiceHealth(kind)` for status (online/warning/error/offline)
+- **Health**: `useServiceHealth(kind)` for status (online/warning/error/offline). The snapshot is collapsed with the shared `healthStatus()` helper (`apps/frontend/src/lib/healthStatus.ts`, also used by the detail sheet and TopNav): `offline` when `reachable` is false, `warning` when reachable overall but the host or service tier is down, `online` otherwise. That status feeds `renderer.tone()`, so a down tier on a reachable service tones the tile `warn`
 - **Stats**: `useServiceStats(kind)` for detailed metrics
 - Loading states: renders `Skeleton` while queries are pending
 

@@ -224,6 +224,8 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> =
       "diskUsagePercent",
       "networkRx",
       "networkTx",
+      "networkRxBps",
+      "networkTxBps",
       "dsmModel",
       "dsmVersion",
       "dsmTemperature",
@@ -234,6 +236,7 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> =
       "volumeDegradedCount",
       "diskCount",
       "diskDegradedCount",
+      "dsmError",
     ],
   };
 

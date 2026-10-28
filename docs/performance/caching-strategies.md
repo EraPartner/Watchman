@@ -2,7 +2,7 @@
 title: Caching Strategies
 type: performance
 status: active
-date: 2026-06-12
+date: 2026-10-28
 tags: [performance, caching, backend, swr, circuit-breaker]
 description: SWR stats caching, poller-published health snapshots, and circuit breakers in the Watchman backend read path
 aliases: [caching, cache, response cache, ttl, swr cache]
@@ -41,7 +41,7 @@ aliases: [caching, cache, response cache, ttl, swr cache]
 
 ## Circuit Breakers
 
-[[apps/backend/src/infra/circuitBreaker/guardedService.ts|guardedService.ts]] wraps every service instance's polled calls in two breakers — `{id}:health` and `{id}:stats` (separate, so a stats-only failure such as bad credentials cannot blind the health check). Policy: opens after 5 consecutive failures, half-opens after 60 s, one trial call. While open, calls return a `CIRCUIT_OPEN` (503) result without touching the network, so a hard-down service is probed at the breaker's reset cadence instead of full poll rate. Breaker state is visible in `GET /metrics` `breakers`.
+[[apps/backend/src/infra/circuitBreaker/guardedService.ts|guardedService.ts]] wraps every service instance's polled calls in two breakers — `{id}:health` and `{id}:stats` (separate, so a stats-only failure such as bad credentials cannot blind the health check). Policy: opens after 5 consecutive failures, half-opens after 60 s, one trial call. While open, calls return a `CIRCUIT_OPEN` (503) result without touching the network (or, when the lane's last failure was `UNAUTHORIZED`/`VALIDATION`, that error again, so the UI keeps asking for configuration), so a hard-down service is probed at the breaker's reset cadence instead of full poll rate. Breaker state is visible in `GET /metrics` `breakers`.
 
 ## EventBus Integration
 

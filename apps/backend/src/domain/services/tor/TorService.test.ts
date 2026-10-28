@@ -559,6 +559,25 @@ describe("TorService", () => {
       }
     });
 
+    it("fills bandwidthCurrent from the busier BW direction", async () => {
+      // regression: the tile hero reads bandwidthCurrent, which only the
+      // Onionoo path set, so ControlPort mode showed "—"
+      const sub = makeFakeSub();
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: makeFakeSubFactory(sub),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 7,
+      });
+      await svc.onStart?.();
+      sub.fire("BW", ["1024", "4096"]);
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) expect(res.value.metrics.bandwidthCurrent).toBe(4096);
+    });
+
     it("reports bwRead/bwWritten as null when no BW event is live", async () => {
       // regression: a dead subscription used to report 0 B/s forever
       const sub = makeFakeSub();
@@ -579,6 +598,7 @@ describe("TorService", () => {
       if (res.ok) {
         expect(res.value.metrics.bwRead).toBeNull();
         expect(res.value.metrics.bwWritten).toBeNull();
+        expect(res.value.metrics.bandwidthCurrent).toBeNull();
       }
     });
 
@@ -783,6 +803,7 @@ describe("TorService", () => {
         expect(res.value.metrics.fingerprint).toBe(FP);
         expect(res.value.metrics.flags).toBe("Fast,Guard,Running,Stable,Valid");
         expect(res.value.metrics.consensusWeight).toBe(5400);
+        expect(res.value.metrics.relayType).toBe("guard");
         expect(res.value.metrics.country).toBe("de");
       }
     });

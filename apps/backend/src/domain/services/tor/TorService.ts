@@ -446,6 +446,12 @@ export class TorService extends BaseService {
             // null = no live BW subscription, not "0 bytes/s"
             bwRead: bwFresh ? this.bwRead : null,
             bwWritten: bwFresh ? this.bwWritten : null,
+            // the tile hero and charts read the Onionoo key; a relay forwards
+            // roughly what it receives, so the busier direction stands in for
+            // Onionoo's one-direction observed bandwidth
+            bandwidthCurrent: bwFresh
+              ? Math.max(this.bwRead, this.bwWritten)
+              : null,
             version: coreInfo.get("version/current") ?? "",
             dormant: coreInfo.get("dormant") === "1",
             descriptorLimit: parseIntMetric(
@@ -460,7 +466,10 @@ export class TorService extends BaseService {
             circuits: { active: circuitsActive, total: circuitsTotal },
             ...(fingerprint ? { fingerprint } : {}),
             ...(nsEntry.flags.length > 0
-              ? { flags: nsEntry.flags.join(",") }
+              ? {
+                  flags: nsEntry.flags.join(","),
+                  relayType: determineRelayType(nsEntry.flags),
+                }
               : {}),
             ...(country !== undefined ? { country } : {}),
             ...(consensusWeight !== undefined ? { consensusWeight } : {}),

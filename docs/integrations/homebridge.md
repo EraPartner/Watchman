@@ -2,7 +2,7 @@
 title: Homebridge Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-28
 tags:
   [
     integration,
@@ -27,14 +27,14 @@ aliases: [homebridge, smart home, accessories, homekit]
 # Homebridge Integration
 
 > [!abstract] Overview
-> Monitors Homebridge smart home server with two-tier health model: ICMP ping to the host, plus HTTP probe to the Homebridge Config UI X API. Provides server info, accessories listing, and configuration.
+> Monitors Homebridge smart home server with two-tier health model: ICMP ping to the host, plus HTTP probe to the Homebridge Config UI X API. Provides server information, host telemetry (CPU, RAM, uptime), bridge and child-bridge status, plugin and version update checks, and an accessory count.
 
 ## Health Model (Phase 0a)
 
 Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to Homebridge host
-- **Service tier** — HTTP `GET /api/status/homebridge` probe
+- **Service tier** — HTTP `GET <statusPath>` probe (default `/api/status/server-information`), run in parallel with the slow-lane version memo (`versionPath`). The probe result supplies `details.hostname`; the version memo supplies `details.currentVersion` when known. A failed version lookup does not fail health; a failed status probe does.
 - **Composite reachability** — `reachable = service.reachable` — daemon-primary: the HTTP API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
 ## Configuration
@@ -67,17 +67,12 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 
 ## Service Class
 
-`HomebridgeService` (`apps/backend/src/domain/services/`)
+`HomebridgeService` (`apps/backend/src/domain/services/homebridge/HomebridgeService.ts`) exposes only the standard `BaseService` methods. All HTTP calls go through `HomebridgeClient.get()` (`homebridgeClient.ts`), which handles authentication.
 
 ### Methods
 
-- `checkHealth()` - API connection test
-- `getStats()` - Server statistics
-- `getVersion()` - Homebridge version
-- `getServerInformation()` - Detailed server info
-- `getAccessories()` - Accessories list with cached fallback
-- `login()` - Background authentication
-- `checkForUpdates()` - Check for Homebridge updates
+- `checkHealth()` - two-tier health: ICMP ping plus `statusPath` probe and version memo (see Health Model)
+- `getStats()` - fans out to the Config UI X endpoints below in parallel; only the `statusPath` request is required, every other endpoint degrades to `null` on failure
 
 ## Stats Telemetry (Config UI X API)
 
@@ -93,6 +88,8 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 | `/api/plugins`                         | `pluginCount`, `pluginUpdatesAvailable` | **Slow lane (15-min ttlMemo)** — plugin list and update count; slow because the UI server checks npm                                                                                                    |
 | `/api/accessories`                     | `accessoryCount`                        | `null` unless Homebridge is running in insecure mode                                                                                                                                                    |
 | Version endpoint                       | `latestVersion`, `updateAvailable`      | **Slow lane (15-min ttlMemo)** — latest release from npm; `updateAvailable` is `true` when current < latest                                                                                             |
+
+The required `statusPath` response (server information) supplies `hostname`, `platform`, `homebridgeVersion` and `serverVersion` (`hostname`/`platform` fall back to its `os` object). A field the response lacks is `null`, like the other missing metrics, so the detail sheet shows "—" instead of an empty string.
 
 ### Tile Summary (renderer)
 
@@ -123,11 +120,8 @@ Plugin list and version checks are rate-limited to **once per 15 minutes** via `
 
 ## Special Features
 
-- **Background Login**: Homebridge performs background login on initialization
-- **Paginated Accessories**: Accessories endpoint supports pagination (default 50, max 100)
-- **Normalized Accessories Shape**: `GET /api/accessories` normalizes upstream Homebridge accessories payloads via route-level helper `extractHomebridgeAccessories()` before pagination.
-- **Cached Accessories Fallback**: If a fresh fetch fails but prior accessories data exists, `GET /api/accessories` serves the last known list from `lastData` and still responds with HTTP `200`.
-- **Warning passthrough semantics preserved**: If Homebridge accessories fetch fails and no accessory list is available, endpoint still returns HTTP `200` with empty paginated `data` plus `warning`/`message` fields so UI can degrade gracefully without hard request failures.
+- **Lazy login**: There is no login at startup. The client sends `authToken` (if configured) as the initial bearer token; the first `401` triggers a single `POST` to `loginPath` with `username`/`password` (see HB1 below). Missing credentials surface as `UnauthorizedError`, and an HTML login page in a response is also treated as unauthorized.
+- **Accessories as a count only**: Watchman does not list or paginate accessories. `getStats()` reads `GET /api/accessories` from the Config UI X server solely to report `accessoryCount`, which is `null` when the endpoint is unavailable (it requires Homebridge insecure mode).
 - **Self-Signed HTTPS (opt-in)**: TLS certificates are **verified by default**, so an `https://` base URL backed by a self-signed cert is rejected (the request surfaces as a generic `http request failed`). Set `allowSelfSigned: true` to route that instance through a permissive-TLS client (`infra/http/insecureClient.ts`, `rejectUnauthorized: false`). This **disables verification and forfeits MITM protection**, so it is intended for the single-user trusted-network model only ([[docs/adr/017-remove-authentication-frontend-v2-migration|ADR-017]] / [[docs/adr/025-trusted-network-security-model-and-audit-remediation|ADR-025]]). For identity-preserving self-signed support, certificate pinning — as the Philips Hue bridge uses via `certHash` (`createPinnedClient`) — is the stronger pattern, but it is not currently wired for Homebridge.
 
 ## HB1 Phase — JWT Token Refresh (Complete)
@@ -151,8 +145,7 @@ HomebridgeService now uses the [[apps/backend/src/infra/http/jwtClient.ts|jwtCli
 
 ## Route Registration
 
-- Homebridge special routes (accessories, version) are registered as Fastify plugins in `apps/backend/src/transport/http/`.
-- Core `GET /services/homebridge/health` and `GET /services/homebridge/stats` come from the standard service route plugin.
+- Homebridge has no integration-specific routes. `GET /services/homebridge/health` and `GET /services/homebridge/stats` come from the standard service route plugin, like every other integration.
 
 ## Frontend Component
 

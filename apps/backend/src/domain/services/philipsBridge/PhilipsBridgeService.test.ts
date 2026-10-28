@@ -3,6 +3,7 @@ import { PhilipsBridgeService } from "./PhilipsBridgeService.js";
 import type { PingProber, PingResult } from "../../../infra/net/pingProbe.js";
 import type { PhilipsBridgeInstance } from "../../../config/services.js";
 import type { HttpClient, HttpRequest } from "../../../infra/http/client.js";
+import { UnauthorizedError } from "../../../core/errors.js";
 
 function makeConfig(
   overrides: Partial<PhilipsBridgeInstance> = {}
@@ -438,6 +439,8 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
     });
     await svc.onStart();
     expect(emit).toBeDefined();
+    // the stream is up before the first poll
+    emit?.(JSON.stringify([{ type: "update", data: [] }]));
 
     // first poll fetches and seeds the live map
     await svc.getStats(new AbortController().signal);
@@ -487,6 +490,8 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
       },
     });
     await svc.onStart();
+    // the stream is up before the first poll
+    emit?.(JSON.stringify([{ type: "update", data: [] }]));
     await svc.getStats(new AbortController().signal);
     // CLIP v2 eventstream: a removed light arrives as a "delete" envelope
     emit?.(
@@ -563,6 +568,55 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
     await svc.onStop();
   });
 
+  it("re-seeds after the stream recovers so a change made while it was down is not lost", async () => {
+    let emit: ((data: string) => void) | undefined;
+    let fail: ((e: unknown) => void) | undefined;
+    const routes = { ...ROUTES };
+    const http = routedHttp(routes);
+    const lightFetches = () =>
+      vi
+        .mocked(http.send)
+        .mock.calls.filter(
+          ([req]) => new URL(req.url).pathname === "/clip/v2/resource/light"
+        ).length;
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: true }),
+      http,
+      config: hueConfig(),
+      now: () => 0,
+      sse: (opts) => {
+        emit = opts.onMessage;
+        fail = opts.onError;
+      },
+    });
+    await svc.onStart();
+    emit?.(JSON.stringify([{ type: "update", data: [] }]));
+    await svc.getStats(new AbortController().signal);
+
+    fail?.(new Error("stream closed"));
+    // fallback fetch while the stream is down
+    await svc.getStats(new AbortController().signal);
+    const afterFallback = lightFetches();
+    // l2 is switched on before the stream reconnects: no event for it
+    routes["/clip/v2/resource/light"] = {
+      data: [
+        { id: "l1", type: "light", on: { on: true } },
+        { id: "l2", type: "light", on: { on: true } },
+      ],
+    };
+    emit?.(JSON.stringify([{ type: "update", data: [] }]));
+
+    const res = await svc.getStats(new AbortController().signal);
+    expect(lightFetches()).toBe(afterFallback + 1);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics.onCount).toBe(2);
+
+    // seeded again while healthy: no further fetch
+    await svc.getStats(new AbortController().signal);
+    expect(lightFetches()).toBe(afterFallback + 1);
+    await svc.onStop();
+  });
+
   it("onStart skips SSE without an applicationKey and onStop aborts the stream", async () => {
     let started = 0;
     let abortSignal: AbortSignal | undefined;
@@ -593,5 +647,57 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
     expect(abortSignal?.aborted).toBe(false);
     await withKey.onStop();
     expect(abortSignal?.aborted).toBe(true);
+  });
+});
+
+describe("PhilipsBridgeService rejected application key", () => {
+  it("health reports the rejected key on the service tier", async () => {
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: true, avgMs: 5 }),
+      http: fakeHttp(403, { errors: [{ description: "unauthorized user" }] }),
+      config: makeConfig({ applicationKey: "revoked" }),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.service?.reachable).toBe(false);
+      expect(res.value.service?.message).toBe(
+        "application key rejected — re-pair the bridge"
+      );
+      expect(res.value.message).toBe(
+        "application key rejected — re-pair the bridge"
+      );
+    }
+  });
+
+  it("health has no key message when the bridge is just unreachable", async () => {
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: false }),
+      http: fakeHttp(503, {}),
+      config: makeConfig({ applicationKey: "k" }),
+      now: () => 0,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.service?.message).toBeUndefined();
+      expect(res.value.message).toBeUndefined();
+    }
+  });
+
+  it.each([401, 403])("getStats returns UnauthorizedError on %i", async (status) => {
+    const svc = new PhilipsBridgeService({
+      ping: fakePing({ success: true }),
+      http: fakeHttp(status, {}),
+      config: makeConfig({ applicationKey: "revoked" }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toBeInstanceOf(UnauthorizedError);
+      expect(res.error.message).toContain("re-pair the bridge");
+    }
   });
 });

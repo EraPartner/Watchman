@@ -35,6 +35,11 @@ vi.mock("../../hooks/useServiceInstances", () => ({
   })),
 }));
 
+vi.mock("@/hooks/useAggregatedHealth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useAggregatedHealth")>()),
+  useAggregatedHealth: vi.fn(() => ({ data: undefined, isError: false })),
+}));
+
 vi.mock("../../hooks/useWebSocket", () => ({
   useWebSocket: () => ({
     isConnected: false,
@@ -122,6 +127,8 @@ vi.mock("@/components/tile/ServiceTile", () => ({
 
 import BentoDashboard from "./BentoDashboard";
 import { useServiceInstances } from "../../hooks/useServiceInstances";
+import { useServices } from "../../pages/Settings/useConfigQueries";
+import { useAggregatedHealth } from "@/hooks/useAggregatedHealth";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -260,5 +267,59 @@ describe("BentoDashboard", () => {
     });
     await act(async () => root.unmount());
     if (previous) mocked.mockImplementation(previous);
+  });
+
+  it("says nothing is active, not 'none configured', when configured services are inactive", async () => {
+    const mocked = vi.mocked(useServices);
+    const previous = mocked.getMockImplementation();
+    mocked.mockImplementation(
+      () =>
+        ({
+          data: [{ id: "bitcoin:main", kind: "bitcoin", instanceId: "main" }],
+          isLoading: false,
+        }) as unknown as ReturnType<typeof useServices>
+    );
+    const { container, root } = await render(h(BentoDashboard));
+    expect(container.textContent).toContain("Nothing active in this profile");
+    expect(container.textContent).not.toContain("No services configured yet");
+    const link = Array.from(container.querySelectorAll("a")).find(
+      (a) => a.textContent === "Open settings"
+    );
+    expect(link?.getAttribute("href")).toBe("/settings/services");
+    await act(async () => root.unmount());
+    if (previous) mocked.mockImplementation(previous);
+  });
+
+  it("does not show the backend-unreachable banner while health polls succeed", async () => {
+    const { container, root } = await render(h(BentoDashboard));
+    expect(container.textContent).not.toContain("Backend unreachable");
+    await act(async () => root.unmount());
+  });
+
+  it("shows a backend-unreachable banner when health errors with stale data", async () => {
+    const mocked = vi.mocked(useAggregatedHealth);
+    const previous = mocked.getMockImplementation();
+    mocked.mockImplementation(
+      () =>
+        ({
+          data: { entries: [], byKey: new Map(), fetchedAt: Date.now() - 60_000 },
+          isError: true,
+          error: new Error("Network error"),
+        }) as unknown as ReturnType<typeof useAggregatedHealth>
+    );
+    const { container, root } = await render(h(BentoDashboard));
+    expect(container.textContent).toContain(
+      "Backend unreachable — showing data from"
+    );
+    await act(async () => root.unmount());
+    if (previous) mocked.mockImplementation(previous);
+  });
+
+  it("shows the WebSocket connection dot at every width", async () => {
+    const { container, root } = await render(h(BentoDashboard));
+    const dot = container.querySelector('[aria-label="WebSocket disconnected"]');
+    expect(dot).toBeTruthy();
+    expect(dot!.className.split(/\s+/)).not.toContain("hidden");
+    await act(async () => root.unmount());
   });
 });

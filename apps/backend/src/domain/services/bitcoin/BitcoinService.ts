@@ -98,6 +98,13 @@ export class BitcoinService extends BaseService {
   private zmqHandle: ZmqSubscriberHandle | null = null;
   /** Why the ZMQ subscription is not running (null when connected or unused). */
   private zmqError: string | null = null;
+  /** Live rawtx subscription — the same handle as zmqHandle when both topics
+   *  share one endpoint. */
+  private zmqRawtxHandle: ZmqSubscriberHandle | null = null;
+  /** Why the rawtx subscription is not running (null when connected or unused). */
+  private zmqRawtxError: string | null = null;
+  /** Running count of ZMQ rawtx events since last onStart. */
+  private zmqTxCount = 0;
   private stopped = false;
   /** Hex hash of the most-recent block seen via ZMQ (empty = none yet). */
   private lastBlockHashZmq = "";
@@ -133,35 +140,74 @@ export class BitcoinService extends BaseService {
   }
 
   override async onStart(): Promise<void> {
-    if (!this.zmqConnectFn || !this.zmqHashblockEndpoint) return;
+    if (!this.zmqConnectFn) return;
+    // one socket per endpoint: hashblock and rawtx share it when they match
+    const topicsByEndpoint = new Map<string, string[]>();
+    if (this.zmqHashblockEndpoint) {
+      topicsByEndpoint.set(this.zmqHashblockEndpoint, ["hashblock"]);
+    }
+    if (this.zmqRawtxEndpoint) {
+      const shared = topicsByEndpoint.get(this.zmqRawtxEndpoint);
+      if (shared) shared.push("rawtx");
+      else topicsByEndpoint.set(this.zmqRawtxEndpoint, ["rawtx"]);
+    }
+    if (topicsByEndpoint.size === 0) return;
 
+    await Promise.all(
+      [...topicsByEndpoint].map(([endpoint, topics]) =>
+        this.openZmq(this.zmqConnectFn!, endpoint, topics)
+      )
+    );
+
+    if (this.zmqHashblockEndpoint) await this.verifyZmqConfig();
+  }
+
+  private async openZmq(
+    connect: ZmqConnectFn,
+    endpoint: string,
+    topics: string[]
+  ): Promise<void> {
+    const hashblock = topics.includes("hashblock");
+    const rawtx = topics.includes("rawtx");
     try {
-      const handle = await this.zmqConnectFn(this.zmqHashblockEndpoint, [
-        "hashblock",
-      ]);
+      const handle = await connect(endpoint, topics);
       // onStart is time-boxed by the lifecycle; if the service was stopped
       // while connecting, nothing else would ever close this handle
       if (this.stopped) {
         await handle.close();
         return;
       }
-      this.zmqHandle = handle;
-      this.zmqError = null;
-      this.zmqHandle.onMessage((msg) => {
+      if (hashblock) {
+        this.zmqHandle = handle;
+        this.zmqError = null;
+      }
+      if (rawtx) {
+        this.zmqRawtxHandle = handle;
+        this.zmqRawtxError = null;
+      }
+      handle.onMessage((msg) => {
         if (msg.topic === "hashblock") {
           this.lastBlockHashZmq = msg.data.toString("hex");
           this.lastBlockAtZmq = this.now();
           this.zmqBlockCount += 1;
+        } else if (msg.topic === "rawtx") {
+          // only counted; the transaction itself is not decoded or kept
+          this.zmqTxCount += 1;
         }
       });
     } catch (e) {
       // ZMQ connection failure is non-fatal — service continues with poll-only
-      // mode, but stats say why no blocks arrive
-      this.zmqHandle = null;
-      this.zmqError = e instanceof Error ? e.message : String(e);
+      // mode, but stats say why no blocks/txs arrive
+      const reason = e instanceof Error ? e.message : String(e);
+      if (hashblock) {
+        this.zmqHandle = null;
+        this.zmqError = reason;
+      }
+      if (rawtx) {
+        this.zmqRawtxHandle = null;
+        this.zmqRawtxError = reason;
+      }
     }
-
-    await this.verifyZmqConfig();
   }
 
   /** Best-effort sanity check: does the node actually publish hashblock on a
@@ -199,6 +245,10 @@ export class BitcoinService extends BaseService {
 
   override async onStop(): Promise<void> {
     this.stopped = true;
+    if (this.zmqRawtxHandle && this.zmqRawtxHandle !== this.zmqHandle) {
+      await this.zmqRawtxHandle.close();
+    }
+    this.zmqRawtxHandle = null;
     if (this.zmqHandle) {
       await this.zmqHandle.close();
       this.zmqHandle = null;
@@ -341,6 +391,14 @@ export class BitcoinService extends BaseService {
                 zmqError: this.zmqError,
                 zmqEndpointMatch: this.zmqEndpointMatch,
                 zmqServerHashblockEndpoint: this.zmqServerHashblockEndpoint,
+              }
+            : {}),
+          // ZMQ rawtx count since start (null when zmqRawtxEndpoint is unset)
+          zmqTxCount: this.zmqRawtxEndpoint ? this.zmqTxCount : null,
+          ...(this.zmqRawtxEndpoint
+            ? {
+                zmqRawtxConnected: this.zmqRawtxHandle !== null,
+                zmqRawtxError: this.zmqRawtxError,
               }
             : {}),
         },

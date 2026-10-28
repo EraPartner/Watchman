@@ -702,6 +702,96 @@ describe("BitcoinService — ZMQ (BT2)", () => {
     expect(zmq.isClosed()).toBe(true);
   });
 
+  it("subscribes to rawtx on its own endpoint, counts txs, and onStop closes both sockets", async () => {
+    // regression: zmqRawtxEndpoint was stored but never subscribed
+    const blocks = makeFakeZmq();
+    const txs = makeFakeZmq();
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({
+        zmqHashblockEndpoint: "tcp://127.0.0.1:28332",
+        zmqRawtxEndpoint: "tcp://127.0.0.1:28333",
+      }),
+      now: () => 0,
+      zmqConnect: (endpoint, topics) =>
+        endpoint.endsWith(":28333")
+          ? txs.connect(endpoint, topics)
+          : blocks.connect(endpoint, topics),
+    });
+    await svc.onStart();
+    expect(blocks.connectCalls).toEqual([
+      { endpoint: "tcp://127.0.0.1:28332", topics: ["hashblock"] },
+    ]);
+    expect(txs.connectCalls).toEqual([
+      { endpoint: "tcp://127.0.0.1:28333", topics: ["rawtx"] },
+    ]);
+
+    const rawtx = (seq: number): ZmqMessage => ({
+      topic: "rawtx",
+      data: Buffer.from("0200", "hex"),
+      sequence: seq,
+    });
+    txs.emit(rawtx(1));
+    txs.emit(rawtx(2));
+    blocks.emit(hashblockMsg("deadbeef".repeat(8), 1));
+
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.zmqTxCount).toBe(2);
+      expect(res.value.metrics.zmqRawtxConnected).toBe(true);
+      expect(res.value.metrics.zmqBlockCount).toBe(1);
+    }
+
+    await svc.onStop();
+    expect(blocks.isClosed()).toBe(true);
+    expect(txs.isClosed()).toBe(true);
+  });
+
+  it("shares one socket when rawtx and hashblock use the same endpoint", async () => {
+    const zmq = makeFakeZmq();
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({
+        zmqHashblockEndpoint: "tcp://127.0.0.1:28332",
+        zmqRawtxEndpoint: "tcp://127.0.0.1:28332",
+      }),
+      now: () => 0,
+      zmqConnect: zmq.connect,
+    });
+    await svc.onStart();
+    expect(zmq.connectCalls).toEqual([
+      { endpoint: "tcp://127.0.0.1:28332", topics: ["hashblock", "rawtx"] },
+    ]);
+    zmq.emit({ topic: "rawtx", data: Buffer.from("02", "hex"), sequence: 0 });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // one handler on the shared socket, so each tx counts once
+      expect(res.value.metrics.zmqTxCount).toBe(1);
+      expect(res.value.metrics.zmqBlockCount).toBe(0);
+    }
+    await svc.onStop();
+    expect(zmq.isClosed()).toBe(true);
+  });
+
+  it("reports zmqTxCount as null when no zmqRawtxEndpoint is configured", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.zmqTxCount).toBeNull();
+      expect(res.value.metrics).not.toHaveProperty("zmqRawtxConnected");
+    }
+  });
+
   it("onStop after no ZMQ start is a no-op", async () => {
     const svc = new BitcoinService({
       http: createHttpClient(),

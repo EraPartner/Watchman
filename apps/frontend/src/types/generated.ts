@@ -1573,7 +1573,7 @@ export interface components {
             message: string;
         };
         /**
-         * @description Full service-instance config (kind-discriminated). Secrets sent as "***" preserve existing value on update. Request is flat (not nested under "config"); kind determines which additional fields are present.
+         * @description Full service-instance config (kind-discriminated). Secrets sent as "***" or blank preserve existing value on update; a secret sent as null is cleared. Request is flat (not nested under "config"); kind determines which additional fields are present.
          * @example {
          *       "kind": "bitcoin",
          *       "instanceId": "main",

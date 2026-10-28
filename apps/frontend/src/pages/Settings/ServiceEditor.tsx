@@ -135,6 +135,10 @@ export default function ServiceEditor({
   const [values, setValues] = useState<FormValues>({});
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
+  // Saved secrets the operator asked to remove; sent as null on save.
+  const [clearedSecrets, setClearedSecrets] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
 
   const kindSchema = kinds?.find((k) => k.kind === selectedKind);
 
@@ -155,6 +159,7 @@ export default function ServiceEditor({
   useEffect(() => {
     if (kindSchema) {
       setValues(initialValues(kindSchema, existing));
+      setClearedSecrets(new Set());
       const cacheField = kindSchema.fields.find((f) => f.name === "cacheTtlMs");
       const timeoutField = kindSchema.fields.find(
         (f) => f.name === "timeoutMs"
@@ -211,7 +216,11 @@ export default function ServiceEditor({
       const v = isArrayField(f)
         ? parseCsv(arrayToCsv(raw), f.type === "numberArray")
         : raw;
-      if (f.secret && (v === "" || v === "***")) continue;
+      if (f.secret && (v === "" || v === "***")) {
+        // Blank keeps the saved secret server-side; null asks it to clear.
+        if (clearedSecrets.has(f.name)) config[f.name] = null;
+        continue;
+      }
       if (v === "" && !f.required) continue;
       if (Array.isArray(v) && v.length === 0 && !f.required) continue;
       config[f.name] = v;
@@ -327,17 +336,40 @@ export default function ServiceEditor({
         Enabled
       </label>
 
-      {renderedFields.map((f) => (
-        <FieldInput
-          key={f.name}
-          field={f}
-          value={values[f.name]}
-          onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
-          secretPlaceholder={
-            existing && f.secret ? "(saved — leave blank to keep)" : undefined
-          }
-        />
-      ))}
+      {renderedFields.map((f) => {
+        // Only a stored non-empty secret comes back as "***"; an unset one
+        // has nothing to keep or clear.
+        const hasSavedSecret =
+          !!existing && !!f.secret && existing.config?.[f.name] === "***";
+        const cleared = clearedSecrets.has(f.name);
+        return (
+          <FieldInput
+            key={f.name}
+            field={f}
+            value={values[f.name]}
+            onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
+            secretPlaceholder={
+              hasSavedSecret
+                ? cleared
+                  ? "(will be cleared on save)"
+                  : "(saved — leave blank to keep)"
+                : undefined
+            }
+            secretCleared={cleared}
+            onToggleClearSecret={
+              hasSavedSecret && !f.required
+                ? () =>
+                    setClearedSecrets((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(f.name)) next.delete(f.name);
+                      else next.add(f.name);
+                      return next;
+                    })
+                : undefined
+            }
+          />
+        );
+      })}
 
       {selectedKind === "philipsBridge" && (
         <div className="flex items-center gap-2">
@@ -440,6 +472,9 @@ interface FieldInputProps {
   value: FormValue | undefined;
   onChange: (v: FormValue) => void;
   secretPlaceholder?: string;
+  /** Set for a saved, optional secret: toggles clearing it on save. */
+  onToggleClearSecret?: () => void;
+  secretCleared?: boolean;
 }
 
 function FieldInput({
@@ -447,6 +482,8 @@ function FieldInput({
   value,
   onChange,
   secretPlaceholder,
+  onToggleClearSecret,
+  secretCleared,
 }: FieldInputProps) {
   const base =
     "mt-1 block w-full rounded border bg-transparent px-3 py-2 text-sm";
@@ -520,7 +557,7 @@ function FieldInput({
           ? "url"
           : "text";
 
-  return (
+  const textInput = (
     <label className="block">
       {labelNode}
       <input
@@ -537,5 +574,20 @@ function FieldInput({
         <span className="text-xs text-muted-foreground">{field.help}</span>
       )}
     </label>
+  );
+
+  if (!onToggleClearSecret) return textInput;
+  return (
+    <div className="space-y-1">
+      {textInput}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onToggleClearSecret}
+      >
+        {secretCleared ? `Keep saved ${field.label}` : `Clear ${field.label}`}
+      </Button>
+    </div>
   );
 }

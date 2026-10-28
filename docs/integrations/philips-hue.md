@@ -129,7 +129,13 @@ When `applicationKey` is set, `getStats` returns:
 }
 ```
 
-Light counts are served from the live SSE map (no HTTP fetch) when the eventstream is healthy and seeded by a full light fetch; otherwise they fall back to `GET /clip/v2/resource/light`, which rebuilds the map. SSE `delete` events remove lights, and an eventstream error, or the bridge closing the stream, forces a re-seed on the next poll. The Zigbee, battery, device, and room values are fetched via slow-lane TTL-memoized calls (`/resource/zigbee_connectivity`, `/resource/device_power`, `/resource/device`, `/resource/room`) that refresh every 5 minutes.
+Light counts are served from the live SSE map (no HTTP fetch) when the eventstream is healthy and seeded by a full light fetch; otherwise they fall back to `GET /clip/v2/resource/light`, which rebuilds the map. SSE `delete` events remove lights, and an eventstream error, or the bridge closing the stream, forces a re-seed on the next poll. When the stream recovers (the first event after it was down or not yet up), the seed is also invalidated, because a light list fetched while the stream was down can miss changes made before it reconnected; the next poll re-fetches the full list. The Zigbee, battery, device, and room values are fetched via slow-lane TTL-memoized calls (`/resource/zigbee_connectivity`, `/resource/device_power`, `/resource/device`, `/resource/room`) that refresh every 5 minutes.
+
+**Rejected application key**: the bridge answers `401` or `403` for an unknown or revoked
+`applicationKey`. If any of the light or resource reads gets one, `getStats` returns
+`err(UnauthorizedError("hue application key rejected — re-pair the bridge"))` instead of a
+metrics object with missing values, because every read will keep failing until the bridge is
+re-paired. Other failures of the slow-lane resource calls still degrade to `null`.
 
 ### Charts (X3 Task)
 
@@ -324,12 +330,13 @@ constructor(deps: PhilipsBridgeDeps) {
 
 - `checkHealth(signal)` — Two-tier health check
   - ICMP ping to host (via `pinger`; skipped when `usePing: false`)
-  - If `applicationKey` set: HTTP probe to `GET /clip/v2/resource/light`
+  - If `applicationKey` set: HTTP probe to `GET /clip/v2/resource/bridge` (one small object, rather than downloading every light each health tick)
   - Returns composite `reachable` (`host.reachable OR service.reachable`)
   - Details include `pingEnabled` and `sseConnected`
+  - When the probe gets `401`/`403`, the service tier and the snapshot carry `message: "application key rejected — re-pair the bridge"` (service tier unreachable)
 - `getStats(signal)` — Fetch service metrics
   - If no `applicationKey`: returns `{ host, configured }`
-  - If `applicationKey` set: returns the full metrics object (see Metrics Exposed below)
+  - If `applicationKey` set: returns the full metrics object (see Metrics Exposed below), or `UnauthorizedError` when the bridge rejects the key
 
 ## Test Coverage
 
