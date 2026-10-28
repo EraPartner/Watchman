@@ -2,7 +2,7 @@
 title: ServiceEditor Component
 type: component
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags: [component, frontend, form, configuration, setup-wizard, dynamic-form, validation]
 description: Dynamic form component for creating and editing service instances with field filtering, advanced settings, and array support
 aliases: [service editor, service configuration form, dynamic form]
@@ -150,14 +150,24 @@ Secret fields (marked `secret: true` in metadata) behave specially:
 
 **On Edit:**
 - Rendered as `<input type="password">`
-- Placeholder: `"(saved — leave blank to keep)"`
+- A secret counts as *saved* only when the backend returned it redacted as `"***"` (an unset secret comes back empty). Only a saved secret gets the `"(saved — leave blank to keep)"` placeholder; an unset one shows no saved-value hint
 - If left blank or empty: omitted from request (preserves existing)
 - If filled: new value sent (encrypted at rest)
+- **Clear control**: a saved secret on an optional field (not `required`) gets a ghost button
+  `Clear <label>`. Pressing it marks the secret for removal: the placeholder becomes
+  `"(will be cleared on save)"` and the button becomes `Keep saved <label>` (pressing it again
+  undoes the mark). On save, a marked secret that is still blank is sent as `null`, which the
+  backend treats as "remove the saved secret" (see [[docs/api/config|Configuration API]]). Typing a
+  new value wins over the mark. Marks reset when the kind schema or the edited instance reloads.
 
-Empty secret fields are **excluded** from the config payload:
+Blank secret fields are **excluded** from the config payload unless marked for clearing:
 
 ```typescript
-if (f.secret && (v === "" || v === "***")) continue;
+if (f.secret && (v === "" || v === "***")) {
+  // Blank keeps the saved secret server-side; null asks it to clear.
+  if (clearedSecrets.has(f.name)) config[f.name] = null;
+  continue;
+}
 ```
 
 ### Required Field Validation
@@ -245,10 +255,19 @@ Each kind-specific field rendered by `FieldInput`:
   value={values[f.name]}
   onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
   secretPlaceholder={
-    existing && f.secret ? "(saved — leave blank to keep)" : undefined
+    hasSavedSecret
+      ? cleared
+        ? "(will be cleared on save)"
+        : "(saved — leave blank to keep)"
+      : undefined
   }
+  secretCleared={cleared}
+  onToggleClearSecret={hasSavedSecret && !f.required ? toggleClear : undefined}
 />
 ```
+
+`hasSavedSecret` is `existing && f.secret && existing.config[f.name] === "***"`. When
+`onToggleClearSecret` is set, `FieldInput` renders the input plus the Clear / Keep saved button.
 
 Handles:
 - `type: "text"` → `<input type="text">`

@@ -35,22 +35,22 @@ Two-tier health via `withHostPing` helper:
 - **Service tier** — HTTP `GET /control/status` probe
 - **Composite reachability** — `reachable = service.reachable` — daemon-primary: the control-API probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
-If host is unreachable, service tier is skipped; dashboard shows both indicators red.
+`withHostPing` runs the ping and the HTTP probe in parallel, so neither tier skips the other. Because reachability follows the service tier, a failed ping with a responding control API still reports AdGuard as reachable; a failed control-API probe reports it unreachable whatever the ping says.
 
 ## Configuration
 
 Configuration lives in the DuckDB config store, managed via the Settings UI or the `/config` API. Environment variables (`ADGUARD_*`) are legacy and were imported once on first boot — they are now ignored (see ADR-015 / ADR-008).
 
-| Field        | Type    | Required | Default                 | Secret  | Description                                                                                     |
-| ------------ | ------- | -------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `instanceId` | text    | yes      | `"main"`                | no      | Unique identifier for this instance                                                             |
-| `enabled`    | boolean | —        | `true`                  | no      | Enable/disable polling                                                                          |
-| `baseUrl`    | URL     | **yes**  | —                       | no      | AdGuard Home base URL (e.g. `http://192.0.2.1`). Host is extracted from this URL for ICMP ping. |
-| `username`   | text    | no       | `""`                    | no      | AdGuard Home username for HTTP Basic auth. Leave empty if auth is disabled.                     |
-| `password`   | text    | no       | `""`                    | **yes** | AdGuard Home password for HTTP Basic auth. Encrypted at rest.                                   |
-| `timeoutMs`  | number  | —        | `5000`                  | no      | Request timeout in milliseconds (applies to both ICMP ping and HTTP probe)                      |
-| `cacheTtlMs` | number  | —        | `10000`                 | no      | Stats cache TTL in milliseconds                                                                 |
-| `pollPolicy` | object  | —        | health 10 s, stats 30 s | no      | Poll intervals and jitter                                                                       |
+| Field        | Type     | Required | Default                 | Secret  | Description                                                                                     |
+| ------------ | -------- | -------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `instanceId` | text     | yes      | `"main"`                | no      | Unique identifier for this instance                                                             |
+| `enabled`    | boolean  | —        | `true`                  | no      | Enable/disable polling                                                                          |
+| `baseUrl`    | URL      | **yes**  | —                       | no      | AdGuard Home base URL (e.g. `http://192.0.2.1`). Host is extracted from this URL for ICMP ping. |
+| `username`   | text     | no       | `""`                    | no      | AdGuard Home username for HTTP Basic auth. Leave empty if auth is disabled.                     |
+| `password`   | password | no       | `""`                    | **yes** | AdGuard Home password for HTTP Basic auth. Encrypted at rest.                                   |
+| `timeoutMs`  | number   | —        | `5000`                  | no      | Request timeout in milliseconds (applies to both ICMP ping and HTTP probe)                      |
+| `cacheTtlMs` | number   | —        | `10000`                 | no      | Stats cache TTL in milliseconds                                                                 |
+| `pollPolicy` | object   | —        | health 10 s, stats 30 s | no      | Poll intervals and jitter                                                                       |
 
 **Authentication:** When `username` or `password` is non-empty, the service sends an `Authorization: Basic <base64>` header on every API request. Both fields default to empty (no auth).
 

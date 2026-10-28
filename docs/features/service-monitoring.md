@@ -95,6 +95,7 @@ Each instance has separate breakers for health and stats (`apps/backend/src/inde
 - **Failure threshold**: 5 consecutive failures
 - **Reset timeout**: 60 seconds, then one half-open trial call
 - **Request timeout**: per-instance `timeoutMs` (default 5 seconds). One poll of a service may take up to `max(10 s, 2 × timeoutMs)`, since a probe can chain two bounded requests
+- **While open**: calls fail fast with `CIRCUIT_OPEN` without reaching the service. When the lane's last real failure was a configuration error (`UNAUTHORIZED` or `VALIDATION`, such as rejected credentials), the open lane returns that error instead, so the UI keeps asking for configuration rather than reporting a generic outage (`infra/circuitBreaker/guardedService.ts`)
 
 ## Frontend Coverage Notes (Monitoring UI)
 
@@ -137,6 +138,15 @@ All dots expose a `data-state` attribute matching their tone, allowing semantic 
 
 Implementation: [[docs/components/primitives/status-dot|StatusDot]] primitive
 Tests: [[apps/frontend/src/components/primitives/StatusDot.test.tsx]] (5 tests covering data-state attribute)
+
+#### Overall status (`healthStatus`)
+
+The tile, the detail sheet header and the TopNav summary all collapse a snapshot with the shared
+`healthStatus()` helper (`apps/frontend/src/lib/healthStatus.ts`): `offline` when `reachable` is
+false, `warning` when the service is reachable overall but its host or service tier reports
+`reachable: false` (for example a NAS that blocks ICMP but answers SNMP), and `online` otherwise.
+Before, the tile and detail sheet showed such a service as plain `online` while TopNav counted it
+as a warning.
 
 #### User Experience
 
@@ -186,7 +196,7 @@ else Found
             CB --> BE : Result
             BE -> Cache : setHealth(id, result)
         else Circuit Open
-            CB --> BE : CIRCUIT_OPEN error
+            CB --> BE : CIRCUIT_OPEN error\n(or last UNAUTHORIZED/VALIDATION error)
         end
     end
     BE --> FE : 200 { data: HealthSnapshot }\nor { error: { code, message } }
@@ -243,6 +253,7 @@ state Open {
     [*] --> Open
     note "Service unavailable" as n2
     Open : Requests fail fast
+    Open : (last UNAUTHORIZED/VALIDATION error\nreturned instead of CIRCUIT_OPEN)
     Open --> HalfOpen : 60 second timeout
 }
 

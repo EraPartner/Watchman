@@ -66,14 +66,14 @@ Configure direct SSH to the Pi for full system metrics (vcgencmd, /proc). Set th
 - `cat /proc/uptime` — System uptime (seconds)
 
 Uptime comes from `/proc/uptime` (direct SSH) or the relay's `state.boot` time. pigpio's current tick is not used: it is an unsigned 32-bit microsecond counter that wraps every ~71.6 minutes. Without SSH or the relay, `uptime` is `null`.
-- `cat /proc/cpuinfo` — CPU model and hardware info
+- `cat /proc/cpuinfo` — CPU hardware (`Hardware`), board model text (`Model`) and revision code (`Revision`)
 - `cat /etc/os-release` — OS release info
 
 `/proc/cpuinfo` and `/etc/os-release` are read on the first successful poll only and then cached. If the exec produces no output at all, direct SSH counts as failed and the relay (if configured) is tried.
 
 ### pigpiod is optional
 
-pigpiod supplies only `hwRevision`/`piModel` and `pigpioVersion`. When it can't be reached but direct SSH or the relay works, stats still succeed with those fields `null` and the reason in `pigpioError`. Stats fail only when pigpiod **and** every SSH path fail. pigpiod does not support the Pi 5 / CM5 / Pi 500, so on those boards use SSH.
+pigpiod supplies `hwRevision`/`piModel` and `pigpioVersion`. When it can't be reached but direct SSH or the relay works, stats still succeed: `pigpioVersion` is `null` and the reason is in `pigpioError`. Over direct SSH, `hwRevision` and `piModel` then come from `/proc/cpuinfo` instead: the `Revision` hex code (the same code pigpiod reports) is decoded with `getPiModel()`, and when that decode is unknown the `Model` text (for example `Raspberry Pi 5 Model B Rev 1.0`) is used as `piModel`. A pigpiod answer takes precedence over `/proc/cpuinfo`. (The legacy relay path already supplied the relay's revision code the same way.) Without any revision source, `hwRevision` is `null` and `piModel` is `"Unknown"`. Stats fail only when pigpiod **and** every SSH path fail. pigpiod does not support the Pi 5 / CM5 / Pi 500, so on those boards use SSH.
 
 ### Throttling Detection
 
@@ -131,7 +131,7 @@ When direct SSH is used (PI1):
 
 | Metric            | Type    | Description                                                         |
 | ----------------- | ------- | ------------------------------------------------------------------- |
-| `piModel`         | string  | Pi model derived from hardware revision                             |
+| `piModel`         | string  | Pi model derived from hardware revision (pigpiod, else `/proc/cpuinfo` over direct SSH or the relay's revision); `"Unknown"` when none supplies one |
 | `hwRevision`      | number  | Hardware revision code                                              |
 | `cpuTemp`         | number  | CPU temperature (°C)                                                |
 | `clockRate`       | number  | ARM clock speed (MHz)                                               |

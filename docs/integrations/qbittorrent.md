@@ -36,7 +36,7 @@ Two-tier health via `withHostPing` helper:
 
 ## Login
 
-Watchman logs in with `POST /api/v2/auth/login` (the only non-GET call) and reuses the `SID` cookie. Parallel requests share one login. After a rejected login it waits 5 minutes before trying again, because qBittorrent bans the client IP after 5 failed logins by default (`WebUI\MaxAuthenticationFailCount`), and that ban would also lock out your browser on the same machine. Saving new credentials restarts the service, which clears the wait.
+Watchman logs in with `POST /api/v2/auth/login` (the only non-GET call) and reuses the `SID` cookie. Parallel requests share one login. When a request gets `403` (expired session), Watchman drops the cookie only if it is still the one that request sent, then logs in again and retries once, so a parallel request that already logged in again does not lose its fresh cookie. After a rejected login it waits 5 minutes before trying again, because qBittorrent bans the client IP after 5 failed logins by default (`WebUI\MaxAuthenticationFailCount`), and that ban would also lock out your browser on the same machine. Saving new credentials restarts the service, which clears the wait.
 
 ## Configuration
 
@@ -76,7 +76,7 @@ QB1 implements efficient state synchronization using qBittorrent's incremental m
 
 - **`/api/v2/sync/maindata?rid={rid}`** — Server returns `full_update: true` on init or state reset; delta otherwise. On full update, service replaces cached state. On delta, service merges `server_state` and merges each torrent **field-wise** (deltas carry only changed fields per torrent), removing entries from `torrents_removed`. Transfer speeds and session totals come from `server_state` inside maindata — `/api/v2/transfer/info` is no longer fetched.
 - **`activeTorrents`** — derived from the synced maindata cache (no extra `/torrents/info` fetch per poll): torrents with non-zero combined dl+ul speed, sorted by combined speed, top 20. Each entry carries hash, name, state, progress, dlspeed, upspeed, size, downloaded, uploaded, eta, category.
-- **`/api/v2/log/main?normal=false&info=false&warning=true&critical=true&last_known_id={lastLogId}`** — Warning (type 4) and critical (type 8) log entries. Persisted cursor (lastLogId) prevents re-fetch; the newest 20 of each are kept across polls.
+- **`/api/v2/log/main?normal=false&info=false&warning=true&critical=true&last_known_id={lastLogId}`** — Warning (type 4) and critical (type 8) log entries. Persisted cursor (lastLogId) prevents re-fetch; the newest 20 of each are kept across polls. Overlapping `getStats` runs (the poller and a stale-while-revalidate refresh) can fetch the same cursor, so each run keeps only entries with an id newer than `lastLogId` and a log line is never listed twice.
 
 Steady-state polling therefore requires only **2 outbound requests per cycle**: incremental maindata + log cursor.
 

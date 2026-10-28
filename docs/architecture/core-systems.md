@@ -2,7 +2,7 @@
 title: Core Systems - Event Bus and Service Lifecycle
 type: architecture
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     architecture,
@@ -138,7 +138,7 @@ const safeOnError = (err: unknown): void => {
 
 | Subscriber                          | Subscribes To                                                                     | Action                                                                      |
 | ----------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| WebSocket Broadcaster               | `service.health.updated`, `service.stats.updated`, `service.error`, `config:service.applied`, `profile.*` | Broadcast frames; alert on first error, info on recovery                    |
+| WebSocket Broadcaster               | `service.health.updated`, `service.stats.updated`, `service.error`, `config:service.applied`, `profile.*` | Broadcast frames; alert on first error (failed poll or `reachable: false` health), info on recovery |
 | SnapshotCache                       | `service.health.updated`, `service.error` (scope=health), `service.stats.updated` | Keep latest health result and stats per service for read-through HTTP layer |
 | Time-Series Writer                  | `service.stats.updated`, `service.health.updated`                                 | Write metrics to DuckDB (when TIMESERIES_ENABLED)                           |
 | Service Lifecycle (restart handler) | `config:service.created/updated/deleted`                                          | Reload affected service                                                     |
@@ -271,7 +271,9 @@ Health and stats are kept separate so a stats-only failure (e.g. bad credentials
 
 ### CIRCUIT_OPEN result
 
-When a breaker is open, `execResult()` returns `err(UnavailableError("CIRCUIT_OPEN"))` rather than throwing, preserving the `Result<T, DomainError>` contract for callers.
+When a breaker is open, `execResult()` returns `err(CircuitOpenError)` (code `CIRCUIT_OPEN`, HTTP 503) rather than throwing, preserving the `Result<T, DomainError>` contract for callers.
+
+While a lane is open because its last real failure was a configuration error (`UNAUTHORIZED` or `VALIDATION`, for example rejected credentials), the breaker still does not call the service, but the lane returns that remembered error instead of `CIRCUIT_OPEN`, so the UI keeps asking for configuration. Each lane remembers the inner service's most recent failure; a success clears it. Keeping the breaker closed to such calls still protects against login bans on the monitored service.
 
 ### Metrics
 

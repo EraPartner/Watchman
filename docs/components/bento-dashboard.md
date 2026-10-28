@@ -2,7 +2,7 @@
 title: BentoDashboard Component
 type: component
 status: active
-date: 2026-10-20
+date: 2026-10-28
 tags:
   [
     component,
@@ -45,16 +45,19 @@ BentoDashboard
 │   ├── nav links (Dashboard, Services, Audit, Backup)
 │   ├── status summary chip (ok / warn / crit · last poll)
 │   ├── breaker warning chip (when /metrics shows open breakers)
-│   ├── WebSocket connectivity dot
+│   ├── WebSocket connectivity dot (visible at every width)
 │   └── "+ Add service" CTA
 ├── main
 │   ├── editorial header
 │   │   ├── eyebrow: "home-lab observatory" (gold mono uppercase)
 │   │   ├── h1: clamp() display, tracking-tight
 │   │   └── thin gold rule + counts ("N renderers active · M instances")
-│   ├── [DashboardGrid OR empty-state]
+│   ├── [stale-data banner] "Backend unreachable — showing data from …" (role="alert")
+│   ├── [DashboardGrid OR one of the empty/error states]
 │   │   ├── DashboardGrid
 │   │   │   └── ServiceTile[] (filtered from BENTO_LAYOUT)
+│   │   ├── OR: "Couldn't load services" + Retry (instances fetch failed, no data)
+│   │   ├── OR: "Nothing active in this profile" + "Open settings" link
 │   │   └── OR: "Add your first service" styled button → opens editor dialog
 │   └── ServiceDetailSheet (for currently selected service)
 ├── CreateServiceEditor Dialog
@@ -97,7 +100,7 @@ Fetches the list of configured service instances from `/instances` endpoint. `co
 
 ### Aggregated Health Fetching (ADR-021)
 
-Tile health is read by `useServiceHealth` from a single shared `useAggregatedHealth` query against `/services` (10 s refetch). The dashboard does not call `/services/{kind}/health` per tile any more — N tiles share 1 underlying request. The same aggregated query also drives the `TopNav` summary chip.
+Tile health is read by `useServiceHealth` from a single shared `useAggregatedHealth` query against `/services` (10 s refetch). The dashboard also reads that query directly for the stale-data banner (see below). The dashboard does not call `/services/{kind}/health` per tile any more — N tiles share 1 underlying request. The same aggregated query also drives the `TopNav` summary chip.
 
 Per-tile stats remain through `useServiceStats(kind, instance, enabled, trackedMetrics)`; tracked metrics flow into the client ring buffer (see [[apps/frontend/src/lib/metricHistory.ts]]) so sparklines on tiles and chart panels in the detail sheet have data without any backend persistence.
 
@@ -125,7 +128,31 @@ Only services with both a renderer and at least one configured instance are incl
 3. For each filtered entry, renders one `<ServiceTile>` per configured instance
 4. Detail sheet closed (`openCtx = null`)
 
-### Empty State
+### Stale-Data Banner
+
+`useAggregatedHealth()` keeps its last successful result when a later `/services` poll fails, so
+tiles would keep showing "online" after the backend goes away. `staleHealthSince(query)` returns
+that result's `fetchedAt` while the query is in error and real data exists (the empty placeholder
+has `fetchedAt` 0, so nothing is shown before the first success). When it returns a time, the
+dashboard renders a warn-toned `role="alert"` banner above the grid:
+
+```
+Backend unreachable — showing data from <local time of fetchedAt>
+```
+
+### Empty States
+
+The dashboard picks one of these in order:
+
+1. **Couldn't load services** — `/instances` failed and there is no cached data. Without instance
+   data it cannot tell "none configured" from "backend unreachable", so it shows the error message
+   and a Retry button instead of an empty state.
+2. **Nothing active in this profile** — no tile entries, but the config list (`useServices()`, all
+   configured services regardless of profile) is non-empty. `/instances` lists only what runs in
+   the active profile, so this state says "N service(s) configured, but none is enabled in the
+   active profile" and links to `/settings/services` ("Open settings").
+3. **Add your first service** — nothing configured at all (`entries.length === 0` and the config
+   list is empty), as below.
 
 If no instances are configured (`entries.length === 0`), displays:
 

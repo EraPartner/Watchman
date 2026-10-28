@@ -66,6 +66,41 @@ dependency audit, and documentation aligned with the code.
 
 ### Fixed
 
+- Service flow bug pass (2026-10-28), backend: Bitcoin subscribes to `rawtx`
+  when `zmqRawtxEndpoint` is set (the field had no effect) and reports
+  `zmqTxCount`, `zmqRawtxConnected` and `zmqRawtxError`, sharing one socket
+  with `hashblock` on the same endpoint; Tor ControlPort mode fills
+  `bandwidthCurrent` and `relayType`, so its tile hero is no longer empty;
+  Synology reports missing SNMP values as `null` instead of `0`/`""`, fills
+  model, version and CPU temperature from DSM, reports a failed DSM call as
+  `dsmError`, shows "Unknown" status when it is unreadable, and stops retrying
+  a rejected DSM login for 5 minutes so DSM's Auto Block cannot ban the IP;
+  a rejected Hue application key (401/403) says "re-pair the bridge" in
+  health and fails stats with `UNAUTHORIZED`, and the SSE light map re-seeds
+  after the stream recovers; the Mac mini CPU figure comes from the second
+  `top` sample, not the first (not a current measurement); the Raspberry Pi
+  model comes from `/proc/cpuinfo` over SSH when pigpiod is absent (Pi 5);
+  qBittorrent no longer lists a log line twice or drops a fresh session
+  cookie when parallel requests race on a `403`; missing Homebridge server
+  fields are `null`; a `reachable: false` health snapshot now raises one
+  error alert per outage (and a recovery alert after); an open circuit
+  breaker keeps returning the last `UNAUTHORIZED`/`VALIDATION` error instead
+  of `CIRCUIT_OPEN`, so the UI still asks for configuration; config and
+  profile timestamps read back from DuckDB are UTC whatever the host time
+  zone; a secret sent as `null` on update clears it; the Bitcoin RPC user
+  help says RPC credentials are required.
+- Service flow bug pass (2026-10-28), frontend: tiles and the detail sheet
+  show "warning" when a service is reachable but its host or service tier is
+  down, like the TopNav summary (shared `lib/healthStatus.ts`); the dashboard
+  shows "Nothing active in this profile" when services exist but none runs in
+  the active profile, and a "Backend unreachable — showing data from …"
+  banner when the health poll fails; the WebSocket dot shows at every width;
+  the service editor shows the "saved" placeholder only for a secret that is
+  saved, and a **Clear** control removes an optional saved secret; Bitcoin
+  sync progress reads Bitcoin Core's 0..1 fraction (99.95 % no longer shows
+  as 1.00 %) and the detail sheet has a ZMQ group; Synology shows network rates instead of cumulative counters, shows
+  `dsmError` and warns while it is set; Alby Hub warns while its node is not
+  running; the IPFS WebUI quick link is built from `apiUrl`.
 - UI bug pass: Enable/Disable (Settings and detail sheet) resends the stored
   config, so the save no longer fails validation or wipes optional fields;
   "Test connection" reports an unreachable service as failed instead of "OK";
