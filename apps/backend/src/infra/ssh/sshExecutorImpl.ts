@@ -4,6 +4,7 @@ import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/er
 import { expandHome } from '../../core/expandHome.js';
 import type { SshExecRequest, SshExecResult, SshExecutor } from './sshExecutor.js';
 import { exitResult } from './exitResult.js';
+import { hostKeyMismatch } from './hostKey.js';
 
 export function createSshExecutor(): SshExecutor {
   return {
@@ -63,10 +64,23 @@ export function createSshExecutor(): SshExecutor {
           });
         });
 
+        let hostKeyError: UnauthorizedError | undefined;
+        const verifyHostKey = (key: Buffer): boolean => {
+          const actual = req.hostKey ? hostKeyMismatch(key, req.hostKey) : null;
+          if (actual === null) return true;
+          hostKeyError = new UnauthorizedError(
+            `ssh host key mismatch for ${req.host}: expected ${req.hostKey}, server presented ${actual}`,
+          );
+          return false;
+        };
+
         client.on('error', (err: Error) => {
           clearTimeout(timer);
           const msg = err.message || String(err);
-          if (/auth|permission|denied/i.test(msg)) {
+          if (hostKeyError) {
+            const error = hostKeyError;
+            finish(() => reject(error));
+          } else if (/auth|permission|denied/i.test(msg)) {
             finish(() => reject(new UnauthorizedError(`ssh auth failed: ${msg}`)));
           } else {
             finish(() => reject(new UnavailableError(`ssh connect failed: ${msg}`)));
@@ -81,6 +95,7 @@ export function createSshExecutor(): SshExecutor {
           ...(privateKey ? { privateKey } : {}),
           ...(req.passphrase ? { passphrase: req.passphrase } : {}),
           ...(req.password ? { password: req.password } : {}),
+          ...(req.hostKey ? { hostVerifier: verifyHostKey } : {}),
         });
       });
     },

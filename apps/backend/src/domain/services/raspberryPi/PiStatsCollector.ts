@@ -268,6 +268,7 @@ export class PiStatsCollector {
       timeoutMs: c.timeoutMs,
       signal,
       ...(c.sshPassphrase ? { passphrase: c.sshPassphrase } : {}),
+      ...(c.sshHostKey ? { hostKey: c.sshHostKey } : {}),
     });
 
     // One compound exec per cycle; static files only until cached
@@ -341,6 +342,7 @@ export class PiStatsCollector {
       timeoutMs: c.timeoutMs,
       signal,
       ...(c.macMiniSshPassphrase ? { passphrase: c.macMiniSshPassphrase } : {}),
+      ...(c.macMiniSshHostKey ? { hostKey: c.macMiniSshHostKey } : {}),
     };
     const res = await this.deps.ssh.exec(req);
     if (res.code !== 0) {

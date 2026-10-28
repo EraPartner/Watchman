@@ -36,6 +36,7 @@ function makeConfig(
     dsmUrl: "",
     dsmAccount: "",
     dsmPassword: "",
+    dsmCertSha256: "",
     ...overrides,
   };
 }

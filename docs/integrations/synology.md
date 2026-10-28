@@ -166,9 +166,19 @@ Service instances are configured via the Settings UI or the `/config` API — no
 | `dsmUrl`           | url      | `""`    | —        | —       | DSM base URL, e.g. `https://nas.local:5001` (optional; enables extended stats when set together with `dsmAccount`/`dsmPassword`) |
 | `dsmAccount`       | text     | `""`    | —        | —       | DSM login account                                                                                                                |
 | `dsmPassword`      | password | `""`    | —        | **yes** | DSM login password                                                                                                               |
+| `dsmCertSha256`    | text     | `""`    | —        | —       | SHA-256 fingerprint of DSM's TLS certificate. Needed only for `https://` with DSM's self-signed certificate                       |
 
 > [!tip] DSM-only mode
 > If `snmpUser`/`snmpAuthKey`/`snmpPrivKey` are left empty, the service falls back to DSM-only mode (no SNMP metrics): health probes DSM, and if every DSM call fails, stats return that error instead of zeros. DSM extended stats are fetched whenever all three of `dsmUrl`, `dsmAccount`, and `dsmPassword` are non-empty.
+
+### DSM over HTTPS with a self-signed certificate
+
+DSM ships with a self-signed certificate, which Watchman does not trust by default. With an `https://` DSM URL and no fingerprint, DSM calls fail with `synology dsm: the certificate at https://… is not trusted (…)`. Either use `http://nas.local:5000` on a trusted network, or pin the certificate:
+
+1. Run `openssl s_client -connect nas.local:5001 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256`.
+2. Copy the hex after `sha256 Fingerprint=` into **DSM certificate fingerprint (SHA-256)** (`dsmCertSha256`). Colons are fine.
+
+Watchman then accepts exactly that certificate and checks it during the TLS handshake, before the DSM password is sent. Any other certificate is refused with `UNAUTHORIZED` (`cert pin mismatch …`). When DSM renews or replaces its certificate, update the fingerprint. A certificate from a public CA (for example DSM's Let's Encrypt option) works without a fingerprint.
 
 Multi-instance support follows the standard pattern — add additional instances via the Settings UI or `/config` API, each with a distinct `instanceId`. See [[docs/features/multi-instance|Multi-Instance Support]].
 

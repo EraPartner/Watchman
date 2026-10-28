@@ -5,6 +5,9 @@ export interface SshExecRequest {
   privateKeyPath?: string;
   passphrase?: string;
   password?: string;
+  /** Pinned host-key fingerprint ("SHA256:…", as `ssh-keygen -lf` prints).
+   *  When set, a server presenting any other host key is refused. */
+  hostKey?: string;
   command: string;
   timeoutMs: number;
   signal?: AbortSignal;

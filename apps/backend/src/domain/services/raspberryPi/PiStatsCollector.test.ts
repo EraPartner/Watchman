@@ -7,6 +7,7 @@ import type {
 } from "../../../infra/gpio/pigpioClient.js";
 import type {
   SshExecutor,
+  SshExecRequest,
   SshExecResult,
 } from "../../../infra/ssh/sshExecutor.js";
 import type { RaspberryPiInstance } from "../../../config/services.js";
@@ -28,11 +29,13 @@ function makeConfig(
     sshPort: 22,
     sshKeyPath: "",
     sshPassphrase: "",
+    sshHostKey: "",
     macMiniHost: "",
     macMiniSshPort: 22,
     macMiniSshUser: "",
     macMiniSshKeyPath: "",
     macMiniSshPassphrase: "",
+    macMiniSshHostKey: "",
     nodePath: "/usr/local/bin/node",
     rpiCliPath: "",
     pingCount: 1,
@@ -122,6 +125,56 @@ describe("PiStatsCollector relay command", () => {
     expect(commands).toContain(
       "'/opt/node 22/bin/node' '/opt/rpi/cli.js; touch /tmp/pwned' -H '192.168.1.40:8888' info"
     );
+  });
+});
+
+describe("PiStatsCollector host key pinning", () => {
+  const PI_KEY = "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU";
+  const MAC_KEY = "SHA256:LXEWQrcmsEQBYnyp+6wy9chTD7GQPMTbAiWHF5IaSIE";
+
+  function recordingSsh(requests: SshExecRequest[]): SshExecutor {
+    return {
+      exec: async (req) => {
+        requests.push(req);
+        return { stdout: "{}", stderr: "", code: 0 };
+      },
+    };
+  }
+
+  it("pins the Pi's key on direct SSH", async () => {
+    const requests: SshExecRequest[] = [];
+    await new PiStatsCollector({
+      pigpio: fakePigpio(1_000),
+      ssh: recordingSsh(requests),
+      config: makeConfig({
+        sshUser: "pi",
+        sshKeyPath: "/tmp/pi_key",
+        sshHostKey: PI_KEY,
+      }),
+      now: () => 0,
+    }).collect(new AbortController().signal);
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.every((r) => r.hostKey === PI_KEY)).toBe(true);
+  });
+
+  it("pins the relay Mac's own key on the legacy relay", async () => {
+    const requests: SshExecRequest[] = [];
+    await new PiStatsCollector({
+      pigpio: fakePigpio(1_000),
+      ssh: recordingSsh(requests),
+      config: makeConfig({
+        sshHostKey: PI_KEY,
+        macMiniHost: "192.168.1.50",
+        macMiniSshUser: "me",
+        macMiniSshKeyPath: "/tmp/id_rsa",
+        macMiniSshHostKey: MAC_KEY,
+        rpiCliPath: "/opt/rpi/cli.js",
+      }),
+      now: () => 0,
+    }).collect(new AbortController().signal);
+    expect(requests.map((r) => [r.host, r.hostKey])).toEqual([
+      ["192.168.1.50", MAC_KEY],
+    ]);
   });
 });
 

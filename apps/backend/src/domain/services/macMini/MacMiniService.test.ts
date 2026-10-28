@@ -31,6 +31,7 @@ function makeConfig(overrides: Partial<MacMiniInstance> = {}): MacMiniInstance {
     sshPort: 22,
     sshKeyPath: "/tmp/id_rsa",
     sshPassphrase: "",
+    sshHostKey: "",
     pingCount: 1,
     ...overrides,
   };
@@ -196,6 +197,31 @@ describe("MacMiniService", () => {
     }
     expect(calls[0]?.user).toBe("me");
     expect(calls[0]?.privateKeyPath).toBe("/tmp/id_rsa");
+  });
+
+  it("passes the pinned host key to SSH, and none when unset", async () => {
+    const pinned: SshExecRequest[] = [];
+    const unpinned: SshExecRequest[] = [];
+    const map = {
+      uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
+      [DF_CMD]: { stdout: DF_OUT, stderr: "", code: 0 },
+      [TEMP_CMD]: { stdout: "55.2°C\n", stderr: "", code: 0 },
+    };
+    const signal = new AbortController().signal;
+    await new MacMiniService({
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh(map, pinned),
+      config: makeConfig({ sshHostKey: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU" }),
+      now: () => 42,
+    }).getStats(signal);
+    await new MacMiniService({
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh(map, unpinned),
+      config: makeConfig(),
+      now: () => 42,
+    }).getStats(signal);
+    expect(pinned[0]?.hostKey).toBe("SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU");
+    expect(unpinned[0]).not.toHaveProperty("hostKey");
   });
 
   it("getStats tolerates missing temp binary", async () => {

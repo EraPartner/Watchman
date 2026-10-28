@@ -47,6 +47,7 @@ vi.mock('ssh2', () => ({ Client: MockClient }));
 import { createSshPool } from './sshPool.js';
 import { UnavailableError, UnauthorizedError, TimeoutError } from '../../core/errors.js';
 import type { SshExecRequest } from './sshExecutor.js';
+import { hostKeyFingerprint } from './hostKey.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -405,5 +406,57 @@ describe('createSshPool', () => {
     openChannel?.();
     expect(close).toHaveBeenCalledTimes(1);
   });
-});
 
+  describe('host key pinning', () => {
+    const HOST_KEY = Buffer.from('pinned host key blob');
+    const PIN = hostKeyFingerprint(HOST_KEY);
+    type ConnectOpts = { hostVerifier?: (key: Buffer) => boolean };
+    const verifierOf = (client: InstanceType<typeof MockClient>) =>
+      (client.connect.mock.calls[0]![0] as ConnectOpts).hostVerifier;
+
+    it('sets no host verifier when no fingerprint is pinned', () => {
+      const pool = createSshPool();
+      void pool.exec(makeReq()).catch(() => undefined);
+      expect(verifierOf(clientInstances[0]!)).toBeUndefined();
+      pool.destroy();
+    });
+
+    it('connects when the server presents the pinned key', async () => {
+      const pool = createSshPool();
+      const execPromise = pool.exec(makeReq({ hostKey: PIN }));
+      const client = clientInstances[0]!;
+      expect(verifierOf(client)!(HOST_KEY)).toBe(true);
+      mockExecSuccess(client, 'ok');
+      client.emitReady();
+      await expect(execPromise).resolves.toMatchObject({ stdout: 'ok' });
+    });
+
+    it('refuses any other key with UnauthorizedError naming both fingerprints', async () => {
+      const pool = createSshPool();
+      const execPromise = pool.exec(makeReq({ hostKey: PIN }));
+      const client = clientInstances[0]!;
+      const impostor = Buffer.from('impostor host key blob');
+      expect(verifierOf(client)!(impostor)).toBe(false);
+      // ssh2 reports the refusal as a generic handshake error, then closes
+      client.emitError('Handshake failed: host key verification failed');
+      client.emitClose();
+      const error = await execPromise.catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(UnauthorizedError);
+      expect((error as Error).message).toContain(PIN);
+      expect((error as Error).message).toContain(hostKeyFingerprint(impostor));
+      expect(client.exec).not.toHaveBeenCalled();
+    });
+
+    it('opens a new connection when the pinned fingerprint changes', async () => {
+      const pool = createSshPool();
+      const p1 = pool.exec(makeReq());
+      const p2 = pool.exec(makeReq({ hostKey: PIN }));
+      expect(clientInstances).toHaveLength(2);
+      await expect(p1).rejects.toBeInstanceOf(UnavailableError);
+      expect(verifierOf(clientInstances[1]!)).toBeTypeOf('function');
+      mockExecSuccess(clientInstances[1]!, 'ok');
+      clientInstances[1]!.emitReady();
+      await expect(p2).resolves.toMatchObject({ stdout: 'ok' });
+    });
+  });
+});

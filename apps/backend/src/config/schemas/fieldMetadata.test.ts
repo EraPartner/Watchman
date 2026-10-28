@@ -46,3 +46,39 @@ describe("Roon apiPort default", () => {
     expect(stored.apiPort).toBe(9100);
   });
 });
+
+describe("pinned fingerprint fields", () => {
+  const SSH_KEY = "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU";
+  const CERT = "AB:".repeat(31) + "AB";
+
+  it("accepts an empty value or an ssh-keygen fingerprint for SSH host keys", () => {
+    const schema = KIND_META.macMini.schema;
+    expect(schema.safeParse({ kind: "macMini", host: "h" }).success).toBe(true);
+    const parsed = schema.parse({ kind: "macMini", host: "h", sshHostKey: ` ${SSH_KEY} ` }) as {
+      sshHostKey: string;
+    };
+    expect(parsed.sshHostKey).toBe(SSH_KEY);
+    for (const kind of ["raspberryPi"] as const) {
+      expect(
+        KIND_META[kind].schema.safeParse({ kind, host: "h", sshHostKey: SSH_KEY, macMiniSshHostKey: SSH_KEY })
+          .success
+      ).toBe(true);
+    }
+  });
+
+  it("rejects a malformed SSH host key fingerprint", () => {
+    for (const bad of ["MD5:16:27:ac:a5", "SHA256:short", "ssh-ed25519 AAAAC3Nza"]) {
+      expect(KIND_META.macMini.schema.safeParse({ kind: "macMini", host: "h", sshHostKey: bad }).success).toBe(false);
+      expect(
+        KIND_META.raspberryPi.schema.safeParse({ kind: "raspberryPi", host: "h", macMiniSshHostKey: bad }).success
+      ).toBe(false);
+    }
+  });
+
+  it("accepts a 64-hex DSM certificate fingerprint, with or without colons", () => {
+    const schema = KIND_META.synology.schema;
+    expect(schema.safeParse({ kind: "synology", host: "h", dsmCertSha256: CERT }).success).toBe(true);
+    expect(schema.safeParse({ kind: "synology", host: "h", dsmCertSha256: CERT.replace(/:/g, "").toLowerCase() }).success).toBe(true);
+    expect(schema.safeParse({ kind: "synology", host: "h", dsmCertSha256: "AB:CD" }).success).toBe(false);
+  });
+});

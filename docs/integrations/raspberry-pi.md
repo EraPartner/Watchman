@@ -52,6 +52,7 @@ Configure direct SSH to the Pi for full system metrics (vcgencmd, /proc). Set th
 | `sshPort`       | number   | `22`    |          |         | SSH port                                         |
 | `sshKeyPath`    | text     | —       |          |         | Path to SSH private key                          |
 | `sshPassphrase` | password | —       |          | **yes** | Passphrase for encrypted SSH key                 |
+| `sshHostKey`    | text     | —       |          |         | Pinned SSH host key fingerprint (`SHA256:…`)     |
 | `pingCount`     | number   | `1`     |          |         | ICMP ping probes per health check                |
 | `timeoutMs`     | number   | `5000`  |          |         | Request timeout (ms)                             |
 
@@ -70,6 +71,17 @@ Uptime comes from `/proc/uptime` (direct SSH) or the relay's `state.boot` time. 
 - `cat /etc/os-release` — OS release info
 
 `/proc/cpuinfo` and `/etc/os-release` are read on the first successful poll only and then cached. If the exec produces no output at all, direct SSH counts as failed and the relay (if configured) is tried.
+
+### SSH host key pinning (optional)
+
+Without a pinned key, Watchman accepts whatever host key the server presents, so a machine that takes over the host's IP address would receive Watchman's login. To pin the key:
+
+1. On the Pi, run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`.
+2. Copy the `SHA256:…` part of the output into **SSH host key fingerprint** (`sshHostKey`).
+
+Watchman then refuses any server whose host key does not match, before it sends any credentials. The service reports `UNAUTHORIZED` with the message `ssh host key mismatch for <host>: expected SHA256:…, server presented SHA256:…`. If the host was reinstalled and the new key is expected, paste the presented fingerprint into the field. Watchman offers ed25519 first, so the ed25519 fingerprint is the one it checks on a standard OpenSSH server.
+
+The legacy relay pins the Mac's key the same way, with `macMiniSshHostKey`.
 
 ### pigpiod is optional
 
@@ -97,6 +109,7 @@ If `sshUser` and `sshKeyPath` are **not** set, the backend uses a Mac Mini relay
 | `macMiniSshUser`       | text     | —                     |          |         | Mac Mini SSH username                        |
 | `macMiniSshKeyPath`    | text     | —                     |          |         | Path to Mac Mini SSH private key             |
 | `macMiniSshPassphrase` | password | —                     |          | **yes** | Passphrase for Mac Mini SSH key              |
+| `macMiniSshHostKey`    | text     | —                     |          |         | Pinned SSH host key fingerprint of the Mac   |
 | `nodePath`             | text     | `/usr/local/bin/node` |          |         | Path to Node.js binary on the Mac Mini       |
 | `rpiCliPath`           | text     | —                     |          |         | Path to the `rpi-cli` script on the Mac Mini |
 

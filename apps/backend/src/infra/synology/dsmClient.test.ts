@@ -466,4 +466,34 @@ describe("createDsmClient", () => {
     expect(err).toBeInstanceOf(UnavailableError);
     expect((err as Error).message).toContain("login: HTTP 503");
   });
+
+  it("says to pin the certificate when DSM's certificate is not trusted", async () => {
+    const http = {
+      send: async () => {
+        throw new UnavailableError("http request failed: POST https://nas:5001/webapi/auth.cgi", {
+          cause: "self-signed certificate",
+        });
+      },
+    };
+    const client = createDsmClient({
+      http,
+      config: makeConfig({ baseUrl: "https://nas:5001" }),
+    });
+    const err = await client.call("SYNO.DSM.Info", 2, "getinfo").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnavailableError);
+    expect((err as Error).message).toContain("https://nas:5001");
+    expect((err as Error).message).toContain("self-signed certificate");
+    expect((err as Error).message).toContain("DSM certificate fingerprint");
+  });
+
+  it("passes other connection failures through unchanged", async () => {
+    const original = new UnavailableError("http request failed: POST http://nas:5000/webapi/auth.cgi", {
+      cause: "connect ECONNREFUSED",
+    });
+    const client = createDsmClient({
+      http: { send: async () => { throw original; } },
+      config: makeConfig({ baseUrl: "http://nas:5000" }),
+    });
+    await expect(client.call("SYNO.DSM.Info", 2, "getinfo")).rejects.toBe(original);
+  });
 });

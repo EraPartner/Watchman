@@ -1,4 +1,4 @@
-import type { HttpClient, HttpResponse } from "../http/client.js";
+import type { HttpClient, HttpRequest, HttpResponse } from "../http/client.js";
 import { UnauthorizedError, UnavailableError } from "../../core/errors.js";
 
 export interface DsmClientConfig {
@@ -87,6 +87,22 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
   let pendingLogin: Promise<string> | null = null;
   let loginFailure: { error: UnauthorizedError; until: number } | null = null;
 
+  /** An untrusted certificate (DSM's default is self-signed) otherwise shows
+   *  only as a generic "http request failed"; say what to do about it. */
+  async function send(req: HttpRequest): Promise<HttpResponse> {
+    try {
+      return await http.send(req);
+    } catch (e) {
+      const cause = e instanceof UnavailableError ? e.context?.["cause"] : undefined;
+      if (typeof cause === "string" && /certificate/i.test(cause)) {
+        throw new UnavailableError(
+          `synology dsm: the certificate at ${base} is not trusted (${cause}); set the DSM certificate fingerprint to trust DSM's self-signed certificate`
+        );
+      }
+      throw e;
+    }
+  }
+
   async function performLogin(signal?: AbortSignal): Promise<string> {
     const body = new URLSearchParams({
       api: "SYNO.API.Auth",
@@ -96,7 +112,7 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       passwd: config.password,
       format: "sid",
     }).toString();
-    const res = await http.send({
+    const res = await send({
       url: `${base}/webapi/auth.cgi`,
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -158,7 +174,7 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       _sid: sid,
       ...params,
     }).toString();
-    const res = await http.send({
+    const res = await send({
       url: `${base}/webapi/entry.cgi`,
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },

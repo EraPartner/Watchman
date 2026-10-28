@@ -68,6 +68,7 @@ export class MacMiniService extends BaseService {
   private readonly sshPort: number;
   private readonly sshKeyPath: string;
   private readonly sshPassphrase: string;
+  private readonly sshHostKey: string;
   private readonly now: () => number;
 
   constructor(deps: MacMiniDeps) {
@@ -83,6 +84,7 @@ export class MacMiniService extends BaseService {
     this.sshPort = deps.config.sshPort;
     this.sshKeyPath = deps.config.sshKeyPath;
     this.sshPassphrase = deps.config.sshPassphrase;
+    this.sshHostKey = deps.config.sshHostKey;
     this.now = deps.now;
   }
 
@@ -198,6 +200,7 @@ export class MacMiniService extends BaseService {
       timeoutMs: this.timeoutMs,
       signal,
       ...(this.sshPassphrase ? { passphrase: this.sshPassphrase } : {}),
+      ...(this.sshHostKey ? { hostKey: this.sshHostKey } : {}),
     };
     const res = await this.ssh.exec(req);
     if (res.code !== 0) {
