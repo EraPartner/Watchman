@@ -76,7 +76,8 @@ dependency audit, and documentation aligned with the code.
   and network capture show a toast; a restore refreshes profiles and
   failed-to-load rows; config changes pushed over the WebSocket refresh the
   Settings list; a failed kinds/schema load shows an error with Retry instead
-  of "No kinds match"; mutations are no longer retried.
+  of "No kinds match"; mutations are no longer retried; the Raspberry Pi tile
+  warns only on current throttling, not on since-boot bits that stay set.
 - Audit leftovers (#127): request timers no longer keep the event loop alive
   or collect abort listeners; Hue pairing validates `host` and caps
   `timeoutMs`; Synology DSM 5xx/HTML replies, Tor dot-escaped data and
