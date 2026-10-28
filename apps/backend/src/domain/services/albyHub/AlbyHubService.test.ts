@@ -9,6 +9,11 @@ import { AlbyHubService } from "./AlbyHubService.js";
 import { createHttpClient } from "../../../infra/http/client.js";
 import type { AlbyHubInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
+import type {
+  HttpClient,
+  HttpResponse,
+} from "../../../infra/http/client.js";
+import { TimeoutError } from "../../../core/errors.js";
 
 function fakePing(): PingProber {
   return { probe: async () => ({ success: true, avgMs: 5 }) };
@@ -471,5 +476,83 @@ describe("AlbyHubService", () => {
     });
     await svc.checkHealth(new AbortController().signal);
     expect(state.lastAuth).toBe("Bearer nwc_tok");
+  });
+
+  // undici holds a socket until its body is read; every response must be consumed
+  function trackingHttp(statusFor: (url: string) => number): {
+    http: HttpClient;
+    unread: () => string[];
+  } {
+    const responses: Array<{ url: string; read: boolean }> = [];
+    const http: HttpClient = {
+      send: async (req) => {
+        const entry = { url: req.url, read: false };
+        responses.push(entry);
+        const status = statusFor(req.url);
+        const body = status === 200 ? JSON.stringify(NWC_INFO_PAYLOAD) : "";
+        const res: HttpResponse = {
+          status,
+          headers: {},
+          text: async () => {
+            entry.read = true;
+            return body;
+          },
+          json: async <T>() => {
+            entry.read = true;
+            return JSON.parse(body) as T;
+          },
+        };
+        return res;
+      },
+    };
+    return {
+      http,
+      unread: () => responses.filter((r) => !r.read).map((r) => r.url),
+    };
+  }
+
+  it("NWC getStats reads the bodies of 401 wallet responses", async () => {
+    const { http, unread } = trackingHttp((url) =>
+      url.endsWith("/api/info") ? 200 : 401
+    );
+    const svc = new AlbyHubService({
+      http,
+      ping: fakePing(),
+      config: makeConfig({ legacyProbe: false, token: "expired" }),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    expect(unread()).toEqual([]);
+  });
+
+  it("legacy probe reads every response body", async () => {
+    const { http, unread } = trackingHttp(() => 404);
+    const svc = new AlbyHubService({
+      http,
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    await svc.checkHealth(new AbortController().signal);
+    await svc.getStats(new AbortController().signal);
+    expect(unread()).toEqual([]);
+  });
+
+  it("NWC checkHealth keeps the timeout reason in its message", async () => {
+    const http: HttpClient = {
+      send: async () => {
+        throw new TimeoutError("aborted after 2000ms");
+      },
+    };
+    const svc = new AlbyHubService({
+      http,
+      ping: fakePing(),
+      config: makeConfig({ legacyProbe: false }),
+      now: () => 1,
+    });
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(res.ok && res.value.reachable).toBe(false);
+    if (res.ok) expect(res.value.message).toContain("aborted after 2000ms");
   });
 });
