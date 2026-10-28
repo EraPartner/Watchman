@@ -59,7 +59,60 @@ describe("ttlMemo", () => {
       }
     );
     await expect(memo(signal())).rejects.toThrow("down");
-    // and retries on the next call rather than caching the failure
+  });
+
+  it("remembers a failure for min(ttl, 60s) before calling the fetcher again", async () => {
+    let t = 0;
+    let fail = true;
+    const fetcher = vi.fn(async () => {
+      if (fail) throw new Error("down");
+      return "ok";
+    });
+    const memo = ttlMemo(10 * 60_000, () => t, fetcher);
+
     await expect(memo(signal())).rejects.toThrow("down");
+    t = 30_000;
+    await expect(memo(signal())).rejects.toThrow("down");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    t = 60_000;
+    fail = false;
+    expect(await memo(signal())).toBe("ok");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("serves the stale value during the failure window without refetching", async () => {
+    let t = 0;
+    let fail = false;
+    const fetcher = vi.fn(async () => {
+      if (fail) throw new Error("down");
+      return "fresh";
+    });
+    const memo = ttlMemo(1000, () => t, fetcher);
+
+    expect(await memo(signal())).toBe("fresh");
+    fail = true;
+    t = 2000;
+    expect(await memo(signal())).toBe("fresh");
+    t = 2500;
+    expect(await memo(signal())).toBe("fresh");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    t = 3000;
+    await memo(signal());
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not remember a failure caused by the caller aborting", async () => {
+    let fail = true;
+    const fetcher = vi.fn(async () => {
+      if (fail) throw new Error("aborted");
+      return "ok";
+    });
+    const memo = ttlMemo(1000, () => 0, fetcher);
+    const ac = new AbortController();
+    ac.abort();
+    await expect(memo(ac.signal)).rejects.toThrow("aborted");
+    fail = false;
+    expect(await memo(signal())).toBe("ok");
   });
 });
