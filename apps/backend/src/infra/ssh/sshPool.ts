@@ -44,9 +44,19 @@ function sameCredentials(args: ConnectArgs, req: SshExecRequest): boolean {
   return args.password === req.password && args.passphrase === req.passphrase;
 }
 
+interface ClosableChannel {
+  close(): unknown;
+}
+
+/** Close a channel we no longer wait on; it would otherwise stay open on the pooled connection. */
+function closeChannel(channel: ClosableChannel | undefined): void {
+  try { channel?.close(); } catch { /* already closed */ }
+}
+
 function execOnReady(client: Client, req: SshExecRequest): Promise<SshExecResult> {
   return new Promise<SshExecResult>((resolve, reject) => {
     let settled = false;
+    let channel: ClosableChannel | undefined;
     const finish = (fn: () => void): void => {
       if (settled) return;
       settled = true;
@@ -55,12 +65,16 @@ function execOnReady(client: Client, req: SshExecRequest): Promise<SshExecResult
       fn();
     };
 
+    // A hung remote command keeps its channel open; sshd's MaxSessions
+    // (default 10) would then block every later exec on this connection.
     const timer = setTimeout(() => {
       finish(() => reject(new TimeoutError(`ssh exec timed out after ${req.timeoutMs}ms`)));
+      closeChannel(channel);
     }, req.timeoutMs);
 
     const onAbort = (): void => {
       finish(() => reject(new TimeoutError('ssh exec aborted')));
+      closeChannel(channel);
     };
     if (req.signal?.aborted) {
       onAbort();
@@ -73,6 +87,12 @@ function execOnReady(client: Client, req: SshExecRequest): Promise<SshExecResult
         finish(() => reject(new UnavailableError(`ssh exec failed: ${err.message}`)));
         return;
       }
+      if (settled) {
+        // the channel opened after the timeout or abort already fired
+        closeChannel(stream);
+        return;
+      }
+      channel = stream;
       // collect raw bytes so multi-byte UTF-8 split across chunks decodes intact
       const out: Buffer[] = [];
       const errOut: Buffer[] = [];

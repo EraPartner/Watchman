@@ -354,4 +354,56 @@ describe('createSshPool', () => {
     client.emitReady();
     await expect(execPromise).resolves.toMatchObject({ stdout: 'Küche' });
   });
+
+  it('closes the channel of a command that times out', async () => {
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq({ timeoutMs: 100 }));
+
+    const client = clientInstances[0]!;
+    const close = vi.fn();
+    client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
+      cb(null, Object.assign(makeStream(), { close }));
+    });
+    client.emitReady();
+
+    vi.advanceTimersByTime(200);
+    await expect(execPromise).rejects.toBeInstanceOf(TimeoutError);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the channel of an aborted command', async () => {
+    const pool = createSshPool();
+    const ac = new AbortController();
+    const execPromise = pool.exec(makeReq({ timeoutMs: 5000, signal: ac.signal }));
+
+    const client = clientInstances[0]!;
+    const close = vi.fn();
+    client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
+      cb(null, Object.assign(makeStream(), { close }));
+    });
+    client.emitReady();
+
+    ac.abort();
+    await expect(execPromise).rejects.toBeInstanceOf(TimeoutError);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a channel that opens after the exec already timed out', async () => {
+    const pool = createSshPool();
+    const execPromise = pool.exec(makeReq({ timeoutMs: 100 }));
+
+    const client = clientInstances[0]!;
+    let openChannel: (() => void) | undefined;
+    const close = vi.fn();
+    client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
+      openChannel = () => cb(null, Object.assign(makeStream(), { close }));
+    });
+    client.emitReady();
+
+    vi.advanceTimersByTime(200);
+    await expect(execPromise).rejects.toBeInstanceOf(TimeoutError);
+    openChannel?.();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
 });
+
