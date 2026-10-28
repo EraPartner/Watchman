@@ -1020,10 +1020,10 @@ components:
         latencyMs: { type: number }
         snapshot:
           $ref: "#/components/schemas/HealthSnapshot"
-          description: Health snapshot (present when ok is true)
+          description: Health snapshot (present when ok is true, and when ok is false because the probe finished with reachable false)
         error:
           type: object
-          description: Probe failure (present when ok is false)
+          description: Probe failure (present when ok is false; code UNREACHABLE means the probe finished with reachable false)
           required: [code, message]
           properties:
             code: { type: string }

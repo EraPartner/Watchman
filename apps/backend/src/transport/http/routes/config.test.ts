@@ -619,6 +619,59 @@ describe("POST /config/services/:id/test", () => {
     expect(res.statusCode).toBe(200);
     expect((res.json() as { data: { ok: boolean } }).data.ok).toBe(true);
   });
+
+  it("returns ok:false when the probe resolves with reachable:false", async () => {
+    // withHostPing resolves ok() even when the service can't be reached; the
+    // test endpoint must not report that as a passing connection test.
+    class UnreachableSvc extends FakeSvc {
+      override async checkHealth(): Promise<HealthResult> {
+        return ok({ reachable: false, message: "connect ECONNREFUSED", at: 1 });
+      }
+    }
+    const svc = new UnreachableSvc();
+    const registry = new ServiceRegistry();
+    registry.register(svc);
+    const svcId = `${svc.kind}:${svc.instanceId}`;
+    const stored = makeStoredService({ id: "svc-uuid-1" });
+    const fakeLifecycle: ServiceLifecycle = {
+      idByStoredId: vi.fn(() => svcId),
+    } as unknown as ServiceLifecycle;
+    const store = makeFakeStore({ get: vi.fn(async () => stored) });
+    const app = await buildServer({
+      logger: pino({ level: "silent" }),
+      services: {
+        getStatus: new GetServiceStatus({ registry }),
+        aggregated: new GetAggregatedHealth(registry),
+      },
+      listInstances: new ListInstances(registry),
+      metrics: createMetricsRegistry(),
+      config: { store, lifecycle: fakeLifecycle, registry, profiles: knownProfiles },
+      profiles: makeFakeProfileDeps(store, fakeLifecycle),
+      setup: {
+        store,
+        http: {
+          send: async () => {
+            throw new Error();
+          },
+        } as HttpClient,
+      },
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/config/services/svc-uuid-1/test",
+      payload: {},
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      data: {
+        ok: false,
+        snapshot: { reachable: false },
+        error: { code: "UNREACHABLE", message: "connect ECONNREFUSED" },
+      },
+    });
+  });
 });
 
 describe("GET /config/export", () => {

@@ -1615,9 +1615,9 @@ export interface components {
         TestConnectionResult: {
             ok: boolean;
             latencyMs: number;
-            /** @description Health snapshot (present when ok is true) */
+            /** @description Health snapshot (present when ok is true, and when ok is false because the probe finished with reachable false) */
             snapshot?: components["schemas"]["HealthSnapshot"];
-            /** @description Probe failure (present when ok is false) */
+            /** @description Probe failure (present when ok is false; code UNREACHABLE means the probe finished with reachable false) */
             error?: {
                 code: string;
                 message: string;

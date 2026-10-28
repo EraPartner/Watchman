@@ -2,7 +2,7 @@
 title: Configuration API Reference
 type: api
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags: [api, configuration, setup, audit, backup, export, import, endpoints]
 description: REST API reference for runtime service configuration endpoints - CRUD operations, test connection, backup/restore, audit log
 aliases: [config api, configuration endpoints, setup api]
@@ -400,64 +400,45 @@ Also emits `config:service.deleted` event and pauses/resumes poller. Audit trail
 
 #### `POST /config/services/{id}/test`
 
-Validate credentials by attempting a health check with provided (or existing) config.
+Run a health check against a **live** service instance, using its saved config. `{id}` is the
+stored service id. The request body is ignored; to test changed settings, save them first.
 
-**Request Body:**
-
-Request is a **flat discriminated union** of the service's kind-specific config. If omitted, uses the current saved config.
+**Response `200`:** the check ran. `ok` is `true` only when the service was reachable.
 
 ```json
-{
-  "onionUrl": "http://example.onion",
-  "rpcUser": "bitcoinrpc",
-  "rpcPassword": "secret123"
-}
+{ "data": { "ok": true, "latencyMs": 123, "snapshot": { "reachable": true, "at": 1730102400000 } } }
 ```
 
-**Request Schema:**
-
-```typescript
-{
-  // Send any combination of kind-specific config fields
-  // If omitted entirely, uses current saved config
-}
-```
-
-**Response:**
+When the probe finished but the service could not be reached, `ok` is `false`, `error.code` is
+`UNREACHABLE`, and `snapshot` carries the host and service tiers for diagnosis:
 
 ```json
 {
   "data": {
-    "success": true,
-    "message": "Connection successful",
-    "details": {
-      "reachable": true,
-      "latencyMs": 123,
-      "blockHeight": 654321
-    }
+    "ok": false,
+    "latencyMs": 3004,
+    "snapshot": { "reachable": false, "message": "connect ECONNREFUSED", "at": 1730102400000 },
+    "error": { "code": "UNREACHABLE", "message": "connect ECONNREFUSED" }
   }
 }
 ```
 
-**Error Response (on failure):**
+When the check itself returned an error (for example bad credentials), `ok` is `false` and
+`error.code` is the domain error code, with no `snapshot`.
 
-```json
-{
-  "data": {
-    "success": false,
-    "message": "Connection failed: Connection timeout",
-    "details": null
-  }
-}
-```
+**Errors:**
+
+- `404 NOT_FOUND`: no stored service with that id
+- `409 NOT_LIVE`: the service is disabled or not tracked
 
 **TestConnectionResult Schema:**
 
 ```typescript
 {
-  success: boolean              // true if health check passed
-  message: string               // Human-readable status
-  details?: Record<string, any> // Service-specific details on success
+  ok: boolean
+  latencyMs: number
+  snapshot?: HealthSnapshot                 // when ok, or when unreachable
+  error?: { code: string; message: string } // when !ok
 }
 ```
 
@@ -730,16 +711,10 @@ curl -X POST http://localhost:3001/config/services \
 
 (Setup wizard and UI endpoints do not require authentication; single-user design.)
 
-### Test Connection Before Saving
+### Test a Saved Service
 
 ```bash
-curl -X POST http://localhost:3001/config/services/bitcoin:main/test \
-  -H "Content-Type: application/json" \
-  -d '{
-    "onionUrl": "http://example.onion",
-    "rpcUser": "bitcoinrpc",
-    "rpcPassword": "secret123"
-  }'
+curl -X POST http://localhost:3001/config/services/<stored-id>/test
 ```
 
 ### Update a Service (Preserve Secret)

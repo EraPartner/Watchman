@@ -198,8 +198,24 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
         const started = Date.now();
         const res = await svc.checkHealth(req.abortController.signal);
         const latencyMs = Date.now() - started;
-        if (res.ok)
+        // Most probes resolve ok() and report a failed connection as
+        // reachable:false (see withHostPing), so a resolved snapshot alone
+        // does not mean the test passed.
+        if (res.ok && res.value.reachable)
           return { data: { ok: true, latencyMs, snapshot: res.value } };
+        if (res.ok) {
+          return {
+            data: {
+              ok: false,
+              latencyMs,
+              snapshot: res.value,
+              error: {
+                code: "UNREACHABLE",
+                message: res.value.message ?? "service unreachable",
+              },
+            },
+          };
+        }
         return {
           data: {
             ok: false,
