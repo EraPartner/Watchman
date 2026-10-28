@@ -61,8 +61,15 @@ interface BitswapStat {
   Wantlist?: unknown[];
 }
 
+interface RepoStat {
+  RepoSize?: number;
+  NumObjects?: number;
+}
+
 // pin/ls returns the full pin list (large on big pin sets) and stats/dht
-// walks every bucket — both change slowly, so refresh them on a slow lane
+// walks every bucket — both change slowly, so refresh them on a slow lane.
+// A full repo/stat also walks the whole blockstore to count NumObjects, so the
+// fast lane asks for size-only and the object count rides the slow lane.
 const SLOW_LANE_TTL_MS = 10 * 60 * 1000;
 
 export class IpfsService extends BaseService {
@@ -77,6 +84,7 @@ export class IpfsService extends BaseService {
   private readonly now: () => number;
   private readonly pinLsMemo: TtlMemo<PinLs>;
   private readonly dhtMemo: TtlMemo<DhtEntry[]>;
+  private readonly repoObjectsMemo: TtlMemo<RepoStat>;
 
   constructor(deps: IpfsDeps) {
     super();
@@ -93,6 +101,9 @@ export class IpfsService extends BaseService {
     );
     this.dhtMemo = ttlMemo(SLOW_LANE_TTL_MS, deps.now, (signal) =>
       this.postNdjson<DhtEntry>("/api/v0/stats/dht", signal)
+    );
+    this.repoObjectsMemo = ttlMemo(SLOW_LANE_TTL_MS, deps.now, (signal) =>
+      this.post<RepoStat>("/api/v0/repo/stat", signal)
     );
   }
 
@@ -132,6 +143,7 @@ export class IpfsService extends BaseService {
         dhtEntries,
         pinLs,
         listenAddrs,
+        repoObjects,
       ] = await Promise.all([
         this.post<{ Version?: string }>("/api/v0/version", signal),
         this.post<{ ID?: string; Addresses?: string[] }>("/api/v0/id", signal),
@@ -139,10 +151,9 @@ export class IpfsService extends BaseService {
           "/api/v0/swarm/peers?format=json",
           signal
         ).catch(() => null),
-        this.post<{ RepoSize?: number; NumObjects?: number }>(
-          "/api/v0/repo/stat?format=json",
-          signal
-        ).catch(() => null),
+        this.post<RepoStat>("/api/v0/repo/stat?size-only=true", signal).catch(
+          (): RepoStat | null => null
+        ),
         this.post<{
           TotalIn?: number;
           TotalOut?: number;
@@ -160,6 +171,7 @@ export class IpfsService extends BaseService {
         this.post<SwarmAddrsListen>("/api/v0/swarm/addrs/listen", signal).catch(
           (): SwarmAddrsListen | null => null
         ),
+        this.repoObjectsMemo(signal).catch((): RepoStat | null => null),
       ]);
 
       const peersCount = Array.isArray(peers)
@@ -195,7 +207,7 @@ export class IpfsService extends BaseService {
           addressCount: id.Addresses?.length ?? 0,
           peers: peersCount,
           repoSize: repo?.RepoSize ?? null,
-          numObjects: repo?.NumObjects ?? null,
+          numObjects: repoObjects?.NumObjects ?? null,
           bwTotalIn: bw?.TotalIn ?? null,
           bwTotalOut: bw?.TotalOut ?? null,
           bwRateIn: bw?.RateIn ?? null,
