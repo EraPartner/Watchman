@@ -111,9 +111,11 @@ describe("startSseStream", () => {
     mode = "stream";
     connections = 0;
     const abort = new AbortController();
+    const errors: unknown[] = [];
     startSseStream({
       url: `http://127.0.0.1:${port}/events`,
       onMessage: () => undefined,
+      onError: (e) => errors.push(e),
       reconnectDelayMs: 20,
       signal: abort.signal,
     });
@@ -122,6 +124,9 @@ describe("startSseStream", () => {
     activeRes?.end();
     activeRes = null;
     await waitFor(() => connections >= 2);
+    // a clean end loses events too, so callers are told (e.g. to re-seed)
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/sse stream ended/);
 
     abort.abort();
     activeRes?.end();

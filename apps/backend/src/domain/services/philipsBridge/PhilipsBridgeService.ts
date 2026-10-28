@@ -162,7 +162,7 @@ export class PhilipsBridgeService extends BaseService {
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
-    const started = this.now();
+    const pingStarted = this.now();
     const pingRes = this.usePing
       ? await this.pinger.probe({
           host: this.host,
@@ -171,7 +171,7 @@ export class PhilipsBridgeService extends BaseService {
           signal,
         })
       : { success: false, avgMs: undefined };
-    const latencyMs = pingRes.avgMs ?? this.now() - started;
+    const pingElapsedMs = this.now() - pingStarted;
     const icmpAlive = this.usePing && pingRes.success;
     const host: HostHealth = {
       reachable: icmpAlive,
@@ -179,6 +179,7 @@ export class PhilipsBridgeService extends BaseService {
     };
 
     if (!this.applicationKey) {
+      const latencyMs = pingRes.avgMs ?? pingElapsedMs;
       return ok({
         reachable: icmpAlive,
         latencyMs,
@@ -188,8 +189,18 @@ export class PhilipsBridgeService extends BaseService {
       });
     }
 
+    const apiStarted = this.now();
     const apiReachable = await this.probeApi(signal);
-    const service = { reachable: apiReachable, details: { apiV2: true } };
+    const apiLatencyMs = this.now() - apiStarted;
+    const service = {
+      reachable: apiReachable,
+      ...(apiReachable ? { latencyMs: apiLatencyMs } : {}),
+      details: { apiV2: true },
+    };
+    // the API round trip is the service latency; ping is the fallback
+    const latencyMs = apiReachable
+      ? apiLatencyMs
+      : (pingRes.avgMs ?? pingElapsedMs);
     const reachable = host.reachable || service.reachable;
 
     return ok({
@@ -269,13 +280,16 @@ export class PhilipsBridgeService extends BaseService {
 
   private async probeApi(signal: AbortSignal): Promise<boolean> {
     try {
+      // /resource/bridge is one small object; /resource/light would download
+      // every light every health tick
       const res = await this.http.send({
-        url: this.apiUrl("/resource/light"),
+        url: this.apiUrl("/resource/bridge"),
         method: "GET",
         headers: this.apiHeaders(),
         timeoutMs: this.timeoutMs,
         signal,
       });
+      await res.text().catch(() => "");
       return res.status >= 200 && res.status < 300;
     } catch {
       return false;
@@ -294,6 +308,7 @@ export class PhilipsBridgeService extends BaseService {
       signal,
     });
     if (res.status < 200 || res.status >= 300) {
+      await res.text().catch(() => "");
       throw new Error(`hue ${path} returned ${res.status}`);
     }
     const body = await res.json<HueListResponse<HueResource>>();
@@ -318,7 +333,10 @@ export class PhilipsBridgeService extends BaseService {
         timeoutMs: this.timeoutMs,
         signal,
       });
-      if (res.status < 200 || res.status >= 300) return {};
+      if (res.status < 200 || res.status >= 300) {
+        await res.text().catch(() => "");
+        return {};
+      }
       const body = await res.json<HueListResponse<HueLight>>();
       const lights = body.data ?? [];
       // seed the live map so SSE deltas keep it current from here on;

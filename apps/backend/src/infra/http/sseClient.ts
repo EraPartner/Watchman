@@ -18,8 +18,8 @@ export type SseStarter = (opts: SseStreamOptions) => void;
 
 /**
  * Minimal Server-Sent-Events consumer with automatic reconnect. Runs as a
- * detached loop until the signal aborts; transport errors are reported via
- * onError and retried — SSE is an optimization layer, never a hard
+ * detached loop until the signal aborts; transport errors and clean stream
+ * ends are reported via onError and retried — SSE is an optimization layer, never a hard
  * dependency for the caller.
  */
 export const startSseStream: SseStarter = (opts) => {
@@ -28,6 +28,10 @@ export const startSseStream: SseStarter = (opts) => {
     while (!opts.signal.aborted) {
       try {
         await consumeOnce(opts);
+        // a clean end (server closed the stream) still loses the events sent
+        // before the reconnect, so callers must hear about it like an error
+        if (opts.signal.aborted) return;
+        opts.onError?.(new Error("sse stream ended"));
       } catch (e) {
         if (opts.signal.aborted) return;
         opts.onError?.(e);
