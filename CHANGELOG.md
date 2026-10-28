@@ -211,5 +211,9 @@ dependency audit, and documentation aligned with the code.
 - Electron 43.8.0 → 43.8.3 (2026-10-28) for GHSA-jr5w-w6x2-84p9 (HIGH,
   compromised eMudhra intermediate certificates), which failed the CI
   dependency audit and Trivy scan on every open PR.
+- Regenerated the standalone `apps/backend/package-lock.json` (used by the
+  desktop bundle's `npm ci --omit=dev`). It had drifted from
+  `apps/backend/package.json` and still pinned zod 4.4.3 (CVE-2023-54404,
+  HIGH); it now resolves zod 4.6.7.
 
 [unreleased]: https://github.com/EraPartner/Watchman/commits/main
