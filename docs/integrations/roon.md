@@ -2,7 +2,7 @@
 title: Roon Integration
 type: integration
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     integration,
@@ -158,6 +158,8 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 - `pingCount` — ICMP count (default 2)
 - **`apiPort`** (RN2) — WebSocket API port (default 9330). Roon assigns this port from a range rather than a fixed number: 9100 was the old start of the range, and current Cores commonly use 9330 (sometimes 9332, 9300 or 9400). Services saved before the default changed keep their stored port. If zones stay empty, check the port your Core listens on. Source: [Roon community, "What is Roon Core's (default) port?"](https://community.roonlabs.com/t/what-is-roon-cores-default-port/225103). Not verified against a live Core.
 - **`useRoonApi`** (RN2) — Enable zone tracking (default false)
+
+Pairing: the first time `useRoonApi` connects, enable the "Watchman" extension in Roon (Settings → Extensions). The Core's token is then kept in `DATA_DIR/roon-state.json` (owner-only permissions), one entry per Core address, so restarts don't ask again. Versions before 2026-10-28 wrote it to `config.json` in the backend's working directory; that file is still read as a fallback, so an existing pairing keeps working.
 
 ### Methods
 
