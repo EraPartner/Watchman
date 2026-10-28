@@ -204,6 +204,7 @@ Test file: `apps/backend/src/domain/services/albyHub/AlbyHubService.test.ts`
 
 ## Related
 
+- [[docs/guides/service-setup/albyhub|Setup guide]]: what to enable on the service, least-privilege credentials, and how to add it in Watchman
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 Phase 0a — Two-Tier Health]]
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/api/services-health|Services Health API]]

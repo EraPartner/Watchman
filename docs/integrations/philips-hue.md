@@ -349,6 +349,7 @@ constructor(deps: PhilipsBridgeDeps) {
 
 ## Related
 
+- [[docs/guides/service-setup/philips-hue|Setup guide]]: what to enable on the service, least-privilege credentials, and how to add it in Watchman
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 — Two-Tier Health and Monitoring Upgrades]]
 - [[docs/api/index#configuration--setup-endpoints|API Documentation — Setup/Pairing Endpoints]]
 - [[docs/guides/running-the-setup-wizard|Running the Setup Wizard Guide]]

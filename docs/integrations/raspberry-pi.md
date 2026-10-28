@@ -273,6 +273,7 @@ Formats voltage values to 4 decimal places with the "V" unit suffix.
 
 ## Related
 
+- [[docs/guides/service-setup/raspberry-pi|Setup guide]]: what to enable on the service, least-privilege credentials, and how to add it in Watchman
 - [[docs/adr/018-split-deploy-pi-backend|ADR-018 — Split Deploy (Pi backend native)]]
 - [[docs/adr/019-two-tier-health-and-monitoring-upgrades|ADR-019 — Two-Tier Health + Monitoring Upgrades]]
 - [[docs/architecture/backend-architecture#ssh-connection-pool|Backend Architecture — SSH Connection Pool]]

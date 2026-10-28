@@ -2,7 +2,7 @@
 title: Guides
 type: index
 status: active
-date: 2026-10-04
+date: 2026-10-28
 tags: [guide, index, setup-wizard]
 description: Index of all how-to guides for the Watchman project
 aliases: [guides index, how-to, tutorials]
@@ -24,16 +24,17 @@ SORT file.name ASC
 
 ## Available Guides
 
-| Guide                           | Description         |
-| ------------------------------- | ------------------- | ------------------------------------ |
-| [[docs/guides/setup             | Setup Guide]]           | Local development environment setup  |
-| [[docs/guides/deployment        | Deployment Guide]]      | Production deployment instructions   |
-| [[docs/guides/running-the-desktop-app | Desktop App]]   | Build and run the Electron desktop application |
-| [[docs/guides/adding-services   | Adding Services]]       | How to add a new service integration |
-| [[docs/guides/contributing      | Contributing]]          | Contribution guidelines and workflow |
-| [[docs/guides/ai-agent-workflow | AI Agent Workflow]]     | Comprehensive AI agent instructions  |
-| [[docs/guides/monitoring-upgrade-plan | Monitoring Upgrade Plan]] | Phase-by-phase rollout of ADR-019 (two-tier health + per-service methodology) |
-| [[docs/guides/devcontainer | Agent Sandbox Guide]] | Built-in Claude and Codex sandboxes with the current host access policy |
+| Guide                                                          | Description                                                                   |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [[docs/guides/service-setup/index\|Service Setup Guides]]       | Configure each monitored service and add it in Watchman (least-privilege credentials) |
+| [[docs/guides/setup\|Setup Guide]]                              | Local development environment setup                                           |
+| [[docs/guides/deployment\|Deployment Guide]]                    | Production deployment instructions                                            |
+| [[docs/guides/running-the-desktop-app\|Desktop App]]            | Build and run the Electron desktop application                                |
+| [[docs/guides/adding-services\|Adding Services]]                | How to add a new service integration to the code                              |
+| [[docs/guides/contributing\|Contributing]]                      | Contribution guidelines and workflow                                          |
+| [[docs/guides/ai-agent-workflow\|AI Agent Workflow]]            | Comprehensive AI agent instructions                                           |
+| [[docs/guides/monitoring-upgrade-plan\|Monitoring Upgrade Plan]] | Phase-by-phase rollout of ADR-019 (two-tier health + per-service methodology) |
+| [[docs/guides/devcontainer\|Agent Sandbox Guide]]               | Built-in Claude and Codex sandboxes with the current host access policy      |
 
 > [!note] Superseded guides
 > `running-the-setup-wizard` and `deploying-to-raspberry-pi` were removed as part of [[docs/adr/019-revert-split-deploy-and-remove-time-series|ADR-019]] (revert split deploy). The setup wizard Connect step and Pi deployment are no longer part of the architecture.

@@ -2,7 +2,7 @@
 title: Getting Started
 type: map-of-content
 status: active
-date: 2026-10-20
+date: 2026-10-28
 tags: [getting-started, onboarding, moc, new-developer, ai-agent, startup-flows, architecture]
 description: Map of Content for new developers and AI agents to quickly navigate the Watchman knowledge base
 aliases: [start here, onboarding, new dev, beginner, setup, how to start]
@@ -228,7 +228,7 @@ See [[docs/common-tasks.md|Common Tasks]] for quick reference to:
 
 - Starting development
 - Adding a new service
-- Configuring services
+- Configuring services (per-service steps: [[docs/guides/service-setup/index|Service Setup Guides]])
 - Troubleshooting issues
 
 ## Troubleshooting

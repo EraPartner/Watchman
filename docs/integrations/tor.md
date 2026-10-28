@@ -323,6 +323,7 @@ Removed in Phase 3. Replaced by `ServiceTile` driven by the renderer registry.
 
 ## Related
 
+- [[docs/guides/service-setup/tor|Setup guide]]: what to enable on the service, least-privilege credentials, and how to add it in Watchman
 - [[docs/integrations/index|Service Integrations]]
 - [[docs/integrations/bitcoin|Bitcoin Integration]]
 - [[docs/architecture/backend-architecture|Backend Architecture]] — infra layer (controlClient.ts)
