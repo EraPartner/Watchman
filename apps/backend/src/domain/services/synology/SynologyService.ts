@@ -60,6 +60,15 @@ const NET_WALK = {
 
 type WalkRows = ReadonlyArray<{ oid: string; value: string }>;
 
+/** Summed octet counters and which counter family they came from. Rates are
+ *  only computed between two samples of the same kind: a 64-bit total minus a
+ *  32-bit one is not a byte count. */
+interface NetSample {
+  kind: "hc" | "32";
+  rx: number;
+  tx: number;
+}
+
 interface DsmInfoData {
   model?: string;
   version?: string;
@@ -110,7 +119,7 @@ export class SynologyService extends BaseService {
   private readonly dsm: DsmClient | undefined;
   private readonly now: () => number;
   // last cumulative network counters, for computing byte rates between polls
-  private lastNet: { at: number; rx: number; tx: number } | null = null;
+  private lastNet: (NetSample & { at: number }) | null = null;
 
   constructor(deps: SynologyDeps) {
     super();
@@ -148,6 +157,9 @@ export class SynologyService extends BaseService {
         prober: this.pinger,
       },
       async (sig) => {
+        if (!this.credentialsReady && this.dsm) {
+          return this.probeDsm(sig);
+        }
         if (!this.credentialsReady) {
           return {
             reachable: false,
@@ -189,11 +201,50 @@ export class SynologyService extends BaseService {
     );
   }
 
-  /** Sums octet counters over the NAS's external interfaces. */
-  private async walkNetwork(
-    signal: AbortSignal
-  ): Promise<{ rx: number; tx: number }> {
-    const walk = (subtree: string): Promise<WalkRows> =>
+  /** DSM-only mode (no SNMPv3 credentials): DSM is the only data source, so it
+   *  defines health. SYNO.DSM.Info getinfo is the same read getStats makes. */
+  private async probeDsm(sig: AbortSignal): Promise<{
+    reachable: boolean;
+    latencyMs?: number;
+    message?: string;
+    details: Record<string, unknown>;
+  }> {
+    const started = this.now();
+    try {
+      const info = await this.dsm!.call<DsmInfoData>(
+        "SYNO.DSM.Info",
+        1,
+        "getinfo",
+        {},
+        sig
+      );
+      return {
+        reachable: true,
+        latencyMs: this.now() - started,
+        details: {
+          host: this.host,
+          credentialsConfigured: false,
+          source: "dsm",
+          systemModel: info?.model || "Unknown",
+          systemVersion: info?.version_string ?? info?.version ?? "Unknown",
+        },
+      };
+    } catch (e) {
+      return {
+        reachable: false,
+        message: e instanceof Error ? e.message : String(e),
+        details: { host: this.host, credentialsConfigured: false, source: "dsm" },
+      };
+    }
+  }
+
+  /**
+   * Sums octet counters over the NAS's external interfaces. Returns null when
+   * a walk it depends on failed or came back empty, so a partial sample is
+   * never reported as traffic or used as a rate baseline.
+   */
+  private async walkNetwork(signal: AbortSignal): Promise<NetSample | null> {
+    const walk = (subtree: string): Promise<WalkRows | null> =>
       this.snmp
         .walk({
           host: this.host,
@@ -203,7 +254,7 @@ export class SynologyService extends BaseService {
           signal,
         })
         .then((r) => r.rows)
-        .catch(() => []);
+        .catch(() => null);
     const [descr, hcIn, hcOut, in32, out32] = await Promise.all([
       walk(NET_WALK.ifDescr),
       walk(NET_WALK.ifHCInOctets),
@@ -211,19 +262,29 @@ export class SynologyService extends BaseService {
       walk(NET_WALK.ifInOctets),
       walk(NET_WALK.ifOutOctets),
     ]);
+    if (!descr || descr.length === 0) return null;
     const names = new Map<string, string>();
     for (const row of descr) names.set(lastArc(row.oid), row.value);
     const selected = selectExternalInterfaces(names);
+    if (selected.size === 0) return null;
+    const covers = (rows: WalkRows | null): rows is WalkRows =>
+      rows !== null && rows.some((r) => selected.has(lastArc(r.oid)));
     const sum = (rows: WalkRows): number =>
       rows.reduce((total, row) => {
         if (!selected.has(lastArc(row.oid))) return total;
         const n = Number(row.value);
         return Number.isFinite(n) ? total + n : total;
       }, 0);
-    const hasHc = hcIn.some((r) => selected.has(lastArc(r.oid)));
-    return hasHc
-      ? { rx: sum(hcIn), tx: sum(hcOut) }
-      : { rx: sum(in32), tx: sum(out32) };
+    if (covers(hcIn) && covers(hcOut)) {
+      return { kind: "hc", rx: sum(hcIn), tx: sum(hcOut) };
+    }
+    // an HC walk that failed this time (rather than being absent) would make
+    // the 32-bit fallback look like a counter reset; report nothing instead
+    if (hcIn === null || hcOut === null) return null;
+    if (covers(in32) && covers(out32)) {
+      return { kind: "32", rx: sum(in32), tx: sum(out32) };
+    }
+    return null;
   }
 
   async getStats(signal: AbortSignal): Promise<StatsResult> {
@@ -291,6 +352,23 @@ export class SynologyService extends BaseService {
       if (snmpResult.status === "rejected" && this.credentialsReady) {
         throw snmpResult.reason as unknown;
       }
+      // In DSM-only mode DSM is the only source: if every call failed there
+      // is no data, and reporting zeros would look like an idle, healthy NAS
+      if (!this.credentialsReady) {
+        const dsmResults = [
+          utilizationResult,
+          dsmInfoResult,
+          sysStatusResult,
+          storageResult,
+        ];
+        const firstFailure = dsmResults.find((r) => r.status === "rejected");
+        if (
+          firstFailure &&
+          dsmResults.every((r) => r.status === "rejected")
+        ) {
+          throw (firstFailure as PromiseRejectedResult).reason as unknown;
+        }
+      }
       const snmpOk = snmpResult.status === "fulfilled";
 
       const v = snmpOk ? snmpResult.value.values.map(clean) : [];
@@ -325,26 +403,28 @@ export class SynologyService extends BaseService {
           ? Math.max(0, 100 - cpuIdle)
           : (utilCpu ?? 0);
 
-      const net =
-        netResult.status === "fulfilled" ? netResult.value : { rx: 0, tx: 0 };
-      const networkRx = net.rx;
-      const networkTx = net.tx;
+      const net = netResult.status === "fulfilled" ? netResult.value : null;
 
-      // Byte rates between polls; negative deltas (wrap/reboot) are skipped
+      // Byte rates between polls of the same counter kind; negative deltas
+      // (wrap/reboot) are skipped. A missing sample keeps the old baseline.
       const at = this.now();
       let networkRxBps: number | undefined;
       let networkTxBps: number | undefined;
-      if (snmpOk) {
-        if (this.lastNet && at > this.lastNet.at) {
+      if (net) {
+        if (
+          this.lastNet &&
+          this.lastNet.kind === net.kind &&
+          at > this.lastNet.at
+        ) {
           const dtSec = (at - this.lastNet.at) / 1000;
-          const dRx = networkRx - this.lastNet.rx;
-          const dTx = networkTx - this.lastNet.tx;
+          const dRx = net.rx - this.lastNet.rx;
+          const dTx = net.tx - this.lastNet.tx;
           if (dRx >= 0 && dTx >= 0) {
             networkRxBps = Math.round(dRx / dtSec);
             networkTxBps = Math.round(dTx / dtSec);
           }
         }
-        this.lastNet = { at, rx: networkRx, tx: networkTx };
+        this.lastNet = { ...net, at };
       }
 
       const memoryTotal = memoryTotalKB * 1024;
@@ -402,8 +482,7 @@ export class SynologyService extends BaseService {
           diskUsed,
           diskFree,
           diskUsagePercent,
-          networkRx,
-          networkTx,
+          ...(net ? { networkRx: net.rx, networkTx: net.tx } : {}),
           ...(networkRxBps !== undefined ? { networkRxBps } : {}),
           ...(networkTxBps !== undefined ? { networkTxBps } : {}),
           ...(utilization !== null
