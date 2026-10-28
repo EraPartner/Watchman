@@ -179,6 +179,9 @@ jobs:
           fi
           echo "OpenAPI types in sync."
 
+      - name: Check standalone backend lockfile matches apps/backend/package.json
+        run: npm run verify:backend-lockfile
+
   # ─────────────────────────────────────────────────────────────────────────────
   # Build frontend — verify the frontend production bundle compiles
   # ─────────────────────────────────────────────────────────────────────────────

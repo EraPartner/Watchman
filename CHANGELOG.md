@@ -218,5 +218,9 @@ dependency audit, and documentation aligned with the code.
   desktop bundle's `npm ci --omit=dev`). It had drifted from
   `apps/backend/package.json` and still pinned zod 4.4.3 (CVE-2023-54404,
   HIGH); it now resolves zod 4.6.7.
+- CI (Verify Generated Artifacts) now fails when the standalone
+  `apps/backend/package-lock.json` no longer matches `apps/backend/package.json`
+  (`npm run verify:backend-lockfile`). Dependabot only updates the root
+  lockfile, so drift there used to surface only when a desktop build failed.
 
 [unreleased]: https://github.com/EraPartner/Watchman/commits/main

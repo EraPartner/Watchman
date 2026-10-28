@@ -232,6 +232,11 @@ needs a one-time right-click → Open to clear Gatekeeper.
 > bundles that, not the sparse workspace `node_modules` — otherwise the packaged
 > backend can't resolve `dotenv` et al. and exits with code 1.
 >
+> That lockfile (`apps/backend/package-lock.json`) is not updated by
+> Dependabot. CI runs `npm run verify:backend-lockfile` and fails when it no
+> longer matches `apps/backend/package.json`; the error prints how to
+> regenerate it.
+>
 > The backend ships an arch-specific `@duckdb` prebuilt binding
 > (`darwin-arm64`), so the mac target is **arm64-only**; an x64/universal build
 > would need the backend staged with the x64 binding too (not yet wired).

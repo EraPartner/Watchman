@@ -50,6 +50,7 @@
     "deps:ci": "npm run verify:git-dependencies && npm ci --allow-git=all",
     "deps:ci:portable": "npm run verify:git-dependencies && npm ci --allow-git=all --workspace=apps/backend --workspace=apps/frontend --include-workspace-root",
     "verify:git-dependencies": "node scripts/verify-git-dependencies.mjs",
+    "verify:backend-lockfile": "node scripts/verify-backend-lockfile.mjs",
     "hooks:setup": "node scripts/setup-git-hooks.mjs",
     "prepare": "node scripts/setup-git-hooks.mjs"
   },
