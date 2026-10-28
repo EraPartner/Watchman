@@ -6,7 +6,12 @@ import {
   type PollPolicy,
 } from "../../domain/BaseService.js";
 import { ok, err } from "../../core/result.js";
-import { UnavailableError } from "../../core/errors.js";
+import {
+  UnauthorizedError,
+  UnavailableError,
+  ValidationError,
+  type DomainError,
+} from "../../core/errors.js";
 import { createFakeClock } from "../../core/clock.js";
 import { createBreaker } from "./breaker.js";
 import { withBreakers } from "./guardedService.js";
@@ -18,6 +23,7 @@ class Stub extends BaseService {
   healthCalls = 0;
   statsCalls = 0;
   healthy = false;
+  statsError: DomainError | undefined;
 
   async checkHealth(): Promise<HealthResult> {
     this.healthCalls++;
@@ -27,6 +33,7 @@ class Stub extends BaseService {
   }
   async getStats(): Promise<StatsResult> {
     this.statsCalls++;
+    if (this.statsError !== undefined) return err(this.statsError);
     return ok({ metrics: {}, at: 0 });
   }
 }
@@ -100,6 +107,64 @@ describe("withBreakers", () => {
     for (let i = 0; i < 4; i++) await guarded.checkHealth(signal);
     const stats = await guarded.getStats(signal);
     expect(stats.ok).toBe(true);
+  });
+
+  it("keeps reporting bad credentials while the breaker is open", async () => {
+    const inner = new Stub();
+    inner.statsError = new UnauthorizedError("login rejected");
+    const { guarded, clock } = makeGuarded(inner);
+    const signal = new AbortController().signal;
+
+    const codes: string[] = [];
+    const messages: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const res = await guarded.getStats(signal);
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        codes.push(res.error.code);
+        messages.push(res.error.message);
+      }
+    }
+    expect(codes).toEqual(Array(10).fill("UNAUTHORIZED"));
+    expect(messages).toEqual(Array(10).fill("login rejected"));
+    // the breaker still stops the login attempts at the threshold
+    expect(inner.statsCalls).toBe(3);
+
+    // one half-open probe per reset window, still reported as UNAUTHORIZED
+    clock.advance(1001);
+    for (let i = 0; i < 3; i++) {
+      const res = await guarded.getStats(signal);
+      if (!res.ok) expect(res.error.code).toBe("UNAUTHORIZED");
+    }
+    expect(inner.statsCalls).toBe(4);
+  });
+
+  it("keeps reporting a validation error while the breaker is open", async () => {
+    const inner = new Stub();
+    inner.statsError = new ValidationError("bad url");
+    const { guarded } = makeGuarded(inner);
+    const signal = new AbortController().signal;
+
+    for (let i = 0; i < 5; i++) {
+      const res = await guarded.getStats(signal);
+      if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+    }
+    expect(inner.statsCalls).toBe(3);
+  });
+
+  it("returns CIRCUIT_OPEN once fixed credentials hit a down service", async () => {
+    const inner = new Stub();
+    inner.statsError = new UnauthorizedError("login rejected");
+    const { guarded, clock } = makeGuarded(inner);
+    const signal = new AbortController().signal;
+
+    for (let i = 0; i < 3; i++) await guarded.getStats(signal);
+    clock.advance(1001);
+    inner.statsError = new UnavailableError("down");
+    await guarded.getStats(signal);
+    const res = await guarded.getStats(signal);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("CIRCUIT_OPEN");
   });
 
   it("preserves identity and poll policy", () => {

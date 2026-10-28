@@ -371,17 +371,24 @@ export class SynologyService extends BaseService {
       }
       const snmpOk = snmpResult.status === "fulfilled";
 
+      // A varbind error (or DSM-only mode) leaves a value empty; those
+      // metrics are reported as null rather than 0 or "", so the UI shows
+      // "no data" instead of an idle NAS at 0 °C.
       const v = snmpOk ? snmpResult.value.values.map(clean) : [];
-      const uptimeTicks = toInt(v[1]) || toInt(v[11]);
+      const uptimeTicks = toOptInt(v[1]) || toOptInt(v[11]);
       const cpuIdle = toOptInt(v[5]);
-      const cpuTemp = toInt(v[6]);
-      const memoryTotalKB = toInt(v[7]);
+      const snmpCpuTemp = toOptInt(v[6]);
+      const memoryTotalKB = toOptInt(v[7]);
+      const memoryAvailRealKB = toOptInt(v[8]);
       // reclaimable buffers/cache count as available, matching DSM's own
       // "real usage" figure
-      const memoryAvailableKB = Math.min(
-        memoryTotalKB,
-        toInt(v[8]) + toInt(v[9]) + toInt(v[10])
-      );
+      const memoryAvailableKB =
+        memoryTotalKB !== undefined && memoryAvailRealKB !== undefined
+          ? Math.min(
+              memoryTotalKB,
+              memoryAvailRealKB + toInt(v[9]) + toInt(v[10])
+            )
+          : undefined;
 
       const utilization =
         utilizationResult.status === "fulfilled"
@@ -401,7 +408,7 @@ export class SynologyService extends BaseService {
       const cpuUsage =
         snmpOk && cpuIdle !== undefined
           ? Math.max(0, 100 - cpuIdle)
-          : (utilCpu ?? 0);
+          : utilCpu;
 
       const net = netResult.status === "fulfilled" ? netResult.value : null;
 
@@ -427,16 +434,34 @@ export class SynologyService extends BaseService {
         this.lastNet = { ...net, at };
       }
 
-      const memoryTotal = memoryTotalKB * 1024;
-      const memoryAvailable = memoryAvailableKB * 1024;
-      const memoryUsed = Math.max(0, memoryTotal - memoryAvailable);
+      const memoryTotal =
+        memoryTotalKB !== undefined ? memoryTotalKB * 1024 : null;
+      const memoryAvailable =
+        memoryAvailableKB !== undefined ? memoryAvailableKB * 1024 : null;
+      const memoryUsed =
+        memoryTotal !== null && memoryAvailable !== null
+          ? Math.max(0, memoryTotal - memoryAvailable)
+          : null;
       const memoryUsagePercent =
-        snmpOk && memoryTotal > 0
+        memoryTotal !== null && memoryUsed !== null && memoryTotal > 0
           ? Math.round((memoryUsed / memoryTotal) * 100)
-          : (utilMem ?? 0);
+          : utilMem;
 
       const dsmInfo =
         dsmInfoResult.status === "fulfilled" ? dsmInfoResult.value : null;
+      const systemStatusCode = toOptInt(v[4]);
+      // In SNMP+DSM mode a DSM failure (e.g. a rejected password) would
+      // otherwise only show as missing DSM metrics
+      const dsmFailure = dsmConfigured
+        ? [utilizationResult, dsmInfoResult, sysStatusResult, storageResult]
+            .filter(
+              (r): r is PromiseRejectedResult => r.status === "rejected"
+            )
+            .map((r) => r.reason as unknown)
+        : [];
+      const dsmErrorReason =
+        dsmFailure.find((e) => e instanceof UnauthorizedError) ??
+        dsmFailure[0];
       const sysStatus =
         sysStatusResult.status === "fulfilled" ? sysStatusResult.value : null;
       const storage =
@@ -455,33 +480,46 @@ export class SynologyService extends BaseService {
         .filter((s) => s.total > 0);
       const diskTotal = volumeSizes.reduce((sum, s) => sum + s.total, 0);
       const diskUsed = volumeSizes.reduce((sum, s) => sum + s.used, 0);
-      const diskUsagePercent =
-        diskTotal > 0 ? Math.round((diskUsed / diskTotal) * 100) : 0;
-      const diskFree = Math.max(0, diskTotal - diskUsed);
+      const hasDisk = diskTotal > 0;
+      const diskUsagePercent = hasDisk
+        ? Math.round((diskUsed / diskTotal) * 100)
+        : null;
+      const diskFree = hasDisk ? Math.max(0, diskTotal - diskUsed) : null;
 
       return ok({
         at: this.now(),
         metrics: {
           host: this.host,
-          systemName: v[0] ?? "",
-          systemModel: v[2] ?? "",
-          systemVersion: v[3] ?? "",
-          systemStatus: snmpOk
-            ? toInt(v[4]) === 1
-              ? "Normal"
-              : "Warning"
-            : "Unknown",
-          uptime: uptimeTicks / 100,
+          systemName: v[0] || null,
+          // DSM Info fills in what SNMP lacks (DSM-only mode, varbind errors)
+          systemModel: v[2] || dsmInfo?.model || null,
+          systemVersion:
+            v[3] || dsmInfo?.version_string || dsmInfo?.version || null,
+          systemStatus:
+            systemStatusCode === undefined
+              ? "Unknown"
+              : systemStatusCode === 1
+                ? "Normal"
+                : "Warning",
+          uptime: uptimeTicks !== undefined ? uptimeTicks / 100 : null,
           cpuUsage,
-          cpuTemp,
+          cpuTemp: snmpCpuTemp ?? dsmInfo?.temperature ?? null,
           memoryTotal,
           memoryAvailable,
           memoryUsed,
           memoryUsagePercent,
-          diskTotal,
-          diskUsed,
+          diskTotal: hasDisk ? diskTotal : null,
+          diskUsed: hasDisk ? diskUsed : null,
           diskFree,
           diskUsagePercent,
+          ...(dsmErrorReason !== undefined
+            ? {
+                dsmError:
+                  dsmErrorReason instanceof Error
+                    ? dsmErrorReason.message
+                    : String(dsmErrorReason),
+              }
+            : {}),
           ...(net ? { networkRx: net.rx, networkTx: net.tx } : {}),
           ...(networkRxBps !== undefined ? { networkRxBps } : {}),
           ...(networkTxBps !== undefined ? { networkTxBps } : {}),

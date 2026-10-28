@@ -26,9 +26,19 @@ export class Broadcaster {
     if (this.unsubs.length > 0) return;
     this.unsubs.push(
       this.deps.bus.on("service.health.updated", (p) => {
-        // most probes resolve ok() with reachable:false when the service is
-        // down; that is not a recovery
-        if (p.snapshot?.reachable !== false) {
+        // Most probes resolve ok() with reachable:false when the service is
+        // down. That is the common outage, so it enters the same health error
+        // state as a failed probe (one alert per transition), and is not a
+        // recovery.
+        if (p.snapshot?.reachable === false) {
+          this.notifyErrored(
+            p.id,
+            "health",
+            p.kind,
+            p.instanceId,
+            p.snapshot.message ?? "unreachable"
+          );
+        } else {
           this.notifyRecovered(p.id, "health", p.kind, p.instanceId);
         }
         this.broadcast({
@@ -54,20 +64,9 @@ export class Broadcaster {
         });
       }),
       this.deps.bus.on("service.error", (p) => {
-        const key = errorKey(p.id, p.scope);
-        if (this.errored.has(key)) return;
-        this.errored.add(key);
         const detail =
           p.error instanceof Error ? p.error.message : String(p.error);
-        this.broadcast({
-          type: "alert",
-          level: "error",
-          message: `${p.id}: ${detail}`,
-          service: p.kind,
-          kind: p.kind,
-          instanceId: p.instanceId,
-          id: p.id,
-        });
+        this.notifyErrored(p.id, p.scope, p.kind, p.instanceId, detail);
       }),
       // Sent once the lifecycle has applied the change, so a client refetching
       // /instances on this message sees the new or removed service.
@@ -156,6 +155,27 @@ export class Broadcaster {
   private forget(id: string): void {
     this.errored.delete(errorKey(id, "health"));
     this.errored.delete(errorKey(id, "stats"));
+  }
+
+  private notifyErrored(
+    id: string,
+    scope: "health" | "stats",
+    kind: string,
+    instanceId: string,
+    detail: string
+  ): void {
+    const key = errorKey(id, scope);
+    if (this.errored.has(key)) return;
+    this.errored.add(key);
+    this.broadcast({
+      type: "alert",
+      level: "error",
+      message: `${id}: ${detail}`,
+      service: kind,
+      kind,
+      instanceId,
+      id,
+    });
   }
 
   private notifyRecovered(

@@ -2,7 +2,7 @@
 title: Renderer Registry
 type: architecture
 status: active
-date: 2026-05-08
+date: 2026-10-28
 tags: [architecture, frontend, renderers, service-driven, phase3, phase4, bento, pi1, x3-renderer, voltage, fmtVolt, throttle]
 description: Service renderer registry driving tile summary, detail-sheet metrics, charts, and tone derivation. One renderer per service kind; pluggable per-service customization. Phase 3 pilots Bitcoin, Synology, and Raspberry Pi (X3 with voltage charting and throttle detection).
 aliases: [renderer, service renderer, renderer registry]
@@ -191,7 +191,12 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStats> = {
 
 File: `[[apps/frontend/src/services/renderers/synology.ts]]`
 
-Similar structure; drives Synology tile with CPU/memory/disk metrics.
+Similar structure; drives Synology tile with CPU/memory/disk metrics. The tile's "Net RX" and the
+network charts use the `networkRxBps`/`networkTxBps` rates (the cumulative counters stay in the
+detail sheet). The System group shows `dsmError` as "DSM API error", and `tone()` returns `warn`
+when `dsmError` is a non-empty string and nothing worse applies (offline health, `systemStatus`
+`"Warning"`, CPU ≥ 90 % or temperature ≥ 80 °C are `crit`). See
+[[docs/integrations/synology#Frontend Component|Synology Integration — Frontend Component]].
 
 ### Raspberry Pi Renderer (PI1 + X3)
 

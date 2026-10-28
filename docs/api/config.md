@@ -363,7 +363,9 @@ Request is a **partial flat discriminated union** — send only the fields you w
 
 - If a secret field is omitted: existing encrypted value preserved
 - If a secret field is `""` (empty string): existing value preserved
-- If a secret field has a value: encrypted and stored (e.g., send `"***"` to preserve, or omit entirely)
+- If a secret field is `"***"` (the redacted value from GET): existing value preserved
+- If a secret field is `null`: the saved secret is removed (the key is dropped before validation, so the field is unset or takes its schema default — for example clearing a router's `snmpCommunity` turns its SNMP stats off again). Use it for optional secrets; a required secret cleared this way fails validation
+- If a secret field has any other value: encrypted and stored
 
 **Response:**
 

@@ -2,7 +2,7 @@
 title: Backend Architecture
 type: architecture
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags:
   [
     architecture,
@@ -458,7 +458,7 @@ await handle.close();
 
 ### Services Using ZMQ
 
-- **BitcoinService** (BT2 task) — Real-time block notifications for `zmqHashblockEndpoint`, populates `zmqLastBlockHash`, `zmqLastBlockAt`, `zmqBlockCount`
+- **BitcoinService** (BT2 task) — Real-time block notifications for `zmqHashblockEndpoint`, populates `zmqLastBlockHash`, `zmqLastBlockAt`, `zmqBlockCount`; transaction notifications for `zmqRawtxEndpoint`, counted as `zmqTxCount` (with `zmqRawtxConnected` / `zmqRawtxError`). One socket per endpoint, shared by both topics when the endpoints match
 
 ## Roon WebSocket Client (RN1 — Real-Time Zone Tracking)
 
@@ -705,7 +705,7 @@ Split into 4 focused classes in `[[apps/backend/src/transport/ws/]]`, plus share
 - Reset timeout: 60 seconds (was 30 s)
 - States: Closed → Open → Half-Open → Closed
 - **Half-open slot management**: `tryAcquire()` atomically reserves a slot; `halfOpenMaxCalls` defaults to 1
-- CIRCUIT_OPEN → `err(UnavailableError)` returned to callers, not thrown
+- CIRCUIT_OPEN → `err(CircuitOpenError)` returned to callers, not thrown; while the lane is open after an `UNAUTHORIZED`/`VALIDATION` failure, callers get that last error instead of `CIRCUIT_OPEN`
 - Volatile state (lost on restart, acceptable for self-hosted)
 - Registered in MetricsRegistry; visible in `GET /metrics` → `snapshot.breakers`
 - See [[docs/architecture/core-systems|Core Systems — Circuit Breaker Wiring]] for full details

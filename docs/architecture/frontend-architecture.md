@@ -188,6 +188,7 @@ React Router v7 with the following structure:
 - **Design System** - Dark-luxury OKLCH tokens, Geist typography, motion foundations, and the ADR-028 liquid-glass material layer (see [[docs/architecture/frontend-design-system|Frontend Design System]])
 - **Glass material** (`styles/glass.css`) - `.glass-thin/regular/thick/topbar` frosted utilities applied app-wide; static `.atmosphere` backdrop rendered once at the App root in `App.tsx` (see [[docs/adr/028-liquid-glass-observability-tiles|ADR-028]])
 - **Service visuals** (`lib/serviceVisuals.ts`) - Per-service icon watermark map and `heroState()` bool-hero chip helper shared by `ServiceTile` and `ServiceDetailSheet`
+- **Health status** (`lib/healthStatus.ts`) - `healthStatus(snapshot)` collapses a health snapshot to `online` / `warning` (reachable, but a host or service tier is down) / `offline`; shared by `ServiceTile`, `ServiceDetailSheet` and the `TopNav` summary so all three agree
 - **Primitives** - 14 typed components <150 LOC each (see [[docs/components/primitives/index|Primitives Index]])
 - **Tailwind CSS** - Utility-first CSS framework with extended token utilities
 - **Radix UI** - Headless dialog, popover, and scroll-area building blocks wrapped by the primitives in `apps/frontend/src/components/primitives/` (the former shadcn/ui `components/ui/` directory no longer exists)

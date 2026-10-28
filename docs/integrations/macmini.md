@@ -97,7 +97,7 @@ All metrics are nullable (`null` if a command fails or is not available). All co
 | `diskFree`         | `df -k /System/Volumes/Data` (else `df -k /`)    | number \| null | Available bytes (shared APFS container) |
 | `diskUsagePercent` | `df -k /System/Volumes/Data` (else `df -k /`)    | number \| null | (total − available) / total      |
 | `uptime`           | `uptime`                                         | number \| null | System uptime in seconds (BSD formats: `H:MM`, `N hrs`, `N mins`, `N secs`, with optional `N days`) |
-| `cpuUsagePercent`  | `top -l 1 -n 0 -s 0`                             | number \| null | `user + sys` CPU percent         |
+| `cpuUsagePercent`  | `top -l 2 -n 0 -s 1`                             | number \| null | `user + sys` CPU percent         |
 
 On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is only the OS; the Data volume holds user data. `cpuLoad`, `cpuTemp`, `uptime` and the disk fields are `null` when not measured (no load line, no `smctemp`/`osx-cpu-temp`, no usable `df` output), never a placeholder 0.
 
@@ -123,7 +123,7 @@ On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is onl
 
 **Command**: `pmset -g batt` — parses power source and battery state. Nil if command unavailable.
 
-### Extended CPU Metrics (via `top -l 1 -n 0 -s 0`)
+### Extended CPU Metrics (via `top -l 2 -n 0 -s 1`)
 
 | Metric         | Type           | Description                         |
 | -------------- | -------------- | ----------------------------------- |
@@ -132,7 +132,7 @@ On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is onl
 | `cpuIdle`      | number \| null | Idle CPU time (%)                   |
 | `processCount` | number \| null | Total running process count         |
 
-**Command**: `top -l 1 -n 0 -s 0` — single snapshot of top; parsed for CPU usage and process count.
+**Command**: `top -l 2 -n 0 -s 1` (`TOP_CMD`) — two samples one second apart. The first sample has no previous one to diff against, so its CPU line is not a current measurement; the parser uses the last `CPU usage:` and `Processes:` lines. This adds about 1 s to the compound SSH exec, well inside the default 5 s timeout.
 
 ### Extended Network Metrics (via `ifconfig en0`)
 
@@ -171,7 +171,7 @@ All commands travel in a single SSH exec ([[apps/backend/src/infra/ssh/compound.
 3. temp probe — prefers `smctemp -c` (works on Apple Silicon, where the unmaintained `osx-cpu-temp` reads 0.0), falls back to `osx-cpu-temp`
 4. `vm_stat` — memory breakdown
 5. `pmset -g batt` — power state
-6. `top -l 1 -n 0 -s 0` — CPU% and process count
+6. `top -l 2 -n 0 -s 1` — CPU% and process count (second sample)
 7. `ifconfig en0` — network interface
 8. `smartctl -j -a disk0` (feature-detect) — disk SMART health
 

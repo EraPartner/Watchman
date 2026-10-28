@@ -145,7 +145,11 @@ describe("HomebridgeService", () => {
     const r = await svc.getStats(new AbortController().signal);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.value.metrics["hostname"]).toBe("");
+      // regression: these defaulted to "" and rendered as blank rows
+      expect(r.value.metrics["hostname"]).toBeNull();
+      expect(r.value.metrics["platform"]).toBeNull();
+      expect(r.value.metrics["homebridgeVersion"]).toBeNull();
+      expect(r.value.metrics["serverVersion"]).toBeNull();
       expect(r.value.metrics["uptime"]).toBe(0);
       expect(r.value.metrics["currentVersion"]).toBe("unknown");
     }

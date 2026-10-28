@@ -33,10 +33,10 @@ aliases: [bitcoin, btc, bitcoin node, rpc, zmq]
 Two-tier health via `withHostPing` helper:
 
 - **Host tier** — ICMP ping to Bitcoin node host
-- **Service tier** — RPC `getblockchaininfo` probe
-- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the RPC/ZMQ probe defines health; the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
+- **Service tier** — one batched JSON-RPC request with `getblockchaininfo` and `getnetworkinfo`
+- **Composite reachability** — `reachable = service.reachable` — daemon-primary: the RPC probe defines health (ZMQ is not part of health); the host/ICMP tier is retained for diagnostics only (see [[docs/adr/026-reachability-derivation-and-telemetry-scope|ADR-026]])
 
-If host is unreachable, service tier is skipped.
+`withHostPing` runs the ping and the RPC probe in parallel, so neither tier skips the other. Because reachability follows the service tier, a failed ping with a responding RPC still reports the node as reachable; a failed RPC probe reports it unreachable whatever the ping says.
 
 ## Configuration
 
@@ -47,10 +47,10 @@ Configure via the Settings UI or `/config` API (DuckDB config store). Legacy `BI
 | `instanceId`           | text     | yes      | `main`                  |        | Unique identifier for this instance                                    |
 | `enabled`              | boolean  |          | `true`                  |        | Enable/disable polling                                                 |
 | `rpcUrl`               | url      | yes      | `http://127.0.0.1:8332` |        | Bitcoin Core JSON-RPC endpoint (host + port)                           |
-| `rpcUser`              | text     |          |                         |        | RPC username                                                           |
+| `rpcUser`              | text     |          |                         |        | RPC username. Required in practice: without RPC credentials health and stats both fail |
 | `rpcPassword`          | password |          |                         | yes    | RPC password                                                           |
 | `zmqHashblockEndpoint` | url      |          |                         |        | ZMQ endpoint for hashblock notifications, e.g. `tcp://127.0.0.1:28332` |
-| `zmqRawtxEndpoint`     | url      |          |                         |        | ZMQ endpoint for rawtx notifications, e.g. `tcp://127.0.0.1:28333`     |
+| `zmqRawtxEndpoint`     | url      |          |                         |        | ZMQ endpoint for rawtx notifications, e.g. `tcp://127.0.0.1:28333` (counted as `zmqTxCount`) |
 | `timeoutMs`            | number   |          | `5000`                  |        | Per-request timeout (ms)                                               |
 | `cacheTtlMs`           | number   |          | `10000`                 |        | Stats cache TTL (ms)                                                   |
 
@@ -59,8 +59,9 @@ The ICMP ping target is derived from the hostname in `rpcUrl` — there is no se
 > [!warning] Cookie auth is not supported
 > Watchman sends HTTP Basic auth from `rpcUser` / `rpcPassword` only. It cannot read Bitcoin
 > Core's `.cookie` file. Set `rpcauth=` (or `rpcuser=` / `rpcpassword=`) in `bitcoin.conf` and
-> enter the same user and password here. Without them, RPC calls fail and stats are unavailable
-> (field help in `apps/backend/src/config/schemas/fieldMetadata.ts`). Watchman only calls read
+> enter the same user and password here. Without both of them, every RPC call throws
+> `UnauthorizedError` ("bitcoin rpc credentials not configured") before any request is sent, so
+> health reports the node as unreachable and stats are unavailable (field help in `apps/backend/src/config/schemas/fieldMetadata.ts`). Watchman only calls read
 > RPCs (listed under Stats below).
 
 ## Endpoints
@@ -78,32 +79,18 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 
 ### Health Check (`checkHealth()`)
 
-Uses `withHostPing()` helper to run ICMP ping and RPC probe in parallel:
+Uses `withHostPing()` to run the ICMP ping and the RPC probe in parallel. The probe sends one
+batched JSON-RPC request (`getblockchaininfo` + `getnetworkinfo`) through `rpcBatch()`, which
+returns `{ results, errors }`: a per-call RPC error yields `null` at that position plus the node's
+message in `errors`, while transport and auth failures (missing credentials, `401`, `403` from
+`rpcwhitelist`, other non-2xx) throw.
 
-```ts
-withHostPing(
-  {
-    host: this.pingHost,
-    timeoutMs: this.timeoutMs,
-    pingCount: 1,
-    prober: this.pinger,
-  },
-  async (sig) => {
-    const started = this.now();
-    const [chainRaw, netRaw] = await this.rpcBatch(
-      [{ method: "getblockchaininfo" }, { method: "getnetworkinfo" }],
-      sig
-    );
-    return {
-      reachable: Boolean(chainRaw?.chain),
-      latencyMs: this.now() - started,
-      details: { chain: chainRaw?.chain, version: resolveVersion(netRaw) },
-    };
-  },
-  this.now(),
-  signal
-);
-```
+- **Healthy** — `getblockchaininfo` returned a `chain`: `reachable: true` with `details.chain`,
+  `details.version` (from `getnetworkinfo`) and `details.blocks`.
+- **Responding but incomplete** — no `chain` (for example `-28 Loading block index…` while the node
+  warms up): `reachable: false`, `message: "bitcoin rpc: <reason>"` when the node gave one, and
+  `details.warning: "bitcoin responding but data incomplete"`.
+- **Thrown error** — `withHostPing` records the service tier as unreachable with the error message.
 
 Returns `HealthSnapshot` with `host` and `service` tiers.
 
@@ -175,7 +162,21 @@ When `zmqHashblockEndpoint` is configured, `getStats()` exposes these additional
 | `zmqConnected`     | boolean | Whether the ZMQ subscription is running                      |
 | `zmqError`         | string \| null | Why the subscription failed to start (null when connected) |
 
-These appear in the stats JSON only when the endpoint is configured:
+When `zmqRawtxEndpoint` is configured, Watchman also subscribes to the `rawtx` topic. Each
+transaction notification is only counted; the transaction itself is not decoded or stored.
+
+| Metric              | Type           | Description                                                                         |
+| ------------------- | -------------- | ----------------------------------------------------------------------------------- |
+| `zmqTxCount`        | number \| null | Count of ZMQ `rawtx` events since service start; always present, `null` when `zmqRawtxEndpoint` is unset |
+| `zmqRawtxConnected` | boolean        | Whether the rawtx subscription is running (present only when `zmqRawtxEndpoint` is set) |
+| `zmqRawtxError`     | string \| null | Why the rawtx subscription failed to start (present only when `zmqRawtxEndpoint` is set) |
+
+When `zmqHashblockEndpoint` and `zmqRawtxEndpoint` are the same endpoint, Watchman opens one socket
+subscribed to both topics, so `zmqConnected`/`zmqError` and `zmqRawtxConnected`/`zmqRawtxError`
+report the same connection. Different endpoints get one socket each and fail independently. The
+detail sheet shows `zmqBlockCount` and `zmqTxCount` in its ZMQ group (`—` when the count is `null`).
+
+The hashblock metrics appear in the stats JSON only when `zmqHashblockEndpoint` is configured:
 
 ```json
 {
@@ -193,7 +194,7 @@ These appear in the stats JSON only when the endpoint is configured:
 ZMQ connection failure in `onStart()` is **non-fatal**:
 
 - Service continues polling via RPC (`getblockchaininfo`)
-- `zmqConnected` is `false` and `zmqError` says why (for example `zeromq` not installed, or a malformed endpoint); the other ZMQ metrics stay at their empty values
+- `zmqConnected` is `false` and `zmqError` says why (for example `zeromq` not installed, or a malformed endpoint); the other ZMQ metrics stay at their empty values; a failed rawtx subscription is reported the same way through `zmqRawtxConnected` / `zmqRawtxError`
 - No error is raised; fallback to poll-only mode
 - Suitable for environments where ZMQ is not available or misconfigured
 
@@ -211,10 +212,10 @@ ZMQ connection failure in `onStart()` is **non-fatal**:
 - `onStart()` calls `getzmqnotifications` via the batched RPC path and surfaces two additional stats fields when a ZMQ endpoint is configured:
   - `zmqEndpointMatch` — `true` when the configured `zmqHashblockEndpoint` port matches a port reported by `getzmqnotifications`
   - `zmqServerHashblockEndpoint` — the raw endpoint string returned by Bitcoin Core for the `pubhashblock` notification type (e.g. `tcp://127.0.0.1:28332`)
-- `onStart()` also opens the ZMQ socket and subscribes to `['hashblock']`
-- Message handler (`onMessage`) updates `lastBlockHashZmq`, `lastBlockAtZmq`, `zmqBlockCount`
-- `onStop()` closes the ZMQ socket
-- `getStats()` conditionally includes ZMQ metrics only when endpoint is configured
+- `onStart()` groups the configured topics by endpoint and opens one ZMQ socket per endpoint (`hashblock`, `rawtx`, or both on a shared endpoint); the `getzmqnotifications` check runs only when `zmqHashblockEndpoint` is set
+- Message handler (`onMessage`) updates `lastBlockHashZmq`, `lastBlockAtZmq`, `zmqBlockCount` for `hashblock`, and increments `zmqTxCount` for `rawtx`
+- `onStop()` closes each socket once (a shared socket is closed once)
+- `getStats()` includes the hashblock metrics only when `zmqHashblockEndpoint` is configured, and `zmqRawtxConnected`/`zmqRawtxError` only when `zmqRawtxEndpoint` is configured
 
 ## Frontend Component
 

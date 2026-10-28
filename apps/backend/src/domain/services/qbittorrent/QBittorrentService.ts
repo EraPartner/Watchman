@@ -223,8 +223,15 @@ export class QBittorrentService extends BaseService {
         }
       }
 
+      // getStats can overlap (poller + SWR revalidation) and both runs then
+      // fetch the same cursor; keep only entries newer than what an earlier
+      // run already recorded, so one log line is never listed twice. From
+      // here to the return there is no await, so this check-and-advance is
+      // atomic per run.
+      const logs = (Array.isArray(logEntries) ? logEntries : []).filter(
+        (entry) => typeof entry.id !== "number" || entry.id > this.lastLogId
+      );
       // Update lastLogId from new entries
-      const logs = Array.isArray(logEntries) ? logEntries : [];
       for (const entry of logs) {
         if (typeof entry.id === "number" && entry.id > this.lastLogId) {
           this.lastLogId = entry.id;
@@ -322,10 +329,13 @@ export class QBittorrentService extends BaseService {
 
   private async apiGet<T>(path: string, signal: AbortSignal): Promise<T> {
     await this.ensureAuth(signal);
+    const sentCookie = this.cookie;
     let res = await this.request(path, signal);
     if (res.status === 403) {
       await res.text().catch(() => "");
-      this.cookie = null;
+      // A parallel request may already have logged in again; only drop the
+      // cookie this request was rejected with, not the fresh one.
+      if (this.cookie === sentCookie) this.cookie = null;
       await this.ensureAuth(signal);
       res = await this.request(path, signal);
     }

@@ -43,6 +43,7 @@ aliases: [synology, nas, synology nas, dsm, synology dsm]
 - **Permission denied (105)**: the account lacks privilege for that API. No re-login (a new session can't fix it); throws `UnauthorizedError` asking for an account in the `administrators` group
 - **Other errors**: DSM error codes → `UnavailableError`; missing credentials → `UnauthorizedError`
 - **Concurrency**: Concurrent calls share a single pending login (thundering herd prevention via `pendingLogin: Promise<string> | null` pattern)
+- **Rejected-login cooldown**: a login that fails with `UnauthorizedError` (wrong account or password) is remembered for 5 minutes (`LOGIN_FAILURE_BACKOFF_MS`). During that time every call rethrows the same error without contacting DSM, so polling cannot keep adding failed attempts and trip DSM's Auto Block IP ban. A successful login clears it. The client is rebuilt when the service config changes, so corrected credentials are tried at once
 - **Test coverage**: 12 tests covering all branches including concurrent access
 
 ### API
@@ -59,6 +60,7 @@ interface DsmClientConfig {
 interface DsmClientDeps {
   http: HttpClient;
   config: DsmClientConfig;
+  now?: () => number; // Clock for the rejected-login cooldown; defaults to Date.now
 }
 
 interface DsmClient {
@@ -82,18 +84,25 @@ interface DsmClient {
 
 ### Dual SNMP + DSM Approach
 
-- **SNMP**: Core metrics (CPU, memory, disk, network) — **required**
-- **DSM API**: Extended telemetry (system status, fan/power state, storage health) — **optional**
-- **Concurrency**: Both SNMP and all DSM calls run in parallel via `Promise.allSettled`
-- **Graceful degradation**: If DSM calls fail, SNMP metrics still returned; missing DSM fields omitted from response
+At least one of the two sources must be configured; `getStats()` returns `UnauthorizedError` when neither SNMPv3 credentials nor DSM credentials are set.
+
+- **SNMP** (SNMPv3 credentials set): core metrics (CPU, memory, uptime, network counters). When SNMP is configured, an SNMP get failure fails the stats call.
+- **DSM API** (`dsmUrl`, `dsmAccount`, `dsmPassword` all set): extended telemetry (system status, fan/power state, storage health, disk totals) plus `SYNO.Core.System.Utilization`, which supplies CPU and memory when SNMP values are absent.
+- **DSM-only mode**: with no SNMPv3 credentials, the SNMP calls are skipped and DSM is the only source (see the DSM-only tip below). Stats fail only if every DSM call fails.
+- **Concurrency**: the SNMP get, the network walk, and all DSM calls run in parallel via `Promise.allSettled`
+- **Graceful degradation**: individual DSM call failures do not fail stats; their fields are omitted from the response, and the failure is reported as `dsmError` (see below)
+- **Missing values are `null`**: a metric that neither source supplies (SNMP varbind error, DSM-only mode, no DSM storage data) is reported as `null`, not `0` or `""`, so the UI shows "—" instead of, for example, an idle NAS at 0 °C. This covers `systemName`, `systemModel`, `systemVersion`, `uptime`, `cpuUsage`, `cpuTemp`, the `memory*` fields and the `disk*` totals
+- **DSM fallbacks for SNMP fields**: `systemModel` falls back to DSM Info `model`, `systemVersion` to `version_string` (else `version`), and `cpuTemp` to DSM Info `temperature`; `cpuUsage` and `memoryUsagePercent` fall back to `SYNO.Core.System.Utilization`
+- **`systemStatus`**: `"Normal"` when SYNOLOGY-SYSTEM-MIB `systemStatus` is 1, `"Warning"` for any other value, and `"Unknown"` when the value is unreadable (SNMP failed, varbind error, or DSM-only mode)
+- **`dsmError`**: when DSM is configured and any DSM call failed, `dsmError` carries the error message (an `UnauthorizedError` such as a rejected password is preferred over other failures); it is absent when every DSM call succeeded. This makes a DSM failure visible in SNMP+DSM mode, where it would otherwise only show as missing DSM metrics
 
 ### Network Counters
 
 - `networkRx`/`networkTx` sum the octet counters of the NAS's external interfaces, found by walking `ifDescr` (ifIndex 1 on DSM is loopback `lo`). Selection: `bond*` if present, else `ovs_*` (Virtual Machine Manager's Open vSwitch ports), else `eth*`, else every interface; `lo`, `docker*`, `veth*`, `br-*`, `sit*`, `tun*`, `tap*` and `dummy*` are always excluded. The 64-bit ifXTable HC counters (`1.3.6.1.2.1.31.1.1.1.6` / `.10`) are preferred; the 32-bit `1.3.6.1.2.1.2.2.1.10` / `.16` columns are a fallback (they wrap at 4 GiB).
 - CPU and memory use UCD-SNMP-MIB, which Synology's MIB guide lists for DSM: `cpuUsage` = 100 − `ssCpuIdle` (`1.3.6.1.4.1.2021.11.11.0`); memory from `memTotalReal`/`memAvailReal`/`memBuffer`/`memCached` (`1.3.6.1.4.1.2021.4.5/6/14/15.0`, kB), with buffers and cache counted as available like DSM's "real usage". SYNOLOGY-SYSTEM-MIB has no CPU or memory scalars (`.1.5.2` is `serialNumber`, `.1.5.4` is `upgradeAvailable`).
 - `uptime` uses `hrSystemUptime` (`1.3.6.1.2.1.25.1.1.0`, host uptime), falling back to `sysUpTime` (the SNMP agent's own uptime).
-- Disk totals (`diskTotal`, `diskUsed`, `diskFree`, `diskUsagePercent`) come only from the DSM storage API. SNMP has no volume-size scalar (`1.3.6.1.4.1.6574.2.1.1.*` are per-disk type/status/temperature columns), so they are 0 in SNMP-only mode.
-- `networkRxBps`/`networkTxBps` are byte rates derived from counter deltas between polls; omitted on the first poll and when a counter decreases (wrap/reboot).
+- Disk totals (`diskTotal`, `diskUsed`, `diskFree`, `diskUsagePercent`) come only from the DSM storage API. SNMP has no volume-size scalar (`1.3.6.1.4.1.6574.2.1.1.*` are per-disk type/status/temperature columns), so they are `null` in SNMP-only mode.
+- `networkRxBps`/`networkTxBps` are byte rates derived from counter deltas between polls; omitted on the first poll and when a counter decreases (wrap/reboot). The tile's "Net RX" value and the Network RX/TX charts show these rates (formatted as bytes per second); the cumulative `networkRx`/`networkTx` counters appear only in the detail sheet.
 - If the `ifDescr` walk or a needed counter walk fails, `networkRx`/`networkTx` and the rates are omitted for that poll and the previous sample stays the rate baseline. A failed HC walk is not replaced by the 32-bit sum, and rates are only computed between two samples of the same counter kind (HC or 32-bit), so a partial walk can't produce a fake traffic spike.
 
 ### DSM API Calls
@@ -104,7 +113,7 @@ interface DsmClient {
 | `SYNO.Core.System.Status`  | `get`       | `cpuFanStatus`, `sysFanStatus`, `powerStatus`                          |
 | `SYNO.Storage.CGI.Storage` | `load_info` | `volumeCount`, `volumeDegradedCount`, `diskCount`, `diskDegradedCount` |
 
-All new fields are **optional** in the stats response and included only when DSM is configured and calls succeed.
+All new fields are **optional** in the stats response and included only when DSM is configured and calls succeed. A failed call is reported in `dsmError` instead.
 
 ### Configuration
 
@@ -193,7 +202,15 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 
 ## Frontend Component
 
-Removed in Phase 3. Replaced by `ServiceTile` with `synologyRenderer` from the renderer registry.
+Removed in Phase 3. Replaced by `ServiceTile` with `synologyRenderer` from the renderer registry
+(`apps/frontend/src/services/renderers/synology.ts`).
+
+- **Tile summary**: CPU, temperature, and `networkRxBps` as "Net RX" (a rate).
+- **Detail sheet**: System (including "DSM API error" from `dsmError`, "—" when absent), CPU,
+  Memory, Disk, Network (rates and cumulative counters) and health-sourced Status groups.
+- **Tone**: `crit` when health is offline, `systemStatus` is `"Warning"`, CPU ≥ 90 % or
+  temperature ≥ 80 °C; `warn` when health is warning (a tier is down), CPU ≥ 80 %, temperature
+  ≥ 70 °C, or `dsmError` is a non-empty string; otherwise `ok`.
 
 ## Related
 

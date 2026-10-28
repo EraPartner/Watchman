@@ -30,6 +30,7 @@ import type {
 import { dotGet } from "@/services/renderers/formatters";
 import type { HealthSnapshot } from "@/services/apiClient/types";
 import { useMetricSeries } from "@/lib/metricHistory";
+import { healthStatus } from "@/lib/healthStatus";
 import { tileVariants, type TileDensity, type TileSize } from "./tileVariants";
 
 const TONE_TO_STATUS: Record<Tone, "neutral" | "ok" | "warn" | "crit"> = {
@@ -149,7 +150,7 @@ export function ServiceTile({
     () =>
       healthRaw
         ? {
-            status: (healthRaw.reachable ? "online" : "offline") as
+            status: healthStatus(healthRaw) as
               "online" | "offline" | "warning" | "loading",
             error: healthRaw.message,
           }

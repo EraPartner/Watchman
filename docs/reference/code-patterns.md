@@ -2,7 +2,7 @@
 title: Code Patterns
 type: reference
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags: [reference, code-patterns, backend, frontend, configuration, zod, mutex]
 description: Standard code patterns and conventions used across the Watchman codebase
 aliases: [patterns, conventions, code style, best practices]
@@ -208,6 +208,13 @@ return health;
 > [!warning] Not in the current code
 > This pattern described a `toTs()` helper in `apps/backend/src/infra/timeseries/duckdbTime.ts` for binding `Date` values in time-series queries. That module and the `metric_raw` time-series table do not exist in the current backend. DuckDB access goes through `apps/backend/src/infra/db/DuckDbPool.ts` (`withConnection()`), used by `ConfigStore` and `ProfileStore`.
 
+`DuckDbPool.ts` does export a `toTs()` / `fromTs()` pair for the config and profile stores'
+`TIMESTAMP` columns. `toTs(date)` binds a `Date` as UTC epoch microseconds. `fromTs(value)` is
+its inverse for values read back: it reads the micros directly (or treats a naive
+`YYYY-MM-DD HH:MM:SS[.ffffff]` string as UTC), so `created_at`, `updated_at` and audit `ts` come
+back as the same instant whatever the host time zone. Never use `new Date(String(v))` on a
+`TIMESTAMP` value: it parses the zone-less text as host-local time.
+
 ### Per-Kind Zod Schema + UI Field Metadata Pattern
 
 Each service kind has a Zod instance schema and a list of UI field metadata. They live in two
@@ -238,7 +245,7 @@ bitcoin: {
   schema: BitcoinInstanceSchema,
   fields: withCommon([
     { name: "rpcUrl", label: "RPC URL", type: "url", required: true, default: "http://127.0.0.1:8332" },
-    { name: "rpcUser", label: "RPC user", type: "text", help: "Needed for stats. Cookie auth is not supported; …" },
+    { name: "rpcUser", label: "RPC user", type: "text", help: "Required: without RPC credentials both health and stats fail, so the node shows offline. Cookie auth is not supported; …" },
     { name: "rpcPassword", label: "RPC password", type: "password", secret: true },
     // zmqHashblockEndpoint, zmqRawtxEndpoint …
   ]),

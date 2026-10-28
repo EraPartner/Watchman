@@ -2,7 +2,7 @@
 title: ServiceDetailSheet Component
 type: component
 status: active
-date: 2026-06-13
+date: 2026-10-28
 tags:
   [
     component,
@@ -150,7 +150,7 @@ See `[[apps/frontend/src/components/detail/ServiceDetailSheet.test.tsx]]` for te
 #### Other Header Elements
 
 - Service display name (from renderer)
-- Status badge (online/warning/error/offline)
+- Status badge (online/warning/error/offline), from the shared `healthStatus()` helper (`apps/frontend/src/lib/healthStatus.ts`): `warning` when the service is reachable overall but a host or service tier is down, matching the tile and TopNav
 - Optional **disabled badge** — Shows when service exists and `enabled === false`
 - Primary metric value and unit
 

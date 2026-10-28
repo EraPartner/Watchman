@@ -9,7 +9,8 @@ export const ipfsRenderer: ServiceRenderer<Stats> = {
   displayName: "IPFS",
   quickLink: (ctx) =>
     buildQuickLink(ctx, {
-      hostKeys: ["webuiUrl", "host"],
+      // the ipfs config stores the Kubo API as apiUrl; the WebUI is <apiUrl>/webui
+      hostKeys: ["webuiUrl", "apiUrl", "host"],
       portKeys: ["webuiPort", "port", "apiPort"],
       defaultPort: 5001,
       path: "/webui",

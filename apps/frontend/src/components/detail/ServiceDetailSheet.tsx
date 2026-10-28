@@ -26,6 +26,7 @@ import {
   Sparkline,
 } from "@/components/primitives";
 import { useMetricSeries } from "@/lib/metricHistory";
+import { healthStatus } from "@/lib/healthStatus";
 import { ServiceIcon, heroState } from "@/lib/serviceVisuals";
 import { useServiceHealth, useServiceStats } from "@/hooks/useServiceHealth";
 import {
@@ -137,7 +138,7 @@ export function ServiceDetailSheet({
     () =>
       healthRaw
         ? {
-            status: (healthRaw.reachable ? "online" : "offline") as
+            status: healthStatus(healthRaw) as
               "online" | "offline" | "warning" | "loading",
             error: healthRaw.message,
           }

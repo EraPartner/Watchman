@@ -13,6 +13,8 @@ export interface DsmClientConfig {
 export interface DsmClientDeps {
   http: HttpClient;
   config: DsmClientConfig;
+  /** Clock for the rejected-login backoff. Defaults to Date.now. */
+  now?: () => number;
 }
 
 export interface DsmClient {
@@ -59,6 +61,11 @@ const AUTH_RETRY_CODES = new Set([106, 107, 119]);
 /** 105: the logged-in account lacks permission for this API. Logging in
  *  again cannot fix that, and doing it every poll piles up DSM sessions. */
 const PERMISSION_DENIED_CODE = 105;
+/** DSM's Auto Block bans an IP after repeated failed logins. After a rejected
+ *  login, stop retrying for this long so every poll cannot add another failed
+ *  attempt. The client is rebuilt when the service config changes, so new
+ *  credentials are tried immediately. */
+const LOGIN_FAILURE_BACKOFF_MS = 5 * 60 * 1000;
 
 /**
  * Minimal Synology DSM HTTP client.
@@ -69,12 +76,16 @@ const PERMISSION_DENIED_CODE = 105;
  * - On session error codes 106/107/119: re-logs in once, retries the original call
  * - Code 105 (insufficient privilege) is an UnauthorizedError, with no re-login
  * - Concurrent calls share a single pending login — no thundering herd
+ * - A rejected login (UnauthorizedError) is remembered for 5 minutes and
+ *   rethrown without contacting DSM
  */
 export function createDsmClient(deps: DsmClientDeps): DsmClient {
   const { http, config } = deps;
+  const now = deps.now ?? Date.now;
   const base = config.baseUrl.replace(/\/+$/, "");
   let currentSid: string | undefined = config.initialSid;
   let pendingLogin: Promise<string> | null = null;
+  let loginFailure: { error: UnauthorizedError; until: number } | null = null;
 
   /** An untrusted certificate (DSM's default is self-signed) otherwise shows
    *  only as a generic "http request failed"; say what to do about it. */
@@ -122,15 +133,25 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
     if (!config.account || !config.password) {
       throw new UnauthorizedError("synology dsm credentials not configured");
     }
+    if (loginFailure && now() < loginFailure.until) {
+      throw loginFailure.error;
+    }
     if (!pendingLogin) {
       pendingLogin = performLogin(signal).then(
         (sid) => {
           currentSid = sid;
           pendingLogin = null;
+          loginFailure = null;
           return sid;
         },
         (err: unknown) => {
           pendingLogin = null;
+          if (err instanceof UnauthorizedError) {
+            loginFailure = {
+              error: err,
+              until: now() + LOGIN_FAILURE_BACKOFF_MS,
+            };
+          }
           throw err;
         }
       );

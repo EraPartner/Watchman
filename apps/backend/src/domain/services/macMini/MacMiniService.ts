@@ -37,6 +37,11 @@ export const TEMP_CMD = `${HOMEBREW_PATH} if which smctemp >/dev/null 2>&1; then
 export const DF_CMD = "df -k /System/Volumes/Data 2>/dev/null || df -k /";
 export const SMART_CMD = `${HOMEBREW_PATH} which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true`;
 
+// top's first sample has no previous one to diff against, so its CPU line is
+// not a current measurement; take two samples 1 s apart and use the second
+// (adds ~1 s to the compound exec, well inside the default 5 s timeout)
+export const TOP_CMD = "top -l 2 -n 0 -s 1";
+
 /** All stats commands, executed as ONE compound SSH exec per cycle
  *  (order matters — outputs are split positionally). */
 export const MAC_STATS_COMMANDS: readonly string[] = [
@@ -45,7 +50,7 @@ export const MAC_STATS_COMMANDS: readonly string[] = [
   TEMP_CMD,
   "vm_stat",
   "pmset -g batt",
-  "top -l 1 -n 0 -s 0",
+  TOP_CMD,
   "ifconfig en0",
   SMART_CMD,
 ];
@@ -357,14 +362,17 @@ interface TopCpuResult {
 
 function parseTopCpu(out: string): TopCpuResult | null {
   if (!out.trim()) return null;
-  const cpuMatch = out.match(
-    /CPU usage:\s*([\d.]+)%\s*user,\s*([\d.]+)%\s*sys,\s*([\d.]+)%\s*idle/i
-  );
+  // `top -l 2` prints two samples; the last one is the real measurement
+  const cpuMatch = [
+    ...out.matchAll(
+      /CPU usage:\s*([\d.]+)%\s*user,\s*([\d.]+)%\s*sys,\s*([\d.]+)%\s*idle/gi
+    ),
+  ].at(-1);
   if (!cpuMatch) return null;
   const cpuUser = parseFloat(cpuMatch[1] ?? "0");
   const cpuSys = parseFloat(cpuMatch[2] ?? "0");
   const cpuIdle = parseFloat(cpuMatch[3] ?? "0");
-  const procMatch = out.match(/Processes:\s*(\d+)\s*total/i);
+  const procMatch = [...out.matchAll(/Processes:\s*(\d+)\s*total/gi)].at(-1);
   const processCount =
     procMatch && procMatch[1] ? parseInt(procMatch[1], 10) : null;
   return {

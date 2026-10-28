@@ -25,7 +25,8 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
   summary: [
     { key: "blocks", label: "Blocks", format: fmtNumber(0) },
     { key: "connections", label: "Peers", format: fmtNumber(0) },
-    { key: "verificationProgress", label: "Sync", format: fmtPercent(2, 100) },
+    // verificationProgress is Bitcoin Core's 0..1 fraction, not a percent
+    { key: "verificationProgress", label: "Sync", format: fmtPercent(2, 1) },
   ],
 
   detail: [
@@ -38,7 +39,7 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
         {
           key: "verificationProgress",
           label: "Sync progress",
-          format: fmtPercent(3, 100),
+          format: fmtPercent(3, 1),
         },
         {
           key: "initialBlockDownload",
@@ -65,6 +66,14 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
         { key: "mempoolBytes", label: "Size", format: fmtBytes },
         { key: "mempoolUsage", label: "Memory", format: fmtBytes },
         { key: "mempoolMax", label: "Max", format: fmtBytes },
+      ],
+    },
+    {
+      title: "ZMQ",
+      metrics: [
+        { key: "zmqBlockCount", label: "Blocks seen", format: fmtNumber(0) },
+        // null (shown as "—") unless zmqRawtxEndpoint is configured
+        { key: "zmqTxCount", label: "Txs seen", format: fmtNumber(0) },
       ],
     },
     {

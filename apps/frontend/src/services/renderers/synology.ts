@@ -1,4 +1,4 @@
-import type { ServiceRenderer } from "./types";
+import type { MetricFormatter, ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
 import {
   dotGet,
@@ -10,6 +10,11 @@ import {
 } from "./formatters";
 
 type SynologyStats = Record<string, unknown>;
+
+const fmtRate: MetricFormatter = (v) => {
+  const s = fmtBytes(v);
+  return s === "—" ? s : `${s}/s`;
+};
 
 const getNum = (
   s: SynologyStats | undefined,
@@ -34,7 +39,8 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
   summary: [
     { key: "cpuUsage", label: "CPU", format: fmtPercent(0, 100) },
     { key: "cpuTemp", label: "Temp", format: fmtTempC },
-    { key: "networkRx", label: "Net RX", format: fmtBytes },
+    // networkRx/networkTx are cumulative octet counters; the tile shows the rate
+    { key: "networkRxBps", label: "Net RX", format: fmtRate },
   ],
 
   detail: [
@@ -46,6 +52,8 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
         { key: "systemVersion", label: "DSM version", format: fmtRaw },
         { key: "systemStatus", label: "Status", format: fmtRaw },
         { key: "uptime", label: "Uptime", format: fmtUptime },
+        // set only when a DSM API call failed (e.g. rejected login); "—" otherwise
+        { key: "dsmError", label: "DSM API error", format: fmtRaw },
       ],
     },
     {
@@ -76,6 +84,8 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
     {
       title: "Network",
       metrics: [
+        { key: "networkRxBps", label: "Receive rate", format: fmtRate },
+        { key: "networkTxBps", label: "Transmit rate", format: fmtRate },
         { key: "networkRx", label: "Bytes received", format: fmtBytes },
         { key: "networkTx", label: "Bytes transmitted", format: fmtBytes },
       ],
@@ -103,16 +113,16 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
       format: fmtTempC,
     },
     {
-      metric: "networkRx",
+      metric: "networkRxBps",
       label: "Network RX",
       kind: "area",
-      format: fmtBytes,
+      format: fmtRate,
     },
     {
-      metric: "networkTx",
+      metric: "networkTxBps",
       label: "Network TX",
       kind: "area",
-      format: fmtBytes,
+      format: fmtRate,
     },
   ],
 
@@ -127,6 +137,10 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
     const temp = getNum(stats, "cpuTemp");
     if ((cpu ?? 0) >= 90 || (temp ?? 0) >= 80) return "crit";
     if ((cpu ?? 0) >= 80 || (temp ?? 0) >= 70) return "warn";
+    // NAS answers, but the DSM API failed (bad password, login cooldown,
+    // missing permission): DSM-sourced metrics are missing
+    const dsmError = stats ? dotGet(stats, "dsmError") : undefined;
+    if (typeof dsmError === "string" && dsmError.length > 0) return "warn";
     return "ok";
   },
 

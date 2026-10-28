@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 import type { DuckDBConnection } from "@duckdb/node-api";
 import type { DuckDbPool } from "../../infra/db/DuckDbPool.js";
-import { toTs } from "../../infra/db/DuckDbPool.js";
+import { fromTs, toTs } from "../../infra/db/DuckDbPool.js";
 import { NotFoundError, ValidationError } from "../../core/errors.js";
 
 const NAME_MAX_LENGTH = 64;
@@ -143,14 +143,8 @@ export function createProfileStore(
       ...(description !== undefined ? { description } : {}),
       ...(color !== undefined ? { color } : {}),
       networkSigs: parseJson<CapturedSignature[]>(row["network_sigs"], []),
-      createdAt:
-        row["created_at"] instanceof Date
-          ? (row["created_at"] as Date)
-          : new Date(String(row["created_at"])),
-      updatedAt:
-        row["updated_at"] instanceof Date
-          ? (row["updated_at"] as Date)
-          : new Date(String(row["updated_at"])),
+      createdAt: fromTs(row["created_at"]),
+      updatedAt: fromTs(row["updated_at"]),
     };
   }
 

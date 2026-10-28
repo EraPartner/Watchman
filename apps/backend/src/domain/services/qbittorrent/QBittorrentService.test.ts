@@ -6,7 +6,11 @@ import {
   type ServerResponse,
 } from "node:http";
 import { QBittorrentService } from "./QBittorrentService.js";
-import { createHttpClient } from "../../../infra/http/client.js";
+import {
+  createHttpClient,
+  type HttpClient,
+  type HttpResponse,
+} from "../../../infra/http/client.js";
 import type { QbittorrentInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 
@@ -583,6 +587,100 @@ describe("QBittorrentService", () => {
       expect(recentErrors).toHaveLength(20);
       expect(recentErrors[0]).toBe("err 24");
     }
+  });
+
+  it("overlapping getStats runs do not list a log entry twice", async () => {
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    // both runs fetch the log with the same cursor and get the same entries
+    const [a, b] = await Promise.all([
+      svc.getStats(new AbortController().signal),
+      svc.getStats(new AbortController().signal),
+    ]);
+    for (const res of [a, b]) {
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        const { recentErrors, recentWarnings } = res.value.metrics as {
+          recentErrors: string[];
+          recentWarnings: string[];
+        };
+        expect(recentWarnings).toEqual(["Tracker warning"]);
+        expect(recentErrors).toEqual(["Disk write error"]);
+      }
+    }
+    const next = await svc.getStats(new AbortController().signal);
+    if (next.ok) {
+      const { recentWarnings } = next.value.metrics as {
+        recentWarnings: string[];
+      };
+      expect(recentWarnings).toHaveLength(1);
+    }
+  });
+
+  it("parallel 403s share one re-login and keep the fresh cookie", async () => {
+    let sid = "old";
+    let logins = 0;
+    let stale = 0;
+    let releaseFirst!: () => void;
+    let releaseSecond!: () => void;
+    const firstGate = new Promise<void>((r) => (releaseFirst = r));
+    const secondGate = new Promise<void>((r) => (releaseSecond = r));
+    const respond = (
+      status: number,
+      body = "",
+      headers: HttpResponse["headers"] = {}
+    ): HttpResponse => ({
+      status,
+      headers,
+      text: async () => body,
+      json: async <T>() => JSON.parse(body) as T,
+    });
+    const http: HttpClient = {
+      send: async (req) => {
+        if (req.url.endsWith("/api/v2/auth/login")) {
+          logins++;
+          return respond(200, "Ok.", { "set-cookie": `SID=${sid}; path=/` });
+        }
+        const cookie = req.headers?.["cookie"];
+        if (cookie === `SID=${sid}`) {
+          // the first request retried with the new cookie: only now does
+          // the second request's 403 (sent with the old cookie) arrive
+          if (sid === "new") releaseSecond();
+          return respond(200, "v4.6.0");
+        }
+        stale++;
+        if (stale === 1) {
+          await firstGate;
+        } else {
+          releaseFirst();
+          await secondGate;
+        }
+        return respond(403, "Forbidden");
+      },
+    };
+    const svc = new QBittorrentService({
+      http,
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    await svc.checkHealth(new AbortController().signal);
+    expect(logins).toBe(1);
+
+    // the session expires server-side; both in-flight requests get 403
+    sid = "new";
+    const [a, b] = await Promise.all([
+      svc.checkHealth(new AbortController().signal),
+      svc.checkHealth(new AbortController().signal),
+    ]);
+    expect(a.ok && a.value.reachable).toBe(true);
+    expect(b.ok && b.value.reachable).toBe(true);
+    expect(stale).toBe(2);
+    expect(logins).toBe(2);
   });
 
   it("connection failure yields unreachable snapshot", async () => {

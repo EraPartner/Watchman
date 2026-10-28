@@ -1726,7 +1726,7 @@
                 "from": "dom.bus",
                 "to": "dom.broadcaster",
                 "payload": "broadcaster subscriber callback",
-                "annotation": "Broadcaster also subscribes to service.stats.updated and config:service.applied (emitted by ServiceLifecycle after a create/update/delete is applied)."
+                "annotation": "Broadcaster also subscribes to service.stats.updated, service.error and config:service.applied (emitted by ServiceLifecycle after a create/update/delete is applied). A health snapshot with reachable: false raises one error alert per transition (transport/ws/Broadcaster.ts notifyErrored); the next snapshot that is not reachable: false sends the recovery alert."
               },
               {
                 "from": "dom.broadcaster",
@@ -1900,7 +1900,7 @@
                 "from": "fe.setup",
                 "to": "fe.api",
                 "payload": "PUT /config/services/{id}",
-                "annotation": "Only changed secret fields carry plaintext; untouched secrets are passed through as the opaque marker."
+                "annotation": "Only changed secret fields carry plaintext; untouched secrets are left out (blank) and kept server-side. A saved secret the operator cleared in ServiceEditor is sent as null, and ConfigStore.update (mergeSecretsWithExisting) removes it."
               },
               {
                 "from": "fe.api",
@@ -2223,14 +2223,14 @@
               {
                 "from": "dom.base",
                 "to": "inf.zmq",
-                "payload": "createZmqSubscriber({ endpoint, topics: ['hashblock','hashtx'] })",
-                "annotation": "ZmqSubscriber wraps a SUB socket with 3-frame parsing (topic, data, sequence)."
+                "payload": "openZmq(zmqConnect, endpoint, ['hashblock'] | ['rawtx'] | ['hashblock','rawtx'])",
+                "annotation": "BitcoinService.onStart() (domain/services/bitcoin/BitcoinService.ts) groups topics by endpoint: one socket per endpoint, shared when zmqHashblockEndpoint and zmqRawtxEndpoint match. zmqConnect (infra/zmq/zmqSubscriberImpl.ts) wraps a SUB socket with 3-frame parsing (topic, data, sequence)."
               },
               {
                 "from": "inf.zmq",
                 "to": "ext.bitcoin",
-                "payload": "tcp://node:28332  ·  SUB hashblock + hashtx",
-                "annotation": "Operator must enable -zmqpubhashblock / -zmqpubhashtx on bitcoind for this to work."
+                "payload": "tcp://node:28332 SUB hashblock  ·  tcp://node:28333 SUB rawtx",
+                "annotation": "Operator must enable zmqpubhashblock / zmqpubrawtx in bitcoin.conf for this to work; a failed connect only sets zmqError / zmqRawtxError (poll-only mode)."
               },
               {
                 "from": "ext.bitcoin",
@@ -2242,19 +2242,19 @@
                 "from": "inf.zmq",
                 "to": "dom.base",
                 "payload": "onMessage(topic, payload, seq)",
-                "annotation": "Service updates last-block-seen / mempool counters in memory."
+                "annotation": "hashblock updates lastBlockHashZmq, lastBlockAtZmq and zmqBlockCount; rawtx only increments zmqTxCount (the transaction is not decoded or kept)."
               },
               {
                 "from": "dom.base",
                 "to": "dom.bus",
-                "payload": "service.stats.updated",
-                "annotation": "Same path as the poller — frontend doesn't care whether the snapshot came from a poll or a push."
+                "payload": "next getStats() poll → service.stats.updated",
+                "annotation": "The ZMQ handler only updates in-memory counters; BitcoinService.getStats() reports them (zmqBlockCount, zmqTxCount, zmqConnected, zmqRawtxConnected, …) on the poller's next stats tick."
               },
               {
                 "from": "dom.bus",
                 "to": "fe.ws",
                 "payload": "→ Broadcaster → WS frame",
-                "annotation": "Block counter on the tile increments live."
+                "annotation": "The detail sheet's ZMQ group (renderers/bitcoin.ts) shows Blocks seen and Txs seen; Txs seen is — when zmqRawtxEndpoint is unset."
               }
             ]
           },

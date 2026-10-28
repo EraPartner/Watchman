@@ -2,7 +2,7 @@
 title: UI-Driven Service Configuration
 type: feature
 status: active
-date: 2026-10-21
+date: 2026-10-28
 tags: [feature, configuration, ui, setup-wizard, settings, duckdb, encryption, hot-reload, backup, export, import, crud, discoverability, tested]
 description: Runtime service configuration from the UI with encrypted secrets, audit trail, hot-reload without restart, backup/restore, and dashboard CRUD discoverability (add/edit/delete from dashboard detail sheet). Phase 3 testing complete.
 aliases: [ui config, configuration, settings, setup wizard, backup, restore, service management, crud]
@@ -595,8 +595,9 @@ The Settings → Services page retains the full service list view with status do
 
 - Secrets encrypted with AES-256-GCM; plaintext never persisted
 - GET responses redact secret fields to `"***"`
-- Frontend forms show `(saved — leave blank to keep)` on edit
+- Frontend forms show `(saved — leave blank to keep)` on edit, only for a secret that is actually saved (returned as `"***"`)
 - On submit, omitted/empty secret fields preserve existing value
+- An optional saved secret has a `Clear <label>` control in the editor; on save it is sent as `null`, and the backend removes the saved secret (see [[docs/components/service-editor|ServiceEditor]] and [[docs/api/config|Configuration API]])
 - `POST /config/services/{id}/test` executes with plaintext but doesn't persist
 
 ### Audit Trail

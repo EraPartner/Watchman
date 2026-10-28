@@ -2,7 +2,7 @@
 title: Alby Hub Integration
 type: integration
 status: active
-date: 2026-06-13
+date: 2026-10-28
 tags:
   [
     integration,
@@ -83,7 +83,7 @@ Additional metrics available when using deterministic NWC endpoints:
 | Metric           | Type           | Description                                                        |
 | ---------------- | -------------- | ------------------------------------------------------------------ |
 | `connected`      | bool \| null   | Kept for compatibility; mirrors `running` (`/api/info` has no `connected` field) |
-| `running`        | bool \| null   | Hub node started (`/api/info` `running`); false while locked after a restart |
+| `running`        | bool \| null   | Hub node started (`/api/info` `running`); false while locked after a restart. The tile tone is `warn` when it is `false` (offline health or `reachable: false` still wins as `crit`) |
 | `unlocked`       | bool \| null   | `/api/info` `unlocked`: true only when the request carried a valid token |
 | `network`        | string \| null | Bitcoin network (`/api/info` `network`)                             |
 | `setupCompleted` | bool \| null   | Whether wallet setup is complete                                   |

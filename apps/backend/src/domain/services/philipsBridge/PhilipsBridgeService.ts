@@ -5,7 +5,8 @@ import {
   type PollPolicy,
   type StatsResult,
 } from "../../BaseService.js";
-import { ok } from "../../../core/result.js";
+import { ok, err } from "../../../core/result.js";
+import { UnauthorizedError } from "../../../core/errors.js";
 import { ttlMemo, type TtlMemo } from "../../../core/ttlMemo.js";
 import type { PhilipsBridgeInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
@@ -26,6 +27,12 @@ const EVENTSTREAM_PATH = "/eventstream/clip/v2";
 // inventory/connectivity/battery resources change rarely — slow lane
 const RESOURCE_TTL_MS = 5 * 60 * 1000;
 const LOW_BATTERY_THRESHOLD = 20;
+const KEY_REJECTED_MESSAGE = "application key rejected — re-pair the bridge";
+
+/** The bridge answers 401/403 for an unknown or revoked application key. */
+function isKeyRejected(status: number): boolean {
+  return status === 401 || status === 403;
+}
 
 interface HueLight {
   id: string;
@@ -150,6 +157,9 @@ export class PhilipsBridgeService extends BaseService {
     } catch {
       return;
     }
+    // the stream was down (or not yet up): a light list fetched meanwhile
+    // can miss changes made before the stream (re)connected, so re-seed
+    if (!this.sseHealthy) this.lightsSeeded = false;
     this.sseHealthy = true;
     this.lastEventAt = this.now();
     for (const envelope of envelopes) {
@@ -190,11 +200,14 @@ export class PhilipsBridgeService extends BaseService {
     }
 
     const apiStarted = this.now();
-    const apiReachable = await this.probeApi(signal);
+    const probe = await this.probeApi(signal);
+    const apiReachable = probe.reachable;
     const apiLatencyMs = this.now() - apiStarted;
+    const message = probe.keyRejected ? KEY_REJECTED_MESSAGE : undefined;
     const service = {
       reachable: apiReachable,
       ...(apiReachable ? { latencyMs: apiLatencyMs } : {}),
+      ...(message !== undefined ? { message } : {}),
       details: { apiV2: true },
     };
     // the API round trip is the service latency; ping is the fallback
@@ -209,6 +222,7 @@ export class PhilipsBridgeService extends BaseService {
       at: this.now(),
       host,
       service,
+      ...(message !== undefined ? { message } : {}),
       details: {
         host: this.host,
         icmpAlive,
@@ -226,14 +240,26 @@ export class PhilipsBridgeService extends BaseService {
       return ok({ at: this.now(), metrics: base });
     }
 
-    const [lightMetrics, connectivity, power, devices, rooms] =
-      await Promise.all([
-        this.lightCounts(signal),
-        this.connectivityMemo(signal).catch((): HueResource[] | null => null),
-        this.powerMemo(signal).catch((): HueResource[] | null => null),
-        this.deviceMemo(signal).catch((): HueResource[] | null => null),
-        this.roomMemo(signal).catch((): HueResource[] | null => null),
-      ]);
+    const settled = await Promise.allSettled([
+      this.lightCounts(signal),
+      this.connectivityMemo(signal),
+      this.powerMemo(signal),
+      this.deviceMemo(signal),
+      this.roomMemo(signal),
+    ]);
+    // a rejected application key is not "no data": every read will fail
+    // until the bridge is re-paired
+    const keyRejected = settled.find(
+      (r): r is PromiseRejectedResult =>
+        r.status === "rejected" && r.reason instanceof UnauthorizedError
+    );
+    if (keyRejected) return err(keyRejected.reason as UnauthorizedError);
+    const [lightResult, ...resourceResults] = settled;
+    const lightMetrics =
+      lightResult.status === "fulfilled" ? lightResult.value : {};
+    const [connectivity, power, devices, rooms] = resourceResults.map((r) =>
+      r.status === "fulfilled" ? r.value : null
+    );
 
     const unreachable = connectivity
       ? connectivity.filter((c) => (c.status ?? "connected") !== "connected")
@@ -278,7 +304,9 @@ export class PhilipsBridgeService extends BaseService {
     return { "hue-application-key": this.applicationKey! };
   }
 
-  private async probeApi(signal: AbortSignal): Promise<boolean> {
+  private async probeApi(
+    signal: AbortSignal
+  ): Promise<{ reachable: boolean; keyRejected: boolean }> {
     try {
       // /resource/bridge is one small object; /resource/light would download
       // every light every health tick
@@ -290,9 +318,12 @@ export class PhilipsBridgeService extends BaseService {
         signal,
       });
       await res.text().catch(() => "");
-      return res.status >= 200 && res.status < 300;
+      return {
+        reachable: res.status >= 200 && res.status < 300,
+        keyRejected: isKeyRejected(res.status),
+      };
     } catch {
-      return false;
+      return { reachable: false, keyRejected: false };
     }
   }
 
@@ -309,6 +340,9 @@ export class PhilipsBridgeService extends BaseService {
     });
     if (res.status < 200 || res.status >= 300) {
       await res.text().catch(() => "");
+      if (isKeyRejected(res.status)) {
+        throw new UnauthorizedError(`hue ${KEY_REJECTED_MESSAGE}`);
+      }
       throw new Error(`hue ${path} returned ${res.status}`);
     }
     const body = await res.json<HueListResponse<HueResource>>();
@@ -335,6 +369,9 @@ export class PhilipsBridgeService extends BaseService {
       });
       if (res.status < 200 || res.status >= 300) {
         await res.text().catch(() => "");
+        if (isKeyRejected(res.status)) {
+          throw new UnauthorizedError(`hue ${KEY_REJECTED_MESSAGE}`);
+        }
         return {};
       }
       const body = await res.json<HueListResponse<HueLight>>();
@@ -351,7 +388,8 @@ export class PhilipsBridgeService extends BaseService {
       const lightCount = lights.length;
       const onCount = lights.filter((l) => l.on?.on === true).length;
       return { lightCount, onCount, offCount: lightCount - onCount };
-    } catch {
+    } catch (e) {
+      if (e instanceof UnauthorizedError) throw e;
       return {};
     }
   }

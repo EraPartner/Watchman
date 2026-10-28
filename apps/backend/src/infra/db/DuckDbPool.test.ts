@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createDuckDbPool } from "./DuckDbPool.js";
+import { DuckDBTimestampValue } from "@duckdb/node-api";
+import { createDuckDbPool, fromTs, toTs } from "./DuckDbPool.js";
 
 describe("DuckDbPool", () => {
   it("reuses released connections instead of growing unboundedly", async () => {
@@ -76,5 +77,40 @@ describe("DuckDbPool", () => {
     const a = await pool.connect();
     await pool.close();
     expect(() => pool.release(a)).not.toThrow();
+  });
+
+  describe("fromTs", () => {
+    it("parses DuckDB's naive TIMESTAMP text as UTC, not host-local time", () => {
+      expect(fromTs("2026-01-02 03:04:05.123456").toISOString()).toBe(
+        "2026-01-02T03:04:05.123Z"
+      );
+      expect(fromTs("2026-01-02 03:04:05").toISOString()).toBe(
+        "2026-01-02T03:04:05.000Z"
+      );
+    });
+
+    it("reads a timestamp value from its epoch micros", () => {
+      const d = new Date("2026-01-02T03:04:05.123Z");
+      expect(fromTs(toTs(d)).toISOString()).toBe(d.toISOString());
+      expect(fromTs({ micros: 1_767_323_045_123_456n }).toISOString()).toBe(
+        "2026-01-02T03:04:05.123Z"
+      );
+      expect(
+        fromTs(new DuckDBTimestampValue(1_767_323_045_123_456n)).toISOString()
+      ).toBe("2026-01-02T03:04:05.123Z");
+    });
+
+    it("round-trips a TIMESTAMP column through DuckDB unchanged", async () => {
+      const pool = await createDuckDbPool({ path: ":memory:" });
+      const d = new Date("2026-07-15T12:34:56.789Z");
+      const row = await pool.withConnection(async (c) => {
+        await c.run("CREATE TABLE t (ts TIMESTAMP NOT NULL)");
+        await c.run("INSERT INTO t VALUES (?)", [toTs(d)]);
+        const r = await c.runAndReadAll("SELECT ts FROM t");
+        return r.getRowObjects()[0]!;
+      });
+      expect(fromTs(row["ts"]).toISOString()).toBe(d.toISOString());
+      await pool.close();
+    });
   });
 });

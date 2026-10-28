@@ -308,7 +308,7 @@ All frames are JSON. A `timestamp` (ISO-8601) is always included.
 
 `action` is `"created"`, `"updated"`, or `"deleted"`.
 
-**`alert`** — Emitted on first poll failure for a service, and again on recovery (deduped: repeated failures while already in error state do not emit additional alerts):
+**`alert`** — Emitted on first failure for a service (a failed poll, or a health snapshot with `reachable: false`), and again on recovery (deduped: repeated failures while already in error state do not emit additional alerts):
 
 ```json
 {
@@ -323,11 +323,11 @@ All frames are JSON. A `timestamp` (ISO-8601) is always included.
 }
 ```
 
-Recovery alert uses `level: "info"` and `message: "{id}: recovered"`. Health and stats errors are tracked separately, so a recovery is announced only when the lane that failed succeeds again; a health snapshot with `reachable: false` does not count.
+Recovery alert uses `level: "info"` and `message: "{id}: recovered"`. Health and stats errors are tracked separately, so a recovery is announced only when the lane that failed succeeds again; a health snapshot with `reachable: false` does not count as a success. It enters the health lane's error state instead (one `error` alert per transition, with the snapshot's `message`, or `unreachable` when it has none), and the next snapshot that is not `reachable: false` sends the recovery.
 
 | `level`     | When                                            |
 | ----------- | ----------------------------------------------- |
-| `"error"`   | First poll failure after a period of success    |
+| `"error"`   | First poll failure, or first `reachable: false` health snapshot, after a period of success |
 | `"info"`    | Service recovers after being in error state     |
 | `"warning"` | Manual alert (emitted by `Broadcaster.alert()`) |
 

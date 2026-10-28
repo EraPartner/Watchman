@@ -180,6 +180,9 @@ accounting/bytes-left  → bytes remaining in period
 
 bwRead                 → realtime bytes read/sec from BW events (Phase 0b+, Task B5); null when no BW event in the last 30 s
 bwWritten              → realtime bytes written/sec from BW events (Phase 0b+, Task B5); null when no BW event in the last 30 s
+bandwidthCurrent       → max(bwRead, bwWritten): the busier direction stands in for Onionoo's observed bandwidth, so the tile hero and charts (which read this Onionoo key) work in ControlPort mode; null when bwRead/bwWritten are null
+flags                  → relay flags from the node's own consensus entry (GETINFO ns/id/<fingerprint>), comma-joined; present only when the entry has flags
+relayType              → "exit" | "guard" | "bridge" | "relay", derived from those flags with the same rules as Onionoo mode; present only with flags
 
 country                → relay country (from Onionoo enrichment, Task B7, optional)
 consensusWeight        → relay consensus weight (from Onionoo enrichment, Task B7, optional)
