@@ -31,7 +31,7 @@ async function openSubscription(
   signal: AbortSignal,
 ): Promise<TorEventSubscription> {
   const socket = await openSocket(opts, signal);
-  const sub = new TorEventSubscriptionImpl(socket);
+  const sub = new TorEventSubscriptionImpl(socket, opts.timeoutMs);
   try {
     await sub.authenticate(opts.password, signal, opts.cookieAuthFile);
   } catch (e) {
@@ -49,7 +49,12 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
     const done = (result: Error | net.Socket): void => {
       if (settled) return;
       settled = true;
-      socket.removeAllListeners();
+      // only our own listeners: removeAllListeners() would also strip
+      // net.Socket's internal 'end' handler, so a peer FIN never closed it
+      socket.off('connect', onConnect);
+      socket.off('timeout', onTimeout);
+      socket.off('error', onError);
+      socket.setTimeout(0);
       if (signal) signal.removeEventListener('abort', onAbort);
       if (result instanceof Error) {
         socket.destroy();
@@ -60,6 +65,11 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
     };
 
     const onAbort = (): void => done(new UnavailableError('tor event subscription connect aborted'));
+    const onConnect = (): void => done(socket);
+    const onTimeout = (): void =>
+      done(new UnavailableError(`tor event subscription connect timed out (${opts.timeoutMs}ms)`));
+    const onError = (err: Error): void =>
+      done(new UnavailableError(`tor event subscription connect failed: ${err.message}`));
 
     if (signal) {
       if (signal.aborted) {
@@ -71,19 +81,16 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
     }
 
     socket.setTimeout(opts.timeoutMs);
-    socket.once('connect', () => done(socket));
-    socket.once('timeout', () =>
-      done(new UnavailableError(`tor event subscription connect timed out (${opts.timeoutMs}ms)`)),
-    );
-    socket.once('error', (err) =>
-      done(new UnavailableError(`tor event subscription connect failed: ${err.message}`)),
-    );
+    socket.once('connect', onConnect);
+    socket.once('timeout', onTimeout);
+    socket.once('error', onError);
     socket.connect(opts.port, opts.host);
   });
 }
 
 class TorEventSubscriptionImpl implements TorEventSubscription {
   private readonly socket: net.Socket;
+  private readonly timeoutMs: number;
   private buffer = '';
   private closed = false;
   private closing = false;
@@ -91,8 +98,9 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
   /** FIFO queue of pending reply callbacks — one per command sent */
   private readonly replyWaiters: Array<(line: string | Error) => void> = [];
 
-  constructor(socket: net.Socket) {
+  constructor(socket: net.Socket, timeoutMs: number) {
     this.socket = socket;
+    this.timeoutMs = timeoutMs;
     this.socket.setEncoding('utf8');
     this.socket.on('data', (chunk: string) => {
       this.buffer += chunk;
@@ -100,6 +108,9 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
     });
     // Prevent unhandled 'error' crashes — individual sendAndWait calls attach their own handlers
     this.socket.on('error', () => undefined);
+    this.socket.on('close', () => {
+      this.closed = true;
+    });
   }
 
   private processBuffer(): void {
@@ -187,14 +198,12 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
   async close(): Promise<void> {
     if (this.closed || this.closing) return;
     this.closing = true;
+    // Polite shutdown, but never wait on a half-open socket: each reply wait
+    // is bounded by sendAndWait's timeout, and a first failure skips the rest.
     const noop = new AbortController();
     try {
       // Clear all event subscriptions
       await this.sendAndWait('SETEVENTS\r\n', noop.signal);
-    } catch {
-      // ignore
-    }
-    try {
       await this.sendAndWait('QUIT\r\n', noop.signal);
     } catch {
       // ignore
@@ -205,11 +214,16 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
 
   private sendAndWait(cmd: string, signal: AbortSignal): Promise<string> {
     return new Promise<string>((resolve, reject) => {
+      if (this.closed || this.socket.destroyed) {
+        reject(new UnavailableError('tor event subscription socket is closed'));
+        return;
+      }
 
       let cleaned = false;
       const cleanup = (): void => {
         if (cleaned) return;
         cleaned = true;
+        clearTimeout(timer);
         const idx = this.replyWaiters.indexOf(onReply);
         if (idx >= 0) this.replyWaiters.splice(idx, 1);
         signal.removeEventListener('abort', onAbort);
@@ -236,6 +250,17 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
         cleanup();
         reject(new UnavailableError('tor event subscription socket closed unexpectedly'));
       };
+
+      // A reply that never comes means the connection is dead (half-open).
+      // Replies are matched FIFO, so a late one would be credited to the next
+      // command; drop the socket instead of carrying on out of step.
+      const timer = setTimeout(() => {
+        cleanup();
+        this.closed = true;
+        this.socket.destroy();
+        reject(new UnavailableError(`tor event subscription timed out after ${this.timeoutMs}ms`));
+      }, this.timeoutMs);
+      timer.unref?.();
 
       signal.addEventListener('abort', onAbort, { once: true });
       this.socket.once('error', onSocketError);

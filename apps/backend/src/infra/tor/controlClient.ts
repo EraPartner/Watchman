@@ -52,7 +52,12 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
     const done = (result: Error | net.Socket): void => {
       if (settled) return;
       settled = true;
-      socket.removeAllListeners();
+      // Remove only our own listeners: removeAllListeners() would also strip
+      // net.Socket's internal 'end' handler, so a peer FIN never closed it.
+      socket.off('connect', onConnect);
+      socket.off('timeout', onTimeout);
+      socket.off('error', onError);
+      socket.setTimeout(0);
       if (signal) signal.removeEventListener('abort', onAbort);
       if (result instanceof Error) {
         socket.destroy();
@@ -63,6 +68,11 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
     };
 
     const onAbort = (): void => done(new UnavailableError('tor control connect aborted'));
+    const onConnect = (): void => done(socket);
+    const onTimeout = (): void =>
+      done(new UnavailableError(`tor control connect timed out (${opts.timeoutMs}ms)`));
+    const onError = (err: Error): void =>
+      done(new UnavailableError(`tor control connect failed: ${err.message}`));
 
     if (signal) {
       if (signal.aborted) {
@@ -74,9 +84,9 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
     }
 
     socket.setTimeout(opts.timeoutMs);
-    socket.once('connect', () => done(socket));
-    socket.once('timeout', () => done(new UnavailableError(`tor control connect timed out (${opts.timeoutMs}ms)`)));
-    socket.once('error', (err) => done(new UnavailableError(`tor control connect failed: ${err.message}`)));
+    socket.once('connect', onConnect);
+    socket.once('timeout', onTimeout);
+    socket.once('error', onError);
     socket.connect(opts.port, opts.host);
   });
 }
@@ -98,6 +108,15 @@ class TorControlHandleImpl implements TorControlHandle {
           break;
         }
       }
+    });
+    // Permanent listeners: without an 'error' listener, a reset between two
+    // commands (Tor restarting) is an uncaught exception that kills the
+    // backend. Once the socket is gone, later reads fail fast.
+    this.socket.on('error', () => {
+      this.closed = true;
+    });
+    this.socket.on('close', () => {
+      this.closed = true;
     });
   }
 
@@ -183,6 +202,10 @@ class TorControlHandleImpl implements TorControlHandle {
       };
 
       if (tryParse()) return;
+      if (this.closed || this.socket.destroyed) {
+        reject(new UnavailableError('tor control socket is closed'));
+        return;
+      }
 
       let cleaned = false;
       const cleanup = (): void => {
