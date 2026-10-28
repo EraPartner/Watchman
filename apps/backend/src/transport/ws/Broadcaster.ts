@@ -13,9 +13,12 @@ export type AlertLevel = "info" | "warning" | "error";
 
 export class Broadcaster {
   private unsubs: Array<() => void> = [];
-  // service ids currently in error state; used to alert only on transitions
-  // (first failure, then recovery) instead of every failed poll.
-  private erroredIds = new Set<string>();
+  // `${id}|${scope}` keys currently in error state; used to alert only on
+  // transitions (first failure, then recovery) instead of every failed poll.
+  // Health and stats are tracked separately: a health tick must not count as
+  // the recovery of a stats lane that is still failing (or the two flap a
+  // toast pair every stats interval).
+  private errored = new Set<string>();
 
   constructor(private readonly deps: BroadcasterDeps) {}
 
@@ -23,7 +26,11 @@ export class Broadcaster {
     if (this.unsubs.length > 0) return;
     this.unsubs.push(
       this.deps.bus.on("service.health.updated", (p) => {
-        this.notifyRecovered(p.id, p.kind, p.instanceId);
+        // most probes resolve ok() with reachable:false when the service is
+        // down; that is not a recovery
+        if (p.snapshot?.reachable !== false) {
+          this.notifyRecovered(p.id, "health", p.kind, p.instanceId);
+        }
         this.broadcast({
           type: "service_update",
           scope: "health",
@@ -35,7 +42,7 @@ export class Broadcaster {
         });
       }),
       this.deps.bus.on("service.stats.updated", (p) => {
-        this.notifyRecovered(p.id, p.kind, p.instanceId);
+        this.notifyRecovered(p.id, "stats", p.kind, p.instanceId);
         this.broadcast({
           type: "service_update",
           scope: "stats",
@@ -47,8 +54,9 @@ export class Broadcaster {
         });
       }),
       this.deps.bus.on("service.error", (p) => {
-        if (this.erroredIds.has(p.id)) return;
-        this.erroredIds.add(p.id);
+        const key = errorKey(p.id, p.scope);
+        if (this.errored.has(key)) return;
+        this.errored.add(key);
         const detail =
           p.error instanceof Error ? p.error.message : String(p.error);
         this.broadcast({
@@ -89,10 +97,10 @@ export class Broadcaster {
       // id has its first failure suppressed and its first success announced
       // as a recovery.
       this.deps.bus.on("config:service.deleted", (p) => {
-        this.erroredIds.delete(`${p.kind}:${p.instanceId}`);
+        this.forget(`${p.kind}:${p.instanceId}`);
       }),
       this.deps.bus.on("config:service.renamed", (p) => {
-        this.erroredIds.delete(`${p.kind}:${p.oldInstanceId}`);
+        this.forget(`${p.kind}:${p.oldInstanceId}`);
       })
     );
   }
@@ -145,8 +153,18 @@ export class Broadcaster {
     return sent;
   }
 
-  private notifyRecovered(id: string, kind: string, instanceId: string): void {
-    if (!this.erroredIds.delete(id)) return;
+  private forget(id: string): void {
+    this.errored.delete(errorKey(id, "health"));
+    this.errored.delete(errorKey(id, "stats"));
+  }
+
+  private notifyRecovered(
+    id: string,
+    scope: "health" | "stats",
+    kind: string,
+    instanceId: string
+  ): void {
+    if (!this.errored.delete(errorKey(id, scope))) return;
     this.broadcast({
       type: "alert",
       level: "info",
@@ -169,4 +187,8 @@ export class Broadcaster {
   private isoNow(): string {
     return new Date(this.deps.now()).toISOString();
   }
+}
+
+function errorKey(id: string, scope: "health" | "stats"): string {
+  return `${id}|${scope}`;
 }

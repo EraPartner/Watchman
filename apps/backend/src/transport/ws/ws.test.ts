@@ -617,6 +617,57 @@ describe("Broadcaster error-state reset", () => {
     bc.stop();
   });
 
+  it("a health tick does not recover a stats lane that is still failing", () => {
+    const { bus, bc, alerts } = setup();
+    const statsFail = () =>
+      bus.emit("service.error", {
+        id: "adguard:main",
+        kind: "adguard",
+        instanceId: "main",
+        scope: "stats",
+        error: new Error("down"),
+        at: 0,
+      });
+    const health = (reachable: boolean) =>
+      bus.emit("service.health.updated", {
+        id: "adguard:main",
+        kind: "adguard",
+        instanceId: "main",
+        at: 0,
+        snapshot: { reachable, at: 0 },
+      });
+    statsFail();
+    health(false);
+    statsFail();
+    health(true);
+    statsFail();
+    expect(alerts()).toEqual(["adguard:main: down"]);
+
+    bus.emit("service.stats.updated", {
+      id: "adguard:main",
+      kind: "adguard",
+      instanceId: "main",
+      at: 0,
+      snapshot: { metrics: {}, at: 0 },
+    });
+    expect(alerts()).toEqual(["adguard:main: down", "adguard:main: recovered"]);
+    bc.stop();
+  });
+
+  it("an unreachable health snapshot is not a recovery", () => {
+    const { bus, bc, fail, alerts } = setup();
+    fail("main");
+    bus.emit("service.health.updated", {
+      id: "bitcoin:main",
+      kind: "bitcoin",
+      instanceId: "main",
+      at: 0,
+      snapshot: { reachable: false, at: 0 },
+    });
+    expect(alerts()).toEqual(["bitcoin:main: down"]);
+    bc.stop();
+  });
+
   it("forgets the old id's error state when an instance is renamed", () => {
     const { bus, bc, fail, ok, alerts } = setup();
     fail("main");
