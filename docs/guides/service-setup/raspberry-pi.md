@@ -16,7 +16,8 @@ aliases: [raspberry pi setup, set up raspberry pi, pi ssh monitoring]
 > - **Stats (preferred, direct SSH):** one SSH command per cycle that runs `vcgencmd`
 >   (`measure_temp`, `measure_clock arm`, `measure_volts core`, `get_throttled`) and reads
 >   `/proc/loadavg`, `/proc/meminfo`, `/proc/uptime`, `/proc/cpuinfo` and `/etc/os-release`.
-> - Hardware revision and pigpio version over the `pigpiod` socket.
+> - Hardware revision and pigpio version over the `pigpiod` socket when it answers; otherwise the
+>   revision and model come from `/proc/cpuinfo`. Stats keep working without pigpiod.
 >
 > Watchman never writes GPIO ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]];
 > `apps/backend/src/domain/services/raspberryPi/`). Details:
@@ -64,8 +65,11 @@ owned by `watchman`), restricted to the Watchman host:
 restrict,from="192.168.1.10" ssh-ed25519 AAAA… watchman
 ```
 
-`restrict` turns off forwarding and terminals; running commands still works. Watchman's SSH client
-does not check the Pi's host key, so use it on a trusted LAN.
+`restrict` turns off forwarding and terminals; running commands still works.
+
+**Pin the Pi's host key** so Watchman refuses a machine pretending to be the Pi. On the Pi run
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` and copy the `SHA256:…` part. Without a pin
+Watchman accepts any host key.
 
 ## 3. Add it in Watchman
 
@@ -79,7 +83,8 @@ does not check the Pi's host key, so use it on a trusted LAN.
 | SSH port       | `22`                                                                 |
 | SSH key path   | `~/.ssh/watchman_pi`, the **private** key on the Watchman machine    |
 | SSH passphrase | Only if the key has one                                              |
-| Mac Mini host / SSH … / Node binary path / rpi CLI path | Leave empty. These are the legacy relay, used only when direct SSH isn't set. |
+| SSH host key fingerprint | The `SHA256:…` value from step 2 (recommended)                     |
+| Mac Mini host / SSH … / host key / Node binary path / rpi CLI path | Leave empty. These are the legacy relay, used only when direct SSH isn't set. |
 
 ## 4. Check it works
 
@@ -93,6 +98,7 @@ temperature, clock, core voltage, throttling flags, load, memory and uptime.
 | `pigpiod unavailable: …`                     | pigpiod not running, listening on localhost only, `-n` doesn't include Watchman, or a Pi 5. |
 | `pi direct ssh produced no output`           | SSH logged in but every command failed. Check the user can run `vcgencmd` (the `video` group). |
 | Temperature/voltage empty, `/proc` stats fine | The user isn't in the `video` group.                                        |
+| `ssh host key mismatch for …`                | The Pi's host key changed (reinstalled SD card) or something else answers at that address. Check, then update the fingerprint. |
 | `ssh: cannot read key at …`                  | Wrong key path, or not readable by the user running Watchman.                |
 | Throttling flag non-zero                     | Real under-voltage or heat on the Pi; see [[docs/integrations/raspberry-pi#Throttling Detection\|Throttling Detection]]. |
 

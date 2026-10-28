@@ -12,7 +12,7 @@ aliases: [mac mini setup, set up mac mini, macos ssh monitoring]
 
 > [!abstract] What Watchman reads
 > Health is an ICMP ping. Stats come from one SSH command per cycle that runs `uptime`, `df`,
-> `vm_stat`, `pmset -g batt`, `top -l 1 -n 0 -s 0`, `ifconfig en0` and, if installed, `smctemp`
+> `vm_stat`, `pmset -g batt`, `top -l 2 -n 0 -s 1`, `ifconfig en0` and, if installed, `smctemp`
 > (or `osx-cpu-temp`) and `smartctl` (`MAC_STATS_COMMANDS` in
 > `apps/backend/src/domain/services/macMini/MacMiniService.ts`). Nothing needs admin rights.
 > Details: [[docs/integrations/macmini|Mac Mini integration]].
@@ -28,7 +28,7 @@ aliases: [mac mini setup, set up mac mini, macos ssh monitoring]
    you SSH in yourself.
 4. Optional, for CPU temperature and disk health: install `smctemp` (Apple Silicon) and
    `smartmontools` with Homebrew. Watchman adds `/opt/homebrew/bin` and `/usr/local/bin` to `PATH`
-   for the temperature command. Without them those numbers are just missing.
+   for both commands. Without them those numbers are just missing.
 
 ## 2. Create an SSH key
 
@@ -50,10 +50,13 @@ restrict,from="192.168.1.10" ssh-ed25519 AAAA… watchman
 
 Make sure the folder and file belong to `watchman` with modes `700` and `600`.
 
-> [!warning] Host key not checked
-> Watchman's SSH client does not verify the Mac's host key (`apps/backend/src/infra/ssh/`), so it
-> can't detect a machine impersonating the Mac on your network. Use it on a trusted LAN. This is why
-> the key should belong to a standard user with the restrictions above.
+**Pin the Mac's host key** so Watchman refuses a machine pretending to be the Mac. On the Mac:
+
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+Copy the `SHA256:…` part for the next step. Without a pin Watchman accepts any host key.
 
 ## 3. Add it in Watchman
 
@@ -66,6 +69,7 @@ Make sure the folder and file belong to `watchman` with modes `700` and `600`.
 | SSH port       | `22` unless you changed it                                                            |
 | SSH key path   | `~/.ssh/watchman_macmini`, the **private** key on the Watchman machine                |
 | SSH passphrase | Only if you gave the key a passphrase                                                 |
+| SSH host key fingerprint | The `SHA256:…` value from step 2 (recommended)                                  |
 
 Without SSH user and key path the tile still shows up/down from ping, but no stats.
 
@@ -80,6 +84,7 @@ Save. The status dot turns green when the Mac answers ping. Within a stats cycle
 | -------------------------------------------- | -------------------------------------------------------------------------------- |
 | Down, but the Mac is on                      | Stealth mode or another firewall drops ping.                                     |
 | `macMini ssh not configured`                 | SSH user or key path is empty.                                                   |
+| `ssh host key mismatch for …`                | The Mac's host key changed (reinstall, new machine at that IP) or something else answers at that address. Check, then update the fingerprint. |
 | `ssh: cannot read key at …`                  | The path is wrong, or it isn't readable by the user running Watchman.            |
 | Authentication failed                        | Public key not in `authorized_keys`, wrong owner/permissions, `from=` doesn't match, or the user isn't allowed under Remote Login. |
 | No temperature or disk health                | `smctemp` / `smartctl` not installed. `smartctl` may also need root to read the internal disk (unverified). |

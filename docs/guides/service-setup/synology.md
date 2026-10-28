@@ -11,7 +11,7 @@ aliases: [synology setup, set up synology, synology snmp]
 # Set up a Synology NAS
 
 > [!abstract] What Watchman reads
-> - **SNMP v3 (needed for health):** model, DSM version, system status, CPU idle and temperature,
+> - **SNMP v3 (normal health check):** model, DSM version, system status, CPU idle and temperature,
 >   memory, uptime and interface byte counters.
 > - **DSM Web API (optional extras):** `SYNO.Core.System.Utilization`, `SYNO.DSM.Info`,
 >   `SYNO.Core.System.Status` and `SYNO.Storage.CGI.Storage` (volume and disk health), after a login.
@@ -20,7 +20,8 @@ aliases: [synology setup, set up synology, synology snmp]
 > `apps/backend/src/infra/synology/dsmClient.ts`). Details: [[docs/integrations/synology|Synology integration]].
 
 The least-privilege setup is **SNMP v3 only**. Add DSM only if you want the volume/disk health and
-fan/power status it adds, and read the note in step 3.
+fan/power status it adds, and read the note in step 3. With DSM fields set but no SNMP user, health
+falls back to a `SYNO.DSM.Info` call over DSM.
 
 ## 1. Prepare the NAS
 
@@ -49,21 +50,32 @@ two-factor code, so the account must not have 2-step verification.
 
 - Create a **separate user** for Watchman (**Control Panel → User & Group → Create**), with a long
   random password, no shared-folder access and no application permissions it doesn't need.
-- The system-status and storage APIs Watchman calls probably need the account to be in the
-  **administrators** group.
+- Try a normal (non-admin) user first. If DSM refuses an API for that account (DSM error 105),
+  Watchman reports "synology dsm account lacks permission for … (code 105); use an account in the
+  administrators group" and doesn't retry that login every poll.
+- If you don't want an admin account for monitoring, leave the DSM fields empty. SNMP alone covers
+  health, CPU, memory and network.
 
 > [!warning] Unverified
-> Which DSM APIs a non-admin account may call was not tested. Try a normal user first: if the DSM
-> extras stay empty while SNMP works, the account needs admin rights. If you don't want an admin
-> account for monitoring, leave the DSM fields empty; SNMP alone covers health, CPU, memory and network.
+> Which DSM APIs a non-admin account may call was not tested against a live NAS.
 
-**DSM URL and TLS.** Watchman checks the DSM HTTPS certificate normally. DSM's default self-signed
-certificate fails that check. Use either:
-- `https://nas.example.com:5001` with a certificate the Watchman machine trusts (for example DSM's
-  Let's Encrypt certificate for a real domain name), or
-- `http://<nas-ip>:5000` on a trusted LAN only (the password then travels unencrypted).
+**DSM URL and TLS.** Use `https://<nas>:5001`. Watchman checks the certificate normally, which DSM's
+default self-signed certificate fails. Either:
+- **pin the self-signed certificate** (recommended on a LAN): get its fingerprint and paste it into
+  **DSM certificate fingerprint (SHA-256)**. Watchman then trusts exactly that certificate and
+  nothing else:
+  ```bash
+  openssl s_client -connect nas.local:5001 </dev/null | openssl x509 -noout -fingerprint -sha256
+  ```
+  If you later replace or renew the DSM certificate, update the fingerprint.
+- or give DSM a certificate the Watchman machine already trusts (for example Let's Encrypt for a
+  real domain name) and leave the fingerprint empty.
 
-If DSM's **Auto block** is on, a wrong password in Watchman can block the Watchman machine's IP.
+Avoid `http://<nas>:5000`: the DSM password then crosses the network unencrypted.
+
+If DSM's **Auto block** is on, a wrong password could block the Watchman machine's IP. After a
+rejected login Watchman waits 5 minutes before trying again (or until you save new credentials),
+which keeps it from piling up failed attempts.
 
 ## 4. Add it in Watchman
 
@@ -78,6 +90,7 @@ If DSM's **Auto block** is on, a wrong password in Watchman can block the Watchm
 | Auth protocol             | Same as DSM: `SHA` or `MD5`                                 |
 | Priv protocol             | Same as DSM: `AES` or `DES`                                 |
 | DSM URL / account / password | All three, or leave all three empty. DSM is used only when all three are set. |
+| DSM certificate fingerprint (SHA-256) | Only for `https://` with DSM's self-signed certificate (see step 3). 64 hex digits; colons allowed. |
 
 ## 5. Check it works
 
@@ -88,10 +101,12 @@ memory and network numbers. With DSM, the stats add volume and disk counts and f
 
 | Symptom                                       | Likely cause                                                                     |
 | --------------------------------------------- | -------------------------------------------------------------------------------- |
-| "snmp credentials not configured"             | One of SNMP user, auth key or priv key is empty.                                 |
+| "snmp credentials not configured"             | One of SNMP user, auth key or priv key is empty, and DSM isn't configured either. |
 | SNMP timeout                                  | SNMP service off, wrong protocol choice, wrong password, or UDP 161 blocked by the DSM firewall. |
 | `synology dsm login failed: code …`           | Wrong account or password, 2-step verification on, or IP auto-blocked.           |
-| DSM extras missing, SNMP fine                 | DSM fields incomplete, TLS failure on a self-signed certificate, or the account lacks rights. DSM failures never turn the tile red. |
+| `synology dsm: the certificate at … is not trusted` | DSM's self-signed certificate. Set the DSM certificate fingerprint.          |
+| `… lacks permission for … (code 105)`         | The DSM account isn't allowed that API. Use an administrators-group account, or drop DSM. |
+| DSM extras missing, SNMP fine                 | DSM fields incomplete, or one of the errors above. With SNMP configured, DSM failures don't turn the tile red. |
 
 ## Related
 

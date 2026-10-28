@@ -36,10 +36,11 @@ the zone subscription is part of it, which in Roon's model also allows playback 
 only subscribes to zones. Approval is a one-time setup step; you can disable the extension in the
 same Roon screen at any time.
 
+Watchman keeps the pairing token in `roon-state.json` in its data directory (`DATA_DIR`), so you
+approve the extension once, not after every restart. Back that file up with the rest of `DATA_DIR`.
+
 > [!warning] Unverified
-> Roon pairing was not tested against a live Core. The Roon API library keeps the pairing token on
-> disk; Watchman doesn't set where. If Roon asks you to enable the extension again after every
-> Watchman restart, the token isn't being kept: report it.
+> Roon pairing was not tested against a live Core.
 
 ## 3. Add it in Watchman
 

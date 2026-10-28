@@ -148,7 +148,7 @@ Then set the corresponding Watchman config fields:
 | Field                  | Value                              |
 | ---------------------- | ---------------------------------- |
 | `zmqHashblockEndpoint` | `tcp://127.0.0.1:28332`            |
-| `zmqRawtxEndpoint`     | leave empty (not used yet)         |
+| `zmqRawtxEndpoint`     | `tcp://127.0.0.1:28333` (optional) |
 
 ### Real-Time Metrics
 

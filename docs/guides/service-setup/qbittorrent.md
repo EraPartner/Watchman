@@ -59,7 +59,8 @@ speeds and torrent counts.
 | Symptom                                   | Likely cause                                                                    |
 | ----------------------------------------- | ------------------------------------------------------------------------------- |
 | `qbittorrent auth returned 403`           | The Watchman machine is banned after failed logins. Wait or restart qBittorrent, then fix the password. |
-| `qbittorrent login missing set-cookie`    | Wrong user name or password (qBittorrent answers `Fails.` without a cookie).    |
+| `qbittorrent rejected the username or password` | Wrong user name or password. Watchman then waits 5 minutes before logging in again (or until you save new credentials), so it doesn't trigger a ban. |
+| `qbittorrent login missing set-cookie`    | The login answered without a session cookie, e.g. a reverse proxy stripping it. |
 | Connection refused                        | Web UI is off, wrong port, or it listens on another interface.                  |
 | `returned 401` on every call              | Host header validation rejects the host name in the Base URL. Use the IP, or add the name under **Server domains**. |
 

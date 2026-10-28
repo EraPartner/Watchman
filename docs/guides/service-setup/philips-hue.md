@@ -11,7 +11,7 @@ aliases: [hue setup, set up philips hue, hue pairing]
 # Set up a Philips Hue Bridge
 
 > [!abstract] What Watchman reads
-> ICMP ping, plus Hue API v2 (`/clip/v2/resource/light`, `zigbee_connectivity`, `device_power`,
+> ICMP ping, plus Hue API v2 (`/clip/v2/resource/bridge` for health, `light`, `zigbee_connectivity`, `device_power`,
 > `device`, `room`) and the `/eventstream/clip/v2` event stream for live light state, all over HTTPS
 > pinned to the bridge's own certificate
 > (`apps/backend/src/domain/services/philipsBridge/PhilipsBridgeService.ts`). It never switches
@@ -67,7 +67,8 @@ off, plus Zigbee connectivity, battery and room counts.
 | "Enter the bridge host first"                     | The Host field is empty.                                                  |
 | Pairing times out / bridge unreachable            | Wrong IP, or port 443 is blocked between Watchman and the bridge.         |
 | Host up, no light stats                           | Application key or cert hash missing, or an old round bridge.             |
-| Light stats stopped later                         | A factory reset wiped the key, or the bridge's certificate changed so the pin no longer matches. Pair again and save. |
+| `hue application key rejected — re-pair the bridge` | The key was removed (e.g. factory reset). Pair again and save.          |
+| Light stats stopped later, TLS error             | The bridge's certificate changed so the pin no longer matches. Pair again and save. |
 
 ## Related
 
