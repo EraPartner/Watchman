@@ -54,6 +54,9 @@ dependency audit, and documentation aligned with the code.
   regressions instead of requiring new tests.
 - Standardized the toolchain on **Node 24** (Active LTS): CI, `.nvmrc` /
   `.node-version`, and the devcontainer now agree; `engines` requires `node >=22`.
+- Frontend on **React 19**: `react`/`react-dom` 19.3.1 with `@types/react`/
+  `@types/react-dom` 19.3.0, bumped together (supersedes Dependabot #137, which
+  bumped only `react-dom` and its types).
 
 ### Removed
 
