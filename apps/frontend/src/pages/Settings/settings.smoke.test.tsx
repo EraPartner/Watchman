@@ -255,6 +255,74 @@ describe("Services page", () => {
     act(() => root.unmount());
   });
 
+  it("resends the stored config when toggling enabled", async () => {
+    // PUT replaces the config, so a bare { enabled } dropped required fields.
+    const { useQuery, useMutation } = await import("@tanstack/react-query");
+    const svc = {
+      id: "svc-1",
+      kind: "ipfs",
+      instanceId: "main",
+      enabled: true,
+      profileId: "p1",
+      config: { kind: "ipfs", apiUrl: "http://127.0.0.1:5001" },
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const mutate = vi.fn();
+    vi.mocked(useQuery).mockImplementation(((opts: { queryKey: unknown[] }) => ({
+      data:
+        opts.queryKey[0] === "config" && opts.queryKey[1] === "services"
+          ? [svc]
+          : undefined,
+      isLoading: false,
+      error: null,
+    })) as unknown as typeof useQuery);
+    vi.mocked(useMutation).mockImplementation((() => ({
+      mutateAsync: vi.fn(async () => ({})),
+      mutate,
+      isPending: false,
+    })) as unknown as typeof useMutation);
+    try {
+      const { container, root } = await render(<Services />);
+      const btn = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent === "Disable"
+      )!;
+      await act(async () => {
+        btn.click();
+      });
+      expect(mutate).toHaveBeenCalledWith(
+        {
+          id: "svc-1",
+          input: {
+            instanceId: "main",
+            enabled: false,
+            config: {
+              kind: "ipfs",
+              apiUrl: "http://127.0.0.1:5001",
+              enabled: false,
+            },
+          },
+        },
+        expect.anything()
+      );
+      act(() => root.unmount());
+    } finally {
+      vi.mocked(useQuery).mockImplementation((() => ({
+        data: undefined,
+        isLoading: false,
+        error: null,
+      })) as unknown as typeof useQuery);
+      vi.mocked(useMutation).mockImplementation((() => ({
+        mutateAsync: vi.fn(async () => ({})),
+        mutate: vi.fn(),
+        isPending: false,
+        isError: false,
+        error: null,
+        reset: vi.fn(),
+      })) as unknown as typeof useMutation);
+    }
+  });
+
   it("reports a failed enable/disable instead of failing silently", async () => {
     const { useQuery, useMutation } = await import("@tanstack/react-query");
     const { toast } = await import("sonner");

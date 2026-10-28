@@ -4,6 +4,10 @@ export const queryKeys = {
   servicesInstances: () => ["services", "instances"] as const,
   metrics: () => ["metrics"] as const,
 
+  // Stored service config (Settings, detail sheet); see useConfigQueries.
+  configServices: () => ["config", "services"] as const,
+  configLoadErrors: () => ["config", "load-errors"] as const,
+
   profiles: () => ["profiles"] as const,
   activeProfile: () => ["profiles", "active"] as const,
   currentNetwork: () => ["profiles", "current-network"] as const,

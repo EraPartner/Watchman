@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   profilesApi,
   type ActiveProfileState,
@@ -8,6 +9,13 @@ import {
 } from "../../services/profilesApi";
 import { configApi } from "../../services/configApi";
 import { queryKeys } from "@/lib/queryKeys";
+
+// These mutations run from one-click controls (profile switcher, Profiles
+// page) that have no error slot of their own; without a toast a failure left
+// the control unchanged with no explanation.
+function toastError(action: string) {
+  return (err: Error) => toast.error(`${action}: ${err.message}`);
+}
 
 // Switching/mutating profiles changes which services the backend monitors, so
 // refresh the dashboard families alongside the profile families.
@@ -47,6 +55,7 @@ export function useSetActiveProfile() {
   return useMutation({
     mutationFn: (profileId: string) => profilesApi.setActive(profileId),
     onSuccess: () => invalidateAll(qc),
+    onError: toastError("Could not switch profile"),
   });
 }
 
@@ -56,6 +65,7 @@ export function useSetAutoSwitch() {
     mutationFn: (autoSwitch: boolean) => profilesApi.setAutoSwitch(autoSwitch),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: queryKeys.activeProfile() }),
+    onError: toastError("Could not change auto-switch"),
   });
 }
 
@@ -92,6 +102,7 @@ export function useCaptureNetwork() {
       qc.invalidateQueries({ queryKey: queryKeys.profiles() });
       qc.invalidateQueries({ queryKey: queryKeys.currentNetwork() });
     },
+    onError: toastError("Could not assign the network"),
   });
 }
 

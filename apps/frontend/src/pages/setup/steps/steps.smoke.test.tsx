@@ -202,6 +202,42 @@ describe("KindPickerStep", () => {
     act(() => root.unmount());
   });
 
+  it("shows a load error with Retry instead of 'No kinds match'", async () => {
+    const { useKinds } = await import("../../Settings/useConfigQueries");
+    const refetch = vi.fn();
+    vi.mocked(useKinds).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Network error"),
+      refetch,
+    } as unknown as ReturnType<typeof useKinds>);
+    try {
+      const { container, root } = await render(
+        <KindPickerStep onSelect={vi.fn()} onBack={vi.fn()} />
+      );
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Couldn't load service kinds: Network error"
+      );
+      expect(container.textContent).not.toContain("No kinds match");
+      const retry = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent === "Retry"
+      )!;
+      await act(async () => retry.click());
+      expect(refetch).toHaveBeenCalledTimes(1);
+      act(() => root.unmount());
+    } finally {
+      vi.mocked(useKinds).mockReset();
+      vi.mocked(useKinds).mockImplementation((() => ({
+        data: [
+          { kind: "tor", label: "Tor", description: "Tor relay node" },
+          { kind: "router", label: "Router", description: "Router monitoring" },
+        ],
+        isLoading: false,
+      })) as unknown as typeof useKinds);
+    }
+  });
+
   it("renders Back button", async () => {
     const { container, root } = await render(
       <KindPickerStep onSelect={vi.fn()} onBack={vi.fn()} />

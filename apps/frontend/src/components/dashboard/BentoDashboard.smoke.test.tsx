@@ -86,6 +86,40 @@ vi.mock("../../pages/Settings/ServiceEditor", () => ({
   default: () => h("form", {}, h("button", { type: "submit" }, "Save")),
 }));
 
+// Records the props the detail sheet receives, so tests can drive open/close.
+type SheetProps = {
+  kind?: string;
+  instanceId?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+const { sheetSpy } = vi.hoisted(() => ({ sheetSpy: vi.fn() }));
+const lastSheetProps = () => sheetSpy.mock.lastCall?.[0] as SheetProps;
+
+vi.mock("@/components/detail/ServiceDetailSheet", () => ({
+  ServiceDetailSheet: (props: SheetProps) => {
+    sheetSpy(props);
+    return null;
+  },
+}));
+
+vi.mock("@/components/tile/ServiceTile", () => ({
+  ServiceTile: ({
+    kind,
+    instanceId,
+    onOpenDetail,
+  }: {
+    kind: string;
+    instanceId?: string;
+    onOpenDetail?: (ctx: { kind: string; instanceId?: string }) => void;
+  }) =>
+    h(
+      "button",
+      { type: "button", onClick: () => onOpenDetail?.({ kind, instanceId }) },
+      `tile ${kind}/${instanceId}`
+    ),
+}));
+
 import BentoDashboard from "./BentoDashboard";
 import { useServiceInstances } from "../../hooks/useServiceInstances";
 
@@ -179,6 +213,51 @@ describe("BentoDashboard", () => {
       retry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(refetch).toHaveBeenCalledTimes(1);
+    await act(async () => root.unmount());
+    if (previous) mocked.mockImplementation(previous);
+  });
+
+  it("keeps the sheet's service while it closes", async () => {
+    // Clearing the service on close made the sheet render "No renderer for
+    // this service." during its exit animation.
+    const mocked = vi.mocked(useServiceInstances);
+    const previous = mocked.getMockImplementation();
+    mocked.mockImplementation(
+      () =>
+        ({
+          data: {
+            instances: {
+              bitcoin: { count: 1, instances: [{ id: "main", type: "bitcoin" }] },
+            },
+            timestamp: new Date().toISOString(),
+          },
+          isLoading: false,
+          isError: false,
+          refetch: vi.fn(),
+        }) as unknown as ReturnType<typeof useServiceInstances>
+    );
+    sheetSpy.mockClear();
+    const { container, root } = await render(h(BentoDashboard));
+    expect(lastSheetProps().open).toBe(false);
+    const tile = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "tile bitcoin/main"
+    )!;
+    await act(async () => {
+      tile.click();
+    });
+    expect(lastSheetProps()).toMatchObject({
+      kind: "bitcoin",
+      instanceId: "main",
+      open: true,
+    });
+    await act(async () => {
+      lastSheetProps().onOpenChange(false);
+    });
+    expect(lastSheetProps()).toMatchObject({
+      kind: "bitcoin",
+      instanceId: "main",
+      open: false,
+    });
     await act(async () => root.unmount());
     if (previous) mocked.mockImplementation(previous);
   });

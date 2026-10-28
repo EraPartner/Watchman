@@ -22,7 +22,8 @@ interface Entry {
 }
 
 export function KindPickerStep({ onSelect, onBack }: KindPickerStepProps) {
-  const { data: kinds, isLoading } = useKinds();
+  const { data: kinds, isLoading, isError, error, refetch } = useKinds();
+  const loadFailed = isError && !kinds;
   const [query, setQuery] = useState("");
 
   const entries: Entry[] = useMemo(() => {
@@ -89,7 +90,20 @@ export function KindPickerStep({ onSelect, onBack }: KindPickerStepProps) {
 
       {isLoading && <p className="setup-muted">Loading kinds…</p>}
 
-      {!isLoading && filtered.length === 0 && (
+      {/* A failed load used to fall through to "No kinds match “”". */}
+      {loadFailed && (
+        <div role="alert" className="setup-muted">
+          <p>
+            Couldn't load service kinds
+            {error instanceof Error ? `: ${error.message}` : "."}
+          </p>
+          <button type="button" className="setup-back" onClick={() => void refetch()}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!isLoading && !loadFailed && filtered.length === 0 && (
         <p className="setup-muted">No kinds match “{query}”.</p>
       )}
 

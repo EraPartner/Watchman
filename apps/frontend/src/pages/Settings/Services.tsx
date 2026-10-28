@@ -19,6 +19,7 @@ import {
 } from "./useConfigQueries";
 import { useProfiles, useMoveServiceProfile } from "./useProfileQueries";
 import type { ServiceInstance } from "../../services/configApi";
+import { toggleEnabledInput } from "@/lib/serviceInput";
 
 type EditorState =
   | { mode: "closed" }
@@ -151,9 +152,10 @@ export default function Services() {
               <Button
                 variant="ghost"
                 size="sm"
+                disabled={updateMut.isPending}
                 onClick={() =>
                   updateMut.mutate(
-                    { id: svc.id, input: { enabled: !svc.enabled } },
+                    { id: svc.id, input: toggleEnabledInput(svc) },
                     {
                       onError: (err) =>
                         toast.error(

@@ -176,3 +176,22 @@ describe("rendererTrackedMetrics", () => {
     expect(metrics.some((m) => typeof m === "string" && m.length > 0)).toBe(true);
   });
 });
+
+describe("raspberryPiRenderer throttling tone", () => {
+  const tone = (stats: Record<string, unknown>) =>
+    raspberryPiRenderer.tone({ stats, health: { status: "online" } });
+
+  it("ignores since-boot bits that stay set until reboot", () => {
+    // 0x50000: under-voltage and throttling happened earlier, not now.
+    expect(tone({ throttled: 0x50000, cpuTemp: 50 })).toBe("ok");
+  });
+
+  it("warns on current throttling", () => {
+    expect(tone({ throttled: 0x50005, cpuTemp: 50 })).toBe("warn");
+  });
+
+  it("prefers the backend's throttledNow when present", () => {
+    expect(tone({ throttled: 0x50005, throttledNow: 0, cpuTemp: 50 })).toBe("ok");
+    expect(tone({ throttled: 0, throttledNow: 4, cpuTemp: 50 })).toBe("warn");
+  });
+});
