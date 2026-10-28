@@ -208,5 +208,8 @@ dependency audit, and documentation aligned with the code.
   advisories remain, and the `.audit-ci.json` allowlist is empty. Moderate
   advisories remain in Electron packaging tooling (`electron-builder` via
   `sprintf-js`), which has no non-breaking fix.
+- Electron 43.8.0 → 43.8.3 (2026-10-28) for GHSA-jr5w-w6x2-84p9 (HIGH,
+  compromised eMudhra intermediate certificates), which failed the CI
+  dependency audit and Trivy scan on every open PR.
 
 [unreleased]: https://github.com/EraPartner/Watchman/commits/main
