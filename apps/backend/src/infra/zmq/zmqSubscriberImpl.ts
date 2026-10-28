@@ -41,8 +41,14 @@ export const zmqConnect: ZmqConnectFn = async (endpoint, topics) => {
   }
 
   const sock = new zmqMod.Subscriber();
-  sock.connect(endpoint);
-  for (const topic of topics) sock.subscribe(topic);
+  try {
+    // zeromq rejects a malformed endpoint (e.g. missing tcp://) synchronously
+    sock.connect(endpoint);
+    for (const topic of topics) sock.subscribe(topic);
+  } catch (e) {
+    sock.close();
+    throw e;
+  }
 
   const handlers = new Set<(msg: ZmqMessage) => void>();
   let closed = false;

@@ -14,13 +14,16 @@ interface FakeSubSocket {
 let socketInstance: FakeSubSocket | null = null;
 let frameQueue: Buffer[][] = [];
 let socketClosed = false;
+let connectThrows = false;
 
 function makeSubSocket(): FakeSubSocket {
   frameQueue = [];
   socketClosed = false;
 
   const sock: FakeSubSocket = {
-    connect: vi.fn(),
+    connect: vi.fn(() => {
+      if (connectThrows) throw new Error('Invalid endpoint');
+    }),
     subscribe: vi.fn(),
     close: vi.fn(() => { socketClosed = true; }),
     emitFrames(frames) { frameQueue.push(frames); },
@@ -189,5 +192,19 @@ describe('zmqConnect', () => {
 
     expect(messages.map((m) => m.sequence)).toEqual([1, 2]);
     await handle.close();
+  });
+});
+
+describe('zmqConnect connect failure', () => {
+  it('closes the socket and rethrows when connect throws', async () => {
+    connectThrows = true;
+    try {
+      await expect(zmqConnect('not-an-endpoint', ['hashblock'])).rejects.toThrow(
+        'Invalid endpoint'
+      );
+      expect(socketInstance?.close).toHaveBeenCalledTimes(1);
+    } finally {
+      connectThrows = false;
+    }
   });
 });

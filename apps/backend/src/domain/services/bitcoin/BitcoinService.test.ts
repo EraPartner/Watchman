@@ -299,6 +299,21 @@ describe("BitcoinService", () => {
     if (res.ok) expect(res.value.reachable).toBe(false);
   });
 
+  it("node warm-up error reaches the health message", async () => {
+    state.rpcError = { message: "Loading block index…" };
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const health = await svc.checkHealth(new AbortController().signal);
+    expect(health.ok && health.value.reachable).toBe(false);
+    if (health.ok) expect(health.value.message).toContain("Loading block index");
+    const stats = await svc.getStats(new AbortController().signal);
+    expect(!stats.ok && stats.error.message).toContain("Loading block index");
+  });
+
   it("rpc error envelope yields unreachable snapshot", async () => {
     state.rpcError = { message: "Method not found" };
     const svc = new BitcoinService({
@@ -494,6 +509,46 @@ describe("BitcoinService", () => {
 // ── BT2: ZMQ subscription ─────────────────────────────────────────────────────
 
 describe("BitcoinService — ZMQ (BT2)", () => {
+  it("a failed ZMQ connect shows in stats as not connected with the reason", async () => {
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
+      now: () => 0,
+      zmqConnect: async () => {
+        throw new Error("zeromq not installed");
+      },
+    });
+    await svc.onStart();
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.zmqConnected).toBe(false);
+      expect(res.value.metrics.zmqError).toContain("zeromq not installed");
+    }
+  });
+
+  it("a ZMQ connect that finishes after onStop is closed", async () => {
+    const zmq = makeFakeZmq();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const svc = new BitcoinService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
+      now: () => 0,
+      zmqConnect: async (endpoint, topics) => {
+        await gate;
+        return zmq.connect(endpoint, topics);
+      },
+    });
+    const started = svc.onStart();
+    await svc.onStop();
+    release();
+    await started;
+    expect(zmq.isClosed()).toBe(true);
+  });
+
   it("onStart connects to configured zmqHashblockEndpoint", async () => {
     const zmq = makeFakeZmq();
     const svc = new BitcoinService({
