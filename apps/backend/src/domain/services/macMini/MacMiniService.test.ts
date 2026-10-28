@@ -249,6 +249,33 @@ describe("MacMiniService", () => {
     }
   });
 
+  it("getStats reports disk as null (not 0) when df gives no output", async () => {
+    const svc = new MacMiniService({
+      ping: fakePing({ success: true }),
+      ssh: fakeSsh({
+        uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
+      }),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.diskUsagePercent).toBeNull();
+      expect(res.value.metrics.diskTotal).toBeNull();
+      expect(res.value.metrics.diskUsed).toBeNull();
+      expect(res.value.metrics.diskFree).toBeNull();
+    }
+  });
+
+  it("every Homebrew tool segment sets the Homebrew PATH itself", () => {
+    // each compound segment runs in its own subshell, so an export in the
+    // temperature segment does not reach the smartctl segment
+    for (const cmd of [TEMP_CMD, SMART_CMD]) {
+      expect(cmd).toMatch(/^export PATH="\/opt\/homebrew\/bin:\/usr\/local\/bin:\$PATH";/);
+    }
+  });
+
   it("getStats maps empty compound output to UnavailableError", async () => {
     const svc = new MacMiniService({
       ping: fakePing({ success: true }),

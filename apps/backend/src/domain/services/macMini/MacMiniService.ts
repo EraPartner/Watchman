@@ -26,14 +26,16 @@ export interface MacMiniDeps {
   now: () => number;
 }
 
+// A non-interactive SSH session on macOS has PATH=/usr/bin:/bin:/usr/sbin:/sbin,
+// so Homebrew tools need their prefixes added. compoundCommand runs each
+// segment in its own subshell, so every segment that needs them sets PATH.
+const HOMEBREW_PATH = 'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH";';
 // smctemp works on Apple Silicon where the unmaintained osx-cpu-temp reads 0.0
-export const TEMP_CMD =
-  'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; if which smctemp >/dev/null 2>&1; then smctemp -c; elif which osx-cpu-temp >/dev/null 2>&1; then osx-cpu-temp; fi';
+export const TEMP_CMD = `${HOMEBREW_PATH} if which smctemp >/dev/null 2>&1; then smctemp -c; elif which osx-cpu-temp >/dev/null 2>&1; then osx-cpu-temp; fi`;
 // On APFS (macOS 10.15+) "/" is the sealed system volume, whose "Used" is
 // only the OS (~10-15 GB); user data lives on the Data volume.
 export const DF_CMD = "df -k /System/Volumes/Data 2>/dev/null || df -k /";
-export const SMART_CMD =
-  "which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true";
+export const SMART_CMD = `${HOMEBREW_PATH} which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true`;
 
 /** All stats commands, executed as ONE compound SSH exec per cycle
  *  (order matters — outputs are split positionally). */
@@ -222,12 +224,15 @@ function parseTemp(out: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// null = df gave no usable output (not measured), never a fake 0
 interface Disk {
-  total: number;
-  used: number;
-  free: number;
-  usagePercent: number;
+  total: number | null;
+  used: number | null;
+  free: number | null;
+  usagePercent: number | null;
 }
+
+const NO_DISK: Disk = { total: null, used: null, free: null, usagePercent: null };
 
 function parseDiskBytes(dfOut: string): Disk {
   const lines = dfOut
@@ -236,13 +241,13 @@ function parseDiskBytes(dfOut: string): Disk {
     .map((l) => l.trim())
     .filter(Boolean);
   if (lines.length < 2 || !lines[1])
-    return { total: 0, used: 0, free: 0, usagePercent: 0 };
+    return NO_DISK;
   const cols = lines[1].split(/\s+/);
   const totalK = parseInt(cols[1] ?? "0", 10);
   const usedK = parseInt(cols[2] ?? "0", 10);
   const availK = parseInt(cols[3] ?? "0", 10);
   if (!Number.isFinite(totalK) || totalK <= 0)
-    return { total: 0, used: 0, free: 0, usagePercent: 0 };
+    return NO_DISK;
   const total = totalK * 1024;
   const used = (Number.isFinite(usedK) ? usedK : 0) * 1024;
   const free = (Number.isFinite(availK) ? availK : 0) * 1024;
