@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 import type { SnmpWalkRequest, SnmpWalkRow } from './snmpGetter.js';
 import { createSnmpGetter } from './snmpGetterImpl.js';
 
@@ -10,7 +11,8 @@ interface FakeVarbind {
   value: Buffer | string | number;
 }
 
-interface FakeSession {
+interface FakeSession extends EventEmitter {
+  get?(oids: string[], cb: (err: Error | null, varbinds: FakeVarbind[]) => void): void;
   subtree(
     oid: string,
     maxRepetitions: number,
@@ -25,14 +27,28 @@ function makeVarbind(oid: string, value: string): FakeVarbind {
 }
 
 function makeSession(rows: FakeVarbind[], error?: Error): FakeSession {
-  return {
-    subtree(_oid, _max, feedCb, doneCb) {
+  return Object.assign(new EventEmitter(), {
+    subtree(
+      _oid: string,
+      _max: number,
+      feedCb: (varbinds: FakeVarbind[]) => void,
+      doneCb: (err: Error | null) => void,
+    ) {
       if (error) { doneCb(error); return; }
       feedCb(rows);
       doneCb(null);
     },
     close: vi.fn(),
-  };
+  });
+}
+
+// A session whose request never answers; the test drives it via emit('error').
+function makeHangingSession(): FakeSession {
+  return Object.assign(new EventEmitter(), {
+    get: () => {},
+    subtree: () => {},
+    close: vi.fn(),
+  });
 }
 
 // Patch the net-snmp module import in snmpGetterImpl before importing it.
@@ -145,5 +161,52 @@ describe('SnmpGetter.walk (I1)', () => {
     const getter = createSnmpGetter();
     const result = await getter.walk(walkReq());
     expect(result.rows[0]).toEqual<SnmpWalkRow>({ oid: '1.3.6.1.2.1.2.2.1.10.1', value: '12345' });
+  });
+});
+
+describe('SnmpGetter session errors and abort', () => {
+  const v3 = { user: 'u', authKey: 'authkey12', privKey: 'privkey12' };
+
+  it("a session 'error' event rejects the walk instead of crashing", async () => {
+    const session = makeHangingSession();
+    (snmp as unknown as { _sessions: FakeSession[] })._sessions[0] = session;
+    const p = createSnmpGetter().walk(walkReq());
+    // with no listener, EventEmitter#emit('error') throws (uncaught in net-snmp's
+    // dgram handler); a listener must be present and settle the promise
+    expect(() => session.emit('error', new Error('bad datagram'))).not.toThrow();
+    await expect(p).rejects.toThrow('snmp walk failed: bad datagram');
+    expect(session.close).toHaveBeenCalled();
+  });
+
+  it("a session 'error' event rejects the get instead of crashing", async () => {
+    const session = makeHangingSession();
+    (snmp as unknown as { _sessions: FakeSession[] })._sessions[0] = session;
+    const p = createSnmpGetter().get({
+      host: '192.168.1.1',
+      oids: ['1.3.6.1.2.1.1.3.0'],
+      credentials: v3,
+      timeoutMs: 1000,
+    });
+    expect(() => session.emit('error', new Error('bad datagram'))).not.toThrow();
+    await expect(p).rejects.toThrow('snmp get failed: bad datagram');
+  });
+
+  it('an already-aborted signal rejects without waiting for the timer', async () => {
+    const session = makeHangingSession();
+    (snmp as unknown as { _sessions: FakeSession[] })._sessions[0] = session;
+    const ac = new AbortController();
+    ac.abort();
+    await expect(createSnmpGetter().walk(walkReq({ signal: ac.signal }))).rejects.toThrow(
+      'snmp walk aborted',
+    );
+    expect(session.close).toHaveBeenCalled();
+  });
+
+  it('removes its abort listener once the walk settles', async () => {
+    (snmp as unknown as { _sessions: FakeSession[] })._sessions[0] = makeSession([]);
+    const ac = new AbortController();
+    const remove = vi.spyOn(ac.signal, 'removeEventListener');
+    await createSnmpGetter().walk(walkReq({ signal: ac.signal }));
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 });
