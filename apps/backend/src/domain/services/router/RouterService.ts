@@ -47,7 +47,14 @@ export class RouterService extends BaseService {
   private readonly snmp: SnmpGetter | undefined;
   private readonly now: () => number;
   // last cumulative octet totals, for computing byte rates between polls
-  private lastOctets: { at: number; in: number; out: number } | null = null;
+  // and the counter family they came from: a 64-bit total minus a 32-bit one
+  // is not a byte count, so rates are only taken between samples of one kind
+  private lastOctets: {
+    at: number;
+    kind: "hc" | "32";
+    in: number;
+    out: number;
+  } | null = null;
 
   constructor(deps: RouterDeps) {
     super();
@@ -226,38 +233,66 @@ export class RouterService extends BaseService {
         return total;
       };
 
-      // Prefer 64-bit HC counters (no 4 GiB wrap); fall back to 32-bit
-      const ifInOctets =
-        hcInRows && hcInRows.length > 0
-          ? sumOctets(hcInRows)
-          : sumOctets(ifInRows ?? none);
-      const ifOutOctets =
-        hcOutRows && hcOutRows.length > 0
-          ? sumOctets(hcOutRows)
-          : sumOctets(ifOutRows ?? none);
+      type Rows = ReadonlyArray<{ oid: string; value: string }> | null;
+      const covers = (rows: Rows): rows is ReadonlyArray<{
+        oid: string;
+        value: string;
+      }> =>
+        rows !== null &&
+        rows.some((r) => activeIndexes.has(r.oid.split(".").at(-1) ?? ""));
+
+      // Prefer 64-bit HC counters (no 4 GiB wrap); fall back to 32-bit only
+      // when the agent has no HC rows. A walk that failed this cycle gives no
+      // sample at all: summing what's left as 0 (or switching counter kind)
+      // would turn the next poll's delta into a huge fake rate.
+      let octets: { kind: "hc" | "32"; in: number; out: number } | null =
+        null;
+      if (ifDescrRows !== null && activeIndexes.size > 0) {
+        if (covers(hcInRows) && covers(hcOutRows)) {
+          octets = {
+            kind: "hc",
+            in: sumOctets(hcInRows),
+            out: sumOctets(hcOutRows),
+          };
+        } else if (
+          hcInRows !== null &&
+          hcOutRows !== null &&
+          covers(ifInRows) &&
+          covers(ifOutRows)
+        ) {
+          octets = {
+            kind: "32",
+            in: sumOctets(ifInRows),
+            out: sumOctets(ifOutRows),
+          };
+        }
+      }
 
       // Byte rates between polls; a negative delta (counter wrap or device
-      // reboot) skips the rate for this cycle instead of reporting garbage
+      // reboot) skips the rate for this cycle instead of reporting garbage.
+      // A missing sample keeps the previous baseline.
       const at = this.now();
       let ifInBps: number | undefined;
       let ifOutBps: number | undefined;
-      if (this.lastOctets && at > this.lastOctets.at) {
-        const dtSec = (at - this.lastOctets.at) / 1000;
-        const dIn = ifInOctets - this.lastOctets.in;
-        const dOut = ifOutOctets - this.lastOctets.out;
-        if (dIn >= 0 && dOut >= 0) {
-          ifInBps = Math.round(dIn / dtSec);
-          ifOutBps = Math.round(dOut / dtSec);
+      if (octets) {
+        const last = this.lastOctets;
+        if (last && last.kind === octets.kind && at > last.at) {
+          const dtSec = (at - last.at) / 1000;
+          const dIn = octets.in - last.in;
+          const dOut = octets.out - last.out;
+          if (dIn >= 0 && dOut >= 0) {
+            ifInBps = Math.round(dIn / dtSec);
+            ifOutBps = Math.round(dOut / dtSec);
+          }
         }
+        this.lastOctets = { at, ...octets };
       }
-      this.lastOctets = { at, in: ifInOctets, out: ifOutOctets };
 
       return {
         ...(sysUptime !== undefined ? { sysUptime } : {}),
         ...(connectedClients !== undefined ? { connectedClients } : {}),
         ...(cpuLoad !== undefined ? { cpuLoad } : {}),
-        ifInOctets,
-        ifOutOctets,
+        ...(octets ? { ifInOctets: octets.in, ifOutOctets: octets.out } : {}),
         ...(ifInBps !== undefined ? { ifInBps } : {}),
         ...(ifOutBps !== undefined ? { ifOutBps } : {}),
       };

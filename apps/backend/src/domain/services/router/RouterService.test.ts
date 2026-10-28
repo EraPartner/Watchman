@@ -397,4 +397,128 @@ describe("RouterService SNMP stats (R1)", () => {
       expect(res.value.metrics.ifOutOctets).toBe(7_000_000_000);
     }
   });
+
+  describe("byte rates", () => {
+    function hcRows(inV: string, outV: string) {
+      return {
+        [SNMP_OID.ifDescr]: [{ oid: `${SNMP_OID.ifDescr}.1`, value: "eth0" }],
+        [SNMP_OID.ifHCInOctets]: [
+          { oid: `${SNMP_OID.ifHCInOctets}.1`, value: inV },
+        ],
+        [SNMP_OID.ifHCOutOctets]: [
+          { oid: `${SNMP_OID.ifHCOutOctets}.1`, value: outV },
+        ],
+        [SNMP_OID.ifInOctets]: [{ oid: `${SNMP_OID.ifInOctets}.1`, value: "7" }],
+        [SNMP_OID.ifOutOctets]: [
+          { oid: `${SNMP_OID.ifOutOctets}.1`, value: "9" },
+        ],
+      } as Record<string, Array<{ oid: string; value: string }>>;
+    }
+
+    it("a failed ifDescr walk reports no octets and keeps the baseline", async () => {
+      let t = 0;
+      let rows = hcRows("5000000000000", "6000000000000");
+      let failSubtree: string | null = null;
+      const snmp: SnmpGetter = {
+        get: async () => ({ values: [] }),
+        walk: async (req) => {
+          if (req.subtree === failSubtree) throw new Error("timeout");
+          return { rows: rows[req.subtree] ?? [] };
+        },
+      };
+      const svc = new RouterService({
+        ping: fakePing({ success: true }),
+        tcp: fakeTcp({}),
+        snmp,
+        config: snmpConfig(),
+        now: () => t,
+      });
+      await svc.getStats(new AbortController().signal);
+
+      t = 30_000;
+      failSubtree = SNMP_OID.ifDescr;
+      const partial = await svc.getStats(new AbortController().signal);
+      expect(partial.ok).toBe(true);
+      if (partial.ok) {
+        // previously reported (and stored as baseline) as 0
+        expect(partial.value.metrics.ifInOctets).toBeUndefined();
+        expect(partial.value.metrics.ifInBps).toBeUndefined();
+      }
+
+      t = 60_000;
+      failSubtree = null;
+      rows = hcRows("5000000600000", "6000001200000");
+      const next = await svc.getStats(new AbortController().signal);
+      expect(next.ok).toBe(true);
+      if (next.ok) {
+        // 6e5 bytes over 60 s, not ~5e12 / 30 s
+        expect(next.value.metrics.ifInBps).toBe(10_000);
+        expect(next.value.metrics.ifOutBps).toBe(20_000);
+      }
+    });
+
+    it("a failed HC walk does not fall back to the 32-bit sum", async () => {
+      let failHc = false;
+      let t = 0;
+      const rows = hcRows("5000000000000", "6000000000000");
+      const snmp: SnmpGetter = {
+        get: async () => ({ values: [] }),
+        walk: async (req) => {
+          if (failHc && req.subtree === SNMP_OID.ifHCOutOctets)
+            throw new Error("timeout");
+          return { rows: rows[req.subtree] ?? [] };
+        },
+      };
+      const svc = new RouterService({
+        ping: fakePing({ success: true }),
+        tcp: fakeTcp({}),
+        snmp,
+        config: snmpConfig(),
+        now: () => t,
+      });
+      await svc.getStats(new AbortController().signal);
+      t = 30_000;
+      failHc = true;
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.ifInOctets).toBeUndefined();
+        expect(res.value.metrics.ifOutOctets).toBeUndefined();
+      }
+    });
+
+    it("no rate across a switch from 32-bit to HC counters", async () => {
+      let hc = false;
+      let t = 0;
+      const full = hcRows("5000000000000", "6000000000000");
+      const snmp: SnmpGetter = {
+        get: async () => ({ values: [] }),
+        walk: async (req) => {
+          const isHc =
+            req.subtree === SNMP_OID.ifHCInOctets ||
+            req.subtree === SNMP_OID.ifHCOutOctets;
+          if (isHc && !hc) return { rows: [] };
+          return { rows: full[req.subtree] ?? [] };
+        },
+      };
+      const svc = new RouterService({
+        ping: fakePing({ success: true }),
+        tcp: fakeTcp({}),
+        snmp,
+        config: snmpConfig(),
+        now: () => t,
+      });
+      const first = await svc.getStats(new AbortController().signal);
+      if (first.ok) expect(first.value.metrics.ifInOctets).toBe(7);
+      t = 30_000;
+      hc = true;
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.ifInOctets).toBe(5_000_000_000_000);
+        expect(res.value.metrics.ifInBps).toBeUndefined();
+      }
+    });
+  });
 });
+
