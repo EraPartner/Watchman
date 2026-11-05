@@ -4,7 +4,10 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 import react from "eslint-plugin-react";
-import { strictTypeAwareRules } from "../../config/eslint-type-aware.ts";
+import {
+  rulesOf,
+  strictTypeAwareRules,
+} from "../../config/eslint-type-aware.ts";
 
 const typescriptEslint = tseslint.plugin;
 const typescriptParser = tseslint.parser;
@@ -58,11 +61,7 @@ export default [
     rules: {
       // typescript-eslint's recommended rules (flat config form; the plugin's
       // legacy `configs.recommended` is untyped).
-      ...Object.fromEntries(
-        tseslint.configs.recommended.flatMap((config) =>
-          Object.entries(config.rules ?? {})
-        )
-      ),
+      ...rulesOf(tseslint.configs.recommended),
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": [
         "warn",

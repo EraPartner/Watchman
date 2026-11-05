@@ -10,11 +10,22 @@
 type RuleEntry = unknown;
 type Rules = Record<string, RuleEntry>;
 
+/** A flat config as typescript-eslint types it: `rules` is a plain object. */
+type ConfigWithRules = { rules?: object | undefined };
+
 /** The part of the `typescript-eslint` module this file reads. */
 interface TsEslintConfigs {
   configs: {
-    strictTypeChecked: ReadonlyArray<{ rules?: Readonly<Rules> | undefined }>;
+    strictTypeChecked: ReadonlyArray<ConfigWithRules>;
   };
+}
+
+/** Every rule entry of a list of flat configs, later configs winning. */
+export function rulesOf(configs: ReadonlyArray<ConfigWithRules>): Rules {
+  const entries: Array<[string, RuleEntry]> = configs.flatMap((config) =>
+    Object.entries(config.rules ?? {})
+  );
+  return Object.fromEntries(entries);
 }
 
 export const typeAwareRules: Rules = {
@@ -67,8 +78,7 @@ export const typeAwareRules: Rules = {
 export function strictTypeAwareRules(tseslint: TsEslintConfigs): Rules {
   return {
     ...Object.fromEntries(
-      tseslint.configs.strictTypeChecked
-        .flatMap((config) => Object.entries(config.rules ?? {}))
+      Object.entries(rulesOf(tseslint.configs.strictTypeChecked))
         // Each project keeps its own unused-variable severity and pattern.
         .filter(([rule]) => rule !== "@typescript-eslint/no-unused-vars")
     ),

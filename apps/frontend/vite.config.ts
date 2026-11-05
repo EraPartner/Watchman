@@ -52,12 +52,6 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
-    // PostCSS plugins (formerly postcss.config.js), kept in this TypeScript file.
-    css: {
-      postcss: {
-        plugins: [tailwindcss(), autoprefixer()],
-      },
-    },
     plugins: [
       // Fast Refresh is always on in @vitejs/plugin-react v6; the old
       // `fastRefresh` option no longer exists.
@@ -164,6 +158,10 @@ export default defineConfig(({ mode }) => {
     },
     css: {
       devSourcemap: mode === "development",
+      // PostCSS plugins (formerly postcss.config.js).
+      postcss: {
+        plugins: [tailwindcss(), autoprefixer()],
+      },
     },
   };
 });
