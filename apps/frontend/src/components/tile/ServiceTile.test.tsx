@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React, { act } from "react";
+import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fmtRaw, fmtNumber } from "@/services/renderers/formatters";
@@ -15,7 +15,6 @@ const defaultRenderer = (): ServiceRenderer => ({
   kind: "bitcoin",
   summary: [],
   tone: () => "ok" as const,
-  subtitle: undefined,
   detail: [],
   charts: [],
 });
@@ -56,6 +55,8 @@ vi.mock("@/lib/metricHistory", () => ({
 }));
 
 import { ServiceTile } from "./ServiceTile";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -63,7 +64,7 @@ async function render() {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => {
+  await actAsync(() => {
     root.render(<ServiceTile kind="bitcoin" />);
   });
   return {
@@ -113,10 +114,10 @@ describe("ServiceTile two-tier status dots", () => {
     const dots = statusDots(container);
 
     expect(dots.length).toBe(2);
-    expect(dots[0]!.getAttribute("aria-label")).toMatch(/host/i);
-    expect(dots[1]!.getAttribute("aria-label")).toMatch(/service/i);
+    expect(required(dots[0]).getAttribute("aria-label")).toMatch(/host/i);
+    expect(required(dots[1]).getAttribute("aria-label")).toMatch(/service/i);
 
-    await cleanup();
+    cleanup();
   });
 
   it("renders single dot when health has no tiers (backward compat)", async () => {
@@ -127,7 +128,7 @@ describe("ServiceTile two-tier status dots", () => {
 
     expect(dots.length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 
   it("renders single dot when health data is undefined", async () => {
@@ -138,7 +139,7 @@ describe("ServiceTile two-tier status dots", () => {
 
     expect(dots.length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 
   it("host dot reflects host.reachable=false with crit tone", async () => {
@@ -152,10 +153,10 @@ describe("ServiceTile two-tier status dots", () => {
     const dots = statusDots(container);
 
     expect(dots.length).toBe(2);
-    expect(dots[0]!.getAttribute("aria-label")).toMatch(/host/i);
-    expect(dots[1]!.getAttribute("aria-label")).toMatch(/service/i);
+    expect(required(dots[0]).getAttribute("aria-label")).toMatch(/host/i);
+    expect(required(dots[1]).getAttribute("aria-label")).toMatch(/service/i);
 
-    await cleanup();
+    cleanup();
   });
 
   it("only service tier missing → single dot fallback", async () => {
@@ -170,7 +171,7 @@ describe("ServiceTile two-tier status dots", () => {
 
     expect(dots.length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 
   it("only host tier missing → single dot fallback", async () => {
@@ -185,7 +186,7 @@ describe("ServiceTile two-tier status dots", () => {
 
     expect(dots.length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 });
 
@@ -208,7 +209,6 @@ describe("ServiceTile metric source resolution", () => {
         { key: "host", label: "Host", format: fmtRaw },
       ],
       tone: () => "ok" as const,
-      subtitle: undefined,
       detail: [],
       charts: [],
     };
@@ -230,7 +230,7 @@ describe("ServiceTile metric source resolution", () => {
     // Secondary cells (Ports, Host) still resolve from stats.
     expect(container.textContent).toContain("192.168.0.1");
 
-    await cleanup();
+    cleanup();
   });
 
   it("falls back to stats when source is omitted (existing renderer behavior)", async () => {
@@ -239,7 +239,6 @@ describe("ServiceTile metric source resolution", () => {
       kind: "bitcoin",
       summary: [{ key: "blocks", label: "Blocks", format: fmtNumber(0) }],
       tone: () => "ok" as const,
-      subtitle: undefined,
       detail: [],
       charts: [],
     };
@@ -257,7 +256,7 @@ describe("ServiceTile metric source resolution", () => {
     });
     expect(container.textContent).toContain(expected);
 
-    await cleanup();
+    cleanup();
   });
 
   it("renders placeholder when source='health' but snapshot missing field", async () => {
@@ -273,7 +272,6 @@ describe("ServiceTile metric source resolution", () => {
         },
       ],
       tone: () => "ok" as const,
-      subtitle: undefined,
       detail: [],
       charts: [],
     };
@@ -289,7 +287,7 @@ describe("ServiceTile metric source resolution", () => {
     expect(container.textContent).toContain("—");
     expect(container.textContent).not.toContain("true");
 
-    await cleanup();
+    cleanup();
   });
 });
 
@@ -307,7 +305,7 @@ describe("ServiceTile stats-error badge", () => {
     expect(container.textContent).toContain("needs config");
     expect(container.textContent).toContain("configure to see metrics");
 
-    await cleanup();
+    cleanup();
   });
 
   it("renders 'stats unavailable' badge when stats error has no auth signal", async () => {
@@ -319,7 +317,7 @@ describe("ServiceTile stats-error badge", () => {
 
     expect(container.textContent).toContain("stats unavailable");
 
-    await cleanup();
+    cleanup();
   });
 
   it("does not render a stats badge when stats data exists despite error", async () => {
@@ -332,7 +330,7 @@ describe("ServiceTile stats-error badge", () => {
     expect(container.textContent).not.toContain("needs config");
     expect(container.textContent).not.toContain("stats unavailable");
 
-    await cleanup();
+    cleanup();
   });
 
   it("suppresses stats badge while tile is offline", async () => {
@@ -345,7 +343,7 @@ describe("ServiceTile stats-error badge", () => {
     expect(container.textContent).not.toContain("needs config");
     expect(container.textContent).toContain("Unavailable");
 
-    await cleanup();
+    cleanup();
   });
 });
 
@@ -358,7 +356,7 @@ describe("ServiceTile keyboard and labels", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
-    await act(async () => {
+    await actAsync(() => {
       root.render(
         <ServiceTile
           kind="bitcoin"
@@ -383,9 +381,9 @@ describe("ServiceTile keyboard and labels", () => {
 
   it("opens the detail on Enter when the tile itself has focus", async () => {
     const { tile, onOpenDetail, cleanup } = await renderTile();
-    await act(async () => pressEnter(tile));
+    await actAsync(() => pressEnter(tile));
     expect(onOpenDetail).toHaveBeenCalledTimes(1);
-    await cleanup();
+    cleanup();
   });
 
   it("leaves Enter on a focused child (the quick link) alone", async () => {
@@ -400,22 +398,22 @@ describe("ServiceTile keyboard and labels", () => {
       bubbles: true,
       cancelable: true,
     });
-    await act(async () => {
+    await actAsync(() => {
       child.dispatchEvent(ev);
     });
     expect(onOpenDetail).not.toHaveBeenCalled();
     expect(ev.defaultPrevented).toBe(false);
     child.remove();
-    await cleanup();
+    cleanup();
   });
 
   it("names the instance in the tile label so sibling tiles differ", async () => {
     const a = await renderTile("backup");
     expect(a.tile.getAttribute("aria-label")).toBe("Bitcoin (backup) tile");
-    await a.cleanup();
+    a.cleanup();
     const b = await renderTile("main");
     expect(b.tile.getAttribute("aria-label")).toBe("Bitcoin tile");
-    await b.cleanup();
+    b.cleanup();
   });
 });
 
@@ -451,7 +449,7 @@ describe("ServiceTile warning status", () => {
     expect(container.textContent).toContain("warning");
     expect(container.textContent).not.toContain("Unavailable");
 
-    await cleanup();
+    cleanup();
   });
 
   it("passes 'warning' when reachable but the service tier is down", async () => {
@@ -464,7 +462,7 @@ describe("ServiceTile warning status", () => {
     expect(seen).toContain("warning");
     expect(container.textContent).toContain("warning");
 
-    await cleanup();
+    cleanup();
   });
 
   it("stays 'online' when reachable and every tier is up", async () => {
@@ -482,6 +480,6 @@ describe("ServiceTile warning status", () => {
     expect(container.textContent).toContain("online");
     expect(container.textContent).not.toContain("warning");
 
-    await cleanup();
+    cleanup();
   });
 });

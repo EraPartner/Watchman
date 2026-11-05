@@ -1,3 +1,4 @@
+import { isNonZero } from "@/lib/number";
 import { forwardRef, type HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,7 @@ export const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
         "before:animate-[skeleton_1.4s_infinite] before:motion-reduce:animate-none",
         className
       )}
-      style={{ ...(height ? { height: `${height}px` } : {}), ...style }}
+      style={{ ...(isNonZero(height) ? { height: `${height}px` } : {}), ...style }}
       {...rest}
     />
   )

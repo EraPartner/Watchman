@@ -49,8 +49,8 @@ vi.mock("../hooks/useServiceInstances", () => ({
   }),
 }));
 vi.mock("../services/ApiClient", () => ({
-  apiClient: { getAggregatedServices: vi.fn(async () => []) },
-  sharedCore: { request: vi.fn(async () => ({})) },
+  apiClient: { getAggregatedServices: vi.fn(() => Promise.resolve([])) },
+  sharedCore: { request: vi.fn(() => Promise.resolve({})) },
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
@@ -78,6 +78,7 @@ import {
   TooltipContent,
 } from "./primitives";
 import { Toggle, ToggleGroup } from "./primitives/Toggle";
+import { actAsync } from "@/test/actAsync";
 import { Popover, PopoverTrigger, PopoverContent } from "./primitives/Popover";
 import {
   Sheet,
@@ -88,6 +89,7 @@ import {
 } from "./primitives/Sheet";
 import { KindCard } from "../pages/setup/KindCard";
 import { Server } from "lucide-react";
+import { required } from "@/test/required";
 
 beforeEach(() => {
   (
@@ -106,7 +108,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -341,8 +343,8 @@ describe("KindCard", () => {
         onSelect={onSelect}
       />
     );
-    const btn = container.querySelector("button")!;
-    await act(async () => {
+    const btn = required(container.querySelector("button"));
+    await actAsync(() => {
       btn.click();
     });
     expect(onSelect).toHaveBeenCalledWith("bitcoin");
@@ -359,7 +361,7 @@ describe("KindCard", () => {
         onSelect={vi.fn()}
       />
     );
-    const btn = container.querySelector("button")!;
+    const btn = required(container.querySelector("button"));
     expect(btn.getAttribute("aria-label")).toBe("Add Tor");
     act(() => root.unmount());
   });
@@ -378,7 +380,7 @@ describe("Sparkline", () => {
 
   it("is aria-hidden when no label is provided", async () => {
     const { container, root } = await render(<Sparkline data={[1, 2, 3]} />);
-    const svg = container.querySelector("svg")!;
+    const svg = required(container.querySelector("svg"));
     expect(svg.getAttribute("aria-hidden")).toBe("true");
     act(() => root.unmount());
   });
@@ -387,7 +389,7 @@ describe("Sparkline", () => {
     const { container, root } = await render(
       <Sparkline data={[1, 2, 3]} label="Block height trend" />
     );
-    const svg = container.querySelector("svg")!;
+    const svg = required(container.querySelector("svg"));
     expect(svg.getAttribute("role")).toBe("img");
     expect(svg.getAttribute("aria-label")).toBe("Block height trend");
     act(() => root.unmount());
@@ -401,7 +403,7 @@ describe("Sparkline", () => {
 
   it("renders nothing inside SVG when data is empty", async () => {
     const { container, root } = await render(<Sparkline data={[]} />);
-    const svg = container.querySelector("svg")!;
+    const svg = required(container.querySelector("svg"));
     expect(svg.querySelector("path")).toBeNull();
     act(() => root.unmount());
   });
@@ -527,10 +529,10 @@ describe("ConfirmDialog", () => {
         onConfirm={onConfirm}
       />
     );
-    const btn = Array.from(document.body.querySelectorAll("button")).find(
+    const btn = required(Array.from(document.body.querySelectorAll("button")).find(
       (b) => b.textContent === "Yes"
-    )!;
-    await act(async () => {
+    ));
+    await actAsync(() => {
       btn.click();
     });
     expect(onConfirm).toHaveBeenCalled();
@@ -547,19 +549,19 @@ describe("ConfirmDialog", () => {
         onConfirm={vi.fn()}
       />
     );
-    const btn = Array.from(document.body.querySelectorAll("button")).find(
+    const btn = required(Array.from(document.body.querySelectorAll("button")).find(
       (b) => b.textContent === "No thanks"
-    )!;
-    await act(async () => {
+    ));
+    await actAsync(() => {
       btn.click();
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it("shows the error when onConfirm rejects and keeps the dialog open", async () => {
-    const onConfirm = vi.fn(async () => {
-      throw new Error("delete failed: 500");
-    });
+    const onConfirm = vi.fn(() =>
+      Promise.reject(new Error("delete failed: 500"))
+    );
     await render(
       <ConfirmDialog
         open={true}
@@ -569,10 +571,10 @@ describe("ConfirmDialog", () => {
         onConfirm={onConfirm}
       />
     );
-    const btn = Array.from(document.body.querySelectorAll("button")).find(
+    const btn = required(Array.from(document.body.querySelectorAll("button")).find(
       (b) => b.textContent === "Yes"
-    )!;
-    await act(async () => {
+    ));
+    await actAsync(() => {
       btn.click();
     });
     expect(document.body.querySelector("[role='alert']")?.textContent).toBe(
@@ -604,11 +606,11 @@ describe("TopNav", () => {
       <TopNav onAddService={onAddService} />
     );
     const btn = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Add service")
+      b.textContent.includes("Add service")
     );
     expect(btn).toBeTruthy();
-    await act(async () => {
-      btn!.click();
+    await actAsync(() => {
+      required(btn).click();
     });
     expect(onAddService).toHaveBeenCalled();
     act(() => root.unmount());
@@ -618,7 +620,7 @@ describe("TopNav", () => {
     // The nav used to be `hidden md:flex`, so below 768px there was no way
     // to reach Settings.
     const { container, root } = await render(<TopNav />);
-    const nav = container.querySelector("nav")!;
+    const nav = required(container.querySelector("nav"));
     expect(nav.className.split(/\s+/)).not.toContain("hidden");
     expect(nav.getAttribute("aria-label")).toBe("Main");
     act(() => root.unmount());

@@ -3,11 +3,12 @@ import crypto from "node:crypto";
 import { UnauthorizedError } from "../../core/errors.js";
 import { createPinnedConnector, createPinnedClient } from "./pinnedClient.js";
 import type { buildConnector } from "undici";
+import { required } from "../../test/required.js";
 
 function makeCert(): { raw: Buffer; sha256hex: string; sha256colon: string } {
   const raw = Buffer.from("fake-cert-der-bytes", "utf8");
   const sha256hex = crypto.createHash("sha256").update(raw).digest("hex");
-  const sha256colon = sha256hex.match(/.{2}/g)!.join(":").toUpperCase();
+  const sha256colon = required(sha256hex.match(/.{2}/g)).join(":").toUpperCase();
   return { raw, sha256hex, sha256colon };
 }
 
@@ -123,10 +124,11 @@ describe("createPinnedConnector", () => {
 });
 
 describe("createPinnedClient", () => {
-  it("builds an HttpClient whose requests enforce the pin on the wire", async () => {
+  it("builds an HttpClient whose requests enforce the pin on the wire", () => {
     const client = createPinnedClient("a".repeat(64));
     expect(typeof client.send).toBe("function");
     // No TLS server with a known cert available in unit tests; full-path
     // behavior is covered by the connector tests above.
+    return Promise.resolve();
   });
 });

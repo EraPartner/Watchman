@@ -6,7 +6,7 @@ interface ErrorBody {
   error: { code: string; message: string };
 }
 
-const plugin: FastifyPluginAsync = async (app) => {
+const plugin: FastifyPluginAsync = (app) => {
   app.setErrorHandler((err: unknown, _req: FastifyRequest, reply: FastifyReply) => {
     if (isDomainError(err)) {
       const body: ErrorBody = { error: { code: err.code, message: err.message } };
@@ -16,7 +16,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     if (fastifyErr.validation) {
       return reply.status(400).send({ error: { code: 'VALIDATION', message: fastifyErr.message ?? 'invalid request' } });
     }
-    const status = fastifyErr.statusCode && fastifyErr.statusCode >= 400 ? fastifyErr.statusCode : 500;
+    const status = fastifyErr.statusCode !== undefined && fastifyErr.statusCode >= 400 ? fastifyErr.statusCode : 500;
     if (status < 500) {
       // Client errors raised by Fastify itself (malformed JSON, body too
       // large, unsupported media type) are the caller's fault, not ours.
@@ -30,6 +30,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   app.setNotFoundHandler((_req, reply) => {
     reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'route not found' } });
   });
+  return Promise.resolve();
 };
 
 export const errorHandlerPlugin = fp(plugin, { name: 'errorHandler' });

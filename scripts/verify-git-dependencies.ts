@@ -14,11 +14,39 @@ const dependencyFields = [
   "peerDependencies",
 ];
 
-function readJson(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
+type Json = Record<string, unknown>;
+
+/** The object stored under `key`, or an empty one when it is missing. */
+function objectAt(obj: Json, key: string): Json {
+  const value = obj[key];
+  return typeof value === "object" && value !== null ? (value as Json) : {};
+}
+interface GitSpec {
+  path: string;
+  field: string;
+  name: string;
+  spec: string;
+}
+interface ResolvedGitEntry {
+  path: string;
+  resolved: string;
 }
 
-function isGitSpec(value) {
+function readJson(path: string): Json {
+  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error(`${path} is not a JSON object`);
+  }
+  return parsed as Json;
+}
+
+function errorCode(error: unknown): unknown {
+  return typeof error === "object" && error !== null && "code" in error
+    ? error.code
+    : undefined;
+}
+
+function isGitSpec(value: unknown): value is string {
   return (
     typeof value === "string" &&
     (/^(?:git(?:\+[^:]+)?|github|gitlab|bitbucket):/.test(value) ||
@@ -28,7 +56,7 @@ function isGitSpec(value) {
   );
 }
 
-function workspaceManifests() {
+function workspaceManifests(): string[] {
   const paths = ["package.json"];
   for (const parent of ["apps", "packages"]) {
     try {
@@ -37,39 +65,42 @@ function workspaceManifests() {
           paths.push(join(parent, entry.name, "package.json"));
       }
     } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
+      if (errorCode(error) !== "ENOENT") throw error;
     }
   }
   return paths;
 }
 
-const manifestGitSpecs = [];
+const manifestGitSpecs: GitSpec[] = [];
 for (const path of workspaceManifests()) {
-  let manifest;
+  let manifest: Json;
   try {
     manifest = readJson(path);
   } catch (error) {
-    if (error?.code === "ENOENT") continue;
+    if (errorCode(error) === "ENOENT") continue;
     throw error;
   }
   for (const field of dependencyFields) {
-    for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
+    for (const [name, spec] of Object.entries(objectAt(manifest, field))) {
       if (isGitSpec(spec)) manifestGitSpecs.push({ path, field, name, spec });
     }
   }
 }
 
 const lock = readJson("package-lock.json");
-const lockGitSpecs = [];
-const resolvedGitEntries = [];
-for (const [path, pkg] of Object.entries(lock.packages ?? {})) {
+const lockGitSpecs: GitSpec[] = [];
+const resolvedGitEntries: ResolvedGitEntry[] = [];
+for (const [path, value] of Object.entries(objectAt(lock, "packages"))) {
+  const pkg =
+    typeof value === "object" && value !== null ? (value as Json) : {};
   for (const field of dependencyFields) {
-    for (const [name, spec] of Object.entries(pkg[field] ?? {})) {
+    for (const [name, spec] of Object.entries(objectAt(pkg, field))) {
       if (isGitSpec(spec)) lockGitSpecs.push({ path, field, name, spec });
     }
   }
-  if (typeof pkg.resolved === "string" && pkg.resolved.startsWith("git+")) {
-    resolvedGitEntries.push({ path, resolved: pkg.resolved });
+  const resolved = pkg["resolved"];
+  if (typeof resolved === "string" && resolved.startsWith("git+")) {
+    resolvedGitEntries.push({ path, resolved });
   }
 }
 
@@ -90,7 +121,7 @@ const expectedLockEntry = {
   resolved: expectedResolved,
 };
 
-function requireOnly(label, actual, expected) {
+function requireOnly(label: string, actual: unknown[], expected: object): void {
   if (JSON.stringify(actual) !== JSON.stringify([expected])) {
     console.error(
       `${label} must contain only the reviewed Roon transport pin.`

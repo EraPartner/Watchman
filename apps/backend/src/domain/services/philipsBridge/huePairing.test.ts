@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import { pairBridge } from './huePairing.js';
 import type { HttpClient, HttpRequest } from '../../../infra/http/client.js';
 import { UnavailableError, ValidationError } from '../../../core/errors.js';
+import { required } from "../../../test/required.js";
+
+/** A fake client whose send mock tests can read directly. */
+type FakeHttp = { send: Mock<HttpClient["send"]> };
 
 const FAKE_CERT_HASH = 'aabbcc112233aabbcc112233aabbcc112233aabbcc112233aabbcc112233aabb';
 
@@ -9,13 +13,13 @@ function fakeProbeCertHash(_host: string, _port: number, _timeoutMs: number): Pr
   return Promise.resolve(FAKE_CERT_HASH);
 }
 
-function fakeHttp(status: number, body: unknown): HttpClient {
+function fakeHttp(status: number, body: unknown): FakeHttp {
   return {
-    send: vi.fn(async (_req: HttpRequest) => ({
+    send: vi.fn<HttpClient["send"]>((_req: HttpRequest) => Promise.resolve({
       status,
       headers: {},
-      text: async () => JSON.stringify(body),
-      json: async <T>() => body as T,
+      text: () => Promise.resolve(JSON.stringify(body)),
+      json: <T>() => Promise.resolve(body as T),
     })),
   };
 }
@@ -36,10 +40,10 @@ describe('pairBridge', () => {
   it('posts to /api with devicetype only (no unused entertainment client key)', async () => {
     const http = fakeHttp(200, [{ success: { username: 'key' } }]);
     await pairBridge('192.168.1.50', { http, probeCertHash: fakeProbeCertHash });
-    const req = vi.mocked(http.send).mock.calls[0]![0];
+    const req = required(vi.mocked(http.send).mock.calls[0])[0];
     expect(req.url).toBe('https://192.168.1.50/api');
     expect(req.method).toBe('POST');
-    const body = JSON.parse(req.body as string);
+    const body = JSON.parse(req.body as string) as { devicetype: string };
     expect(body.devicetype).toBe('watchman#host');
     expect(body).toEqual({ devicetype: 'watchman#host' });
   });
@@ -60,12 +64,12 @@ describe('pairBridge', () => {
 
   it('throws UnavailableError when the bridge reply is not JSON', async () => {
     const http: HttpClient = {
-      send: vi.fn(async () => ({
+      send: vi.fn(() => Promise.resolve({
         status: 200,
         headers: {},
-        text: async () => '<html>',
-        json: async <T>(): Promise<T> => {
-          throw new SyntaxError('Unexpected token <');
+        text: () => Promise.resolve('<html>'),
+        json: <T>(): Promise<T> => {
+          return Promise.reject(new SyntaxError('Unexpected token <'));
         },
       })),
     };
@@ -125,7 +129,7 @@ describe('pairBridge', () => {
 
   it('propagates http error', async () => {
     const failHttp: HttpClient = {
-      send: vi.fn(async () => { throw new UnavailableError('connection refused'); }),
+      send: vi.fn(() => { return Promise.reject(new UnavailableError('connection refused')); }),
     };
     await expect(
       pairBridge('192.168.1.50', { http: failHttp, probeCertHash: fakeProbeCertHash }),
@@ -134,10 +138,10 @@ describe('pairBridge', () => {
 
   it('uses custom timeoutMs when provided', async () => {
     const http = fakeHttp(200, [{ success: { username: 'key' } }]);
-    const probeSpy = vi.fn(async (_h: string, _p: number, _t: number) => FAKE_CERT_HASH);
+    const probeSpy = vi.fn((_h: string, _p: number, _t: number) => Promise.resolve(FAKE_CERT_HASH));
     await pairBridge('192.168.1.50', { http, probeCertHash: probeSpy }, 3_000);
     expect(probeSpy).toHaveBeenCalledWith('192.168.1.50', 443, 3_000);
-    const req = vi.mocked(http.send).mock.calls[0]![0];
+    const req = required(vi.mocked(http.send).mock.calls[0])[0];
     expect(req.timeoutMs).toBe(3_000);
   });
 });

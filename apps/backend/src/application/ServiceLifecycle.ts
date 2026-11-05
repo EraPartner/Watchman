@@ -103,7 +103,7 @@ export function createServiceLifecycle(
         // onStart does real network I/O (Roon pairing, Tor ControlPort, …);
         // bound it so one hanging service cannot stall bring-up.
         const startP = svc.onStart();
-        startP.catch((e) =>
+        startP.catch((e: unknown) =>
           logger.error(
             { err: e, id: svc.id },
             "service onStart failed after timeout"
@@ -189,7 +189,7 @@ export function createServiceLifecycle(
         // disabled and out-of-profile services.
         await Promise.all(
           all.map((s) =>
-            bringUp(s, activeProfileId).catch((e) =>
+            bringUp(s, activeProfileId).catch((e: unknown) =>
               logger.error({ err: e, id: s.id }, "bringUp failed")
             )
           )
@@ -231,7 +231,7 @@ export function createServiceLifecycle(
       unsubs.push(
         bus.on("config:service.created", (p) => {
           void applyCreate(p.id)
-            .catch((e) =>
+            .catch((e: unknown) =>
               logger.error({ err: e, id: p.id }, "applyCreate failed")
             )
             .finally(() => announceApplied(p, "created"));
@@ -240,7 +240,7 @@ export function createServiceLifecycle(
       unsubs.push(
         bus.on("config:service.updated", (p) => {
           void applyUpdate(p.id)
-            .catch((e) =>
+            .catch((e: unknown) =>
               logger.error({ err: e, id: p.id }, "applyUpdate failed")
             )
             .finally(() => announceApplied(p, "updated"));
@@ -249,7 +249,7 @@ export function createServiceLifecycle(
       unsubs.push(
         bus.on("config:service.deleted", (p) => {
           void applyDelete(p.id)
-            .catch((e) =>
+            .catch((e: unknown) =>
               logger.error({ err: e, id: p.id }, "applyDelete failed")
             )
             .finally(() => announceApplied(p, "deleted"));
@@ -284,6 +284,6 @@ function rejectAfter(ms: number): Promise<never> {
       () => reject(new Error(`onStart timed out after ${ms}ms`)),
       ms
     );
-    t.unref?.();
+    t.unref();
   });
 }

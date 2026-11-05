@@ -8,7 +8,7 @@ export interface ServicesRouteDeps {
 }
 
 export function servicesRoutes(deps: ServicesRouteDeps): FastifyPluginAsync {
-  return async (app) => {
+  return (app) => {
     app.get("/services", async (req) => {
       const entries = await deps.aggregated.run(req.abortController.signal);
       // A failed Result carries a DomainError; JSON.stringify drops its
@@ -67,5 +67,6 @@ export function servicesRoutes(deps: ServicesRouteDeps): FastifyPluginAsync {
         return { data: result.value };
       }
     );
+    return Promise.resolve();
   };
 }

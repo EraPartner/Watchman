@@ -14,7 +14,7 @@ declare module "fastify" {
   }
 }
 
-const plugin: FastifyPluginAsync<RequestTimeoutOptions> = async (app, opts) => {
+const plugin: FastifyPluginAsync<RequestTimeoutOptions> = (app, opts) => {
   const { timeoutMs } = opts;
   app.decorateRequest("abortController", null as unknown as AbortController);
   app.addHook("onRequest", async (req, reply) => {
@@ -40,6 +40,7 @@ const plugin: FastifyPluginAsync<RequestTimeoutOptions> = async (app, opts) => {
       ac.abort(new Error("client aborted"));
     });
   });
+  return Promise.resolve();
 };
 
 export const requestTimeoutPlugin = fp(plugin, { name: "requestTimeout" });

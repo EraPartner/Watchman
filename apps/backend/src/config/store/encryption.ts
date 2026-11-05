@@ -26,7 +26,7 @@ export interface Encryptor {
   encrypt(plaintext: string): Buffer;
   decrypt(ciphertext: Buffer): string;
   encryptJson(value: unknown): Buffer;
-  decryptJson<T = unknown>(ciphertext: Buffer): T;
+  decryptJson(ciphertext: Buffer): unknown;
 }
 
 export function deriveKey(raw: string): Buffer {
@@ -120,8 +120,8 @@ export function createEncryptor(
     encryptJson(value: unknown): Buffer {
       return encrypt(JSON.stringify(value));
     },
-    decryptJson<T = unknown>(ciphertext: Buffer): T {
-      return JSON.parse(decrypt(ciphertext)) as T;
+    decryptJson(ciphertext: Buffer): unknown {
+      return JSON.parse(decrypt(ciphertext)) as unknown;
     },
   };
 }

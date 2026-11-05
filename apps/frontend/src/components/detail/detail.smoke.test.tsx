@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
   useMutation: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({ ok: true })),
+    mutateAsync: vi.fn(() => Promise.resolve({ ok: true })),
     mutate: vi.fn(),
     isPending: false,
     isError: false,
@@ -20,7 +20,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("@/pages/Settings/useConfigQueries", () => ({
   useTestService: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({ ok: true })),
+    mutateAsync: vi.fn(() => Promise.resolve({ ok: true })),
     isPending: false,
   })),
 }));
@@ -35,7 +35,7 @@ vi.mock("@/lib/metricHistory", () => ({
 
 vi.mock("@/services/configApi", () => ({
   configApi: {
-    testService: vi.fn(async () => ({ ok: true })),
+    testService: vi.fn(() => Promise.resolve({ ok: true })),
   },
 }));
 
@@ -46,6 +46,7 @@ vi.mock("sonner", () => ({
 import { ChartsPanel } from "./ChartsPanel";
 import { ConfigPanel } from "./ConfigPanel";
 import { RawStatsPanel } from "./RawStatsPanel";
+import { actAsync } from "@/test/actAsync";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -79,7 +80,7 @@ describe("ChartsPanel", () => {
 
   it("renders chart cards for provided specs", async () => {
     const charts = [
-      { metric: "bw", label: "Bandwidth", kind: "area" as const, format: (v: number) => `${v}` },
+      { metric: "bw", label: "Bandwidth", kind: "area" as const, format: (v: unknown) => String(v) },
     ];
     const { container, root } = await render(
       <ChartsPanel kind="tor" instanceId="main" charts={charts} tone="ok" />
@@ -90,7 +91,7 @@ describe("ChartsPanel", () => {
 
   it("shows sample count in chart card", async () => {
     const charts = [
-      { metric: "peers", label: "Peers", kind: "line" as const, format: (v: number) => `${v}` },
+      { metric: "peers", label: "Peers", kind: "line" as const, format: (v: unknown) => String(v) },
     ];
     const { container, root } = await render(
       <ChartsPanel kind="ipfs" instanceId={undefined} charts={charts} tone="neutral" />
@@ -115,6 +116,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: { host: "127.0.0.1", port: 9051 },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-02T00:00:00Z",
@@ -131,6 +133,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -146,6 +149,7 @@ describe("ConfigPanel", () => {
       kind: "bitcoin",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: { host: "10.0.0.1", port: 8332 },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -162,6 +166,7 @@ describe("ConfigPanel", () => {
       kind: "bitcoin",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: { rpcPassword: "***" },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -177,6 +182,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: false,
+      profileId: "default",
       config: { isRelay: true, metadata: { region: "us-east" } },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -194,15 +200,16 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
     };
     const { container, root } = await render(<ConfigPanel service={service} />);
     const testBtn = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Test connection")
+      b.textContent.includes("Test connection")
     );
-    await act(async () => { testBtn?.click(); });
+    await actAsync(() => { testBtn?.click(); });
     expect(toast.success).toHaveBeenCalled();
     act(() => root.unmount());
   });
@@ -211,7 +218,7 @@ describe("ConfigPanel", () => {
     const { toast } = await import("sonner");
     const { useTestService } = await import("@/pages/Settings/useConfigQueries");
     vi.mocked(useTestService).mockReturnValueOnce({
-      mutateAsync: vi.fn(async () => ({
+      mutateAsync: vi.fn(() => Promise.resolve({
         ok: false,
         latencyMs: 12,
         error: { code: "UNAVAILABLE", message: "connection refused" },
@@ -223,15 +230,16 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
     };
     const { container, root } = await render(<ConfigPanel service={service} />);
     const testBtn = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Test connection")
+      b.textContent.includes("Test connection")
     );
-    await act(async () => { testBtn?.click(); });
+    await actAsync(() => { testBtn?.click(); });
     expect(toast.error).toHaveBeenCalledWith("Connection failed: connection refused");
     act(() => root.unmount());
   });
@@ -241,7 +249,7 @@ describe("ConfigPanel", () => {
     const { useTestService } = await import("@/pages/Settings/useConfigQueries");
     vi.mocked(toast.success).mockClear();
     vi.mocked(useTestService).mockReturnValueOnce({
-      mutateAsync: vi.fn(async () => ({
+      mutateAsync: vi.fn(() => Promise.resolve({
         ok: true,
         latencyMs: 40,
         snapshot: { reachable: false, message: "ECONNREFUSED", at: 0 },
@@ -253,15 +261,16 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
     };
     const { container, root } = await render(<ConfigPanel service={service} />);
     const testBtn = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Test connection")
+      b.textContent.includes("Test connection")
     );
-    await act(async () => { testBtn?.click(); });
+    await actAsync(() => { testBtn?.click(); });
     expect(toast.error).toHaveBeenCalledWith("Connection failed: ECONNREFUSED");
     expect(toast.success).not.toHaveBeenCalled();
     act(() => root.unmount());

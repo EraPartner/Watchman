@@ -1,6 +1,8 @@
 import { defineConfig, loadEnv } from "vite";
 import type { ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/postcss";
+import autoprefixer from "autoprefixer";
 import path from "path";
 
 /** Top-level backend route prefixes that should be proxied to the Fastify
@@ -17,6 +19,12 @@ const BACKEND_PREFIXES: ReadonlyArray<string> = [
   "/config",
   "/profiles",
 ];
+
+/** A port from the environment, or `fallback` when it is unset, 0 or not a number. */
+function envPort(value: string | undefined, fallback: number): number {
+  const port = parseInt(value ?? "");
+  return Number.isNaN(port) || port === 0 ? fallback : port;
+}
 
 function backendProxyRules(): Record<string, ProxyOptions> {
   const httpRule: ProxyOptions = {
@@ -45,10 +53,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react({
-        // Enable React Fast Refresh
-        fastRefresh: true,
-      }),
+      // Fast Refresh is always on in @vitejs/plugin-react v6; the old
+      // `fastRefresh` option no longer exists.
+      react(),
     ],
     resolve: {
       alias: {
@@ -56,7 +63,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: parseInt(env.VITE_FRONTEND_PORT) || 5173,
+      port: envPort(env.VITE_FRONTEND_PORT, 5173),
       host: true,
       strictPort: true,
       // Allow access from both localhost and production domain
@@ -68,7 +75,7 @@ export default defineConfig(({ mode }) => {
       ],
       // Enable HMR over network
       hmr: {
-        port: parseInt(env.VITE_HMR_PORT) || 24678,
+        port: envPort(env.VITE_HMR_PORT, 24678),
       },
       // Proxy API calls to backend server.
       // The backend exposes resources at the root (e.g. /services, /instances)
@@ -77,7 +84,7 @@ export default defineConfig(({ mode }) => {
       proxy: backendProxyRules(),
     },
     preview: {
-      port: parseInt(env.VITE_PREVIEW_PORT) || 4173,
+      port: envPort(env.VITE_PREVIEW_PORT, 4173),
       strictPort: false,
       proxy: backendProxyRules(),
       // Security headers for dev server
@@ -151,6 +158,10 @@ export default defineConfig(({ mode }) => {
     },
     css: {
       devSourcemap: mode === "development",
+      // PostCSS plugins (formerly postcss.config.js).
+      postcss: {
+        plugins: [tailwindcss(), autoprefixer()],
+      },
     },
   };
 });

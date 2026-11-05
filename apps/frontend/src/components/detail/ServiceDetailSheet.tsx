@@ -1,3 +1,4 @@
+import { isNonZero } from "@/lib/number";
 import { useMemo, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { ExternalLink, Check, X } from "lucide-react";
@@ -59,7 +60,7 @@ function fmtMs(ms?: number): string | undefined {
 
 export interface ServiceDetailSheetProps {
   kind: ServiceKind | undefined;
-  instanceId?: string;
+  instanceId?: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -184,9 +185,10 @@ export function ServiceDetailSheet({
           : ev.level === "warning"
             ? "warn"
             : "info";
+      const parsedTs = Date.parse(ev.timestamp);
       const next: ServiceEvent = {
         id: `${ev.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
-        ts: Date.parse(ev.timestamp) || Date.now(),
+        ts: isNonZero(parsedTs) ? parsedTs : Date.now(),
         serviceKey,
         level,
         message: ev.message ?? "Service event",
@@ -246,7 +248,7 @@ export function ServiceDetailSheet({
   const quickLinkUrl =
     renderer?.quickLink && service
       ? renderer.quickLink({
-          config: service.config as Record<string, unknown>,
+          config: service.config,
         })
       : undefined;
 

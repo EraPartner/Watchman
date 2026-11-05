@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import * as net from 'node:net';
 import { createTorEventSubscriptionFactory } from './eventSubscription.js';
 import { UnavailableError, UnauthorizedError } from '../../core/errors.js';
+import { required } from "../../test/required.js";
 
 let server: net.Server;
 let port: number;
@@ -116,9 +117,10 @@ describe('createTorEventSubscriptionFactory', () => {
   });
 
   it('fires registered handler when 650 BW event arrives', async () => {
-    let serverSocket: net.Socket | null = null;
+    // A holder object: TypeScript does not see the assignment in the callback.
+    const pushed: { socket: net.Socket | null } = { socket: null };
     serverHandler = (socket) => {
-      serverSocket = socket;
+      pushed.socket = socket;
       socket.setEncoding('utf8');
       socket.on('error', () => undefined);
       let buf = '';
@@ -146,7 +148,7 @@ describe('createTorEventSubscriptionFactory', () => {
     sub.on('BW', (event, args) => received.push({ event, args }));
 
     // Server pushes async event
-    serverSocket!.write('650 BW 512 256\r\n');
+    required(pushed.socket).write('650 BW 512 256\r\n');
 
     // Give the data event a tick to process
     await new Promise<void>((resolve) => setTimeout(resolve, 20));

@@ -14,9 +14,10 @@ import type {
   ZmqMessage,
   ZmqSubscriberHandle,
 } from "../../../infra/zmq/zmqSubscriber.js";
+import { toText } from "../../../core/text.js";
 
 function fakePing(): PingProber {
-  return { probe: async () => ({ success: true, avgMs: 5 }) };
+  return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
 }
 
 let server: Server;
@@ -34,7 +35,7 @@ let state: {
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   state.requests += 1;
-  state.lastAuth = req.headers["authorization"] as string | undefined;
+  state.lastAuth = req.headers["authorization"];
   if (
     state.requireAuth &&
     state.lastAuth !== "Basic " + Buffer.from("user:pw").toString("base64")
@@ -91,7 +92,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
       );
     } else {
       res.end(
-        JSON.stringify(envelopeFor((parsed ?? {}) as { method?: string }))
+        JSON.stringify(envelopeFor(parsed ?? {}))
       );
     }
   });
@@ -209,15 +210,16 @@ function makeFakeZmq(): {
       handlers.add(h);
       return () => handlers.delete(h);
     },
-    async close() {
+    close() {
       closed = true;
       handlers.clear();
+      return Promise.resolve();
     },
   };
 
-  const connect: ZmqConnectFn = async (endpoint, topics) => {
+  const connect: ZmqConnectFn = (endpoint, topics) => {
     connectCalls.push({ endpoint, topics });
-    return handle;
+    return Promise.resolve(handle);
   };
 
   const emit = (msg: ZmqMessage) => {
@@ -519,8 +521,8 @@ describe("BitcoinService — ZMQ (BT2)", () => {
       ping: fakePing(),
       config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => 0,
-      zmqConnect: async () => {
-        throw new Error("zeromq not installed");
+      zmqConnect: () => {
+        return Promise.reject(new Error("zeromq not installed"));
       },
     });
     await svc.onStart();
@@ -807,8 +809,8 @@ describe("BitcoinService — ZMQ (BT2)", () => {
   });
 
   it("ZMQ connect failure is non-fatal — service continues without ZMQ metrics", async () => {
-    const failingConnect: ZmqConnectFn = async () => {
-      throw new Error("zeromq not installed");
+    const failingConnect: ZmqConnectFn = () => {
+      return Promise.reject(new Error("zeromq not installed"));
     };
     const svc = new BitcoinService({
       http: createHttpClient(),
@@ -955,8 +957,8 @@ describe("BitcoinService — ZMQ (BT2)", () => {
               return {
                 status: 403,
                 headers: {},
-                text: async () => "",
-                json: async <T>() => ({}) as T,
+                text: () => Promise.resolve(""),
+                json: <T>() => Promise.resolve(({}) as T),
               };
             }
             return http.send(req);
@@ -971,7 +973,7 @@ describe("BitcoinService — ZMQ (BT2)", () => {
       if (res.ok) {
         expect(res.value.metrics.blocks).toBe(850000);
         expect(res.value.metrics.chainTipsCount).toBeNull();
-        expect(String(res.value.metrics.extrasError)).toContain("rpcwhitelist");
+        expect(toText(res.value.metrics.extrasError)).toContain("rpcwhitelist");
       }
     });
   });

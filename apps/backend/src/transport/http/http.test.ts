@@ -18,37 +18,41 @@ import type { ConfigStore } from "../../config/store/ConfigStore.js";
 import type { ServiceLifecycle } from "../../application/ServiceLifecycle.js";
 import type { HttpClient } from "../../infra/http/client.js";
 import { SERVER_VERSION } from "../../version.js";
+import { required } from "../../test/required.js";
 
 class FakeSvc extends BaseService {
   readonly kind: string;
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
+  private readonly healthy: boolean;
+
   constructor(
     kind: string,
     instanceId: string,
-    private readonly healthy = true
+    healthy = true
   ) {
     super();
+    this.healthy = healthy;
     this.kind = kind;
     this.instanceId = instanceId;
   }
-  async checkHealth(): Promise<HealthResult> {
-    return this.healthy
+  checkHealth(): Promise<HealthResult> {
+    return Promise.resolve(this.healthy
       ? ok({ reachable: true, at: 1 })
-      : err(new UnavailableError("down"));
+      : err(new UnavailableError("down")));
   }
-  async getStats(): Promise<StatsResult> {
-    return ok({ metrics: { count: 42 }, at: 1 });
+  getStats(): Promise<StatsResult> {
+    return Promise.resolve(ok({ metrics: { count: 42 }, at: 1 }));
   }
 }
 
 async function makeApp(registry: ServiceRegistry) {
   const logger = pino({ level: "silent" });
-  const fakeStore = { loadAll: async () => [] } as unknown as ConfigStore;
+  const fakeStore = { loadAll: () => Promise.resolve([]) } as unknown as ConfigStore;
   const fakeLifecycle = {} as ServiceLifecycle;
   const fakeHttp = {
-    send: async () => {
-      throw new Error("not used in tests");
+    send: () => {
+      return Promise.reject(new Error("not used in tests"));
     },
   } as HttpClient;
   return buildServer({
@@ -63,13 +67,13 @@ async function makeApp(registry: ServiceRegistry) {
       store: fakeStore,
       lifecycle: fakeLifecycle,
       registry,
-      profiles: { getProfile: async () => undefined },
+      profiles: { getProfile: () => Promise.resolve(undefined) },
     },
     profiles: {
       profiles: {} as never,
       store: fakeStore,
       lifecycle: fakeLifecycle,
-      detector: { detect: async () => ({}) },
+      detector: { detect: () => Promise.resolve({}) },
     },
     setup: { store: fakeStore, http: fakeHttp },
   });
@@ -91,7 +95,7 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/services" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { data: Array<{ id: string }> };
+    const body = res.json<{ data: Array<{ id: string }> }>();
     expect(body.data).toHaveLength(2);
     await app.close();
   });
@@ -102,10 +106,10 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/services" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ result: { ok: boolean; error?: unknown } }>;
-    };
-    expect(body.data[0]!.result).toEqual({
+    }>();
+    expect(required(body.data[0]).result).toEqual({
       ok: false,
       error: { code: "UNAVAILABLE", message: "down" },
     });
@@ -133,7 +137,7 @@ describe("http routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(
-      (res.json() as { data: { metrics: { count: number } } }).data.metrics
+      res.json<{ data: { metrics: { count: number } } }>().data.metrics
         .count
     ).toBe(42);
     await app.close();
@@ -196,7 +200,7 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/instances" });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(2);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(2);
     await app.close();
   });
 
@@ -206,7 +210,7 @@ describe("http routes", () => {
     r.register(new FakeSvc("ipfs", "main"));
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/instances/ipfs" });
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(1);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(1);
     await app.close();
   });
 
@@ -214,10 +218,10 @@ describe("http routes", () => {
     const app = await makeApp(new ServiceRegistry());
     const res = await app.inject({ method: "GET", url: "/metrics" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       breakers: unknown;
       process: { uptimeSec: number };
-    };
+    }>();
     expect(body.breakers).toBeDefined();
     expect(body.process.uptimeSec).toBeGreaterThanOrEqual(0);
     await app.close();
@@ -235,7 +239,7 @@ describe("http routes", () => {
     const app = await makeApp(new ServiceRegistry());
     const res = await app.inject({ method: "GET", url: "/meta/version" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { version: string; node: string };
+    const body = res.json<{ version: string; node: string }>();
     expect(body.node).toMatch(/^v\d+/);
     // Regression: was npm_package_version, so "dev" outside npm scripts.
     expect(body.version).toBe(SERVER_VERSION);
@@ -249,7 +253,7 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/kinds" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { data: string[] };
+    const body = res.json<{ data: string[] }>();
     expect(body.data).toContain("bitcoin");
     expect(body.data).toContain("ipfs");
     await app.close();

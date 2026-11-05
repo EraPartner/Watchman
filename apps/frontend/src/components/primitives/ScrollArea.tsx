@@ -1,9 +1,9 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
 import * as S from "@radix-ui/react-scroll-area";
 import { cn } from "@/lib/utils";
 
 export const ScrollArea = forwardRef<
-  ElementRef<typeof S.Root>,
+  ComponentRef<typeof S.Root>,
   ComponentPropsWithoutRef<typeof S.Root>
 >(({ className, children, ...rest }, ref) => (
   <S.Root
@@ -22,7 +22,7 @@ export const ScrollArea = forwardRef<
 ScrollArea.displayName = "ScrollArea";
 
 export const ScrollBar = forwardRef<
-  ElementRef<typeof S.ScrollAreaScrollbar>,
+  ComponentRef<typeof S.ScrollAreaScrollbar>,
   ComponentPropsWithoutRef<typeof S.ScrollAreaScrollbar>
 >(({ className, orientation = "vertical", ...rest }, ref) => (
   <S.ScrollAreaScrollbar

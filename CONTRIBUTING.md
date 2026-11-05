@@ -75,7 +75,7 @@ Patterns and conventions: [`docs/reference/code-patterns.md`](./docs/reference/c
 
 ## Git hooks
 
-`npm run deps:ci:portable` runs `scripts/setup-git-hooks.mjs` through npm's `prepare` lifecycle, which points
+`npm run deps:ci:portable` runs `scripts/setup-git-hooks.ts` through npm's `prepare` lifecycle, which points
 `core.hooksPath` at the version-controlled `.githooks/` directory (the same
 mechanism Vision and VaultLens use — no husky). Re-run by hand with
 `npm run hooks:setup`.
@@ -97,7 +97,7 @@ so a bypassed commit will just fail later.
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject`
-— enforced by the `commit-msg` hook (config: `commitlint.config.mjs`).
+— enforced by the `commit-msg` hook (config: `commitlint.config.ts`).
 
 Types in use: `feat`, `fix`, `chore`, `docs`, `refactor`, `build`, `perf`, `test`,
 plus scoped variants like `feat(backend):`, `feat(desktop):`, `chore(security):`.

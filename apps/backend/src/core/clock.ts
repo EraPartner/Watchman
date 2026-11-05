@@ -38,8 +38,8 @@ export function createFakeClock(initial = 0): FakeClock {
         const due = timers
           .filter((t) => !t.cancelled && t.at <= target)
           .sort((a, b) => a.at - b.at);
-        if (due.length === 0) break;
-        const next = due[0]!;
+        const [next] = due;
+        if (!next) break;
         current = next.at;
         next.cancelled = true;
         next.fn();

@@ -1,9 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, type Mock } from "vitest";
 import { PhilipsBridgeService } from "./PhilipsBridgeService.js";
 import type { PingProber, PingResult } from "../../../infra/net/pingProbe.js";
 import type { PhilipsBridgeInstance } from "../../../config/services.js";
 import type { HttpClient, HttpRequest } from "../../../infra/http/client.js";
 import { UnauthorizedError } from "../../../core/errors.js";
+import { required } from "../../../test/required.js";
+
+/** A fake client whose send mock tests can read directly. */
+type FakeHttp = { send: Mock<HttpClient["send"]> };
 
 function makeConfig(
   overrides: Partial<PhilipsBridgeInstance> = {}
@@ -23,17 +27,19 @@ function makeConfig(
 }
 
 function fakePing(result: PingResult): PingProber {
-  return { probe: async () => result };
+  return { probe: () => Promise.resolve(result) };
 }
 
-function fakeHttp(status: number, body: unknown): HttpClient {
+function fakeHttp(status: number, body: unknown): FakeHttp {
   return {
-    send: vi.fn(async (_req: HttpRequest) => ({
-      status,
-      headers: {},
-      text: async () => JSON.stringify(body),
-      json: async <T>() => body as T,
-    })),
+    send: vi.fn<HttpClient["send"]>((_req: HttpRequest) =>
+      Promise.resolve({
+        status,
+        headers: {},
+        text: () => Promise.resolve(JSON.stringify(body)),
+        json: <T>() => Promise.resolve(body as T),
+      })
+    ),
   };
 }
 
@@ -92,7 +98,7 @@ describe("PhilipsBridgeService", () => {
 
   it("usePing=false skips ICMP probe entirely", async () => {
     const probe = vi.fn(
-      async (): Promise<PingResult> => ({ success: true, avgMs: 5 })
+      (): Promise<PingResult> => Promise.resolve({ success: true, avgMs: 5 })
     );
     const svc = new PhilipsBridgeService({
       ping: { probe },
@@ -112,7 +118,7 @@ describe("PhilipsBridgeService", () => {
 
   it("usePing=false + applicationKey set: still probes API and reports service reachable", async () => {
     const probe = vi.fn(
-      async (): Promise<PingResult> => ({ success: true, avgMs: 5 })
+      (): Promise<PingResult> => Promise.resolve({ success: true, avgMs: 5 })
     );
     const svc = new PhilipsBridgeService({
       ping: { probe },
@@ -202,7 +208,7 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
     await svc.getStats(new AbortController().signal);
     const calls = vi.mocked(http.send).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
-    const headers = calls[0]![0].headers ?? {};
+    const headers = required(calls[0])[0].headers ?? {};
     expect(headers["hue-application-key"]).toBe("test-app-key");
   });
 
@@ -215,7 +221,7 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
       now: () => 0,
     });
     await svc.getStats(new AbortController().signal);
-    const url = vi.mocked(http.send).mock.calls[0]![0].url;
+    const url = required(vi.mocked(http.send).mock.calls[0])[0].url;
     expect(url).toContain("/clip/v2/resource/light");
   });
 
@@ -237,23 +243,22 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
   it("health probes the small bridge resource, reads its body and times the API call", async () => {
     let t = 0;
     let bodyRead = false;
-    const http: HttpClient = {
-      send: vi.fn(async (_req: HttpRequest) => {
-        t += 40;
-        return {
-          status: 200,
-          headers: {},
-          text: async () => {
-            bodyRead = true;
-            return "{}";
-          },
-          json: async <T>() => {
-            bodyRead = true;
-            return {} as T;
-          },
-        };
-      }),
-    };
+    const send = vi.fn((_req: HttpRequest) => {
+      t += 40;
+      return Promise.resolve({
+        status: 200,
+        headers: {},
+        text: () => {
+          bodyRead = true;
+          return Promise.resolve("{}");
+        },
+        json: <T>() => {
+          bodyRead = true;
+          return Promise.resolve({} as T);
+        },
+      });
+    });
+    const http: HttpClient = { send };
     const svc = new PhilipsBridgeService({
       ping: fakePing({ success: false }),
       http,
@@ -261,18 +266,17 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
       now: () => t,
     });
     const res = await svc.checkHealth(new AbortController().signal);
-    const url = vi.mocked(http.send).mock.calls[0]![0].url;
+    const url = required(send.mock.calls[0])[0].url;
     expect(url).toContain("/clip/v2/resource/bridge");
     expect(bodyRead).toBe(true);
     expect(res.ok && res.value.latencyMs).toBe(40);
   });
 
   it("service unreachable when API call throws", async () => {
-    const http: HttpClient = {
-      send: vi.fn(async () => {
-        throw new Error("connection refused");
-      }),
-    };
+    const send = vi.fn(() => {
+      return Promise.reject(new Error("connection refused"));
+    });
+    const http: HttpClient = { send };
     const svc = new PhilipsBridgeService({
       ping: fakePing({ success: false }),
       http,
@@ -305,8 +309,8 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
 
   it("getStats reports UNAVAILABLE when every API read fails, not a snapshot of blanks", async () => {
     const http: HttpClient = {
-      send: vi.fn(async () => {
-        throw new Error("network error");
+      send: vi.fn(() => {
+        return Promise.reject(new Error("network error"));
       }),
     };
     const svc = new PhilipsBridgeService({
@@ -343,25 +347,25 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
 
 describe("PhilipsBridgeService extended resources + eventstream", () => {
   // route-aware HTTP fake: responds per CLIP v2 resource path
-  function routedHttp(routes: Record<string, unknown>): HttpClient {
+  function routedHttp(routes: Record<string, unknown>): FakeHttp {
     return {
-      send: vi.fn(async (req: HttpRequest) => {
+      send: vi.fn<HttpClient["send"]>((req: HttpRequest) => {
         const path = new URL(req.url).pathname;
         const body = routes[path];
         if (body === undefined) {
-          return {
+          return Promise.resolve({
             status: 404,
             headers: {},
-            text: async () => "",
-            json: async <T>() => ({}) as T,
-          };
+            text: () => Promise.resolve(""),
+            json: <T>() => Promise.resolve({} as T),
+          });
         }
-        return {
+        return Promise.resolve({
           status: 200,
           headers: {},
-          text: async () => JSON.stringify(body),
-          json: async <T>() => body as T,
-        };
+          text: () => Promise.resolve(JSON.stringify(body)),
+          json: <T>() => Promise.resolve(body as T),
+        });
       }),
     };
   }

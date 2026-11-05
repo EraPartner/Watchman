@@ -12,7 +12,11 @@ export interface HeartbeatDeps {
 export class HeartbeatScheduler {
   private handle: unknown = null;
 
-  constructor(private readonly deps: HeartbeatDeps) {}
+  private readonly deps: HeartbeatDeps;
+
+  constructor(deps: HeartbeatDeps) {
+    this.deps = deps;
+  }
 
   start(): void {
     if (this.handle !== null) return;

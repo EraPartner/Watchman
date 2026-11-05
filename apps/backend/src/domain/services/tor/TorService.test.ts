@@ -16,6 +16,7 @@ import type {
   TorEventSubscriptionFactory,
   TorEventHandler,
 } from "../../../infra/tor/eventSubscription.js";
+import { required } from "../../../test/required.js";
 
 let server: Server;
 let port: number;
@@ -146,8 +147,8 @@ function makeConfig(overrides: Partial<TorInstance> = {}): TorInstance {
 
 function fakePing(success = true, avgMs = 5): PingProber {
   return {
-    probe: async () =>
-      success ? { success: true, avgMs } : { success: false },
+    probe: () =>
+      Promise.resolve(success ? { success: true, avgMs } : { success: false }),
   };
 }
 
@@ -155,11 +156,11 @@ function fakeTorControl(
   info: Map<string, string> = new Map()
 ): TorControlClient {
   return {
-    connect: async () => ({
-      getinfo: async () => info,
-      getconf: async () => new Map(),
-      signal: async () => undefined,
-      close: async () => undefined,
+    connect: () => Promise.resolve({
+      getinfo: () => Promise.resolve(info),
+      getconf: () => Promise.resolve(new Map()),
+      signal: () => Promise.resolve(undefined),
+      close: () => Promise.resolve(undefined),
     }),
   };
 }
@@ -178,31 +179,33 @@ function makeFakeSub(): FakeTorEventSub {
     fire(event: string, args: string[]): void {
       for (const h of handlers.get(event) ?? []) h(event, args);
     },
-    async setevents(events: string[], _signal: AbortSignal): Promise<void> {
+    setevents(events: string[], _signal: AbortSignal): Promise<void> {
       sub.lastSetevents = events;
+      return Promise.resolve();
     },
     on(event: string, handler: TorEventHandler): void {
       const existing = handlers.get(event);
       if (existing) existing.push(handler);
       else handlers.set(event, [handler]);
     },
-    async close(): Promise<void> {
+    close(): Promise<void> {
       sub.wasClosed = true;
+      return Promise.resolve();
     },
   };
   return sub;
 }
 
 function makeFakeSubFactory(sub: FakeTorEventSub): TorEventSubscriptionFactory {
-  return { create: async () => sub };
+  return { create: () => Promise.resolve(sub) };
 }
 
 function failingTorControl(
   e: Error = new UnavailableError("connection refused")
 ): TorControlClient {
   return {
-    connect: async () => {
-      throw e;
+    connect: () => {
+      return Promise.reject(e);
     },
   };
 }
@@ -214,11 +217,11 @@ function failingTorControl(
 function sequenceTorControl(infos: Map<string, string>[]): TorControlClient {
   let idx = 0;
   return {
-    connect: async () => ({
-      getinfo: async () => infos[idx++ % infos.length] ?? new Map(),
-      getconf: async () => new Map(),
-      signal: async () => undefined,
-      close: async () => undefined,
+    connect: () => Promise.resolve({
+      getinfo: () => Promise.resolve(infos[idx++ % infos.length] ?? new Map()),
+      getconf: () => Promise.resolve(new Map()),
+      signal: () => Promise.resolve(undefined),
+      close: () => Promise.resolve(undefined),
     }),
   };
 }
@@ -549,18 +552,18 @@ describe("TorService", () => {
       const values = new Map([["version", "0.4.8.10"], ["traffic/read", "1"]]);
       const requested: string[] = [];
       const strict: TorControlClient = {
-        connect: async () => ({
-          getinfo: async (keys: string[]) => {
+        connect: () => Promise.resolve({
+          getinfo: (keys: string[]) => {
             requested.push(...keys);
             const bad = keys.find((k) => !SPEC_KEYS.has(k) && !k.startsWith("ns/id/") && !k.startsWith("ip-to-country/"));
-            if (bad) throw new Error(`552 Unrecognized key "${bad}"`);
-            return new Map(keys.filter((k) => values.has(k)).map((k) => [k, values.get(k)!]));
+            if (bad) return Promise.reject(new Error(`552 Unrecognized key "${bad}"`));
+            return Promise.resolve(new Map(keys.filter((k) => values.has(k)).map((k) => [k, required(values.get(k))])));
           },
-          getconf: async () => new Map(),
-          signal: async () => {
-            throw new Error("Watchman must not send SIGNAL");
+          getconf: () => Promise.resolve(new Map()),
+          signal: () => {
+            return Promise.reject(new Error("Watchman must not send SIGNAL"));
           },
-          close: async () => undefined,
+          close: () => Promise.resolve(undefined),
         }),
       };
       const svc = new TorService({
@@ -624,7 +627,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       expect(sub.lastSetevents).toContain("BW");
     });
 
@@ -638,8 +641,8 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await svc.onStart?.();
-      await svc.onStop?.();
+      await svc.onStart();
+      await svc.onStop();
       expect(sub.wasClosed).toBe(true);
     });
 
@@ -653,7 +656,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 7,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       sub.fire("BW", ["2048", "1024"]);
       const res = await svc.getStats(new AbortController().signal);
       expect(res.ok).toBe(true);
@@ -675,7 +678,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 7,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       sub.fire("BW", ["1024", "4096"]);
       const res = await svc.getStats(new AbortController().signal);
       expect(res.ok).toBe(true);
@@ -694,7 +697,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => t,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       sub.fire("BW", ["2048", "1024"]);
       t = 60_000;
       const res = await svc.getStats(new AbortController().signal);
@@ -710,10 +713,10 @@ describe("TorService", () => {
       const sub = makeFakeSub();
       let creates = 0;
       const factory: TorEventSubscriptionFactory = {
-        create: async () => {
+        create: () => {
           creates++;
-          if (creates === 1) throw new UnavailableError("connection refused");
-          return sub;
+          if (creates === 1) return Promise.reject(new UnavailableError("connection refused"));
+          return Promise.resolve(sub);
         },
       };
       const svc = new TorService({
@@ -724,7 +727,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await expect(svc.onStart?.()).rejects.toThrow();
+      await expect(svc.onStart()).rejects.toThrow();
       await svc.getStats(new AbortController().signal);
       // resubscribe runs in the background
       await new Promise((r) => setTimeout(r, 0));
@@ -733,13 +736,13 @@ describe("TorService", () => {
       sub.fire("BW", ["10", "20"]);
       const res = await svc.getStats(new AbortController().signal);
       if (res.ok) expect(res.value.metrics.bwRead).toBe(10);
-      await svc.onStop?.();
+      await svc.onStop();
     });
 
     it("closes the subscription when SETEVENTS fails", async () => {
       const sub = makeFakeSub();
-      sub.setevents = async () => {
-        throw new UnavailableError("tor SETEVENTS failed 552");
+      sub.setevents = () => {
+        return Promise.reject(new UnavailableError("tor SETEVENTS failed 552"));
       };
       const svc = new TorService({
         http: createHttpClient(),
@@ -749,7 +752,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await expect(svc.onStart?.()).rejects.toThrow("SETEVENTS");
+      await expect(svc.onStart()).rejects.toThrow("SETEVENTS");
       expect(sub.wasClosed).toBe(true);
     });
 
@@ -762,8 +765,8 @@ describe("TorService", () => {
         now: () => 0,
       });
       // Must not throw; no subscription created
-      await svc.onStart?.();
-      await svc.onStop?.();
+      await svc.onStart();
+      await svc.onStop();
     });
   });
 
@@ -958,9 +961,9 @@ describe("TorService", () => {
     it("cooldown: subsequent checkHealth skips ControlPort entirely", async () => {
       let connectAttempts = 0;
       const counting: TorControlClient = {
-        connect: async () => {
+        connect: () => {
           connectAttempts++;
-          throw new UnavailableError("refused");
+          return Promise.reject(new UnavailableError("refused"));
         },
       };
       let nowMs = 1_000;
@@ -982,9 +985,9 @@ describe("TorService", () => {
     it("cooldown expires after 5 min, ControlPort is retried", async () => {
       let connectAttempts = 0;
       const counting: TorControlClient = {
-        connect: async () => {
+        connect: () => {
           connectAttempts++;
-          throw new UnavailableError("refused");
+          return Promise.reject(new UnavailableError("refused"));
         },
       };
       let nowMs = 1_000;
@@ -1010,19 +1013,19 @@ describe("TorService", () => {
       let connectShouldFail = true;
       let connectAttempts = 0;
       const ping: PingProber = {
-        probe: async () =>
-          pingOk ? { success: true, avgMs: 5 } : { success: false },
+        probe: () =>
+          Promise.resolve(pingOk ? { success: true, avgMs: 5 } : { success: false }),
       };
       const torControl: TorControlClient = {
-        connect: async () => {
+        connect: () => {
           connectAttempts++;
-          if (connectShouldFail) throw new UnavailableError("refused");
-          return {
-            getinfo: async () => new Map([["status/circuit-established", "1"]]),
-            getconf: async () => new Map(),
-            signal: async () => undefined,
-            close: async () => undefined,
-          };
+          if (connectShouldFail) return Promise.reject(new UnavailableError("refused"));
+          return Promise.resolve({
+            getinfo: () => Promise.resolve(new Map([["status/circuit-established", "1"]])),
+            getconf: () => Promise.resolve(new Map()),
+            signal: () => Promise.resolve(undefined),
+            close: () => Promise.resolve(undefined),
+          });
         },
       };
       let nowMs = 1_000;
@@ -1056,9 +1059,9 @@ describe("TorService", () => {
     it("on-LAN ControlPort failure (ICMP up) does NOT trigger fallback — surfaces as service down", async () => {
       let connectAttempts = 0;
       const counting: TorControlClient = {
-        connect: async () => {
+        connect: () => {
           connectAttempts++;
-          throw new UnavailableError("refused");
+          return Promise.reject(new UnavailableError("refused"));
         },
       };
       const svc = new TorService({
@@ -1081,7 +1084,7 @@ describe("TorService", () => {
     });
 
     it("getStats honors cooldown set by checkHealth and serves Onionoo metrics", async () => {
-      let nowMs = 1_000;
+      const nowMs = 1_000;
       const svc = new TorService({
         http: createHttpClient(),
         ping: fakePing(false),
@@ -1243,7 +1246,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       expect(sub.lastSetevents).toEqual(["BW", "WARN", "ERR"]);
       sub.fire("WARN", ["Your", "clock", "is", "skewed"]);
       sub.fire("ERR", ["Could", "not", "bind"]);

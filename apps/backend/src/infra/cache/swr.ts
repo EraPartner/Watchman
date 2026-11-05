@@ -24,7 +24,10 @@ interface Entry<V> {
   staleUntil: number;
 }
 
-export function createSwrCache<V extends NonNullable<unknown>>(
+/** Any value but null or undefined, which mark a cache miss. */
+type Cacheable = string | number | boolean | bigint | symbol | object;
+
+export function createSwrCache<V extends Cacheable>(
   policy: SwrPolicy,
   clock: Clock,
   bus?: EventBus,
@@ -72,7 +75,7 @@ export function createSwrCache<V extends NonNullable<unknown>>(
       if (entry && entry.staleUntil > now) {
         counters.stale++;
         counters.revalidations++;
-        fetchAndStore(key, fetcher).catch((err) => {
+        fetchAndStore(key, fetcher).catch((err: unknown) => {
           if (!bus) return;
           const nowTs = clock.now();
           const prev = lastFailureEmit.get(key);

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 
-const holder = vi.hoisted(() => ({ current: null as unknown }));
+const holder = vi.hoisted((): { current: unknown } => ({ current: null }));
 
 vi.mock("pigpio-client", () => ({
   default: { pigpio: () => holder.current },

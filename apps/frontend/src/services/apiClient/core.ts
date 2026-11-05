@@ -1,3 +1,5 @@
+import { isNonZero } from "@/lib/number";
+import { toText } from "@/lib/text";
 import { APP_CONFIG } from "../../lib/constants";
 import { getBackendUrl } from "../../lib/backendUrl";
 import { extractApiError, unwrapApiResponse } from "../../lib/apiResponse";
@@ -57,7 +59,7 @@ export class ApiClientCore {
           !(code !== undefined && NON_RETRYABLE_CODES.has(code)) &&
           ((status !== undefined && RETRYABLE_STATUSES.includes(status)) ||
             name === "AbortError" ||
-            (error instanceof TypeError && error.message?.includes("fetch")));
+            (error instanceof TypeError && error.message.includes("fetch")));
 
         if (!isRetryable || attempt === MAX_RETRIES) {
           throw error;
@@ -69,12 +71,15 @@ export class ApiClientCore {
       }
     }
 
-    throw lastError || new Error("Unknown error after retries");
+    // Unreachable in practice: the last attempt rethrows above.
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Unknown error after retries");
   }
 
   private makeRequestKey(url: string, options?: ApiRequestOptions) {
     const method =
-      options && options.method ? String(options.method).toUpperCase() : "GET";
+      options?.method ? options.method.toUpperCase() : "GET";
     let bodyKey = "";
     try {
       if (options && options.body != null) {
@@ -104,20 +109,21 @@ export class ApiClientCore {
     }
 
     if (Array.isArray(headers)) {
-      for (const entry of headers) {
+      const pairs: unknown[] = headers;
+      for (const entry of pairs) {
         if (!Array.isArray(entry) || entry.length < 2) continue;
-        const [key, value] = entry;
-        normalized[String(key)] = String(value);
+        const pair: unknown[] = entry;
+        normalized[toText(pair[0], "")] = toText(pair[1], "");
       }
       return normalized;
     }
 
-    if (typeof headers === "object" && headers !== null) {
+    if (typeof headers === "object") {
       for (const [key, value] of Object.entries(
         headers as Record<string, unknown>
       )) {
         if (value !== undefined) {
-          normalized[key] = String(value);
+          normalized[key] = toText(value, "");
         }
       }
     }
@@ -145,7 +151,9 @@ export class ApiClientCore {
       return this.inFlightRequests.get(key) as Promise<T>;
     }
 
-    const timeoutMs = customTimeout || APP_CONFIG.API_TIMEOUT || 10000;
+    const timeoutMs = isNonZero(customTimeout)
+      ? customTimeout
+      : APP_CONFIG.API_TIMEOUT;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const callerSignal =
       options?.signal instanceof AbortSignal ? options.signal : undefined;
@@ -170,7 +178,8 @@ export class ApiClientCore {
       method,
       headers,
       signal,
-      body: options?.body as BodyInit | null | undefined,
+      // fetch treats a null body like an absent one.
+      body: (options?.body ?? null) as BodyInit | null,
     };
 
     const promise = (async () => {
@@ -211,7 +220,8 @@ export class ApiClientCore {
           throw error;
         }
 
-        return unwrapApiResponse<T>(responseBody);
+        // The response body is untyped JSON; callers name the type they expect.
+        return unwrapApiResponse(responseBody) as T;
       } catch (error) {
         if (
           error instanceof Error &&

@@ -1,3 +1,4 @@
+import { isNonZero } from "@/lib/number";
 import type { QuickLinkContext } from "./types";
 
 const STRING_FIELDS = new Set([
@@ -46,7 +47,7 @@ function normalizeUrl(
   forceScheme?: "http" | "https"
 ): string | undefined {
   if (!raw) return undefined;
-  let candidate = raw.trim();
+  const candidate = raw.trim();
   if (!candidate) return undefined;
   // already a full URL
   if (/^[a-z]+:\/\//i.test(candidate)) {
@@ -66,7 +67,7 @@ function normalizeUrl(
   const hasPort = /:\d+$/.test(candidate);
   const url = hasPort
     ? `${scheme}://${candidate}`
-    : fallbackPort
+    : isNonZero(fallbackPort)
       ? `${scheme}://${candidate}:${fallbackPort}`
       : `${scheme}://${candidate}`;
   try {

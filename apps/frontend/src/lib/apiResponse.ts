@@ -21,34 +21,33 @@ export function isApiResponseEnvelope<T = unknown>(
   );
 }
 
-export function unwrapApiResponse<T = unknown>(payload: unknown): T {
-  if (isApiResponseEnvelope<T>(payload)) {
-    const candidate = payload as ApiResponseEnvelope<T>;
-    if ("_payload" in candidate) {
-      return candidate._payload as T;
+export function unwrapApiResponse(payload: unknown): unknown {
+  if (isApiResponseEnvelope(payload)) {
+    if ("_payload" in payload) {
+      return payload._payload;
     }
-    return payload.data as T;
+    return payload.data;
   }
   // v2 envelope: { data: T } with no success/error siblings
   if (
     payload !== null &&
     typeof payload === "object" &&
     !Array.isArray(payload) &&
-    "data" in (payload as Record<string, unknown>) &&
-    Object.keys(payload as Record<string, unknown>).length === 1
+    "data" in payload &&
+    Object.keys(payload).length === 1
   ) {
-    return (payload as { data: T }).data;
+    return payload.data;
   }
-  return payload as T;
+  return payload;
 }
 
 export function extractApiError(payload: unknown, fallback: string): string {
   if (isApiResponseEnvelope(payload)) {
-    if (payload.error && String(payload.error).trim().length > 0) {
-      return String(payload.error);
+    if (payload.error && payload.error.trim().length > 0) {
+      return payload.error;
     }
-    if (payload.message && String(payload.message).trim().length > 0) {
-      return String(payload.message);
+    if (payload.message && payload.message.trim().length > 0) {
+      return payload.message;
     }
   }
 

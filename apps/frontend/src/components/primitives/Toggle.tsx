@@ -1,9 +1,9 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
 import * as T from "@radix-ui/react-toggle";
 import { cn } from "@/lib/utils";
 
 export const Toggle = forwardRef<
-  ElementRef<typeof T.Root>,
+  ComponentRef<typeof T.Root>,
   ComponentPropsWithoutRef<typeof T.Root>
 >(({ className, ...rest }, ref) => (
   <T.Root

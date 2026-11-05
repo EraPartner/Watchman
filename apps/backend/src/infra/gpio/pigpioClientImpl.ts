@@ -108,13 +108,13 @@ export function createPigpioClient(): PigpioClient {
           assertAlive();
           return await promisify0<number>((cb) => getGpio(gpio).read(cb));
         },
-        async getHardwareRevision() {
+        getHardwareRevision() {
           assertAlive();
-          return toNum(pi.getInfo().hwVersion);
+          return Promise.resolve(toNum(pi.getInfo().hwVersion));
         },
-        async getPigpioVersion() {
+        getPigpioVersion() {
           assertAlive();
-          return toNum(pi.getInfo().pigpioVersion);
+          return Promise.resolve(toNum(pi.getInfo().pigpioVersion));
         },
         async getCurrentTick() {
           assertAlive();

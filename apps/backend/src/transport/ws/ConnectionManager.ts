@@ -14,7 +14,11 @@ export class ConnectionManager {
   private readonly clients = new Map<WsClient, ClientMeta>();
   private readonly byIp = new Map<string, number>();
 
-  constructor(private readonly deps: ConnectionManagerDeps) {}
+  private readonly deps: ConnectionManagerDeps;
+
+  constructor(deps: ConnectionManagerDeps) {
+    this.deps = deps;
+  }
 
   add(ws: WsClient, ip: string, user: AuthUser): AddResult {
     const current = this.byIp.get(ip) ?? 0;

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { reconnectDelay, SseStatusError, startSseStream } from "./sseClient.js";
+import { required } from "../../test/required.js";
 
 let server: Server;
 let port: number;
@@ -46,6 +47,13 @@ afterAll(
     })
 );
 
+// A function, not inline code: the server callback reassigns activeRes, which
+// control-flow narrowing in the test body cannot see.
+function endActiveResponse(): void {
+  activeRes?.end();
+  activeRes = null;
+}
+
 function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
   return new Promise((resolve, reject) => {
     const started = Date.now();
@@ -71,11 +79,11 @@ describe("startSseStream", () => {
     });
 
     await waitFor(() => activeRes !== null);
-    activeRes!.write("data: hello\n\n");
-    activeRes!.write("data: line1\ndata: line2\n\n");
+    required(activeRes).write("data: hello\n\n");
+    required(activeRes).write("data: line1\ndata: line2\n\n");
     // payload split across writes
-    activeRes!.write("data: par");
-    activeRes!.write("tial\n\n");
+    required(activeRes).write("data: par");
+    required(activeRes).write("tial\n\n");
 
     await waitFor(() => messages.length >= 3);
     expect(messages[0]).toBe("hello");
@@ -83,8 +91,7 @@ describe("startSseStream", () => {
     expect(messages[2]).toBe("partial");
 
     abort.abort();
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
   });
 
   it("decodes multi-byte UTF-8 split across chunks", async () => {
@@ -100,16 +107,15 @@ describe("startSseStream", () => {
     await waitFor(() => activeRes !== null);
     const bytes = Buffer.from('data: {"name":"Küche"}\n\n', "utf8");
     const split = bytes.indexOf(0xc3) + 1; // between the two bytes of "ü"
-    activeRes!.write(bytes.subarray(0, split));
+    required(activeRes).write(bytes.subarray(0, split));
     await new Promise((r) => setTimeout(r, 20));
-    activeRes!.write(bytes.subarray(split));
+    required(activeRes).write(bytes.subarray(split));
 
     await waitFor(() => messages.length >= 1);
     expect(messages[0]).toBe('{"name":"Küche"}');
 
     abort.abort();
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
   });
 
   it("reconnects after the server drops the stream", async () => {
@@ -126,16 +132,14 @@ describe("startSseStream", () => {
     });
 
     await waitFor(() => connections >= 1);
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
     await waitFor(() => connections >= 2);
     // a clean end loses events too, so callers are told (e.g. to re-seed)
     expect(errors).toHaveLength(1);
     expect(String(errors[0])).toMatch(/sse stream ended/);
 
     abort.abort();
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
   });
 
   it("reports non-2xx responses via onError and keeps retrying until aborted", async () => {
@@ -181,7 +185,7 @@ describe("startSseStream", () => {
     mode = "stream";
   });
 
-  it("stops cleanly when aborted before any connection", async () => {
+  it("stops cleanly when aborted before any connection", () => {
     const abort = new AbortController();
     abort.abort();
     expect(() =>
@@ -191,6 +195,7 @@ describe("startSseStream", () => {
         signal: abort.signal,
       })
     ).not.toThrow();
+    return Promise.resolve();
   });
 });
 

@@ -394,7 +394,7 @@ export class AdGuardService extends BaseService {
       );
     }
     this.authGate.accept();
-    return res.json<T>();
+    return (await res.json()) as T;
   }
 }
 

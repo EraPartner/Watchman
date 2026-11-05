@@ -34,9 +34,12 @@ export const PI_DYNAMIC_COMMANDS: readonly string[] = [
 ];
 
 /** Immutable per boot — fetched once per service lifetime, then cached. */
+const CPUINFO_COMMAND = "cat /proc/cpuinfo";
+const OS_RELEASE_COMMAND = "cat /etc/os-release";
+
 export const PI_STATIC_COMMANDS: readonly string[] = [
-  "cat /proc/cpuinfo",
-  "cat /etc/os-release",
+  CPUINFO_COMMAND,
+  OS_RELEASE_COMMAND,
 ];
 
 export interface PiStatsSnapshot {
@@ -133,7 +136,11 @@ export class PiStatsCollector {
   private lastCpu: CpuSample | null = null;
   private lastNet: { at: number; rx: number; tx: number } | null = null;
 
-  constructor(private readonly deps: PiStatsDeps) {}
+  private readonly deps: PiStatsDeps;
+
+  constructor(deps: PiStatsDeps) {
+    this.deps = deps;
+  }
 
   async collect(signal: AbortSignal): Promise<PiStatsSnapshot> {
     const cfg = this.deps.config;
@@ -220,7 +227,7 @@ export class PiStatsCollector {
       }
     }
 
-    const directSucceeded = snapshot.rpiCliAvailable === true;
+    const directSucceeded = snapshot.rpiCliAvailable;
     if (!directSucceeded && this.macMiniReady()) {
       try {
         this.applyRelayInfo(snapshot, await this.fetchRpiInfo(signal));
@@ -365,8 +372,8 @@ export class PiStatsCollector {
       PI_DYNAMIC_COMMANDS.slice(0, 7).map(seg);
     const [statOut, dfOut, findmntOut, systemctlOut, netDevOut] =
       PI_DYNAMIC_COMMANDS.slice(7).map(seg);
-    const cpuinfoOut = wantStatic ? seg(PI_STATIC_COMMANDS[0]!) : "";
-    const osOut = wantStatic ? seg(PI_STATIC_COMMANDS[1]!) : "";
+    const cpuinfoOut = wantStatic ? seg(CPUINFO_COMMAND) : "";
+    const osOut = wantStatic ? seg(OS_RELEASE_COMMAND) : "";
 
     const at = this.deps.now();
     const cpu = parseProcStatCpu(statOut ?? "");
@@ -392,9 +399,9 @@ export class PiStatsCollector {
     }
 
     if (wantStatic) {
-      const cpuInfo = parseProcCpuinfo(cpuinfoOut ?? "");
+      const cpuInfo = parseProcCpuinfo(cpuinfoOut);
       this.staticInfo = {
-        prettyName: parseOsRelease(osOut ?? ""),
+        prettyName: parseOsRelease(osOut),
         processor: cpuInfo.processor,
         isRpi: cpuInfo.isRpi,
         hwRevision: cpuInfo.hwRevision,

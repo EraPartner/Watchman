@@ -56,7 +56,7 @@ export default function Services() {
       )}
       {error && (
         <p className="text-fs-label text-[var(--crit)]">
-          {(error as Error).message ?? "Failed to load"}
+          {error.message || "Failed to load"}
         </p>
       )}
 
@@ -218,7 +218,7 @@ export default function Services() {
 
       {pendingDelete ? (
         <ConfirmDialog
-          open={!!pendingDelete}
+          open
           onOpenChange={(open) => !open && setPendingDelete(null)}
           title={`Delete ${pendingDelete.kind}/${pendingDelete.instanceId}?`}
           description="This removes the service and stops polling. Cannot be undone without re-adding."

@@ -1,7 +1,7 @@
 import {
   forwardRef,
   type ComponentPropsWithoutRef,
-  type ElementRef,
+  type ComponentRef,
 } from "react";
 import * as P from "@radix-ui/react-popover";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,7 @@ export const PopoverAnchor = P.Anchor;
 export const PopoverClose = P.Close;
 
 export const PopoverContent = forwardRef<
-  ElementRef<typeof P.Content>,
+  ComponentRef<typeof P.Content>,
   ComponentPropsWithoutRef<typeof P.Content>
 >(({ className, align = "start", sideOffset = 6, ...rest }, ref) => (
   <P.Portal>

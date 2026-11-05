@@ -69,7 +69,7 @@ async function readEnvelope<T>(
     throw new UnavailableError(`synology dsm ${what}: HTTP ${res.status}`);
   }
   try {
-    return await res.json<DsmEnvelope<T>>();
+    return (await res.json()) as DsmEnvelope<T>;
   } catch {
     throw new UnavailableError(`synology dsm ${what}: response is not JSON`);
   }
@@ -115,7 +115,8 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
     try {
       return await http.send(req);
     } catch (e) {
-      const cause = e instanceof UnavailableError ? e.context?.["cause"] : undefined;
+      const cause =
+        e instanceof UnavailableError ? e.context?.["cause"] : undefined;
       if (typeof cause === "string" && /certificate/i.test(cause)) {
         throw new UnavailableError(
           `synology dsm: the certificate at ${base} is not trusted (${cause}); set the DSM certificate fingerprint to trust DSM's self-signed certificate`
@@ -159,26 +160,24 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
     if (loginFailure && now() < loginFailure.until) {
       throw loginFailure.error;
     }
-    if (!pendingLogin) {
-      pendingLogin = performLogin(signal).then(
-        (sid) => {
-          currentSid = sid;
-          pendingLogin = null;
-          loginFailure = null;
-          return sid;
-        },
-        (err: unknown) => {
-          pendingLogin = null;
-          if (err instanceof UnauthorizedError) {
-            loginFailure = {
-              error: err,
-              until: now() + LOGIN_FAILURE_BACKOFF_MS,
-            };
-          }
-          throw err;
+    pendingLogin ??= performLogin(signal).then(
+      (sid) => {
+        currentSid = sid;
+        pendingLogin = null;
+        loginFailure = null;
+        return sid;
+      },
+      (err: unknown) => {
+        pendingLogin = null;
+        if (err instanceof UnauthorizedError) {
+          loginFailure = {
+            error: err,
+            until: now() + LOGIN_FAILURE_BACKOFF_MS,
+          };
         }
-      );
-    }
+        throw err;
+      }
+    );
     return pendingLogin;
   }
 

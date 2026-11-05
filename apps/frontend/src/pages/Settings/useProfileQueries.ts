@@ -20,12 +20,12 @@ function toastError(action: string) {
 // Switching/mutating profiles changes which services the backend monitors, so
 // refresh the dashboard families alongside the profile families.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>): void {
-  qc.invalidateQueries({ queryKey: queryKeys.profiles() });
-  qc.invalidateQueries({ queryKey: queryKeys.activeProfile() });
-  qc.invalidateQueries({ queryKey: queryKeys.currentNetwork() });
-  qc.invalidateQueries({ queryKey: queryKeys.servicesInstances() });
-  qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
-  qc.invalidateQueries({ queryKey: ["config", "services"] });
+  void qc.invalidateQueries({ queryKey: queryKeys.profiles() });
+  void qc.invalidateQueries({ queryKey: queryKeys.activeProfile() });
+  void qc.invalidateQueries({ queryKey: queryKeys.currentNetwork() });
+  void qc.invalidateQueries({ queryKey: queryKeys.servicesInstances() });
+  void qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
+  void qc.invalidateQueries({ queryKey: ["config", "services"] });
 }
 
 export function useProfiles() {
@@ -99,8 +99,8 @@ export function useCaptureNetwork() {
   return useMutation({
     mutationFn: (id: string) => profilesApi.captureNetwork(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.profiles() });
-      qc.invalidateQueries({ queryKey: queryKeys.currentNetwork() });
+      void qc.invalidateQueries({ queryKey: queryKeys.profiles() });
+      void qc.invalidateQueries({ queryKey: queryKeys.currentNetwork() });
     },
     onError: toastError("Could not assign the network"),
   });

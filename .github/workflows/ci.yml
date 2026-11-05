@@ -116,9 +116,11 @@ jobs:
       - name: Type-check frontend
         run: npm run typecheck --workspace=apps/frontend
 
-      - name: Type-check desktop (Electron shell)
+      # Also checks the repo's TypeScript tooling scripts (root tsconfig.json)
+      # with the same compiler, in this step rather than a new job.
+      - name: Type-check desktop (Electron shell) and tooling scripts
         working-directory: apps/desktop
-        run: npx tsc --noEmit -p tsconfig.json
+        run: npx tsc --noEmit -p tsconfig.json && npx tsc --noEmit -p ../../tsconfig.json
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Type-check backend — tsc strict check over the TypeScript backend.

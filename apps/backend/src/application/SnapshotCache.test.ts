@@ -17,12 +17,12 @@ class Stub extends BaseService {
   readonly instanceId = "main";
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 1000 };
   statsCalls = 0;
-  async checkHealth(): Promise<HealthResult> {
-    return ok({ reachable: true, at: 0 });
+  checkHealth(_signal: AbortSignal): Promise<HealthResult> {
+    return Promise.resolve(ok({ reachable: true, at: 0 }));
   }
-  async getStats(): Promise<StatsResult> {
+  getStats(_signal: AbortSignal): Promise<StatsResult> {
     this.statsCalls++;
-    return ok({ metrics: { n: this.statsCalls }, at: this.statsCalls });
+    return Promise.resolve(ok({ metrics: { n: this.statsCalls }, at: this.statsCalls }));
   }
 }
 
@@ -160,8 +160,8 @@ describe("SnapshotCache", () => {
     const bus = createEventBus();
     const cache = new SnapshotCache({ bus, clock: createFakeClock() });
     const svc = new (class extends Stub {
-      override async getStats(): Promise<StatsResult> {
-        return err(new UnavailableError("nope"));
+      override getStats(): Promise<StatsResult> {
+        return Promise.resolve(err(new UnavailableError("nope")));
       }
     })();
     cache.register(svc, 1_000);
@@ -278,7 +278,7 @@ describe("SnapshotCache", () => {
       cache.stop();
     });
 
-    it("bounds the live probe with its own timeout", async () => {
+    it("bounds the live probe with its own timeout", () => {
       const cache = new SnapshotCache({ bus: createEventBus(), clock: createFakeClock() });
       const svc = new Deferred();
       cache.register(svc, 10_000);
@@ -288,6 +288,7 @@ describe("SnapshotCache", () => {
       expect(svc.seenSignal).toBeDefined();
       expect(svc.seenSignal).not.toBe(parent.signal);
       svc.release(up);
+      return Promise.resolve();
     });
   });
 });

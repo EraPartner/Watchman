@@ -15,6 +15,8 @@ vi.mock("@/hooks/useWebSocket", () => ({
 }));
 
 import { WebSocketProvider, useWebSocketContext } from "./WebSocketProvider";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 beforeEach(() => {
   (
@@ -33,7 +35,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -49,11 +51,14 @@ describe("WebSocketProvider", () => {
   });
 
   it("provides context to children via useWebSocketContext", async () => {
-    let captured: { isConnected: boolean; reconnectAttempts: number } | null =
-      null;
+    // A holder object: TypeScript does not see the assignment in the
+    // component and would narrow a plain `let` to null.
+    const captured: {
+      value: { isConnected: boolean; reconnectAttempts: number } | null;
+    } = { value: null };
 
     function Consumer() {
-      captured = useWebSocketContext();
+      captured.value = useWebSocketContext();
       return h("span", {}, "ok");
     }
 
@@ -62,25 +67,28 @@ describe("WebSocketProvider", () => {
         <Consumer />
       </WebSocketProvider>
     );
-    expect(captured!.isConnected).toBe(true);
-    expect(captured!.reconnectAttempts).toBe(0);
+    expect(required(captured.value).isConnected).toBe(true);
+    expect(required(captured.value).reconnectAttempts).toBe(0);
     act(() => root.unmount());
   });
 });
 
 describe("useWebSocketContext (outside provider)", () => {
   it("returns default values when no provider is present", async () => {
-    let captured: { isConnected: boolean; reconnectAttempts: number } | null =
-      null;
+    // A holder object: TypeScript does not see the assignment in the
+    // component and would narrow a plain `let` to null.
+    const captured: {
+      value: { isConnected: boolean; reconnectAttempts: number } | null;
+    } = { value: null };
 
     function Standalone() {
-      captured = useWebSocketContext();
+      captured.value = useWebSocketContext();
       return h("span", {}, "ok");
     }
 
     const { root } = await render(<Standalone />);
-    expect(captured!.isConnected).toBe(false);
-    expect(captured!.reconnectAttempts).toBe(0);
+    expect(required(captured.value).isConnected).toBe(false);
+    expect(required(captured.value).reconnectAttempts).toBe(0);
     act(() => root.unmount());
   });
 });

@@ -70,22 +70,22 @@ function makeRedacted(
 
 function makeFakeStore(overrides: Partial<ConfigStore> = {}): ConfigStore {
   return {
-    loadAll: vi.fn(async () => []),
-    loadErrors: vi.fn(async () => []),
-    get: vi.fn(async () => null),
-    create: vi.fn(async () => makeStoredService()),
-    update: vi.fn(async () => makeStoredService()),
-    delete: vi.fn(async () => undefined),
-    setProfile: vi.fn(async () => undefined),
+    loadAll: vi.fn(() => Promise.resolve([])),
+    loadErrors: vi.fn(() => Promise.resolve([])),
+    get: vi.fn(() => Promise.resolve(null)),
+    create: vi.fn(() => Promise.resolve(makeStoredService())),
+    update: vi.fn(() => Promise.resolve(makeStoredService())),
+    delete: vi.fn(() => Promise.resolve(undefined)),
+    setProfile: vi.fn(() => Promise.resolve(undefined)),
     redact: vi.fn(() => makeRedacted()),
-    listAudit: vi.fn(async () => []),
-    writeAudit: vi.fn(async () => undefined),
-    exportAll: vi.fn(async () => ({
+    listAudit: vi.fn(() => Promise.resolve([])),
+    writeAudit: vi.fn(() => Promise.resolve(undefined)),
+    exportAll: vi.fn(() => Promise.resolve({
       version: 1 as const,
       exportedAt: NOW.toISOString(),
       payload: "abc123",
     })),
-    importBundle: vi.fn(async () => ({
+    importBundle: vi.fn(() => Promise.resolve({
       imported: 1,
       updated: 0,
       skipped: 0,
@@ -99,32 +99,32 @@ function makeFakeStore(overrides: Partial<ConfigStore> = {}): ConfigStore {
 
 // Only "profile-default" exists.
 const knownProfiles = {
-  getProfile: vi.fn(async (id: string) =>
-    id === "profile-default"
+  getProfile: vi.fn((id: string) =>
+    Promise.resolve(id === "profile-default"
       ? ({ id, name: "Default" } as unknown as Awaited<
           ReturnType<ProfileRouteDeps["profiles"]["getProfile"]>
         >)
-      : undefined
+      : undefined)
   ),
 };
 
 function makeFakeProfileDeps(store: ConfigStore, lifecycle: ServiceLifecycle) {
   const profiles = {
-    listProfiles: vi.fn(async () => []),
-    getProfile: vi.fn(async () => undefined),
+    listProfiles: vi.fn(() => Promise.resolve([])),
+    getProfile: vi.fn(() => Promise.resolve(undefined)),
     createProfile: vi.fn(),
     updateProfile: vi.fn(),
-    deleteProfile: vi.fn(async () => undefined),
-    serviceCounts: vi.fn(async () => ({})),
-    getActiveProfileId: vi.fn(async () => "profile-default"),
-    setActiveProfileId: vi.fn(async () => undefined),
-    getAutoSwitch: vi.fn(async () => true),
-    setAutoSwitch: vi.fn(async () => undefined),
-    getLastSignature: vi.fn(async () => undefined),
-    setLastSignature: vi.fn(async () => undefined),
-    ensureBootstrap: vi.fn(async () => undefined),
+    deleteProfile: vi.fn(() => Promise.resolve(undefined)),
+    serviceCounts: vi.fn(() => Promise.resolve({})),
+    getActiveProfileId: vi.fn(() => Promise.resolve("profile-default")),
+    setActiveProfileId: vi.fn(() => Promise.resolve(undefined)),
+    getAutoSwitch: vi.fn(() => Promise.resolve(true)),
+    setAutoSwitch: vi.fn(() => Promise.resolve(undefined)),
+    getLastSignature: vi.fn(() => Promise.resolve(undefined)),
+    setLastSignature: vi.fn(() => Promise.resolve(undefined)),
+    ensureBootstrap: vi.fn(() => Promise.resolve(undefined)),
   };
-  const detector = { detect: vi.fn(async () => ({})) };
+  const detector = { detect: vi.fn(() => Promise.resolve({})) };
   return {
     profiles: profiles as unknown as ProfileRouteDeps["profiles"],
     store,
@@ -143,15 +143,15 @@ function makeFakeLifecycle(): ServiceLifecycle {
     applyDelete: vi.fn(),
     switchActiveProfile: vi.fn(),
     idByStoredId: vi.fn(() => undefined),
-  } as unknown as ServiceLifecycle;
+  };
 }
 
 function makeApp(store: ConfigStore, registry = new ServiceRegistry()) {
   const logger = pino({ level: "silent" });
   const fakeLifecycle = makeFakeLifecycle();
   const fakeHttp = {
-    send: async () => {
-      throw new Error("not used");
+    send: () => {
+      return Promise.reject(new Error("not used"));
     },
   } as HttpClient;
 
@@ -178,9 +178,9 @@ describe("GET /config/kinds", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ kind: string; label: string; description: string }>;
-    };
+    }>();
     expect(Array.isArray(body.data)).toBe(true);
     expect(body.data.length).toBeGreaterThan(0);
     const bitcoin = body.data.find((k) => k.kind === "bitcoin");
@@ -191,20 +191,20 @@ describe("GET /config/kinds", () => {
 
 describe("GET /config/services", () => {
   it("returns empty array when store is empty", async () => {
-    const store = makeFakeStore({ loadAll: vi.fn(async () => []) });
+    const store = makeFakeStore({ loadAll: vi.fn(() => Promise.resolve([])) });
     const app = await makeApp(store);
     const res = await app.inject({ method: "GET", url: "/config/services" });
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(0);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(0);
   });
 
   it("returns redacted services", async () => {
     const stored = makeStoredService();
     const redacted = makeRedacted();
     const store = makeFakeStore({
-      loadAll: vi.fn(async () => [stored]),
+      loadAll: vi.fn(() => Promise.resolve([stored])),
       redact: vi.fn(() => redacted),
     });
     const app = await makeApp(store);
@@ -212,7 +212,7 @@ describe("GET /config/services", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { data: RedactedService[] };
+    const body = res.json<{ data: RedactedService[] }>();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.id).toBe("svc-uuid-1");
   });
@@ -221,23 +221,23 @@ describe("GET /config/services", () => {
 describe("GET /config/load-errors", () => {
   it("returns rows that failed to load", async () => {
     const store = makeFakeStore({
-      loadErrors: vi.fn(async () => [
+      loadErrors: vi.fn(() => Promise.resolve([
         {
           id: "svc-uuid-9",
           kind: "synology",
           instanceId: "nas",
           message: "decrypt failed",
         },
-      ]),
+      ])),
     });
     const app = await makeApp(store);
     const res = await app.inject({ method: "GET", url: "/config/load-errors" });
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ id: string; kind: string; message: string }>;
-    };
+    }>();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.id).toBe("svc-uuid-9");
     expect(body.data[0]?.message).toBe("decrypt failed");
@@ -246,7 +246,7 @@ describe("GET /config/load-errors", () => {
 
 describe("GET /config/services/:id", () => {
   it("returns 404 when service not found", async () => {
-    const store = makeFakeStore({ get: vi.fn(async () => null) });
+    const store = makeFakeStore({ get: vi.fn(() => Promise.resolve(null)) });
     const app = await makeApp(store);
     const res = await app.inject({
       method: "GET",
@@ -260,8 +260,8 @@ describe("GET /config/services/:id", () => {
 
   it("returns 409 CONFLICT, not 500, for a row that fails to load", async () => {
     const store = makeFakeStore({
-      get: vi.fn(async () => {
-        throw new Error("Unsupported state or unable to authenticate data");
+      get: vi.fn(() => {
+        return Promise.reject(new Error("Unsupported state or unable to authenticate data"));
       }),
     });
     const app = await makeApp(store);
@@ -275,7 +275,7 @@ describe("GET /config/services/:id", () => {
     expect(res.json()).toMatchObject({
       error: {
         code: "CONFLICT",
-        message: expect.stringContaining("fails to load"),
+        message: expect.stringContaining("fails to load") as unknown,
       },
     });
   });
@@ -284,7 +284,7 @@ describe("GET /config/services/:id", () => {
     const stored = makeStoredService();
     const redacted = makeRedacted();
     const store = makeFakeStore({
-      get: vi.fn(async () => stored),
+      get: vi.fn(() => Promise.resolve(stored)),
       redact: vi.fn(() => redacted),
     });
     const app = await makeApp(store);
@@ -295,7 +295,7 @@ describe("GET /config/services/:id", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: RedactedService }).data.id).toBe(
+    expect(res.json<{ data: RedactedService }>().data.id).toBe(
       "svc-uuid-1"
     );
   });
@@ -306,7 +306,7 @@ describe("POST /config/services", () => {
     const stored = makeStoredService();
     const redacted = makeRedacted();
     const store = makeFakeStore({
-      create: vi.fn(async () => stored),
+      create: vi.fn(() => Promise.resolve(stored)),
       redact: vi.fn(() => redacted),
     });
     const app = await makeApp(store);
@@ -318,15 +318,15 @@ describe("POST /config/services", () => {
     await app.close();
 
     expect(res.statusCode).toBe(201);
-    expect((res.json() as { data: RedactedService }).data.id).toBe(
+    expect(res.json<{ data: RedactedService }>().data.id).toBe(
       "svc-uuid-1"
     );
   });
 
   it("returns 400 on validation error", async () => {
     const store = makeFakeStore({
-      create: vi.fn(async () => {
-        throw new Error("invalid input: missing host");
+      create: vi.fn(() => {
+        return Promise.reject(new Error("invalid input: missing host"));
       }),
     });
     const app = await makeApp(store);
@@ -342,7 +342,7 @@ describe("POST /config/services", () => {
   });
 
   it("passes x-actor header to store.create", async () => {
-    const createMock = vi.fn(async () => makeStoredService());
+    const createMock = vi.fn(() => Promise.resolve(makeStoredService()));
     const store = makeFakeStore({
       create: createMock,
       redact: vi.fn(() => makeRedacted()),
@@ -369,7 +369,7 @@ describe("PUT /config/services/:id", () => {
     const stored = makeStoredService({ instanceId: "updated" });
     const redacted = makeRedacted({ instanceId: "updated" });
     const store = makeFakeStore({
-      update: vi.fn(async () => stored),
+      update: vi.fn(() => Promise.resolve(stored)),
       redact: vi.fn(() => redacted),
     });
     const app = await makeApp(store);
@@ -381,15 +381,15 @@ describe("PUT /config/services/:id", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: RedactedService }).data.instanceId).toBe(
+    expect(res.json<{ data: RedactedService }>().data.instanceId).toBe(
       "updated"
     );
   });
 
   it("returns 404 when service not found", async () => {
     const store = makeFakeStore({
-      update: vi.fn(async () => {
-        throw new Error("Not found: missing-id");
+      update: vi.fn(() => {
+        return Promise.reject(new Error("Not found: missing-id"));
       }),
     });
     const app = await makeApp(store);
@@ -406,8 +406,8 @@ describe("PUT /config/services/:id", () => {
 
   it("returns 400 on validation error", async () => {
     const store = makeFakeStore({
-      update: vi.fn(async () => {
-        throw new Error("invalid field");
+      update: vi.fn(() => {
+        return Promise.reject(new Error("invalid field"));
       }),
     });
     const app = await makeApp(store);
@@ -425,7 +425,7 @@ describe("PUT /config/services/:id", () => {
 
 describe("DELETE /config/services/:id", () => {
   it("returns 204 on successful delete", async () => {
-    const store = makeFakeStore({ delete: vi.fn(async () => undefined) });
+    const store = makeFakeStore({ delete: vi.fn(() => Promise.resolve(undefined)) });
     const app = await makeApp(store);
     const res = await app.inject({
       method: "DELETE",
@@ -437,7 +437,7 @@ describe("DELETE /config/services/:id", () => {
   });
 
   it("passes x-actor header to store.delete", async () => {
-    const deleteMock = vi.fn(async () => undefined);
+    const deleteMock = vi.fn(() => Promise.resolve(undefined));
     const store = makeFakeStore({ delete: deleteMock });
     const app = await makeApp(store);
     await app.inject({
@@ -453,7 +453,7 @@ describe("DELETE /config/services/:id", () => {
 
 describe("profile must exist", () => {
   it("POST /config/services rejects an unknown profileId without storing", async () => {
-    const createMock = vi.fn(async () => makeStoredService());
+    const createMock = vi.fn(() => Promise.resolve(makeStoredService()));
     const store = makeFakeStore({ create: createMock });
     const app = await makeApp(store);
     const res = await app.inject({
@@ -469,9 +469,9 @@ describe("profile must exist", () => {
   });
 
   it("PUT /config/services/:id/profile rejects an unknown profileId without moving", async () => {
-    const setProfile = vi.fn(async () => undefined);
+    const setProfile = vi.fn(() => Promise.resolve(undefined));
     const store = makeFakeStore({
-      get: vi.fn(async () => makeStoredService()),
+      get: vi.fn(() => Promise.resolve(makeStoredService())),
       setProfile,
     });
     const app = await makeApp(store);
@@ -488,9 +488,9 @@ describe("profile must exist", () => {
   });
 
   it("PUT /config/services/:id/profile moves to a known profile", async () => {
-    const setProfile = vi.fn(async () => undefined);
+    const setProfile = vi.fn(() => Promise.resolve(undefined));
     const store = makeFakeStore({
-      get: vi.fn(async () => makeStoredService()),
+      get: vi.fn(() => Promise.resolve(makeStoredService())),
       setProfile,
     });
     const app = await makeApp(store);
@@ -515,21 +515,24 @@ describe("POST /config/services/:id/test", () => {
     readonly kind = "bitcoin";
     readonly instanceId = "main";
     readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
-    constructor(private readonly healthy = true) {
+    private readonly healthy: boolean;
+
+    constructor(healthy = true) {
       super();
+      this.healthy = healthy;
     }
-    async checkHealth(): Promise<HealthResult> {
-      return this.healthy
+    checkHealth(): Promise<HealthResult> {
+      return Promise.resolve(this.healthy
         ? ok({ reachable: true, at: 1 })
-        : err(new UnavailableError("down"));
+        : err(new UnavailableError("down")));
     }
-    async getStats(): Promise<StatsResult> {
-      return ok({ metrics: {}, at: 1 });
+    getStats(): Promise<StatsResult> {
+      return Promise.resolve(ok({ metrics: {}, at: 1 }));
     }
   }
 
   it("returns 404 when stored service is not found", async () => {
-    const store = makeFakeStore({ get: vi.fn(async () => null) });
+    const store = makeFakeStore({ get: vi.fn(() => Promise.resolve(null)) });
     const app = await makeApp(store);
     const res = await app.inject({
       method: "POST",
@@ -546,7 +549,7 @@ describe("POST /config/services/:id/test", () => {
     const fakeLifecycle: ServiceLifecycle = {
       idByStoredId: vi.fn(() => undefined),
     } as unknown as ServiceLifecycle;
-    const store = makeFakeStore({ get: vi.fn(async () => stored) });
+    const store = makeFakeStore({ get: vi.fn(() => Promise.resolve(stored)) });
     const registry = new ServiceRegistry();
     const logger = pino({ level: "silent" });
     const app = await buildServer({
@@ -562,10 +565,10 @@ describe("POST /config/services/:id/test", () => {
       setup: {
         store,
         http: {
-          send: async () => {
-            throw new Error();
+          send: () => {
+            return Promise.reject(new Error());
           },
-        } as HttpClient,
+        },
       },
     });
     const res = await app.inject({
@@ -588,7 +591,7 @@ describe("POST /config/services/:id/test", () => {
     const fakeLifecycle: ServiceLifecycle = {
       idByStoredId: vi.fn(() => svcId),
     } as unknown as ServiceLifecycle;
-    const store = makeFakeStore({ get: vi.fn(async () => stored) });
+    const store = makeFakeStore({ get: vi.fn(() => Promise.resolve(stored)) });
     const logger = pino({ level: "silent" });
     const app = await buildServer({
       logger,
@@ -603,10 +606,10 @@ describe("POST /config/services/:id/test", () => {
       setup: {
         store,
         http: {
-          send: async () => {
-            throw new Error();
+          send: () => {
+            return Promise.reject(new Error());
           },
-        } as HttpClient,
+        },
       },
     });
     const res = await app.inject({
@@ -617,15 +620,15 @@ describe("POST /config/services/:id/test", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: { ok: boolean } }).data.ok).toBe(true);
+    expect(res.json<{ data: { ok: boolean } }>().data.ok).toBe(true);
   });
 
   it("returns ok:false when the probe resolves with reachable:false", async () => {
     // withHostPing resolves ok() even when the service can't be reached; the
     // test endpoint must not report that as a passing connection test.
     class UnreachableSvc extends FakeSvc {
-      override async checkHealth(): Promise<HealthResult> {
-        return ok({ reachable: false, message: "connect ECONNREFUSED", at: 1 });
+      override checkHealth(): Promise<HealthResult> {
+        return Promise.resolve(ok({ reachable: false, message: "connect ECONNREFUSED", at: 1 }));
       }
     }
     const svc = new UnreachableSvc();
@@ -636,7 +639,7 @@ describe("POST /config/services/:id/test", () => {
     const fakeLifecycle: ServiceLifecycle = {
       idByStoredId: vi.fn(() => svcId),
     } as unknown as ServiceLifecycle;
-    const store = makeFakeStore({ get: vi.fn(async () => stored) });
+    const store = makeFakeStore({ get: vi.fn(() => Promise.resolve(stored)) });
     const app = await buildServer({
       logger: pino({ level: "silent" }),
       services: {
@@ -650,10 +653,10 @@ describe("POST /config/services/:id/test", () => {
       setup: {
         store,
         http: {
-          send: async () => {
-            throw new Error();
+          send: () => {
+            return Promise.reject(new Error());
           },
-        } as HttpClient,
+        },
       },
     });
     const res = await app.inject({
@@ -681,7 +684,7 @@ describe("GET /config/export", () => {
       exportedAt: "2024-06-01T00:00:00.000Z",
       payload: "base64payload",
     };
-    const store = makeFakeStore({ exportAll: vi.fn(async () => bundle) });
+    const store = makeFakeStore({ exportAll: vi.fn(() => Promise.resolve(bundle)) });
     const app = await makeApp(store);
     const res = await app.inject({ method: "GET", url: "/config/export" });
     await app.close();
@@ -690,7 +693,7 @@ describe("GET /config/export", () => {
     expect(res.headers["content-disposition"]).toMatch(
       /watchman-config-.*\.json/
     );
-    expect((res.json() as ExportBundle).payload).toBe("base64payload");
+    expect(res.json<ExportBundle>().payload).toBe("base64payload");
   });
 });
 
@@ -702,7 +705,7 @@ describe("POST /config/import", () => {
       skipped: 0,
       errors: [],
     };
-    const store = makeFakeStore({ importBundle: vi.fn(async () => result) });
+    const store = makeFakeStore({ importBundle: vi.fn(() => Promise.resolve(result)) });
     const app = await makeApp(store);
     const res = await app.inject({
       method: "POST",
@@ -712,13 +715,13 @@ describe("POST /config/import", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: ImportResult }).data.imported).toBe(2);
+    expect(res.json<{ data: ImportResult }>().data.imported).toBe(2);
   });
 
   it("returns 400 on invalid bundle", async () => {
     const store = makeFakeStore({
-      importBundle: vi.fn(async () => {
-        throw new Error("Invalid bundle: unsupported version");
+      importBundle: vi.fn(() => {
+        return Promise.reject(new Error("Invalid bundle: unsupported version"));
       }),
     });
     const app = await makeApp(store);
@@ -736,13 +739,13 @@ describe("POST /config/import", () => {
 
 describe("GET /config/audit", () => {
   it("returns empty audit log", async () => {
-    const store = makeFakeStore({ listAudit: vi.fn(async () => []) });
+    const store = makeFakeStore({ listAudit: vi.fn(() => Promise.resolve([])) });
     const app = await makeApp(store);
     const res = await app.inject({ method: "GET", url: "/config/audit" });
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(0);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(0);
   });
 
   it("returns formatted audit entries", async () => {
@@ -755,21 +758,21 @@ describe("GET /config/audit", () => {
       diff: { kind: "bitcoin", instanceId: "main" },
       actor: "alice",
     };
-    const store = makeFakeStore({ listAudit: vi.fn(async () => [entry]) });
+    const store = makeFakeStore({ listAudit: vi.fn(() => Promise.resolve([entry])) });
     const app = await makeApp(store);
     const res = await app.inject({ method: "GET", url: "/config/audit" });
     await app.close();
 
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ action: string; actor: string }>;
-    };
+    }>();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.action).toBe("create");
     expect(body.data[0]?.actor).toBe("alice");
   });
 
   it("respects limit query param", async () => {
-    const listAuditMock = vi.fn(async () => []);
+    const listAuditMock = vi.fn(() => Promise.resolve([]));
     const store = makeFakeStore({ listAudit: listAuditMock });
     const app = await makeApp(store);
     await app.inject({ method: "GET", url: "/config/audit?limit=50" });
@@ -779,7 +782,7 @@ describe("GET /config/audit", () => {
   });
 
   it("falls back to the default limit for a non-numeric limit", async () => {
-    const listAuditMock = vi.fn(async () => []);
+    const listAuditMock = vi.fn(() => Promise.resolve([]));
     const store = makeFakeStore({ listAudit: listAuditMock });
     const app = await makeApp(store);
     const res = await app.inject({

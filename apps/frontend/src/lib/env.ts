@@ -5,7 +5,7 @@ interface Env {
 }
 
 class EnvValidator {
-  private static instance: EnvValidator;
+  private static instance: EnvValidator | undefined;
   private env: Env;
 
   private constructor() {
@@ -13,9 +13,7 @@ class EnvValidator {
   }
 
   public static getInstance(): EnvValidator {
-    if (!EnvValidator.instance) {
-      EnvValidator.instance = new EnvValidator();
-    }
+    EnvValidator.instance ??= new EnvValidator();
     return EnvValidator.instance;
   }
 

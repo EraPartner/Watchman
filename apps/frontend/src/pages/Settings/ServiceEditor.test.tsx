@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -7,6 +6,8 @@ import type {
   ServiceInstance,
   ServiceInstanceInput,
 } from "../../services/configApi";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 const KINDS: KindSchema[] = [
   {
@@ -103,6 +104,7 @@ const existingService: ServiceInstance = {
   kind: "ipfs",
   instanceId: "primary",
   enabled: true,
+  profileId: "default",
   config: { kind: "ipfs", instanceId: "primary", enabled: true, apiUrl: "http://127.0.0.1:5001" },
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
@@ -115,7 +117,7 @@ async function render(props: Partial<React.ComponentProps<typeof ServiceEditor>>
   const onSubmit =
     props.onSubmit ?? vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
   const onCancel = props.onCancel ?? vi.fn();
-  await act(async () => {
+  await actAsync(() => {
     root.render(
       <ServiceEditor
         existing={props.existing}
@@ -132,7 +134,7 @@ async function render(props: Partial<React.ComponentProps<typeof ServiceEditor>>
     container,
     onSubmit,
     cleanup: async () => {
-      await act(async () => {
+      await actAsync(() => {
         root.unmount();
       });
       container.remove();
@@ -143,8 +145,8 @@ async function render(props: Partial<React.ComponentProps<typeof ServiceEditor>>
 function getInstanceIdInput(container: HTMLElement): HTMLInputElement {
   const labels = container.querySelectorAll("label");
   for (const lab of labels) {
-    if (/instance id/i.test(lab.textContent ?? "")) {
-      const input = lab.querySelector("input") as HTMLInputElement | null;
+    if (/instance id/i.test(lab.textContent)) {
+      const input = lab.querySelector("input");
       if (input) return input;
     }
   }
@@ -152,18 +154,15 @@ function getInstanceIdInput(container: HTMLElement): HTMLInputElement {
 }
 
 function getSubmitButton(container: HTMLElement): HTMLButtonElement {
-  const btn = container.querySelector('[data-testid="submit-btn"]') as HTMLButtonElement | null;
+  const btn = container.querySelector<HTMLButtonElement>('[data-testid="submit-btn"]');
   if (!btn) throw new Error("Submit button not found");
   return btn;
 }
 
 async function typeInto(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  await act(async () => {
-    setter?.call(input, value);
+  await actAsync(() => {
+    // The prototype's native setter, so React's value tracker sees a change.
+    Reflect.set(window.HTMLInputElement.prototype, "value", value, input);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
@@ -244,12 +243,12 @@ describe("ServiceEditor instance id rename", () => {
     const submit = getSubmitButton(container);
     expect(submit.disabled).toBe(false);
 
-    await act(async () => {
+    await actAsync(() => {
       submit.click();
     });
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.instanceId).toBe("renamed");
     expect(payload.kind).toBe("ipfs");
 
@@ -259,8 +258,8 @@ describe("ServiceEditor instance id rename", () => {
 
 function getFieldInput(container: HTMLElement, label: RegExp): HTMLInputElement {
   for (const lab of container.querySelectorAll("label")) {
-    if (label.test(lab.textContent ?? "")) {
-      const input = lab.querySelector("input") as HTMLInputElement | null;
+    if (label.test(lab.textContent)) {
+      const input = lab.querySelector("input");
       if (input) return input;
     }
   }
@@ -301,12 +300,12 @@ describe("ServiceEditor list fields", () => {
     await typeInto(getFieldInput(container, /^Ports/), "80, 443,");
     await typeInto(getFieldInput(container, /^Interface filter/), "eth0,eth1");
 
-    await act(async () => {
+    await actAsync(() => {
       getSubmitButton(container).click();
     });
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.kind).toBe("router");
     expect(payload.config).toEqual({
       host: "192.168.1.1",
@@ -326,11 +325,11 @@ describe("ServiceEditor list fields", () => {
     });
 
     await typeInto(getFieldInput(container, /^Host/), "10.0.0.1");
-    await act(async () => {
+    await actAsync(() => {
       getSubmitButton(container).click();
     });
 
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.config).toEqual({ host: "10.0.0.1" });
 
     await cleanup();
@@ -350,7 +349,7 @@ describe("ServiceEditor Hue pairing", () => {
 
   function getPairButton(container: HTMLElement): HTMLButtonElement {
     const btn = Array.from(container.querySelectorAll("button")).find((b) =>
-      /pair with bridge/i.test(b.textContent ?? ""),
+      /pair with bridge/i.test(b.textContent),
     );
     if (!btn) throw new Error("Pair button not found");
     return btn;
@@ -372,7 +371,7 @@ describe("ServiceEditor Hue pairing", () => {
     });
 
     await typeInto(getFieldInput(container, /^Host/), "192.168.1.50");
-    await act(async () => {
+    await actAsync(() => {
       getPairButton(container).click();
     });
 
@@ -380,10 +379,10 @@ describe("ServiceEditor Hue pairing", () => {
     expect(getFieldInput(container, /^Cert SHA-256/).value).toBe("ab".repeat(32));
     expect(container.querySelector('[data-testid="pair-result"]')?.textContent).toMatch(/paired/i);
 
-    await act(async () => {
+    await actAsync(() => {
       getSubmitButton(container).click();
     });
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.config).toMatchObject({
       host: "192.168.1.50",
       applicationKey: "hue-key",
@@ -398,7 +397,7 @@ describe("ServiceEditor Hue pairing", () => {
     const { container, cleanup } = await render({ presetKind: "philipsBridge", hideKind: true });
 
     await typeInto(getFieldInput(container, /^Host/), "192.168.1.50");
-    await act(async () => {
+    await actAsync(() => {
       getPairButton(container).click();
     });
 
@@ -443,10 +442,10 @@ describe("ServiceEditor saved secrets in edit mode", () => {
     const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
     const { container, cleanup } = await render({ existing: adguard, onSubmit });
     await typeInto(getFieldInput(container, /^Password/), "new-secret");
-    await act(async () => {
+    await actAsync(() => {
       getSubmitButton(container).click();
     });
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.config?.["password"]).toBe("new-secret");
     await cleanup();
   });
@@ -454,17 +453,17 @@ describe("ServiceEditor saved secrets in edit mode", () => {
   it("omits an untouched saved secret so the server keeps it", async () => {
     const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
     const { container, cleanup } = await render({ existing: adguard, onSubmit });
-    await act(async () => {
+    await actAsync(() => {
       getSubmitButton(container).click();
     });
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.config).not.toHaveProperty("password");
     await cleanup();
   });
 
   function findButton(container: HTMLElement, text: RegExp): HTMLButtonElement | undefined {
     return Array.from(container.querySelectorAll("button")).find((b) =>
-      text.test(b.textContent ?? ""),
+      text.test(b.textContent),
     );
   }
 
@@ -484,14 +483,14 @@ describe("ServiceEditor saved secrets in edit mode", () => {
   it("sends null for a saved secret the operator clears", async () => {
     const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
     const { container, cleanup } = await render({ existing: adguard, onSubmit });
-    await act(async () => {
-      findButton(container, /^Clear Password/)!.click();
+    await actAsync(() => {
+      required(findButton(container, /^Clear Password/)).click();
     });
     expect(getFieldInput(container, /^Password/).placeholder).toMatch(/cleared on save/i);
-    await act(async () => {
+    await actAsync(() => {
       getSubmitButton(container).click();
     });
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.config).toHaveProperty("password", null);
     await cleanup();
   });
@@ -499,16 +498,16 @@ describe("ServiceEditor saved secrets in edit mode", () => {
   it("keeps the saved secret when a clear is undone", async () => {
     const onSubmit = vi.fn<(input: ServiceInstanceInput) => Promise<void>>(async () => {});
     const { container, cleanup } = await render({ existing: adguard, onSubmit });
-    await act(async () => {
-      findButton(container, /^Clear Password/)!.click();
+    await actAsync(() => {
+      required(findButton(container, /^Clear Password/)).click();
     });
-    await act(async () => {
-      findButton(container, /^Keep saved Password/)!.click();
+    await actAsync(() => {
+      required(findButton(container, /^Keep saved Password/)).click();
     });
-    await act(async () => {
+    await actAsync(() => {
       getSubmitButton(container).click();
     });
-    const payload = onSubmit.mock.calls[0]![0] as ServiceInstanceInput;
+    const payload = required(onSubmit.mock.calls[0])[0];
     expect(payload.config).not.toHaveProperty("password");
     await cleanup();
   });
@@ -540,10 +539,10 @@ describe("ServiceEditor load and test feedback", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "Couldn't load service schemas: Network error"
     );
-    const retry = Array.from(container.querySelectorAll("button")).find(
+    const retry = required(Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent === "Retry"
-    )!;
-    await act(async () => {
+    ));
+    await actAsync(() => {
       retry.click();
     });
     expect(refetch).toHaveBeenCalledTimes(1);
@@ -557,10 +556,10 @@ describe("ServiceEditor load and test feedback", () => {
       snapshot: { reachable: false, message: "ECONNREFUSED", at: 0 },
     });
     const { container, cleanup } = await render({ existing: existingService });
-    const btn = Array.from(container.querySelectorAll("button")).find(
+    const btn = required(Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent === "Test connection"
-    )!;
-    await act(async () => {
+    ));
+    await actAsync(() => {
       btn.click();
     });
     expect(container.textContent).toContain("Failed: ECONNREFUSED");

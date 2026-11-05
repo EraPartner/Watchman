@@ -1,4 +1,5 @@
 {
+  "//": "Solution file for editors. `npm run typecheck` checks tsconfig.app.json (src, tests included) and tsconfig.node.json (tool configs) directly, because `tsc -p` on this file with `files: []` checks nothing.",
   "files": [],
   "references": [
     {
@@ -7,19 +8,5 @@
     {
       "path": "./tsconfig.node.json"
     }
-  ],
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "noImplicitAny": true,
-    "noUnusedParameters": true,
-    "skipLibCheck": true,
-    "allowJs": true,
-    "noUnusedLocals": true,
-    "strictNullChecks": true,
-    "strict": true,
-    "noImplicitThis": true,
-    "useUnknownInCatchVariables": true
-  }
+  ]
 }

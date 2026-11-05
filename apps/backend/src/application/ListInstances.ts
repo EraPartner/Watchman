@@ -7,7 +7,11 @@ export interface InstanceInfo {
 }
 
 export class ListInstances {
-  constructor(private readonly registry: ServiceRegistry) {}
+  private readonly registry: ServiceRegistry;
+
+  constructor(registry: ServiceRegistry) {
+    this.registry = registry;
+  }
 
   byKind(kind: string): readonly InstanceInfo[] {
     return this.registry.listKind(kind).map((s) => ({ id: s.id, kind: s.kind, instanceId: s.instanceId }));

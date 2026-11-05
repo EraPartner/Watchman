@@ -35,7 +35,8 @@ describe("encryption", () => {
   it("rejects tampered ciphertext", () => {
     const enc = createEncryptor(key);
     const ct = enc.encrypt("hello");
-    ct[ct.length - 1] ^= 0xff;
+    const last = ct.length - 1;
+    ct.writeUInt8(ct.readUInt8(last) ^ 0xff, last);
     expect(() => enc.decrypt(ct)).toThrow();
   });
 

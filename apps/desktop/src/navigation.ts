@@ -3,9 +3,9 @@
 // so it can be unit-tested with node:test.
 export interface NavigationPolicy {
   /** Origin of the local backend, e.g. "http://127.0.0.1:51234". */
-  backendOrigin?: string;
+  backendOrigin?: string | undefined;
   /** Origin of the Vite dev server in unpackaged dev runs. */
-  devOrigin?: string;
+  devOrigin?: string | undefined;
 }
 
 export function isAllowedNavigation(

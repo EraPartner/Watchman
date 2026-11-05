@@ -6,18 +6,26 @@ import { BaseService, type HealthResult, type StatsResult, type PollPolicy } fro
 import { ok, err } from '../../core/result.js';
 import { UnavailableError } from '../../core/errors.js';
 import pino from 'pino';
+import { required } from "../../test/required.js";
 
 const silentLogger = pino({ level: 'silent' });
 
 class Stub extends BaseService {
   readonly kind = 'test';
   readonly instanceId = 'a';
+  readonly pollPolicy: PollPolicy;
+  readonly healthImpl: () => Promise<HealthResult>;
+  readonly statsImpl: () => Promise<StatsResult>;
+
   constructor(
-    readonly pollPolicy: PollPolicy,
-    readonly healthImpl: () => Promise<HealthResult>,
-    readonly statsImpl: () => Promise<StatsResult> = async () => ok({ metrics: {}, at: 0 }),
+    pollPolicy: PollPolicy,
+    healthImpl: () => Promise<HealthResult>,
+    statsImpl: () => Promise<StatsResult> = () => Promise.resolve(ok({ metrics: {}, at: 0 }))
   ) {
     super();
+    this.pollPolicy = pollPolicy;
+    this.healthImpl = healthImpl;
+    this.statsImpl = statsImpl;
   }
   lastHealthSignal: AbortSignal | undefined;
   checkHealth(signal: AbortSignal): Promise<HealthResult> {
@@ -35,8 +43,8 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const spy = vi.fn();
     bus.on('service.health.updated', spy);
-    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -51,8 +59,8 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const spy = vi.fn();
     bus.on('service.error', spy);
-    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, async () =>
-      err(new UnavailableError('down')),
+    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, () =>
+      Promise.resolve(err(new UnavailableError('down'))),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -67,8 +75,8 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const spy = vi.fn();
     bus.on('service.health.updated', spy);
-    const svc = new Stub({ healthMs: 50, statsMs: 50, jitterRatio: 0 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const svc = new Stub({ healthMs: 50, statsMs: 50, jitterRatio: 0 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -84,8 +92,8 @@ describe('BackgroundPoller', () => {
   it('ignores duplicate track calls', () => {
     const clock = createFakeClock();
     const bus = createEventBus();
-    const svc = new Stub({ healthMs: 100, statsMs: 100 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const svc = new Stub({ healthMs: 100, statsMs: 100 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -127,7 +135,7 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const seen: Array<boolean> = [];
     bus.on('service.health.updated', (p) => {
-      seen.push(p.snapshot!.reachable);
+      seen.push(required(p.snapshot).reachable);
     });
     let releaseOld!: (r: HealthResult) => void;
     const oldSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, async () =>
@@ -135,8 +143,8 @@ describe('BackgroundPoller', () => {
         releaseOld = r;
       }),
     );
-    const newSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const newSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(oldSvc);
@@ -160,7 +168,7 @@ describe('BackgroundPoller', () => {
     let reason: unknown;
     const svc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, () =>
       new Promise<HealthResult>((resolve) => {
-        const sig = svc.lastHealthSignal!;
+        const sig = required(svc.lastHealthSignal);
         sig.addEventListener('abort', () => {
           reason = sig.reason;
           resolve(ok({ reachable: false, at: 0 }));

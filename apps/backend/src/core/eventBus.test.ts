@@ -37,8 +37,8 @@ describe('EventBus', () => {
   it('catches async handler rejections via onError', async () => {
     const onError = vi.fn();
     const bus = createEventBus(onError);
-    bus.on('service.error', async () => {
-      throw new Error('async boom');
+    bus.on('service.error', () => {
+      return Promise.reject(new Error('async boom'));
     });
     bus.emit('service.error', { id: 'x:1', kind: 'x', instanceId: '1', scope: 'health', error: null, at: 0 });
     await new Promise((r) => setImmediate(r));

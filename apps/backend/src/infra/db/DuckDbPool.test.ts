@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DuckDBTimestampValue } from "@duckdb/node-api";
 import { createDuckDbPool, fromTs, toTs } from "./DuckDbPool.js";
+import { required } from "../../test/required.js";
 
 describe("DuckDbPool", () => {
   it("reuses released connections instead of growing unboundedly", async () => {
@@ -58,10 +59,10 @@ describe("DuckDbPool", () => {
     await new Promise((r) => setImmediate(r));
     expect(settled).toBe(2);
     expect(a).not.toBe(b);
-    pool.release(a!);
-    const c = await pending[2]!;
+    pool.release(required(a));
+    const c = await required(pending[2]);
     expect(c).toBe(a);
-    pool.release(b!);
+    pool.release(required(b));
     pool.release(c);
     await pool.close();
   });
@@ -107,7 +108,7 @@ describe("DuckDbPool", () => {
         await c.run("CREATE TABLE t (ts TIMESTAMP NOT NULL)");
         await c.run("INSERT INTO t VALUES (?)", [toTs(d)]);
         const r = await c.runAndReadAll("SELECT ts FROM t");
-        return r.getRowObjects()[0]!;
+        return required(r.getRowObjects()[0]);
       });
       expect(fromTs(row["ts"]).toISOString()).toBe(d.toISOString());
       await pool.close();

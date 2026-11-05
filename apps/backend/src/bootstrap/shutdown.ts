@@ -6,7 +6,8 @@ interface Closable {
 
 export interface ShutdownStep {
   name: string;
-  run(): Promise<unknown> | unknown;
+  /** May return a promise, which shutdown awaits. */
+  run(): unknown;
 }
 
 export interface ShutdownOptions {

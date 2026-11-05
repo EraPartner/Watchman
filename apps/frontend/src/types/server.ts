@@ -46,23 +46,23 @@ export interface AdGuardServerStats extends ServerStats {
   topQueriedDomain: string;
   avgProcessingTime: number;
   running: boolean;
-  timeUnits?: string;
-  topClient?: string;
-  safebrowsingBlocked?: number;
-  safesearchBlocked?: number;
-  parentalBlocked?: number;
+  timeUnits?: string | undefined;
+  topClient?: string | undefined;
+  safebrowsingBlocked?: number | undefined;
+  safesearchBlocked?: number | undefined;
+  parentalBlocked?: number | undefined;
 }
 
 export interface TorServerStats extends ServerStats {
-  version?: string;
-  nickname?: string;
+  version?: string | undefined;
+  nickname?: string | undefined;
   fingerprint: string;
   relayType: "relay" | "exit" | "bridge" | "client";
   bandwidth: {
     current: number; // KB/s
     average: number; // KB/s
     burst: number; // KB/s
-    observed?: number; // KB/s - Optional to match API response
+    observed?: number | undefined; // KB/s - Optional to match API response
   };
   connections: {
     current: number;
@@ -73,16 +73,16 @@ export interface TorServerStats extends ServerStats {
     total: number;
   };
   flags: string[]; // Like ['Fast', 'Guard', 'HSDir', 'Running', 'Stable', 'V2Dir', 'Valid']
-  consensusWeight?: number;
-  exitPolicy?: string;
-  hibernating?: boolean;
-  orPort?: number;
-  controlPort?: number;
+  consensusWeight?: number | undefined;
+  exitPolicy?: string | undefined;
+  hibernating?: boolean | undefined;
+  orPort?: number | undefined;
+  controlPort?: number | undefined;
   running: boolean;
-  country?: string;
-  city?: string;
-  platform?: string;
-  contact?: string;
+  country?: string | undefined;
+  city?: string | undefined;
+  platform?: string | undefined;
+  contact?: string | undefined;
 }
 
 export interface ServerWithService extends Server {

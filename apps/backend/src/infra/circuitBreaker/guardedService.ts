@@ -75,18 +75,22 @@ class BreakerGuardedService extends BaseService {
   private readonly health: Lane;
   private readonly stats: Lane;
 
+  private readonly inner: BaseService;
+
   constructor(
-    private readonly inner: BaseService,
+    inner: BaseService,
     breakers: ServiceBreakers
   ) {
     super();
+    this.inner = inner;
     this.health = { breaker: breakers.health, lastError: undefined };
     this.stats = { breaker: breakers.stats, lastError: undefined };
     this.kind = inner.kind;
     this.instanceId = inner.instanceId;
     this.pollPolicy = inner.pollPolicy;
-    if (inner.onStart) this.onStart = () => inner.onStart!();
-    if (inner.onStop) this.onStop = () => inner.onStop!();
+    // Optional-call keeps `inner` as the receiver.
+    if (inner.onStart) this.onStart = () => inner.onStart?.() ?? Promise.resolve();
+    if (inner.onStop) this.onStop = () => inner.onStop?.() ?? Promise.resolve();
   }
 
   override onStart?: () => Promise<void>;

@@ -1,22 +1,23 @@
 {
+  "//": "Strict check for the Electron shell sources and their node:test tests (CI: npx tsc --noEmit -p tsconfig.json). Same strict options as Vision's Electron shell (EraPartner/Vision packaging/electron/tsconfig.base.json). The build uses tsconfig.build.json.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "Node16",
     "moduleResolution": "Node16",
-    "outDir": "dist",
-    "rootDir": "src",
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "forceConsistentCasingInFileNames": true,
-    "sourceMap": true,
-    "declaration": false
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts"],
-  "ts-node": {
-    "compilerOptions": {
-      "module": "CommonJS"
-    }
-  }
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }

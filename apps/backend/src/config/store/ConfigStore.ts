@@ -15,6 +15,7 @@ import {
 import type { ServiceInstance } from "../services.js";
 import type { Encryptor } from "./encryption.js";
 import type { ProfileStore } from "./ProfileStore.js";
+import { toText } from "../../core/text.js";
 
 const INSTANCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const INSTANCE_ID_MAX_LENGTH = 64;
@@ -193,8 +194,8 @@ function toBuffer(value: unknown): Buffer | null {
   if (Buffer.isBuffer(value)) return value;
   if (value instanceof Uint8Array) return Buffer.from(value);
   if (value instanceof DuckDBBlobValue) return Buffer.from(value.bytes);
-  if (typeof value === "object" && value !== null && "bytes" in value) {
-    const bytes = (value as { bytes: unknown }).bytes;
+  if (typeof value === "object" && "bytes" in value) {
+    const bytes = value.bytes;
     if (bytes instanceof Uint8Array) return Buffer.from(bytes);
   }
   if (typeof value === "string") return Buffer.from(value, "base64");
@@ -250,7 +251,7 @@ export function createConfigStore(
         `SELECT id FROM app_service_instance WHERE kind = ? AND instance_id = ?`,
         [kind, instanceId]
       );
-      return res.getRowObjects() as Array<Record<string, unknown>>;
+      return res.getRowObjects();
     });
     return rows.some((r) => String(r["id"]) !== exceptId);
   }
@@ -293,12 +294,12 @@ export function createConfigStore(
       const errors: LoadError[] = [];
       for (const r of rows) {
         try {
-          services.push(await rowToStored(r));
+          services.push(rowToStored(r));
         } catch (err) {
           const entry: LoadError = {
-            id: String(r["id"] ?? ""),
-            kind: String(r["kind"] ?? "unknown"),
-            instanceId: String(r["instance_id"] ?? ""),
+            id: toText(r["id"]),
+            kind: toText(r["kind"], "unknown"),
+            instanceId: toText(r["instance_id"]),
             message: err instanceof Error ? err.message : String(err),
           };
           errors.push(entry);
@@ -317,9 +318,7 @@ export function createConfigStore(
     });
   }
 
-  async function rowToStored(
-    row: Record<string, unknown>
-  ): Promise<StoredService> {
+  function rowToStored(row: Record<string, unknown>): StoredService {
     const kind = String(row["kind"]);
     if (!isServiceKind(kind)) {
       throw new Error(`Unknown service kind in DB: ${kind}`);
@@ -347,7 +346,7 @@ export function createConfigStore(
       kind,
       instanceId: String(row["instance_id"]),
       enabled: Boolean(row["enabled"]),
-      profileId: row["profile_id"] == null ? "" : String(row["profile_id"]),
+      profileId: toText(row["profile_id"]),
       config,
       createdAt,
       updatedAt,
@@ -369,7 +368,8 @@ export function createConfigStore(
     }
     const parsed = result.data;
     if (!isServiceKind(parsed.kind)) {
-      throw new Error(`Unknown kind: ${parsed.kind}`);
+      const kind: unknown = parsed.kind;
+      throw new Error(`Unknown kind: ${toText(kind)}`);
     }
     return parsed;
   }
@@ -394,16 +394,16 @@ export function createConfigStore(
       ...rest
     } = config as Record<string, unknown> & ServiceInstance;
     const { publicPart, secretPart } = splitSecrets(
-      config.kind as ServiceKind,
-      rest as Record<string, unknown>
+      config.kind,
+      rest
     );
     return {
-      kind: kind as ServiceKind,
-      instanceId: instanceId as string,
-      enabled: enabled as boolean,
+      kind,
+      instanceId,
+      enabled,
       pollPolicy,
-      cacheTtlMs: cacheTtlMs as number,
-      timeoutMs: timeoutMs as number,
+      cacheTtlMs,
+      timeoutMs,
       publicPart,
       secretPart,
     };
@@ -441,8 +441,8 @@ export function createConfigStore(
           [id]
         );
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
-        if (rows.length === 0) return null;
-        return rowToStored(rows[0]!);
+        const [row] = rows;
+        return row ? rowToStored(row) : null;
       });
     },
 
@@ -453,7 +453,7 @@ export function createConfigStore(
     ): Promise<StoredService> {
       const config = validate(input);
       const parts = extractStorable(config);
-      if (!KIND_META[parts.kind])
+      if (!Object.hasOwn(KIND_META, parts.kind))
         throw new Error(`Unsupported kind: ${parts.kind}`);
       assertValidInstanceId(parts.instanceId);
       const resolvedProfileId =
@@ -587,11 +587,11 @@ export function createConfigStore(
         const diff = {
           before: redactConfig(
             existing.kind,
-            existing.config as unknown as Record<string, unknown>
+            existing.config
           ),
           after: redactConfig(
             parts.kind,
-            config as unknown as Record<string, unknown>
+            config
           ),
         };
         await insertAudit(c, "update", parts.kind, id, diff, actor ?? null);
@@ -653,11 +653,12 @@ export function createConfigStore(
             `SELECT kind, instance_id FROM app_service_instance WHERE id = ?`,
             [id]
           );
-          return res.getRowObjects() as Array<Record<string, unknown>>;
+          return res.getRowObjects();
         });
-        if (identity.length === 0) return;
-        kind = String(identity[0]!["kind"] ?? "");
-        instanceId = String(identity[0]!["instance_id"] ?? "");
+        const [row] = identity;
+        if (!row) return;
+        kind = toText(row["kind"]);
+        instanceId = toText(row["instance_id"]);
       }
       await inTransaction(async (c) => {
         await c.run(`DELETE FROM app_service_instance WHERE id = ?`, [id]);
@@ -712,7 +713,7 @@ export function createConfigStore(
         profileId: svc.profileId,
         config: redactConfig(
           svc.kind,
-          svc.config as unknown as Record<string, unknown>
+          svc.config
         ),
         createdAt: svc.createdAt.toISOString(),
         updatedAt: svc.updatedAt.toISOString(),
@@ -736,10 +737,10 @@ export function createConfigStore(
           ts: fromTs(r["ts"]),
           action: String(r["action"]) as AuditEntry["action"],
           targetKind:
-            r["target_kind"] == null ? null : String(r["target_kind"]),
-          targetId: r["target_id"] == null ? null : String(r["target_id"]),
+            r["target_kind"] == null ? null : toText(r["target_kind"]),
+          targetId: r["target_id"] == null ? null : toText(r["target_id"]),
           diff: r["diff"] == null ? null : parseJsonColumn(r["diff"]),
-          actor: r["actor"] == null ? null : String(r["actor"]),
+          actor: r["actor"] == null ? null : toText(r["actor"]),
         }));
       });
     },
@@ -816,7 +817,7 @@ export function createConfigStore(
         throw new Error("Invalid bundle: unsupported version");
       if (typeof b["payload"] !== "string")
         throw new Error("Invalid bundle: payload missing");
-      const cipher = Buffer.from(b["payload"] as string, "base64");
+      const cipher = Buffer.from(b["payload"], "base64");
       const plaintext = encryptor.decryptJson(cipher);
       if (!Array.isArray(plaintext))
         throw new Error("Invalid bundle: decoded payload must be array");
@@ -909,8 +910,8 @@ export function createConfigStore(
           profileId?: unknown;
           config?: unknown;
         };
-        const kind = String(entry.kind ?? "");
-        const instanceId = String(entry.instanceId ?? "");
+        const kind = toText(entry.kind);
+        const instanceId = toText(entry.instanceId);
         try {
           const cfg = entry.config as Record<string, unknown> | undefined;
           if (!cfg) throw new Error("missing config");
@@ -995,7 +996,7 @@ function mergeSecretsWithExisting(
     // An explicit null clears a saved secret: drop the key so the schema
     // default applies. Blank, "***" and absent still mean "keep".
     if (incoming === null) {
-      delete clone[field];
+      Reflect.deleteProperty(clone, field);
       continue;
     }
     if (incoming === undefined || incoming === REDACTED || incoming === "") {

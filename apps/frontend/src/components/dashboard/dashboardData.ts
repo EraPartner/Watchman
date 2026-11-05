@@ -125,12 +125,12 @@ export function chunkTiles<T>(tiles: T[], size: number): T[][] {
 // instance-id rule); a numeric display index is the trailing digit run,
 // e.g. "qbittorrent-2" -> 2, "main2" -> 2, "main" -> undefined.
 export function getInstanceNumber(instanceId: string): number | undefined {
-  const match = /(\d+)$/.exec(instanceId);
-  if (!match) {
+  const digits = /(\d+)$/.exec(instanceId)?.[1];
+  if (digits === undefined) {
     return undefined;
   }
 
-  const parsed = Number.parseInt(match[1], 10);
+  const parsed = Number.parseInt(digits, 10);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 

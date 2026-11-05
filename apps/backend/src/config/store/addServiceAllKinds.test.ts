@@ -16,6 +16,7 @@ import {
   createService,
   type ServiceInfra,
 } from "../../bootstrap/registerServices.js";
+import { required } from "../../test/required.js";
 
 // Fields the add-service form renders itself rather than from the kind schema.
 const COMMON_FIELD_NAMES = new Set([
@@ -109,16 +110,16 @@ describe("adding each service kind from the form", () => {
 
       const loaded = await store.get(created.id);
       expect(loaded).not.toBeNull();
-      const config = loaded!.config as Record<string, unknown>;
+      const config = required(loaded).config as Record<string, unknown>;
       for (const name of KIND_META[kind].secretFields) {
         expect(config[name]).toBe(`secret-${name}`);
       }
-      const redacted = store.redact(loaded!).config;
+      const redacted = store.redact(required(loaded)).config;
       for (const name of KIND_META[kind].secretFields) {
         expect(redacted[name]).toBe("***");
       }
 
-      const svc = createService(loaded!.config, infra);
+      const svc = createService(required(loaded).config, infra);
       expect(svc.kind).toBe(kind);
       expect(svc.instanceId).toBe("main");
     }

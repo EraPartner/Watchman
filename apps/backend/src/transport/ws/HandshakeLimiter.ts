@@ -13,7 +13,11 @@ export class HandshakeLimiter {
     { start: number; count: number }
   >();
 
-  constructor(private readonly deps: HandshakeLimiterDeps) {}
+  private readonly deps: HandshakeLimiterDeps;
+
+  constructor(deps: HandshakeLimiterDeps) {
+    this.deps = deps;
+  }
 
   allow(ip: string): boolean {
     const now = this.deps.now();

@@ -32,7 +32,7 @@ export function SettingsLayout({
               <h1 className="text-[clamp(2rem,1.6rem+1.4vw,3rem)] font-[700] leading-[0.98] tracking-[-0.03em] text-[var(--text-hi)]">
                 {title}
               </h1>
-              {description ? (
+              {description !== undefined && description !== null ? (
                 <div className="flex items-center gap-s-3">
                   <span
                     aria-hidden
@@ -44,7 +44,7 @@ export function SettingsLayout({
                 </div>
               ) : null}
             </div>
-            {actions ? (
+            {actions !== undefined && actions !== null ? (
               <div className="flex items-center gap-s-2">{actions}</div>
             ) : null}
           </header>

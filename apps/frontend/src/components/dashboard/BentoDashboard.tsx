@@ -28,7 +28,7 @@ import type { ServiceKind } from "@/services/renderers/types";
 
 interface OpenCtx {
   kind: ServiceKind;
-  instanceId?: string;
+  instanceId?: string | undefined;
 }
 
 type EditorState = { mode: "closed" } | { mode: "create" };
@@ -81,12 +81,12 @@ export default function BentoDashboard() {
                   {entries.length} renderer
                   {entries.length === 1 ? "" : "s"} active ·{" "}
                   {Object.values(configuredKinds).reduce(
-                    (sum, k) => sum + (k?.count ?? 0),
+                    (sum, k) => sum + k.count,
                     0
                   )}{" "}
                   instance
                   {Object.values(configuredKinds).reduce(
-                    (sum, k) => sum + (k?.count ?? 0),
+                    (sum, k) => sum + k.count,
                     0
                   ) === 1
                     ? ""

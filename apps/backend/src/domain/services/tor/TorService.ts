@@ -154,7 +154,7 @@ export class TorService extends BaseService {
     this.now = deps.now;
   }
 
-  async onStart(): Promise<void> {
+  override async onStart(): Promise<void> {
     this.stopped = false;
     await this.subscribe();
   }
@@ -237,7 +237,7 @@ export class TorService extends BaseService {
     })();
   }
 
-  async onStop(): Promise<void> {
+  override async onStop(): Promise<void> {
     this.stopped = true;
     this.subAbort?.abort();
     await this.subscription?.close().catch(() => undefined);
@@ -656,7 +656,7 @@ export class TorService extends BaseService {
       if (!relay.running) details["warning"] = "relay is not running";
       else if (relay.hibernating) details["warning"] = "relay is hibernating";
       return ok({
-        reachable: Boolean(relay.running) && !relay.hibernating,
+        reachable: relay.running && !relay.hibernating,
         latencyMs,
         at: this.now(),
         details,
@@ -681,7 +681,7 @@ export class TorService extends BaseService {
         metrics: {
           nickname: relay.nickname,
           fingerprint: relay.fingerprint.slice(0, 8) + "...",
-          running: Boolean(relay.running),
+          running: relay.running,
           hibernating: Boolean(relay.hibernating),
           flags: (relay.flags ?? []).join(","),
           country: relay.country_name ?? relay.country ?? "Unknown",
@@ -747,15 +747,15 @@ export class TorService extends BaseService {
     // relay
     if (knownFp !== "") {
       return (
-        relays.find((r) => r.fingerprint?.toUpperCase() === knownFp) ?? null
+        relays.find((r) => r.fingerprint.toUpperCase() === knownFp) ?? null
       );
     }
     const term = this.relayNickname.trim();
     const nick = term.toLowerCase();
     const fp = term.replace(/^\$/, "").toUpperCase();
     return (
-      relays.find((r) => r.nickname?.toLowerCase() === nick) ??
-      relays.find((r) => r.fingerprint?.toUpperCase() === fp) ??
+      relays.find((r) => r.nickname.toLowerCase() === nick) ??
+      relays.find((r) => r.fingerprint.toUpperCase() === fp) ??
       null
     );
   }
@@ -767,7 +767,7 @@ export class TorService extends BaseService {
         `onionoo returned ${res.status}: ${text.slice(0, 200)}`
       );
     }
-    return res.json<OnionooResponse>();
+    return (await res.json()) as OnionooResponse;
   }
 
   // Onionoo enrichment (country/AS/consensus weight) changes on the order of

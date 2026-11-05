@@ -4,6 +4,7 @@ import type { DuckDBConnection } from "@duckdb/node-api";
 import type { DuckDbPool } from "../../infra/db/DuckDbPool.js";
 import { fromTs, toTs } from "../../infra/db/DuckDbPool.js";
 import { NotFoundError, ValidationError } from "../../core/errors.js";
+import { toText } from "../../core/text.js";
 
 const NAME_MAX_LENGTH = 64;
 
@@ -107,21 +108,21 @@ function normalizeSigs(value: unknown): CapturedSignature[] {
     const out: CapturedSignature = {
       capturedAt:
         typeof s["capturedAt"] === "string"
-          ? (s["capturedAt"] as string)
+          ? s["capturedAt"]
           : new Date().toISOString(),
     };
     if (typeof s["gatewayMac"] === "string")
-      out.gatewayMac = (s["gatewayMac"] as string).toLowerCase();
+      out.gatewayMac = s["gatewayMac"].toLowerCase();
     if (typeof s["gatewayIp"] === "string")
-      out.gatewayIp = s["gatewayIp"] as string;
-    if (typeof s["subnet"] === "string") out.subnet = s["subnet"] as string;
+      out.gatewayIp = s["gatewayIp"];
+    if (typeof s["subnet"] === "string") out.subnet = s["subnet"];
     return out;
   });
 }
 
 function optionalString(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
-  const s = String(value).trim();
+  const s = toText(value).trim();
   return s.length === 0 ? undefined : s;
 }
 
@@ -135,8 +136,8 @@ export function createProfileStore(
 
   function rowToProfile(row: Record<string, unknown>): Profile {
     const description =
-      row["description"] == null ? undefined : String(row["description"]);
-    const color = row["color"] == null ? undefined : String(row["color"]);
+      row["description"] == null ? undefined : toText(row["description"]);
+    const color = row["color"] == null ? undefined : toText(row["color"]);
     return {
       id: String(row["id"]),
       name: String(row["name"]),
@@ -178,8 +179,8 @@ export function createProfileStore(
       [key]
     );
     const rows = res.getRowObjects() as Array<Record<string, unknown>>;
-    if (rows.length === 0) return undefined;
-    return parseJson<unknown>(rows[0]!["value"], undefined);
+    const [row] = rows;
+    return row ? parseJson<unknown>(row["value"], undefined) : undefined;
   }
 
   async function writeSetting(
@@ -212,7 +213,8 @@ export function createProfileStore(
           [id]
         );
         const rows = res.getRowObjects() as Array<Record<string, unknown>>;
-        return rows.length === 0 ? undefined : rowToProfile(rows[0]!);
+        const [row] = rows;
+        return row ? rowToProfile(row) : undefined;
       });
     },
 
@@ -359,7 +361,7 @@ export function createProfileStore(
         const rows = res.getRowObjects() as Array<Record<string, unknown>>;
         const out: Record<string, number> = {};
         for (const r of rows) {
-          const pid = r["profile_id"] == null ? "" : String(r["profile_id"]);
+          const pid = toText(r["profile_id"]);
           if (pid) out[pid] = Number(r["n"]);
         }
         return out;
@@ -396,7 +398,7 @@ export function createProfileStore(
 
     async getLastSignature(): Promise<NetworkSignature | undefined> {
       const v = await withConn((c) => readSetting(c, LAST_SIGNATURE_KEY));
-      return v && typeof v === "object" ? (v as NetworkSignature) : undefined;
+      return v && typeof v === "object" ? v : undefined;
     },
 
     async setLastSignature(sig: NetworkSignature | undefined): Promise<void> {
@@ -408,7 +410,8 @@ export function createProfileStore(
       const profiles = await this.listProfiles();
       let activeId = await this.getActiveProfileId();
 
-      if (profiles.length === 0) {
+      const [firstProfile] = profiles;
+      if (!firstProfile) {
         const created = await this.createProfile(
           { name: DEFAULT_PROFILE_NAME },
           "bootstrap"
@@ -418,21 +421,19 @@ export function createProfileStore(
         log?.info({ profileId: activeId }, "created Default profile");
       } else if (!activeId || !profiles.some((p) => p.id === activeId)) {
         // No active profile, or it points at a deleted one — pin the first.
-        activeId = profiles[0]!.id;
+        activeId = firstProfile.id;
         await this.setActiveProfileId(activeId, "bootstrap");
       }
 
       // Backfill any unassigned service rows into the active profile so the
       // one-profile-per-service invariant holds for pre-existing installs.
-      const assigned = await withConn(async (c) => {
-        const res = await c.run(
+      await withConn(async (c) => {
+        await c.run(
           `UPDATE app_service_instance SET profile_id = ?
            WHERE profile_id IS NULL OR profile_id = ''`,
           [activeId]
         );
-        return res;
       });
-      void assigned;
     },
   };
 

@@ -56,7 +56,7 @@ export class RoonService extends BaseService {
     this.roonConnect = deps.roonConnect;
   }
 
-  async onStart(): Promise<void> {
+  override async onStart(): Promise<void> {
     if (!this.useRoonApi || !this.roonConnect) return;
     this.handle = await this.roonConnect({
       host: this.host,
@@ -66,7 +66,7 @@ export class RoonService extends BaseService {
     });
   }
 
-  async onStop(): Promise<void> {
+  override async onStop(): Promise<void> {
     if (this.handle) {
       await this.handle.close();
       this.handle = null;
@@ -149,14 +149,14 @@ export class RoonService extends BaseService {
     });
   }
 
-  async getStats(_signal: AbortSignal): Promise<StatsResult> {
+  getStats(_signal: AbortSignal): Promise<StatsResult> {
     const zones = this.handle?.getZones() ?? [];
     const paired = this.handle?.isPaired() ?? false;
     const activeZones = zones.filter((z) => z.state === "playing").length;
     const nowPlaying = zones.find((z) => z.state === "playing")?.nowPlaying
       ?.oneLine;
 
-    return ok({
+    return Promise.resolve(ok({
       at: this.now(),
       metrics: {
         host: this.host,
@@ -186,6 +186,6 @@ export class RoonService extends BaseService {
             }
           : {}),
       },
-    });
+    }));
   }
 }

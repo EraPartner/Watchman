@@ -1,3 +1,4 @@
+import { toText } from "@/lib/text";
 import type { ServiceInstance } from "@/services/configApi";
 import { Button } from "@/components/primitives/Button";
 import { useTestService } from "@/pages/Settings/useConfigQueries";
@@ -9,16 +10,7 @@ export interface ConfigPanelProps {
 }
 
 function fmtConfigValue(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "boolean") return v ? "true" : "false";
-  if (typeof v === "object") {
-    try {
-      return JSON.stringify(v);
-    } catch {
-      return String(v);
-    }
-  }
-  return String(v);
+  return toText(v);
 }
 
 function fmtTs(iso?: string): string {
@@ -46,11 +38,7 @@ export function ConfigPanel({ service }: ConfigPanelProps) {
       const result = readConnectionTest(await test.mutateAsync(service.id));
       if (result.ok) {
         toast.success(
-          `Connection ok${
-            result.latencyMs !== undefined
-              ? ` (${Math.round(result.latencyMs)} ms)`
-              : ""
-          }`
+          `Connection ok (${Math.round(result.latencyMs)} ms)`
         );
       } else {
         toast.error(`Connection failed: ${result.error}`);
@@ -68,7 +56,7 @@ export function ConfigPanel({ service }: ConfigPanelProps) {
     ["Updated", fmtTs(service.updatedAt)],
   ];
 
-  const configRows = Object.entries(service.config ?? {}).filter(
+  const configRows = Object.entries(service.config).filter(
     ([k]) => k !== "kind" && k !== "instanceId" && k !== "enabled"
   );
 

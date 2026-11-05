@@ -2,9 +2,15 @@ import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
-import typescriptEslint from "@typescript-eslint/eslint-plugin";
-import typescriptParser from "@typescript-eslint/parser";
+import tseslint from "typescript-eslint";
 import react from "eslint-plugin-react";
+import {
+  rulesOf,
+  strictTypeAwareRules,
+} from "../../config/eslint-type-aware.ts";
+
+const typescriptEslint = tseslint.plugin;
+const typescriptParser = tseslint.parser;
 
 export default [
   {
@@ -53,7 +59,9 @@ export default [
       react: react,
     },
     rules: {
-      ...typescriptEslint.configs.recommended.rules,
+      // typescript-eslint's recommended rules (flat config form; the plugin's
+      // legacy `configs.recommended` is untyped).
+      ...rulesOf(tseslint.configs.recommended),
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": [
         "warn",
@@ -72,20 +80,17 @@ export default [
 
   // file-specific configuration (replaces the previous `overrides` usage)
   {
-    files: ["**/*.{js,cjs}"],
+    // Type-aware linting with the same rule set as EraPartner/Vision
+    // (strict-type-checked as errors, see config/eslint-type-aware.ts).
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
-      globals: {
-        ...globals.node,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
-      "no-undef": "off",
-    },
-  },
-  {
-    files: ["**/*.{ts,tsx}"],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
+      ...strictTypeAwareRules(tseslint),
       "no-undef": "off",
     },
   },

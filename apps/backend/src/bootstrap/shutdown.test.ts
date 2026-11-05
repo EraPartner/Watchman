@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { pino } from 'pino';
 import { registerShutdown, runShutdownSteps } from './shutdown.js';
+import { required } from "../test/required.js";
 
 const silentLogger = pino({ level: 'silent' });
 const EVENTS = ['SIGINT', 'SIGTERM', 'SIGHUP', 'disconnect'] as const;
@@ -11,8 +12,9 @@ describe('runShutdownSteps', () => {
     await runShutdownSteps(
       ['server', 'lifecycle', 'db'].map((name) => ({
         name,
-        run: async () => {
+        run: () => {
           order.push(name);
+          return Promise.resolve();
         },
       })),
       silentLogger,
@@ -38,7 +40,7 @@ describe('runShutdownSteps', () => {
 
 describe('registerShutdown', () => {
   let before: Map<string, ReturnType<typeof process.listeners>>;
-  let exit: ReturnType<typeof vi.spyOn>;
+  let exit: MockInstance<typeof process.exit>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -49,7 +51,7 @@ describe('registerShutdown', () => {
   afterEach(() => {
     for (const e of EVENTS) {
       for (const l of process.listeners(e as NodeJS.Signals)) {
-        if (!before.get(e)!.includes(l)) process.removeListener(e, l as never);
+        if (!required(before.get(e)).includes(l)) process.removeListener(e, l as never);
       }
     }
     exit.mockRestore();

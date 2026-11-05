@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { KIND_META, SERVICE_KINDS } from "../config/schemas/index.js";
 import { REDACTED_LOG_KEYS, createLogger } from "./logger.js";
+import { required } from "../test/required.js";
 
 function capture(): { lines: string[]; write(msg: string): void } {
   const lines: string[] = [];
@@ -33,7 +34,7 @@ describe("logger redaction", () => {
       "svc"
     );
     expect(dest.lines).toHaveLength(1);
-    const line = JSON.parse(dest.lines[0]!) as {
+    const line = JSON.parse(required(dest.lines[0])) as {
       rpcPassword: string;
       config: { sshPassphrase: string; host: string };
     };

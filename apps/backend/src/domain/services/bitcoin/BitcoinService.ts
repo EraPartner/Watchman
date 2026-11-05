@@ -206,7 +206,7 @@ export class BitcoinService extends BaseService {
     return {
       chainTips: Array.isArray(tipsRaw) ? (tipsRaw as ChainTip[]) : null,
       memory:
-        memRaw && typeof memRaw === "object" ? (memRaw as MemoryInfo) : null,
+        memRaw && typeof memRaw === "object" ? memRaw : null,
     };
   }
 
@@ -247,7 +247,8 @@ export class BitcoinService extends BaseService {
   }
 
   override async onStart(): Promise<void> {
-    if (!this.zmqConnectFn) return;
+    const connect = this.zmqConnectFn;
+    if (!connect) return;
     // one socket per endpoint: hashblock and rawtx share it when they match
     const topicsByEndpoint = new Map<string, string[]>();
     if (this.zmqHashblockEndpoint) {
@@ -262,7 +263,7 @@ export class BitcoinService extends BaseService {
 
     await Promise.all(
       [...topicsByEndpoint].map(([endpoint, topics]) =>
-        this.openZmq(this.zmqConnectFn!, endpoint, topics)
+        this.openZmq(connect, endpoint, topics)
       )
     );
 
@@ -501,8 +502,11 @@ export class BitcoinService extends BaseService {
           warnings: collectWarnings(chain.warnings, net.warnings),
           reachableNetworks: Array.isArray(net.networks)
             ? net.networks
-                .filter((n) => n.reachable === true && n.name)
-                .map((n) => n.name as string)
+                .flatMap((n) =>
+                  n.reachable === true && typeof n.name === "string" && n.name !== ""
+                    ? [n.name]
+                    : []
+                )
             : [],
           // slow lane: null when the extras batch failed (see extrasError)
           chainTipsCount: tips ? tips.length : null,
@@ -604,7 +608,7 @@ export class BitcoinService extends BaseService {
     calls: ReadonlyArray<{ method: string; params?: unknown[] }>,
     signal: AbortSignal
   ): Promise<{
-    results: Array<unknown | null>;
+    results: unknown[];
     errors: Array<string | undefined>;
   }> {
     if (!this.authHeader) {
@@ -648,7 +652,9 @@ export class BitcoinService extends BaseService {
         `bitcoin rpc batch returned ${res.status}: ${text.slice(0, 200)}`
       );
     }
-    const env = await res.json<Array<RpcEnvelope<unknown> & { id?: number }>>();
+    const env = (await res.json()) as Array<
+      RpcEnvelope<unknown> & { id?: number }
+    >;
     if (!Array.isArray(env)) {
       throw new UnavailableError("bitcoin rpc batch returned a non-array");
     }
@@ -677,7 +683,7 @@ export class BitcoinService extends BaseService {
         `bitcoin rpc ${method} returned ${res.status}: ${text.slice(0, 200)}`
       );
     }
-    const env = await res.json<RpcEnvelope<T>>();
+    const env = (await res.json()) as RpcEnvelope<T>;
     if (env.error) {
       throw new UnavailableError(
         `bitcoin rpc ${method} error: ${env.error.message ?? "unknown"}`

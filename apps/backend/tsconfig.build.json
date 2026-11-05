@@ -1,0 +1,5 @@
+{
+  "//": "Emit config for npm run build: the strict options of tsconfig.json, without the tests.",
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "dist-ts", "tests", "src/test", "**/*.test.ts"]
+}

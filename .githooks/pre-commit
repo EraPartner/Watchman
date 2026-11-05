@@ -3,7 +3,7 @@
 # Watchman pre-commit -- fast, staged-only checks. The heavier gate (typecheck,
 # tests) lives in .githooks/pre-push.
 #
-# Wiring:   git config core.hooksPath .githooks   (done by scripts/setup-git-hooks.mjs)
+# Wiring:   git config core.hooksPath .githooks   (done by scripts/setup-git-hooks.ts)
 # Bypass:   git commit --no-verify        or       SKIP_HOOKS=1 git commit ...
 #
 # Checks (in order):
@@ -61,7 +61,7 @@ if [ "${ALLOW_BIG_FILES:-}" != "1" ]; then
 fi
 
 # --- 4. Format + lint staged files (lint-staged) -----------------------------
-# eslint --fix (per workspace) + prettier --write; config: lint-staged.config.mjs.
+# eslint --fix (per workspace) + prettier --write; config: lint-staged.config.ts.
 echo "[pre-commit] lint-staged: formatting + linting staged files..."
 npx lint-staged || fail=1
 

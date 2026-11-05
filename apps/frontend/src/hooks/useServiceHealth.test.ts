@@ -4,8 +4,8 @@ import type { AggregatedEntry } from "../services/apiClient/types";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-const useQueryMock = vi.fn();
-const getServiceStatsMock = vi.fn();
+const useQueryMock = vi.fn<(...args: unknown[]) => unknown>();
+const getServiceStatsMock = vi.fn<(...args: unknown[]) => unknown>();
 
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -18,7 +18,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("../services/ApiClient", () => ({
   apiClient: {
-    getAggregatedServices: vi.fn(async () => []),
+    getAggregatedServices: vi.fn(() => Promise.resolve([])),
     getServiceStats: (...args: unknown[]) => getServiceStatsMock(...args),
   },
 }));
@@ -134,7 +134,7 @@ describe("useServiceStats", () => {
 
     useServiceStats("bitcoin");
 
-    const opts = useQueryMock.mock.calls[0][0] as { queryKey: unknown[] };
+    const opts = useQueryMock.mock.calls[0]?.[0] as { queryKey: unknown[] };
     expect(opts.queryKey).not.toContain(undefined);
     expect(opts.queryKey[0]).toBe("bitcoin");
   });
@@ -144,7 +144,7 @@ describe("useServiceStats", () => {
 
     useServiceStats("bitcoin", "node1");
 
-    const opts = useQueryMock.mock.calls[0][0] as { queryKey: unknown[] };
+    const opts = useQueryMock.mock.calls[0]?.[0] as { queryKey: unknown[] };
     expect(opts.queryKey).toContain("node1");
   });
 
@@ -153,7 +153,7 @@ describe("useServiceStats", () => {
 
     useServiceStats("bitcoin", undefined, false);
 
-    const opts = useQueryMock.mock.calls[0][0] as { enabled: boolean };
+    const opts = useQueryMock.mock.calls[0]?.[0] as { enabled: boolean };
     expect(opts.enabled).toBe(false);
   });
 
@@ -164,7 +164,7 @@ describe("useServiceStats", () => {
 
     useServiceStats("bitcoin", "main");
 
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryFn: () => Promise<unknown>;
     };
     const result = await opts.queryFn();
@@ -177,7 +177,7 @@ describe("useServiceStats", () => {
 
     useServiceStats("bitcoin");
 
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryFn: () => Promise<unknown>;
     };
     await expect(opts.queryFn()).rejects.toBeInstanceOf(StatsApiError);

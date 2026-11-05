@@ -6,7 +6,7 @@ describe('SwrCache', () => {
   it('misses on first get then hits within ttl', async () => {
     const clock = createFakeClock(0);
     const cache = createSwrCache<number>({ ttlMs: 100, staleMs: 100 }, clock);
-    const fetcher = vi.fn(async () => 42);
+    const fetcher = vi.fn(() => Promise.resolve(42));
     expect(await cache.get('k', fetcher)).toBe(42);
     expect(await cache.get('k', fetcher)).toBe(42);
     expect(fetcher).toHaveBeenCalledOnce();
@@ -18,7 +18,7 @@ describe('SwrCache', () => {
     const clock = createFakeClock(0);
     const cache = createSwrCache<number>({ ttlMs: 100, staleMs: 100 }, clock);
     let n = 1;
-    const fetcher = vi.fn(async () => n++);
+    const fetcher = vi.fn(() => Promise.resolve(n++));
     await cache.get('k', fetcher);
     clock.advance(150);
     expect(await cache.get('k', fetcher)).toBe(1);
@@ -30,7 +30,7 @@ describe('SwrCache', () => {
   it('re-fetches after stale window expires', async () => {
     const clock = createFakeClock(0);
     const cache = createSwrCache<number>({ ttlMs: 50, staleMs: 50 }, clock);
-    const fetcher = vi.fn(async () => 7);
+    const fetcher = vi.fn(() => Promise.resolve(7));
     await cache.get('k', fetcher);
     clock.advance(200);
     await cache.get('k', fetcher);

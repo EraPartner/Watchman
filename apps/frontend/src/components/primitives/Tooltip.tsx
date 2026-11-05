@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
 import * as T from "@radix-ui/react-tooltip";
 import { cn } from "@/lib/utils";
 
@@ -7,7 +7,7 @@ export const Tooltip = T.Root;
 export const TooltipTrigger = T.Trigger;
 
 export const TooltipContent = forwardRef<
-  ElementRef<typeof T.Content>,
+  ComponentRef<typeof T.Content>,
   ComponentPropsWithoutRef<typeof T.Content>
 >(({ className, sideOffset = 6, ...rest }, ref) => (
   <T.Portal>

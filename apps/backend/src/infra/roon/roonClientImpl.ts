@@ -85,7 +85,7 @@ interface RoonZoneRaw {
     seek_position?: number;
     length?: number;
   };
-  outputs?: Array<{ display_name?: unknown }>;
+  outputs?: Array<{ display_name?: unknown } | null>;
 }
 
 interface ZonesBody {
@@ -331,7 +331,7 @@ export function createRoonConnect(deps: RoonConnectDeps): RoonConnectFn {
     const handle: RoonHandle = {
       getZones: () => Array.from(zones.values()),
       isPaired: () => paired,
-      close: async (): Promise<void> => {
+      close: (): Promise<void> => {
         closed = true;
         clearTimeout(reconnectTimer);
         reconnectTimer = undefined;
@@ -343,6 +343,7 @@ export function createRoonConnect(deps: RoonConnectDeps): RoonConnectFn {
         }
         zones.clear();
         paired = false;
+        return Promise.resolve();
       },
     };
 

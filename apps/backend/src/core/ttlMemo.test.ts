@@ -10,7 +10,7 @@ describe("ttlMemo", () => {
     const memo = ttlMemo(
       1000,
       () => t,
-      async () => ++n
+      () => Promise.resolve(++n)
     );
 
     expect(await memo(signal())).toBe(1);
@@ -38,9 +38,9 @@ describe("ttlMemo", () => {
     const memo = ttlMemo(
       1000,
       () => t,
-      async () => {
-        if (fail) throw new Error("down");
-        return "fresh";
+      () => {
+        if (fail) return Promise.reject(new Error("down"));
+        return Promise.resolve("fresh");
       }
     );
 
@@ -54,8 +54,8 @@ describe("ttlMemo", () => {
     const memo = ttlMemo(
       1000,
       () => 0,
-      async () => {
-        throw new Error("down");
+      () => {
+        return Promise.reject(new Error("down"));
       }
     );
     await expect(memo(signal())).rejects.toThrow("down");
@@ -64,9 +64,9 @@ describe("ttlMemo", () => {
   it("remembers a failure for min(ttl, 60s) before calling the fetcher again", async () => {
     let t = 0;
     let fail = true;
-    const fetcher = vi.fn(async () => {
-      if (fail) throw new Error("down");
-      return "ok";
+    const fetcher = vi.fn(() => {
+      if (fail) return Promise.reject(new Error("down"));
+      return Promise.resolve("ok");
     });
     const memo = ttlMemo(10 * 60_000, () => t, fetcher);
 
@@ -84,9 +84,9 @@ describe("ttlMemo", () => {
   it("serves the stale value during the failure window without refetching", async () => {
     let t = 0;
     let fail = false;
-    const fetcher = vi.fn(async () => {
-      if (fail) throw new Error("down");
-      return "fresh";
+    const fetcher = vi.fn(() => {
+      if (fail) return Promise.reject(new Error("down"));
+      return Promise.resolve("fresh");
     });
     const memo = ttlMemo(1000, () => t, fetcher);
 
@@ -104,9 +104,9 @@ describe("ttlMemo", () => {
 
   it("does not remember a failure caused by the caller aborting", async () => {
     let fail = true;
-    const fetcher = vi.fn(async () => {
-      if (fail) throw new Error("aborted");
-      return "ok";
+    const fetcher = vi.fn(() => {
+      if (fail) return Promise.reject(new Error("aborted"));
+      return Promise.resolve("ok");
     });
     const memo = ttlMemo(1000, () => 0, fetcher);
     const ac = new AbortController();

@@ -17,7 +17,11 @@ export interface PiHealthDeps {
 }
 
 export class PiHealthChecker {
-  constructor(private readonly deps: PiHealthDeps) {}
+  private readonly deps: PiHealthDeps;
+
+  constructor(deps: PiHealthDeps) {
+    this.deps = deps;
+  }
 
   async check(signal: AbortSignal): Promise<PiHealthStatus> {
     const { pigpio, ping, config, now } = this.deps;

@@ -1,7 +1,7 @@
 import {
   forwardRef,
   type ComponentPropsWithoutRef,
-  type ElementRef,
+  type ComponentRef,
 } from "react";
 import * as D from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
@@ -18,7 +18,7 @@ export const SheetClose = D.Close;
 export const SheetPortal = D.Portal;
 
 export const SheetOverlay = forwardRef<
-  ElementRef<typeof D.Overlay>,
+  ComponentRef<typeof D.Overlay>,
   ComponentPropsWithoutRef<typeof D.Overlay>
 >(({ className, ...rest }, ref) => (
   <D.Overlay
@@ -40,7 +40,7 @@ export interface SheetContentProps extends ComponentPropsWithoutRef<
 }
 
 export const SheetContent = forwardRef<
-  ElementRef<typeof D.Content>,
+  ComponentRef<typeof D.Content>,
   SheetContentProps
 >(({ className, children, width = "min(560px,94vw)", ...rest }, ref) => (
   <SheetPortal>
@@ -105,7 +105,7 @@ export const SheetFooter = ({
 );
 
 export const SheetTitle = forwardRef<
-  ElementRef<typeof D.Title>,
+  ComponentRef<typeof D.Title>,
   ComponentPropsWithoutRef<typeof D.Title>
 >(({ className, ...rest }, ref) => (
   <D.Title
@@ -117,7 +117,7 @@ export const SheetTitle = forwardRef<
 SheetTitle.displayName = "SheetTitle";
 
 export const SheetDescription = forwardRef<
-  ElementRef<typeof D.Description>,
+  ComponentRef<typeof D.Description>,
   ComponentPropsWithoutRef<typeof D.Description>
 >(({ className, ...rest }, ref) => (
   <D.Description

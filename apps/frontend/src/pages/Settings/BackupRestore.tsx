@@ -88,7 +88,7 @@ export default function BackupRestore() {
           )}
           {exportMut.error && (
             <p className="mt-s-3 text-fs-label text-[var(--crit)]">
-              {(exportMut.error as Error).message}
+              {exportMut.error.message}
             </p>
           )}
         </section>

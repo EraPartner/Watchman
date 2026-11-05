@@ -70,7 +70,7 @@ build to produce a working app: (a) `electron`/`electron-builder` are pinned to
 exact versions in `apps/desktop/package.json`, because the hoisted `electron`
 isn't found under `apps/desktop/node_modules` and electron-builder refuses a
 caret range for its version fallback; (b) the backend's runtime deps are hoisted
-to the repo root, so `scripts/stage-backend.mjs` materialises a complete
+to the repo root, so `scripts/stage-backend.mts` materialises a complete
 **production** dependency tree from the backend's standalone lockfile into
 `apps/backend/.bundle`, which electron-builder bundles instead of the sparse
 workspace `node_modules`. The backend's native `@duckdb` binding is arch-specific
@@ -123,4 +123,4 @@ desktop bridge, so the browser build is unaffected.
   `apps/desktop/src/splash.ts`, `apps/desktop/src/menu.ts`,
   `apps/desktop/src/logs.ts`, `apps/desktop/src/frontendProtocol.ts`,
   `apps/desktop/assets/error.html`, `apps/frontend/src/hooks/useDesktopChrome.ts`,
-  `apps/desktop/scripts/stage-backend.mjs`, `packaging/release/make-release.sh`
+  `apps/desktop/scripts/stage-backend.mts`, `packaging/release/make-release.sh`

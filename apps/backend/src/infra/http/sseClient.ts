@@ -1,4 +1,5 @@
 import { request, type Dispatcher } from "undici";
+import { isAborted } from "../../core/abort.js";
 
 export interface SseStreamOptions {
   url: string;
@@ -21,8 +22,11 @@ export type SseStarter = (opts: SseStreamOptions) => void;
 
 /** The endpoint answered the handshake with a non-2xx status. */
 export class SseStatusError extends Error {
-  constructor(readonly statusCode: number) {
+  readonly statusCode: number;
+
+  constructor(statusCode: number) {
     super(`sse endpoint returned ${statusCode}`);
+    this.statusCode = statusCode;
     this.name = "SseStatusError";
   }
 }
@@ -65,14 +69,14 @@ export const startSseStream: SseStarter = (opts) => {
         await consumeOnce(opts, session);
         // a clean end (server closed the stream) still loses the events sent
         // before the reconnect, so callers must hear about it like an error
-        if (opts.signal.aborted) return;
+        if (isAborted(opts.signal)) return;
         opts.onError?.(new Error("sse stream ended"));
       } catch (e) {
-        if (opts.signal.aborted) return;
+        if (isAborted(opts.signal)) return;
         opts.onError?.(e);
         if (isCredentialRejection(e)) return;
       }
-      if (opts.signal.aborted) return;
+      if (isAborted(opts.signal)) return;
       // a stream that was up counts as a fresh start; refused handshakes and
       // transport errors in a row back off further each time
       failures = session.opened ? 1 : failures + 1;

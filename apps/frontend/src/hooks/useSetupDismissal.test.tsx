@@ -4,19 +4,21 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSetupDismissal } from "./useSetupDismissal";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 const KEY = "watchman.setupDismissed";
 
 // jsdom may not expose localStorage for opaque origins — provide a minimal stub.
 function makeLocalStorageStub() {
-  const store: Record<string, string> = {};
+  const store = new Map<string, string>();
   return {
-    getItem: (k: string) => store[k] ?? null,
-    setItem: (k: string, v: string) => { store[k] = v; },
-    removeItem: (k: string) => { delete store[k]; },
-    clear: () => { Object.keys(store).forEach((k) => delete store[k]); },
-    get length() { return Object.keys(store).length; },
-    key: (i: number) => Object.keys(store)[i] ?? null,
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => { store.set(k, v); },
+    removeItem: (k: string) => { store.delete(k); },
+    clear: () => { store.clear(); },
+    get length() { return store.size; },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
   };
 }
 
@@ -54,11 +56,11 @@ describe("useSetupDismissal", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(r) => (hookResult = r)} />);
     });
 
-    return { root, getResult: () => hookResult! };
+    return { root, getResult: () => required(hookResult) };
   }
 
   it("starts with dismissed=false when localStorage is empty", async () => {
@@ -77,7 +79,7 @@ describe("useSetupDismissal", () => {
   it("dismiss() sets dismissed=true and writes to localStorage", async () => {
     const { root, getResult } = await mount();
 
-    await act(async () => {
+    await actAsync(() => {
       getResult().dismiss();
     });
 
@@ -93,7 +95,7 @@ describe("useSetupDismissal", () => {
 
     expect(getResult().dismissed).toBe(true);
 
-    await act(async () => {
+    await actAsync(() => {
       getResult().reset();
     });
 
@@ -108,7 +110,7 @@ describe("useSetupDismissal", () => {
 
     expect(getResult().dismissed).toBe(false);
 
-    await act(async () => {
+    await actAsync(() => {
       fakeStorage.setItem(KEY, "1");
       window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     });
@@ -121,7 +123,7 @@ describe("useSetupDismissal", () => {
   it("ignores storage events for unrelated keys", async () => {
     const { root, getResult } = await mount();
 
-    await act(async () => {
+    await actAsync(() => {
       window.dispatchEvent(
         new StorageEvent("storage", { key: "some-other-key" })
       );

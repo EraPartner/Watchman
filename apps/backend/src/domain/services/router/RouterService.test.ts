@@ -42,31 +42,31 @@ function fakeSnmp(
   walkMap: Record<string, Array<{ oid: string; value: string }>>
 ): SnmpGetter {
   return {
-    get: async () => ({ values: [] }),
-    walk: async (req: SnmpWalkRequest): Promise<SnmpWalkResult> => {
+    get: () => Promise.resolve({ values: [] }),
+    walk: (req: SnmpWalkRequest): Promise<SnmpWalkResult> => {
       const rows = walkMap[req.subtree] ?? [];
-      return { rows };
+      return Promise.resolve({ rows });
     },
   };
 }
 
 function failSnmp(): SnmpGetter {
   return {
-    get: async () => {
-      throw new Error("unreachable");
+    get: () => {
+      return Promise.reject(new Error("unreachable"));
     },
-    walk: async () => {
-      throw new Error("snmp unreachable");
+    walk: () => {
+      return Promise.reject(new Error("snmp unreachable"));
     },
   };
 }
 
 function fakePing(result: PingResult): PingProber {
-  return { probe: async (_: PingRequest) => result };
+  return { probe: (_: PingRequest) => Promise.resolve(result) };
 }
 
 function fakeTcp(map: Record<number, boolean>): TcpProber {
-  return { probe: async (req: TcpProbeRequest) => Boolean(map[req.port]) };
+  return { probe: (req: TcpProbeRequest) => Promise.resolve(Boolean(map[req.port])) };
 }
 
 describe("RouterService", () => {
@@ -350,12 +350,12 @@ describe("RouterService SNMP stats (R1)", () => {
       ],
     };
     const snmp: SnmpGetter = {
-      get: async () => ({ values: [] }),
-      walk: async (req) => {
+      get: () => Promise.resolve({ values: [] }),
+      walk: (req) => {
         if (req.subtree === SNMP_OID.hrProcessorLoad)
-          throw new Error("timeout");
-        if (req.subtree === SNMP_OID.arpTable) throw new Error("timeout");
-        return { rows: rows[req.subtree] ?? [] };
+          return Promise.reject(new Error("timeout"));
+        if (req.subtree === SNMP_OID.arpTable) return Promise.reject(new Error("timeout"));
+        return Promise.resolve({ rows: rows[req.subtree] ?? [] });
       },
     };
     const svc = new RouterService({
@@ -429,10 +429,10 @@ describe("RouterService SNMP stats (R1)", () => {
       let rows = hcRows("5000000000000", "6000000000000");
       let failSubtree: string | null = null;
       const snmp: SnmpGetter = {
-        get: async () => ({ values: [] }),
-        walk: async (req) => {
-          if (req.subtree === failSubtree) throw new Error("timeout");
-          return { rows: rows[req.subtree] ?? [] };
+        get: () => Promise.resolve({ values: [] }),
+        walk: (req) => {
+          if (req.subtree === failSubtree) return Promise.reject(new Error("timeout"));
+          return Promise.resolve({ rows: rows[req.subtree] ?? [] });
         },
       };
       const svc = new RouterService({
@@ -471,11 +471,11 @@ describe("RouterService SNMP stats (R1)", () => {
       let t = 0;
       const rows = hcRows("5000000000000", "6000000000000");
       const snmp: SnmpGetter = {
-        get: async () => ({ values: [] }),
-        walk: async (req) => {
+        get: () => Promise.resolve({ values: [] }),
+        walk: (req) => {
           if (failHc && req.subtree === SNMP_OID.ifHCOutOctets)
-            throw new Error("timeout");
-          return { rows: rows[req.subtree] ?? [] };
+            return Promise.reject(new Error("timeout"));
+          return Promise.resolve({ rows: rows[req.subtree] ?? [] });
         },
       };
       const svc = new RouterService({
@@ -501,13 +501,13 @@ describe("RouterService SNMP stats (R1)", () => {
       let t = 0;
       const full = hcRows("5000000000000", "6000000000000");
       const snmp: SnmpGetter = {
-        get: async () => ({ values: [] }),
-        walk: async (req) => {
+        get: () => Promise.resolve({ values: [] }),
+        walk: (req) => {
           const isHc =
             req.subtree === SNMP_OID.ifHCInOctets ||
             req.subtree === SNMP_OID.ifHCOutOctets;
-          if (isHc && !hc) return { rows: [] };
-          return { rows: full[req.subtree] ?? [] };
+          if (isHc && !hc) return Promise.resolve({ rows: [] });
+          return Promise.resolve({ rows: full[req.subtree] ?? [] });
         },
       };
       const svc = new RouterService({
@@ -539,10 +539,10 @@ describe("RouterService SNMP hardening and link state", () => {
   it("uses SNMPv3 instead of the v2c community when v3 credentials are set", async () => {
     const reqs: SnmpWalkRequest[] = [];
     const snmp: SnmpGetter = {
-      get: async () => ({ values: [] }),
-      walk: async (req) => {
+      get: () => Promise.resolve({ values: [] }),
+      walk: (req) => {
         reqs.push(req);
-        return { rows: [] };
+        return Promise.resolve({ rows: [] });
       },
     };
     const svc = new RouterService({

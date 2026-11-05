@@ -139,8 +139,8 @@ export class PhilipsBridgeService extends BaseService {
     this.roomMemo = resource("/resource/room");
   }
 
-  override async onStart(): Promise<void> {
-    if (!this.applicationKey) return;
+  override onStart(): Promise<void> {
+    if (!this.applicationKey) return Promise.resolve();
     // the bridge pushes every state change over SSE — light state stays
     // fresh between polls without re-fetching the light list
     this.sseAbort = new AbortController();
@@ -158,12 +158,14 @@ export class PhilipsBridgeService extends BaseService {
         if (isCredentialRejection(e)) this.sseKeyRejected = true;
       },
     });
+    return Promise.resolve();
   }
 
-  override async onStop(): Promise<void> {
+  override onStop(): Promise<void> {
     this.sseAbort?.abort();
     this.sseAbort = undefined;
     this.sseHealthy = false;
+    return Promise.resolve();
   }
 
   private handleSseMessage(data: string): void {
@@ -313,7 +315,7 @@ export class PhilipsBridgeService extends BaseService {
       .map((p) => p.power_state?.battery_level)
       .filter((lvl): lvl is number => typeof lvl === "number");
     const batteryLow = power
-      ? (power ?? []).filter((p) => {
+      ? power.filter((p) => {
           const state = p.power_state?.battery_state;
           const level = p.power_state?.battery_level;
           return (
@@ -374,7 +376,7 @@ export class PhilipsBridgeService extends BaseService {
   }
 
   private apiHeaders(): Record<string, string> {
-    return { "hue-application-key": this.applicationKey! };
+    return this.applicationKey ? { "hue-application-key": this.applicationKey } : {};
   }
 
   private async probeApi(
@@ -418,7 +420,7 @@ export class PhilipsBridgeService extends BaseService {
       }
       throw new Error(`hue ${path} returned ${res.status}`);
     }
-    const body = await res.json<HueListResponse<HueResource>>();
+    const body = (await res.json()) as HueListResponse<HueResource>;
     return body.data ?? [];
   }
 
@@ -447,7 +449,7 @@ export class PhilipsBridgeService extends BaseService {
         }
         return {};
       }
-      const body = await res.json<HueListResponse<HueLight>>();
+      const body = (await res.json()) as HueListResponse<HueLight>;
       const lights = body.data ?? [];
       // seed the live map so SSE deltas keep it current from here on;
       // rebuild it so lights removed while unobserved don't linger

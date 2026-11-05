@@ -47,8 +47,8 @@ const OLD_STYLE_MODELS: Readonly<Record<string, string>> = {
 };
 
 export function getPiModel(revision: number | null | undefined): string {
-  if (!revision) return 'Unknown';
-  if (revision & 0x800000) {
+  if (revision === null || revision === undefined || revision === 0) return 'Unknown';
+  if ((revision & 0x800000) !== 0) {
     const type = (revision >> 4) & 0xff;
     return NEW_STYLE_MODELS[type] ?? `Unknown (type ${type})`;
   }

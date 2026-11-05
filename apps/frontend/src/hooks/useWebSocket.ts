@@ -27,9 +27,22 @@ interface WebSocketMessage {
   reason?: "manual" | "auto";
 }
 
+/**
+ * Parses a backend frame. Throws on invalid JSON (logged by the caller) and
+ * returns undefined for JSON that is not an object with a string `type`.
+ * Unknown types pass through so the switch below can log them.
+ */
+function parseWebSocketMessage(raw: unknown): WebSocketMessage | undefined {
+  if (typeof raw !== "string") return undefined;
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== "object" || parsed === null) return undefined;
+  if (typeof (parsed as { type?: unknown }).type !== "string") return undefined;
+  return parsed as WebSocketMessage;
+}
+
 // Global singleton to prevent multiple WebSocket instances
 let globalWebSocket: WebSocket | null = null;
-let globalConnectionState = {
+const globalConnectionState = {
   isConnected: false,
   reconnectAttempts: 0,
   isConnecting: false,
@@ -108,11 +121,11 @@ export const useWebSocket = (url?: string) => {
     // families ([kind, ...]) are invalidated via prefix matching, which
     // covers status/stats plus kind-specific families like
     // ["adguard","full"], ["tor","relay"], ["router","arp",...].
-    keys.forEach((key) => {
+    for (const key of keys) {
       try {
         if (key === "metrics") {
           addInvalidation(queryKeys.metrics());
-          return;
+          continue;
         }
 
         shouldInvalidateServicesHealth = true;
@@ -123,15 +136,15 @@ export const useWebSocket = (url?: string) => {
           error: e instanceof Error ? e.message : String(e),
         });
       }
-    });
+    }
 
     queryInvalidations.forEach((queryKey) => {
-      queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey });
     });
 
     if (shouldInvalidateServicesHealth) {
       try {
-        queryClient.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
       } catch (e) {
         logger.warn("Failed to invalidate services health query", {
           error: e instanceof Error ? e.message : String(e),
@@ -161,7 +174,11 @@ export const useWebSocket = (url?: string) => {
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       try {
-        const message: WebSocketMessage = JSON.parse(event.data);
+        const message = parseWebSocketMessage(event.data);
+        if (!message) {
+          logger.warn("[WEBSOCKET] Ignored a malformed message");
+          return;
+        }
 
         publishWsEvent({
           type: message.type,
@@ -216,18 +233,18 @@ export const useWebSocket = (url?: string) => {
               instanceId: message.instanceId,
               action: message.action,
             });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.servicesInstances(),
             });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.servicesHealth(),
             });
             // Settings and the detail sheet read the stored rows; a change
             // made elsewhere (another window, an import) left them stale.
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.configServices(),
             });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.configLoadErrors(),
             });
             break;
@@ -238,24 +255,24 @@ export const useWebSocket = (url?: string) => {
             if (message.reason === "auto") {
               toast.info("Switched profile for the detected network");
             }
-            queryClient.invalidateQueries({ queryKey: queryKeys.profiles() });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: queryKeys.profiles() });
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.activeProfile(),
             });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.currentNetwork(),
             });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.servicesInstances(),
             });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.servicesHealth(),
             });
             break;
 
           case "profile_network_unrecognized":
             // The current LAN matches no profile — refresh the hint source.
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeys.currentNetwork(),
             });
             break;
@@ -363,7 +380,7 @@ export const useWebSocket = (url?: string) => {
             queryKeys.servicesInstances(),
             queryKeys.servicesHealth(),
           ]) {
-            queryClient.invalidateQueries({ queryKey });
+            void queryClient.invalidateQueries({ queryKey });
           }
         }
       };

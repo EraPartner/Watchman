@@ -22,41 +22,47 @@ import type { ServiceInfra } from "../bootstrap/registerServices.js";
 function makeProfiles(initialActive = "p1"): ProfileStore {
   let active: string | undefined = initialActive;
   return {
-    listProfiles: async () => [],
-    getProfile: async () => undefined,
-    createProfile: async () => {
-      throw new Error("not used");
+    listProfiles: () => Promise.resolve([]),
+    getProfile: () => Promise.resolve(undefined),
+    createProfile: () => {
+      return Promise.reject(new Error("not used"));
     },
-    updateProfile: async () => {
-      throw new Error("not used");
+    updateProfile: () => {
+      return Promise.reject(new Error("not used"));
     },
     deleteProfile: async () => {},
-    serviceCounts: async () => ({}),
-    getActiveProfileId: async () => active,
-    setActiveProfileId: async (id: string) => {
+    serviceCounts: () => Promise.resolve({}),
+    getActiveProfileId: () => Promise.resolve(active),
+    setActiveProfileId: (id: string) => {
       active = id;
+      return Promise.resolve();
     },
-    getAutoSwitch: async () => true,
+    getAutoSwitch: () => Promise.resolve(true),
     setAutoSwitch: async () => {},
-    getLastSignature: async () => undefined,
+    getLastSignature: () => Promise.resolve(undefined),
     setLastSignature: async () => {},
     ensureBootstrap: async () => {},
-  } as unknown as ProfileStore;
+  };
 }
 
 class StubService extends BaseService {
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
+  readonly kind: string;
+  readonly instanceId: string;
+
   constructor(
-    readonly kind: string,
-    readonly instanceId: string
+    kind: string,
+    instanceId: string
   ) {
     super();
+    this.kind = kind;
+    this.instanceId = instanceId;
   }
-  async checkHealth(): Promise<HealthResult> {
-    return ok({ reachable: true, at: 0 });
+  checkHealth(): Promise<HealthResult> {
+    return Promise.resolve(ok({ reachable: true, at: 0 }));
   }
-  async getStats(): Promise<StatsResult> {
-    return ok({ metrics: {}, at: 0 });
+  getStats(): Promise<StatsResult> {
+    return Promise.resolve(ok({ metrics: {}, at: 0 }));
   }
 }
 
@@ -67,6 +73,7 @@ vi.mock("../bootstrap/registerServices.js", () => ({
 }));
 
 import { createServiceLifecycle } from "./ServiceLifecycle.js";
+import { required } from "../test/required.js";
 
 function makeStoredService(
   id: string,
@@ -95,20 +102,20 @@ function makeStoredService(
 
 function makeStore(initial: Map<string, StoredService>): ConfigStore {
   return {
-    async loadAll() {
-      return Array.from(initial.values());
+    loadAll() {
+      return Promise.resolve(Array.from(initial.values()));
     },
-    async get(id) {
-      return initial.get(id) ?? null;
+    get(id) {
+      return Promise.resolve(initial.get(id) ?? null);
     },
-    async create() {
-      throw new Error("not used");
+    create() {
+      return Promise.reject(new Error("not used"));
     },
-    async update() {
-      throw new Error("not used");
+    update() {
+      return Promise.reject(new Error("not used"));
     },
-    async delete() {
-      throw new Error("not used");
+    delete() {
+      return Promise.reject(new Error("not used"));
     },
     async setProfile() {},
     redact(svc) {
@@ -123,15 +130,18 @@ function makeStore(initial: Map<string, StoredService>): ConfigStore {
         updatedAt: svc.updatedAt.toISOString(),
       };
     },
-    async listAudit() {
-      return [];
+    listAudit() {
+      return Promise.resolve([]);
     },
     async writeAudit() {},
-    async exportAll() {
-      return { version: 1, exportedAt: "", payload: "" };
+    exportAll() {
+      return Promise.resolve({ version: 1, exportedAt: "", payload: "" });
     },
-    async importBundle() {
-      return { imported: 0, updated: 0, skipped: 0, errors: [] };
+    importBundle() {
+      return Promise.resolve({ imported: 0, updated: 0, skipped: 0, errors: [] });
+    },
+    loadErrors() {
+      return Promise.resolve([]);
     },
   };
 }
@@ -252,7 +262,9 @@ describe("ServiceLifecycle", () => {
     const poller = makePoller();
     const bus = createEventBus();
     const switched: Array<{ profileId: string; reason: string }> = [];
-    bus.on("profile.switched", (p) => switched.push(p));
+    bus.on("profile.switched", (p) => {
+      switched.push(p);
+    });
 
     const lifecycle = createServiceLifecycle({
       store,
@@ -362,7 +374,7 @@ describe("ServiceLifecycle", () => {
     await vi.waitFor(() => expect(releaseGet).toBeDefined());
     records.delete(storedId);
     const del = lifecycle.applyDelete(storedId);
-    releaseGet!();
+    required(releaseGet)();
     await Promise.all([update, del]);
 
     expect(registry.has("ipfs:race")).toBe(false);
@@ -391,8 +403,9 @@ describe("ServiceLifecycle", () => {
         await new Promise((r) => setTimeout(r, delay));
         return value;
       },
-      setActiveProfileId: async (id: string) => {
+      setActiveProfileId: (id: string) => {
         active = id;
+        return Promise.resolve();
       },
     } as unknown as ProfileStore;
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { RoonConnectFn, RoonHandle, RoonZone } from './roonClient.js';
+import { required } from "../../test/required.js";
 
 // ─── Fake factory ──────────────────────────────────────────────────────────────
 
@@ -14,11 +15,11 @@ function makeFakeRoon(): FakeRoonControl {
   let handle: {
     zones: Map<string, RoonZone>;
     paired: boolean;
-    onZonesChanged?: (z: ReadonlyArray<RoonZone>) => void;
+    onZonesChanged?: ((z: ReadonlyArray<RoonZone>) => void) | undefined;
     closed: boolean;
   } | null = null;
 
-  const connect: RoonConnectFn = async (opts) => {
+  const connect: RoonConnectFn = (opts) => {
     handle = {
       zones: new Map(),
       paired: false,
@@ -28,15 +29,16 @@ function makeFakeRoon(): FakeRoonControl {
     const h: RoonHandle = {
       getZones: () => (handle ? Array.from(handle.zones.values()) : []),
       isPaired: () => handle?.paired ?? false,
-      close: async () => {
+      close: () => {
         if (handle) {
           handle.zones.clear();
           handle.paired = false;
           handle.closed = true;
         }
+        return Promise.resolve();
       },
     };
-    return h;
+    return Promise.resolve(h);
   };
 
   return {
@@ -100,7 +102,7 @@ describe('RoonHandle contract', () => {
     fake.simulatePair([makeZone({ state: 'playing' })]);
     expect(h.isPaired()).toBe(true);
     expect(h.getZones()).toHaveLength(1);
-    expect(h.getZones()[0]!.state).toBe('playing');
+    expect(required(h.getZones()[0]).state).toBe('playing');
   });
 
   it('fires onZonesChanged callback when zones update', async () => {
@@ -128,8 +130,8 @@ describe('RoonHandle contract', () => {
     });
     fake.simulatePair([makeZone({ state: 'stopped' })]);
     fake.simulateZoneChange([makeZone({ state: 'playing', nowPlaying: { oneLine: 'Yellow Submarine' } })]);
-    expect(h.getZones()[0]!.state).toBe('playing');
-    expect(h.getZones()[0]!.nowPlaying?.oneLine).toBe('Yellow Submarine');
+    expect(required(h.getZones()[0]).state).toBe('playing');
+    expect(required(h.getZones()[0]).nowPlaying?.oneLine).toBe('Yellow Submarine');
   });
 
   it('clears zones and unpairs on simulateUnpair', async () => {

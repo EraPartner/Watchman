@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement as h } from "react";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +20,7 @@ vi.mock("react-router-dom", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
   useMutation: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({})),
+    mutateAsync: vi.fn(() => Promise.resolve({})),
     mutate: vi.fn(),
     isPending: false,
     isError: false,
@@ -51,21 +53,21 @@ vi.mock("../../hooks/useWebSocket", () => ({
 }));
 
 vi.mock("../../services/ApiClient", () => ({
-  apiClient: { getAggregatedServices: vi.fn(async () => []) },
-  sharedCore: { request: vi.fn(async () => ({})) },
+  apiClient: { getAggregatedServices: vi.fn(() => Promise.resolve([])) },
+  sharedCore: { request: vi.fn(() => Promise.resolve({})) },
 }));
 
 vi.mock("../../pages/Settings/useConfigQueries", () => ({
   useCreateService: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({})),
+    mutateAsync: vi.fn(() => Promise.resolve({})),
     isPending: false,
   })),
   useUpdateService: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({})),
+    mutateAsync: vi.fn(() => Promise.resolve({})),
     isPending: false,
   })),
   useDeleteService: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => undefined),
+    mutateAsync: vi.fn(() => Promise.resolve(undefined)),
     isPending: false,
   })),
   useServices: vi.fn(() => ({ data: [], isLoading: false })),
@@ -75,11 +77,11 @@ vi.mock("../../pages/Settings/useConfigQueries", () => ({
 
 vi.mock("../../services/configApi", () => ({
   configApi: {
-    getKinds: vi.fn(async () => []),
-    listServices: vi.fn(async () => []),
-    createService: vi.fn(async () => ({})),
-    testService: vi.fn(async () => ({ ok: true })),
-    getSetupStatus: vi.fn(async () => ({ needsSetup: false })),
+    getKinds: vi.fn(() => Promise.resolve([])),
+    listServices: vi.fn(() => Promise.resolve([])),
+    createService: vi.fn(() => Promise.resolve({})),
+    testService: vi.fn(() => Promise.resolve({ ok: true })),
+    getSetupStatus: vi.fn(() => Promise.resolve({ needsSetup: false })),
   },
 }));
 
@@ -115,8 +117,8 @@ vi.mock("@/components/tile/ServiceTile", () => ({
     onOpenDetail,
   }: {
     kind: string;
-    instanceId?: string;
-    onOpenDetail?: (ctx: { kind: string; instanceId?: string }) => void;
+    instanceId?: string | undefined;
+    onOpenDetail?: (ctx: { kind: string; instanceId?: string | undefined }) => void;
   }) =>
     h(
       "button",
@@ -145,7 +147,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -216,11 +218,11 @@ describe("BentoDashboard", () => {
     const retry = Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent === "Retry"
     );
-    await act(async () => {
+    await actAsync(() => {
       retry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(refetch).toHaveBeenCalledTimes(1);
-    await act(async () => root.unmount());
+    await actAsync(() => root.unmount());
     if (previous) mocked.mockImplementation(previous);
   });
 
@@ -246,10 +248,10 @@ describe("BentoDashboard", () => {
     sheetSpy.mockClear();
     const { container, root } = await render(h(BentoDashboard));
     expect(lastSheetProps().open).toBe(false);
-    const tile = Array.from(container.querySelectorAll("button")).find(
+    const tile = required(Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent === "tile bitcoin/main"
-    )!;
-    await act(async () => {
+    ));
+    await actAsync(() => {
       tile.click();
     });
     expect(lastSheetProps()).toMatchObject({
@@ -257,7 +259,7 @@ describe("BentoDashboard", () => {
       instanceId: "main",
       open: true,
     });
-    await act(async () => {
+    await actAsync(() => {
       lastSheetProps().onOpenChange(false);
     });
     expect(lastSheetProps()).toMatchObject({
@@ -265,7 +267,7 @@ describe("BentoDashboard", () => {
       instanceId: "main",
       open: false,
     });
-    await act(async () => root.unmount());
+    await actAsync(() => root.unmount());
     if (previous) mocked.mockImplementation(previous);
   });
 
@@ -286,14 +288,14 @@ describe("BentoDashboard", () => {
       (a) => a.textContent === "Open settings"
     );
     expect(link?.getAttribute("href")).toBe("/settings/services");
-    await act(async () => root.unmount());
+    await actAsync(() => root.unmount());
     if (previous) mocked.mockImplementation(previous);
   });
 
   it("does not show the backend-unreachable banner while health polls succeed", async () => {
     const { container, root } = await render(h(BentoDashboard));
     expect(container.textContent).not.toContain("Backend unreachable");
-    await act(async () => root.unmount());
+    await actAsync(() => root.unmount());
   });
 
   it("shows a backend-unreachable banner when health errors with stale data", async () => {
@@ -311,7 +313,7 @@ describe("BentoDashboard", () => {
     expect(container.textContent).toContain(
       "Backend unreachable — showing data from"
     );
-    await act(async () => root.unmount());
+    await actAsync(() => root.unmount());
     if (previous) mocked.mockImplementation(previous);
   });
 
@@ -319,7 +321,7 @@ describe("BentoDashboard", () => {
     const { container, root } = await render(h(BentoDashboard));
     const dot = container.querySelector('[aria-label="WebSocket disconnected"]');
     expect(dot).toBeTruthy();
-    expect(dot!.className.split(/\s+/)).not.toContain("hidden");
-    await act(async () => root.unmount());
+    expect(required(dot).className.split(/\s+/)).not.toContain("hidden");
+    await actAsync(() => root.unmount());
   });
 });

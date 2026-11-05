@@ -79,20 +79,17 @@ export function createEventBus(onError?: (err: unknown) => void): EventBus {
       for (const h of set) {
         try {
           const maybe = (h as Handler<typeof payload>)(payload);
-          if (maybe instanceof Promise) maybe.catch((e) => safeOnError(e));
+          if (maybe instanceof Promise) maybe.catch((e: unknown) => safeOnError(e));
         } catch (e) {
           safeOnError(e);
         }
       }
     },
     on(event, handler) {
-      let set = handlers.get(event);
-      if (!set) {
-        set = new Set();
-        handlers.set(event, set);
-      }
+      const set = handlers.get(event) ?? new Set<Handler<unknown>>();
+      handlers.set(event, set);
       set.add(handler as Handler<unknown>);
-      return () => set!.delete(handler as Handler<unknown>);
+      return () => set.delete(handler as Handler<unknown>);
     },
   };
 }

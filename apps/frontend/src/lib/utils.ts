@@ -1,3 +1,4 @@
+import { isNonZero } from "./number";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -70,5 +71,5 @@ export function instanceDisplayName(
   name: string,
   instanceNumber?: number
 ): string {
-  return instanceNumber ? `${name} #${instanceNumber}` : name;
+  return isNonZero(instanceNumber) ? `${name} #${instanceNumber}` : name;
 }

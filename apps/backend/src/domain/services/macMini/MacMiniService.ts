@@ -253,7 +253,7 @@ export function parseSwapUsage(
     if (!m || !m[1] || !m[2]) return null;
     const n = parseFloat(m[1]);
     const unit = SIZE_UNITS[m[2].toUpperCase()];
-    return Number.isFinite(n) && unit ? Math.round(n * unit) : null;
+    return Number.isFinite(n) && unit !== undefined ? Math.round(n * unit) : null;
   };
   const totalBytes = field("total");
   const usedBytes = field("used");

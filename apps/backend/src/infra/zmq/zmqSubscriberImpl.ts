@@ -51,15 +51,17 @@ export const zmqConnect: ZmqConnectFn = async (endpoint, topics) => {
   }
 
   const handlers = new Set<(msg: ZmqMessage) => void>();
-  let closed = false;
+  // An object, not a `let`: the flag flips in close(), which TypeScript's
+  // narrowing inside the read loop below cannot see.
+  const state = { closed: false };
 
   void (async () => {
     try {
       for await (const frames of sock) {
-        if (closed) break;
+        if (state.closed) break;
         const [topicBuf, data, seqBuf] = frames;
         const topic = (topicBuf as Buffer).toString();
-        const sequence = seqBuf ? (seqBuf as Buffer).readUInt32LE(0) : 0;
+        const sequence = seqBuf ? seqBuf.readUInt32LE(0) : 0;
         const msg: ZmqMessage = { topic, data: data as Buffer, sequence };
         for (const h of handlers) {
           // a throwing handler must not end the receive loop for everyone
@@ -80,14 +82,15 @@ export const zmqConnect: ZmqConnectFn = async (endpoint, topics) => {
       handlers.add(handler);
       return () => handlers.delete(handler);
     },
-    async close() {
-      closed = true;
+    close() {
+      state.closed = true;
       handlers.clear();
       try {
         sock.close();
       } catch {
         /* already closed */
       }
+      return Promise.resolve();
     },
   } satisfies ZmqSubscriberHandle;
 };

@@ -41,7 +41,7 @@ const CertSha256Schema = z
 
 export const IpfsInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("ipfs"),
-  apiUrl: z.string().url().default("http://127.0.0.1:5001"),
+  apiUrl: z.url().default("http://127.0.0.1:5001"),
   /** Kubo RPC secret in --api-auth notation ("bearer:<token>" or
    *  "basic:<user>:<password>"), for nodes with API.Authorizations. */
   apiAuth: z.string().default(""),
@@ -87,7 +87,7 @@ export const RoonInstanceSchema = BaseInstanceSchema.extend({
 
 export const QbittorrentInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("qbittorrent"),
-  baseUrl: z.string().url().default("http://127.0.0.1:8069"),
+  baseUrl: z.url().default("http://127.0.0.1:8069"),
   username: z.string().default("admin"),
   password: z.string().default(""),
   // qBittorrent ≥ 5.2 WebUI API key: sent as a bearer token instead of
@@ -99,7 +99,7 @@ export const QbittorrentInstanceSchema = BaseInstanceSchema.extend({
 
 export const AdGuardInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("adguard"),
-  baseUrl: z.string().url(),
+  baseUrl: z.url(),
   username: z.string().default(""),
   password: z.string().default(""),
   // Pin AdGuard's (often self-signed) HTTPS certificate, like dsmCertSha256
@@ -115,7 +115,7 @@ export const AdGuardInstanceSchema = BaseInstanceSchema.extend({
 
 export const AlbyHubInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("albyHub"),
-  baseUrl: z.string().url(),
+  baseUrl: z.url(),
   token: z.string().default(""),
   // When true (default for one release): probe candidate paths to discover endpoints.
   // When false: use deterministic NWC API paths (/api/info, /api/apps).
@@ -126,7 +126,7 @@ export const AlbyHubInstanceSchema = BaseInstanceSchema.extend({
 
 export const HomebridgeInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("homebridge"),
-  baseUrl: z.string().url(),
+  baseUrl: z.url(),
   username: z.string().default(""),
   password: z.string().default(""),
   authToken: z.string().default(""),
@@ -188,7 +188,7 @@ export const RaspberryPiInstanceSchema = BaseInstanceSchema.extend({
 
 export const BitcoinInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("bitcoin"),
-  rpcUrl: z.string().url().default("http://127.0.0.1:8332"),
+  rpcUrl: z.url().default("http://127.0.0.1:8332"),
   rpcUser: z.string().default(""),
   rpcPassword: z.string().default(""),
   /** ZMQ endpoint for hashblock notifications, e.g. tcp://127.0.0.1:28332 */
@@ -200,7 +200,7 @@ export const BitcoinInstanceSchema = BaseInstanceSchema.extend({
 export const TorInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("tor"),
   relayNickname: z.string().default(""),
-  onionooBaseUrl: z.string().url().default("https://onionoo.torproject.org"),
+  onionooBaseUrl: z.url().default("https://onionoo.torproject.org"),
   host: z.string().default("127.0.0.1"),
   pingCount: z.number().int().positive().default(1),
   controlPort: z.number().int().min(1).max(65535).default(9051),
@@ -214,7 +214,7 @@ export const TorInstanceSchema = BaseInstanceSchema.extend({
   useControlPort: z.boolean().default(false),
   /** Optional Tor MetricsPort URL (read-only Prometheus counters), e.g.
    *  http://127.0.0.1:9035/metrics. Empty = not used. */
-  metricsUrl: z.union([z.literal(""), z.string().url()]).default(""),
+  metricsUrl: z.union([z.literal(""), z.url()]).default(""),
 });
 
 export const ServiceInstanceSchema = z.discriminatedUnion("kind", [

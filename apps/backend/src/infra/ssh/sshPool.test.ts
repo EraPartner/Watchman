@@ -48,6 +48,7 @@ import { createSshPool } from './sshPool.js';
 import { UnavailableError, UnauthorizedError, TimeoutError } from '../../core/errors.js';
 import type { SshExecRequest } from './sshExecutor.js';
 import { hostKeyFingerprint } from './hostKey.js';
+import { required } from "../../test/required.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -117,7 +118,7 @@ describe('createSshPool', () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq({ command: 'uname -r' }));
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     mockExecSuccess(client, 'linux-kernel\n');
     client.emitReady();
 
@@ -133,7 +134,7 @@ describe('createSshPool', () => {
     const p1 = pool.exec(req);
     const p2 = pool.exec(req);
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     mockExecSuccess(client, 'result');
     client.emitReady();
 
@@ -148,7 +149,7 @@ describe('createSshPool', () => {
     const p1 = pool.exec(makeReq({ command: 'a' })).then(() => results.push(1));
     const p2 = pool.exec(makeReq({ command: 'b' })).then(() => results.push(2));
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       const stream = makeStream();
       cb(null, stream);
@@ -164,14 +165,14 @@ describe('createSshPool', () => {
   it('rejects queued execs with UnavailableError on connection error', async () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
-    clientInstances[0]!.emitError('connection refused');
+    required(clientInstances[0]).emitError('connection refused');
     await expect(execPromise).rejects.toBeInstanceOf(UnavailableError);
   });
 
   it('rejects queued execs with UnauthorizedError on auth error', async () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
-    clientInstances[0]!.emitError('auth failed: Permission denied');
+    required(clientInstances[0]).emitError('auth failed: Permission denied');
     await expect(execPromise).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -186,7 +187,7 @@ describe('createSshPool', () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq({ timeoutMs: 100 }));
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       const stream = makeStream();
       cb(null, stream);
@@ -203,7 +204,7 @@ describe('createSshPool', () => {
     const ac = new AbortController();
     const execPromise = pool.exec(makeReq({ timeoutMs: 5000, signal: ac.signal }));
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       const stream = makeStream();
       cb(null, stream);
@@ -219,7 +220,7 @@ describe('createSshPool', () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     mockExecError(client, 'exec channel failed');
     client.emitReady();
 
@@ -230,7 +231,7 @@ describe('createSshPool', () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       const stream = makeStream();
       cb(null, stream);
@@ -253,15 +254,15 @@ describe('createSshPool', () => {
 
     await expect(p1).rejects.toBeInstanceOf(UnavailableError);
     await expect(p2).rejects.toBeInstanceOf(UnavailableError);
-    expect(clientInstances[0]!.end).toHaveBeenCalled();
-    expect(clientInstances[1]!.end).toHaveBeenCalled();
+    expect(required(clientInstances[0]).end).toHaveBeenCalled();
+    expect(required(clientInstances[1]).end).toHaveBeenCalled();
   });
   it('does not reconnect in the background after a failure (error + close)', async () => {
     // regression: ssh2 emits both 'error' and 'close' for one failure; each
     // used to schedule its own reconnect, multiplying connect attempts
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     client.emitError('connect ECONNREFUSED');
     client.emitClose();
     await expect(execPromise).rejects.toBeInstanceOf(UnavailableError);
@@ -273,15 +274,15 @@ describe('createSshPool', () => {
     // the next exec opens a fresh connection
     const next = pool.exec(makeReq());
     expect(clientInstances).toHaveLength(2);
-    mockExecSuccess(clientInstances[1]!, 'ok');
-    clientInstances[1]!.emitReady();
+    mockExecSuccess(required(clientInstances[1]), 'ok');
+    required(clientInstances[1]).emitReady();
     await expect(next).resolves.toMatchObject({ stdout: 'ok', code: 0 });
   });
 
   it('rejects queued execs when the connection closes before ready', async () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
-    clientInstances[0]!.emitClose();
+    required(clientInstances[0]).emitClose();
     await expect(execPromise).rejects.toBeInstanceOf(UnavailableError);
   });
 
@@ -305,18 +306,18 @@ describe('createSshPool', () => {
     const p1 = pool.exec(makeReq({ password: 'old' }));
     const p2 = pool.exec(makeReq({ password: 'new' }));
     expect(clientInstances).toHaveLength(2);
-    expect(clientInstances[0]!.end).toHaveBeenCalled();
+    expect(required(clientInstances[0]).end).toHaveBeenCalled();
     await expect(p1).rejects.toBeInstanceOf(UnavailableError);
-    expect(clientInstances[1]!.connect).toHaveBeenCalledWith(expect.objectContaining({ password: 'new' }));
-    mockExecSuccess(clientInstances[1]!, 'ok');
-    clientInstances[1]!.emitReady();
+    expect(required(clientInstances[1]).connect).toHaveBeenCalledWith(expect.objectContaining({ password: 'new' }));
+    mockExecSuccess(required(clientInstances[1]), 'ok');
+    required(clientInstances[1]).emitReady();
     await expect(p2).resolves.toMatchObject({ stdout: 'ok' });
   });
 
   it('rejects when the channel closes without an exit status (truncated output)', async () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       const stream = makeStream();
       cb(null, stream);
@@ -330,7 +331,7 @@ describe('createSshPool', () => {
   it('rejects when the command is killed by a signal', async () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       const stream = makeStream();
       cb(null, stream);
@@ -343,7 +344,7 @@ describe('createSshPool', () => {
   it('decodes multi-byte UTF-8 split across data chunks', async () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq());
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     const bytes = Buffer.from('Küche', 'utf8');
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       const stream = makeStream();
@@ -360,7 +361,7 @@ describe('createSshPool', () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq({ timeoutMs: 100 }));
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     const close = vi.fn();
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       cb(null, Object.assign(makeStream(), { close }));
@@ -377,7 +378,7 @@ describe('createSshPool', () => {
     const ac = new AbortController();
     const execPromise = pool.exec(makeReq({ timeoutMs: 5000, signal: ac.signal }));
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     const close = vi.fn();
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
       cb(null, Object.assign(makeStream(), { close }));
@@ -393,7 +394,7 @@ describe('createSshPool', () => {
     const pool = createSshPool();
     const execPromise = pool.exec(makeReq({ timeoutMs: 100 }));
 
-    const client = clientInstances[0]!;
+    const client = required(clientInstances[0]);
     let openChannel: (() => void) | undefined;
     const close = vi.fn();
     client.exec.mockImplementation((_cmd: string, cb: ExecCb) => {
@@ -412,13 +413,13 @@ describe('createSshPool', () => {
     const PIN = hostKeyFingerprint(HOST_KEY);
     type ConnectOpts = { hostVerifier?: (key: Buffer) => boolean };
     const verifierOf = (client: InstanceType<typeof MockClient>) =>
-      (client.connect.mock.calls[0]![0] as ConnectOpts).hostVerifier;
+      (required(client.connect.mock.calls[0])[0] as ConnectOpts).hostVerifier;
 
     it('trusts the first key of an unpinned host and reports its fingerprint once', () => {
       const seen: Array<[string, number, string]> = [];
       const pool = createSshPool({ onUnpinnedHostKey: (h, p, fp) => seen.push([h, p, fp]) });
       void pool.exec(makeReq()).catch(() => undefined);
-      const verify = verifierOf(clientInstances[0]!)!;
+      const verify = required(verifierOf(required(clientInstances[0])));
       expect(verify(HOST_KEY)).toBe(true);
       expect(verify(HOST_KEY)).toBe(true);
       expect(seen).toEqual([['10.0.0.1', 22, PIN]]);
@@ -428,13 +429,13 @@ describe('createSshPool', () => {
     it('refuses an unpinned host whose key changed since first seen', async () => {
       const pool = createSshPool();
       void pool.exec(makeReq()).catch(() => undefined);
-      expect(verifierOf(clientInstances[0]!)!(HOST_KEY)).toBe(true);
+      expect(required(verifierOf(required(clientInstances[0])))(HOST_KEY)).toBe(true);
       // the first connection drops; the reconnect meets a different key
-      clientInstances[0]!.emitClose();
+      required(clientInstances[0]).emitClose();
       const execPromise = pool.exec(makeReq());
-      const client = clientInstances[1]!;
+      const client = required(clientInstances[1]);
       const impostor = Buffer.from('impostor host key blob');
-      expect(verifierOf(client)!(impostor)).toBe(false);
+      expect(required(verifierOf(client))(impostor)).toBe(false);
       client.emitError('Handshake failed: host key verification failed');
       client.emitClose();
       const error = await execPromise.catch((e: unknown) => e);
@@ -447,8 +448,8 @@ describe('createSshPool', () => {
     it('connects when the server presents the pinned key', async () => {
       const pool = createSshPool();
       const execPromise = pool.exec(makeReq({ hostKey: PIN }));
-      const client = clientInstances[0]!;
-      expect(verifierOf(client)!(HOST_KEY)).toBe(true);
+      const client = required(clientInstances[0]);
+      expect(required(verifierOf(client))(HOST_KEY)).toBe(true);
       mockExecSuccess(client, 'ok');
       client.emitReady();
       await expect(execPromise).resolves.toMatchObject({ stdout: 'ok' });
@@ -457,9 +458,9 @@ describe('createSshPool', () => {
     it('refuses any other key with UnauthorizedError naming both fingerprints', async () => {
       const pool = createSshPool();
       const execPromise = pool.exec(makeReq({ hostKey: PIN }));
-      const client = clientInstances[0]!;
+      const client = required(clientInstances[0]);
       const impostor = Buffer.from('impostor host key blob');
-      expect(verifierOf(client)!(impostor)).toBe(false);
+      expect(required(verifierOf(client))(impostor)).toBe(false);
       // ssh2 reports the refusal as a generic handshake error, then closes
       client.emitError('Handshake failed: host key verification failed');
       client.emitClose();
@@ -476,9 +477,9 @@ describe('createSshPool', () => {
       const p2 = pool.exec(makeReq({ hostKey: PIN }));
       expect(clientInstances).toHaveLength(2);
       await expect(p1).rejects.toBeInstanceOf(UnavailableError);
-      expect(verifierOf(clientInstances[1]!)).toBeTypeOf('function');
-      mockExecSuccess(clientInstances[1]!, 'ok');
-      clientInstances[1]!.emitReady();
+      expect(verifierOf(required(clientInstances[1]))).toBeTypeOf('function');
+      mockExecSuccess(required(clientInstances[1]), 'ok');
+      required(clientInstances[1]).emitReady();
       await expect(p2).resolves.toMatchObject({ stdout: 'ok' });
     });
   });

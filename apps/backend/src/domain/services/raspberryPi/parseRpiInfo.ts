@@ -1,3 +1,5 @@
+import { toText } from '../../../core/text.js';
+
 export interface RpiInfo {
   piModel: string | null;
   hwRevision: number | null;
@@ -58,6 +60,6 @@ export function parseRpiInfo(raw: unknown, now: () => number = Date.now): RpiInf
 
 function num(v: unknown): number | null {
   if (v == null) return null;
-  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  const n = typeof v === 'number' ? v : parseFloat(toText(v));
   return Number.isFinite(n) ? n : null;
 }

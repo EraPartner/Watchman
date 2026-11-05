@@ -78,8 +78,9 @@ function subnetForGateway(
   for (const list of Object.values(ifaces)) {
     for (const info of list ?? []) {
       if (info.internal) continue;
-      if (String(info.family) !== "IPv4" && String(info.family) !== "4")
-        continue;
+      // Node 18.0-18.3 reported the family as the number 4
+      const family: unknown = info.family;
+      if (family !== "IPv4" && family !== 4) continue;
       if (info.address.startsWith(`${prefix24}.`) && info.cidr) {
         return info.cidr;
       }

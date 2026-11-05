@@ -19,7 +19,7 @@ export function DesktopChrome() {
         message.action === "navigate" &&
         typeof message.payload === "string"
       ) {
-        navigate(message.payload);
+        void navigate(message.payload);
       }
     });
   }, [navigate]);

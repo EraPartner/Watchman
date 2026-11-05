@@ -9,6 +9,7 @@ import {
   type RoonApiOptions,
   type RoonCore,
 } from './roonClientImpl.js';
+import { required } from "../../test/required.js";
 
 interface WsConnectCall {
   onclose?: () => void;
@@ -30,7 +31,7 @@ function makeFakeRoonApi() {
       return { transport: { close: transportClose } };
     }
   } as unknown as RoonApiConstructor;
-  return { RoonApi, calls, options: () => options! };
+  return { RoonApi, calls, options: () => required(options) };
 }
 
 function fakeCore(): RoonCore {
@@ -63,11 +64,11 @@ describe('createRoonConnect reconnect', () => {
       ...connectOpts,
       onZonesChanged,
     });
-    fake.options().core_paired!(fakeCore());
+    required(fake.options().core_paired)(fakeCore());
     expect(handle.isPaired()).toBe(true);
     expect(handle.getZones()).toHaveLength(1);
 
-    fake.calls[0]!.onclose!();
+    required(required(fake.calls[0]).onclose)();
     expect(handle.isPaired()).toBe(false);
     expect(handle.getZones()).toHaveLength(0);
     expect(onZonesChanged).toHaveBeenLastCalledWith([]);
@@ -85,17 +86,17 @@ describe('createRoonConnect reconnect', () => {
       maxReconnectDelayMs: 300,
     })(connectOpts);
 
-    fake.calls[0]!.onerror!();
+    required(required(fake.calls[0]).onerror)();
     vi.advanceTimersByTime(100);
     expect(fake.calls).toHaveLength(2);
 
-    fake.calls[1]!.onerror!();
+    required(required(fake.calls[1]).onerror)();
     vi.advanceTimersByTime(199);
     expect(fake.calls).toHaveLength(2);
     vi.advanceTimersByTime(1);
     expect(fake.calls).toHaveLength(3);
 
-    fake.calls[2]!.onerror!();
+    required(required(fake.calls[2]).onerror)();
     vi.advanceTimersByTime(300);
     expect(fake.calls).toHaveLength(4);
     await handle.close();
@@ -104,8 +105,8 @@ describe('createRoonConnect reconnect', () => {
   it('schedules a single reconnect when error and close both fire', async () => {
     const fake = makeFakeRoonApi();
     const handle = await createRoonConnect({ RoonApi: fake.RoonApi, reconnectDelayMs: 100 })(connectOpts);
-    fake.calls[0]!.onerror!();
-    fake.calls[0]!.onclose!();
+    required(required(fake.calls[0]).onerror)();
+    required(required(fake.calls[0]).onclose)();
     vi.advanceTimersByTime(1_000);
     expect(fake.calls).toHaveLength(2);
     await handle.close();
@@ -114,11 +115,11 @@ describe('createRoonConnect reconnect', () => {
   it('stops reconnecting once closed', async () => {
     const fake = makeFakeRoonApi();
     const handle = await createRoonConnect({ RoonApi: fake.RoonApi, reconnectDelayMs: 100 })(connectOpts);
-    fake.calls[0]!.onclose!();
+    required(required(fake.calls[0]).onclose)();
     await handle.close();
     vi.advanceTimersByTime(10_000);
     expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0]!.transportClose).toHaveBeenCalled();
+    expect(required(fake.calls[0]).transportClose).toHaveBeenCalled();
   });
 });
 

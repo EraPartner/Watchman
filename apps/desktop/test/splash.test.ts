@@ -4,7 +4,8 @@ import { splashDataUrl, toJsStringLiteral } from "../src/splash.ts";
 
 test("splashDataUrl HTML-escapes the status text", () => {
   const html = decodeURIComponent(
-    splashDataUrl("<img src=x onerror=alert(1)>").split(",")[1]
+    splashDataUrl("<img src=x onerror=alert(1)>").split(",")[1] ??
+      assert.fail("splash data URL has no payload")
   );
   assert.ok(html.includes("&lt;img src=x onerror=alert(1)&gt;"));
   assert.ok(!html.includes("<img"));

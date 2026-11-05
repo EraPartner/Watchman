@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { createJwtClient } from './jwtClient.js';
 import type { HttpClient, HttpRequest, HttpResponse } from './client.js';
+import { required } from "../../test/required.js";
+
+/** A fake client whose send mock tests can read directly. */
+type FakeHttp = { send: Mock<HttpClient["send"]> };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -8,19 +12,19 @@ function fakeResponse(status: number, body?: unknown): HttpResponse {
   return {
     status,
     headers: {},
-    text: async () => JSON.stringify(body ?? {}),
-    json: async <T>() => (body ?? {}) as T,
+    text: () => Promise.resolve(JSON.stringify(body ?? {})),
+    json: <T>() => Promise.resolve((body ?? {}) as T),
   };
 }
 
 /** Returns an HttpClient that replays `responses` in order, then throws. */
-function sequentialHttp(responses: HttpResponse[]): HttpClient {
+function sequentialHttp(responses: HttpResponse[]): FakeHttp {
   let index = 0;
   return {
-    send: vi.fn(async (_req: HttpRequest): Promise<HttpResponse> => {
+    send: vi.fn<HttpClient["send"]>((_req: HttpRequest): Promise<HttpResponse> => {
       const r = responses[index++];
-      if (!r) throw new Error(`unexpected extra send (call ${index})`);
-      return r;
+      if (!r) return Promise.reject(new Error(`unexpected extra send (call ${index})`));
+      return Promise.resolve(r);
     }),
   };
 }
@@ -32,17 +36,17 @@ describe('createJwtClient', () => {
     const inner = sequentialHttp([fakeResponse(200)]);
     const client = createJwtClient(inner, {
       initialToken: 'initial-token',
-      refresh: vi.fn(async () => 'new-token'),
+      refresh: vi.fn(() => Promise.resolve('new-token')),
     });
 
     await client.send({ url: 'http://example.com/api', method: 'GET' });
 
-    const req = vi.mocked(inner.send).mock.calls[0]![0];
+    const req = required(vi.mocked(inner.send).mock.calls[0])[0];
     expect(req.headers?.['authorization']).toBe('Bearer initial-token');
   });
 
   it('passes through non-401 responses without refresh', async () => {
-    const refresh = vi.fn(async () => 'new-token');
+    const refresh = vi.fn(() => Promise.resolve('new-token'));
     const inner = sequentialHttp([fakeResponse(200)]);
     const client = createJwtClient(inner, { initialToken: 'tok', refresh });
 
@@ -52,7 +56,7 @@ describe('createJwtClient', () => {
   });
 
   it('calls refresh once on 401 and retries with new token', async () => {
-    const refresh = vi.fn(async () => 'refreshed-token');
+    const refresh = vi.fn(() => Promise.resolve('refreshed-token'));
     const inner = sequentialHttp([fakeResponse(401), fakeResponse(200, { ok: true })]);
     const client = createJwtClient(inner, { initialToken: 'stale', refresh });
 
@@ -61,23 +65,23 @@ describe('createJwtClient', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
 
     const [firstReq, secondReq] = vi.mocked(inner.send).mock.calls;
-    expect(firstReq![0].headers?.['authorization']).toBe('Bearer stale');
-    expect(secondReq![0].headers?.['authorization']).toBe('Bearer refreshed-token');
+    expect(required(firstReq)[0].headers?.['authorization']).toBe('Bearer stale');
+    expect(required(secondReq)[0].headers?.['authorization']).toBe('Bearer refreshed-token');
   });
 
   it('consumes the discarded 401 body before retrying', async () => {
     const first = fakeResponse(401);
-    const text = vi.fn(async () => '');
+    const text = vi.fn(() => Promise.resolve(''));
     first.text = text;
     const http = sequentialHttp([first, fakeResponse(200)]);
-    const client = createJwtClient(http, { refresh: async () => 'tok' });
+    const client = createJwtClient(http, { refresh: () => Promise.resolve('tok') });
     const res = await client.send({ url: 'http://x/api' });
     expect(res.status).toBe(200);
     expect(text).toHaveBeenCalledTimes(1);
   });
 
   it('does not refresh again after retry — only one attempt per 401', async () => {
-    const refresh = vi.fn(async () => 'refreshed-token');
+    const refresh = vi.fn(() => Promise.resolve('refreshed-token'));
     // Both 401 and 401 means the retry also fails — no second refresh
     const inner = sequentialHttp([fakeResponse(401), fakeResponse(401)]);
     const client = createJwtClient(inner, { initialToken: 'stale', refresh });
@@ -95,9 +99,9 @@ describe('createJwtClient', () => {
 
     // 3 concurrent requests each get 401, then 200
     const inner: HttpClient = {
-      send: vi.fn(async (req: HttpRequest) => {
-        if (req.headers?.['authorization'] === 'Bearer stale') return fakeResponse(401);
-        return fakeResponse(200, { ok: true });
+      send: vi.fn((req: HttpRequest) => {
+        if (req.headers?.['authorization'] === 'Bearer stale') return Promise.resolve(fakeResponse(401));
+        return Promise.resolve(fakeResponse(200, { ok: true }));
       }),
     };
 
@@ -110,15 +114,15 @@ describe('createJwtClient', () => {
       client.send({ url: 'http://x.com/3', method: 'GET' }),
     ]);
 
-    expect(r1!.status).toBe(200);
-    expect(r2!.status).toBe(200);
-    expect(r3!.status).toBe(200);
+    expect(required(r1).status).toBe(200);
+    expect(required(r2).status).toBe(200);
+    expect(required(r3).status).toBe(200);
     // Only ONE refresh call despite three concurrent 401s
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it('refresh failure propagates to all waiters', async () => {
-    const refresh = vi.fn(async () => { throw new Error('auth server down'); });
+    const refresh = vi.fn(() => { return Promise.reject(new Error('auth server down')); });
     const inner = sequentialHttp([fakeResponse(401)]);
     const client = createJwtClient(inner, { initialToken: 'stale', refresh });
 
@@ -128,7 +132,7 @@ describe('createJwtClient', () => {
   });
 
   it('uses new token for subsequent requests after successful refresh', async () => {
-    const refresh = vi.fn(async () => 'new-token');
+    const refresh = vi.fn(() => Promise.resolve('new-token'));
     const inner = sequentialHttp([
       fakeResponse(401),    // first request → 401
       fakeResponse(200),    // retry with new-token → 200
@@ -140,31 +144,31 @@ describe('createJwtClient', () => {
     await client.send({ url: 'http://example.com/b', method: 'GET' });
 
     const calls = vi.mocked(inner.send).mock.calls;
-    expect(calls[2]![0].headers?.['authorization']).toBe('Bearer new-token');
+    expect(required(calls[2])[0].headers?.['authorization']).toBe('Bearer new-token');
   });
 
   it('refresh returning empty string — no authorization header injected on retry', async () => {
-    const refresh = vi.fn(async () => '');
+    const refresh = vi.fn(() => Promise.resolve(''));
     const inner = sequentialHttp([fakeResponse(401), fakeResponse(200)]);
     const client = createJwtClient(inner, { initialToken: 'stale', refresh });
 
     await client.send({ url: 'http://example.com', method: 'GET' });
-    const retryReq = vi.mocked(inner.send).mock.calls[1]![0];
+    const retryReq = required(vi.mocked(inner.send).mock.calls[1])[0];
     // Empty token → no Bearer header on retry
     expect(retryReq.headers?.['authorization']).toBeUndefined();
   });
 
   it('works with no initial token — skips authorization header until refreshed', async () => {
-    const refresh = vi.fn(async () => 'first-token');
+    const refresh = vi.fn(() => Promise.resolve('first-token'));
     const inner = sequentialHttp([fakeResponse(401), fakeResponse(200)]);
     const client = createJwtClient(inner, { refresh });
 
     await client.send({ url: 'http://example.com', method: 'GET' });
-    const firstReq = vi.mocked(inner.send).mock.calls[0]![0];
+    const firstReq = required(vi.mocked(inner.send).mock.calls[0])[0];
     // No initial token → no authorization header on first attempt
     expect(firstReq.headers?.['authorization']).toBeUndefined();
     // After refresh, retry should have the token
-    const retryReq = vi.mocked(inner.send).mock.calls[1]![0];
+    const retryReq = required(vi.mocked(inner.send).mock.calls[1])[0];
     expect(retryReq.headers?.['authorization']).toBe('Bearer first-token');
   });
 });

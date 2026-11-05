@@ -272,7 +272,7 @@ describe('createTorControlClient', () => {
 describe('cookie auth', () => {
   it('sends AUTHENTICATE <hex> (no quotes) when cookieAuthFile is provided', async () => {
     const cookieBytes = Buffer.alloc(32, 0xab);
-    vi.mocked(fs.readFile).mockResolvedValueOnce(cookieBytes as never);
+    vi.mocked(fs.readFile).mockResolvedValueOnce(cookieBytes);
 
     const received: string[] = [];
     serverHandler = (socket) => {
@@ -307,7 +307,7 @@ describe('cookie auth', () => {
 
   it('cookie auth succeeds and handle is usable', async () => {
     const cookieBytes = Buffer.alloc(32, 0xcd);
-    vi.mocked(fs.readFile).mockResolvedValueOnce(cookieBytes as never);
+    vi.mocked(fs.readFile).mockResolvedValueOnce(cookieBytes);
 
     serverHandler = torResponder({
       'AUTHENTICATE': '250 OK\r\n',
@@ -327,7 +327,7 @@ describe('cookie auth', () => {
 
   it('throws UnauthorizedError on 515 with cookie auth', async () => {
     const cookieBytes = Buffer.alloc(32, 0xef);
-    vi.mocked(fs.readFile).mockResolvedValueOnce(cookieBytes as never);
+    vi.mocked(fs.readFile).mockResolvedValueOnce(cookieBytes);
 
     serverHandler = (socket) => {
       socket.setEncoding('utf8');

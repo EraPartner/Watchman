@@ -1,12 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import { PiHealthChecker } from './PiHealthChecker.js';
 import type { PigpioClient, PigpioHandle } from '../../../infra/gpio/pigpioClient.js';
 import type { PingProber } from '../../../infra/net/pingProbe.js';
-import type { RaspberryPiInstance } from '../../../config/services.js';
+import {
+  RaspberryPiInstanceSchema,
+  type RaspberryPiInstance,
+} from '../../../config/services.js';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const CONFIG: RaspberryPiInstance = {
+const CONFIG: RaspberryPiInstance = RaspberryPiInstanceSchema.parse({
   kind: 'raspberryPi',
   instanceId: 'main',
   enabled: true,
@@ -16,15 +19,20 @@ const CONFIG: RaspberryPiInstance = {
   pollPolicy: { healthMs: 10_000, statsMs: 30_000, jitterRatio: 0.1 },
   cacheTtlMs: 10_000,
   timeoutMs: 3_000,
-};
+});
 
-function makeFakeHandle(): PigpioHandle {
+/** `end` as a mock property, so tests can assert on it directly. */
+interface FakeHandle extends PigpioHandle {
+  end: Mock<PigpioHandle["end"]>;
+}
+
+function makeFakeHandle(): FakeHandle {
   return {
-    read: vi.fn(async () => 0),
-    getHardwareRevision: vi.fn(async () => 0xb03141),
-    getPigpioVersion: async () => 78,
-    getCurrentTick: async () => 12345,
-    end: vi.fn(async () => undefined),
+    read: vi.fn(() => Promise.resolve(0)),
+    getHardwareRevision: vi.fn(() => Promise.resolve(0xb03141)),
+    getPigpioVersion: () => Promise.resolve(78),
+    getCurrentTick: () => Promise.resolve(12345),
+    end: vi.fn<PigpioHandle["end"]>(() => Promise.resolve(undefined)),
   };
 }
 
@@ -34,7 +42,7 @@ function makeFakePigpio(connectImpl: () => Promise<PigpioHandle>): PigpioClient 
 
 function makeFakePing(success: boolean, avgMs = 5): PingProber {
   return {
-    probe: vi.fn(async () => ({ success, avgMs: success ? avgMs : undefined })),
+    probe: vi.fn(() => Promise.resolve((success ? { success, avgMs } : { success }))),
   };
 }
 
@@ -42,12 +50,12 @@ function makeFakePing(success: boolean, avgMs = 5): PingProber {
 
 describe('PiHealthChecker', () => {
   const signal = new AbortController().signal;
-  let now = 0;
+  const now = 0;
   const mockNow = () => now;
 
   it('reports reachable + pigpioOnline when pigpio connects successfully', async () => {
     const handle = makeFakeHandle();
-    const pigpio = makeFakePigpio(async () => handle);
+    const pigpio = makeFakePigpio(() => Promise.resolve(handle));
     const ping = makeFakePing(true);
 
     const checker = new PiHealthChecker({ pigpio, ping, config: CONFIG, now: mockNow });
@@ -60,7 +68,7 @@ describe('PiHealthChecker', () => {
   });
 
   it('reports reachable + pigpioOnline false when pigpio fails but ping succeeds', async () => {
-    const pigpio = makeFakePigpio(async () => { throw new Error('pigpiod not running'); });
+    const pigpio = makeFakePigpio(() => { return Promise.reject(new Error('pigpiod not running')); });
     const ping = makeFakePing(true, 8);
 
     const checker = new PiHealthChecker({ pigpio, ping, config: CONFIG, now: mockNow });
@@ -73,7 +81,7 @@ describe('PiHealthChecker', () => {
   });
 
   it('reports unreachable when both pigpio and ping fail', async () => {
-    const pigpio = makeFakePigpio(async () => { throw new Error('connection refused'); });
+    const pigpio = makeFakePigpio(() => { return Promise.reject(new Error('connection refused')); });
     const ping = makeFakePing(false);
 
     const checker = new PiHealthChecker({ pigpio, ping, config: CONFIG, now: mockNow });
@@ -88,7 +96,7 @@ describe('PiHealthChecker', () => {
     let tick = 0;
     const fakeClock = () => { tick += 10; return tick; };
     const handle = makeFakeHandle();
-    const pigpio = makeFakePigpio(async () => handle);
+    const pigpio = makeFakePigpio(() => Promise.resolve(handle));
     const ping = makeFakePing(true);
 
     const checker = new PiHealthChecker({ pigpio, ping, config: CONFIG, now: fakeClock });
@@ -98,7 +106,7 @@ describe('PiHealthChecker', () => {
   });
 
   it('passes correct connect args to pigpio client', async () => {
-    const connectMock = vi.fn(async () => makeFakeHandle());
+    const connectMock = vi.fn(() => Promise.resolve(makeFakeHandle()));
     const pigpio: PigpioClient = { connect: connectMock };
     const ping = makeFakePing(true);
 
@@ -113,8 +121,8 @@ describe('PiHealthChecker', () => {
   });
 
   it('passes signal and config to ping prober when pigpio fails', async () => {
-    const pigpio = makeFakePigpio(async () => { throw new Error('down'); });
-    const probeMock = vi.fn(async () => ({ success: true, avgMs: 3 }));
+    const pigpio = makeFakePigpio(() => { return Promise.reject(new Error('down')); });
+    const probeMock = vi.fn(() => Promise.resolve({ success: true, avgMs: 3 }));
     const ping: PingProber = { probe: probeMock };
 
     const checker = new PiHealthChecker({ pigpio, ping, config: CONFIG, now: mockNow });

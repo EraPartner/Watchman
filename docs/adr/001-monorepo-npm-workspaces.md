@@ -86,7 +86,7 @@ npm run test --workspace=apps/backend
 folder "Root" as Root {
     [package.json] as PKG
     [tsconfig.json] as TSC
-    [eslint.config.js] as ESLINT
+    [eslint.config.ts] as ESLINT
     [.prettierrc] as PRETTIER
     [vite.config.ts] as VITE
 }

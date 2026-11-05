@@ -19,7 +19,7 @@ interface FakeSession extends EventEmitter {
     feedCb: (varbinds: FakeVarbind[]) => void,
     doneCb: (err: Error | null) => void,
   ): void;
-  close(): void;
+  close: () => void;
 }
 
 function makeVarbind(oid: string, value: string): FakeVarbind {
@@ -65,13 +65,14 @@ vi.mock('net-snmp', () => {
     SecurityLevel: { authPriv: 3 },
     ObjectType: { OctetString: 4, Counter32: 65, Counter64: 70 },
     isVarbindError: () => false,
-    createSession: vi.fn((_host: string, _community: string) => sessions[0]!),
-    createV3Session: vi.fn((_host: string, _user: unknown) => sessions[0]!),
+    createSession: vi.fn((_host: string, _community: string) => required(sessions[0])),
+    createV3Session: vi.fn((_host: string, _user: unknown) => required(sessions[0])),
   };
   return { default: mod, ...mod };
 });
 
 import snmp from 'net-snmp';
+import { required } from "../../test/required.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,13 @@ describe('SnmpGetter.walk (I1)', () => {
       'private',
       expect.objectContaining({ version: 1 }),
     );
+  });
+
+  it('rejects with UnauthorizedError when neither v2c nor v3 credentials are given', async () => {
+    const getter = createSnmpGetter();
+    const req = walkReq();
+    delete req.v2c;
+    await expect(getter.walk(req)).rejects.toThrow('snmp: walk needs v2c or v3 credentials');
   });
 
   it('returns empty rows when subtree is empty', async () => {

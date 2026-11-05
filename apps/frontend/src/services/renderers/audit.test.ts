@@ -22,6 +22,7 @@ import { qbittorrentRenderer } from "./qbittorrent";
 import { raspberryPiRenderer } from "./raspberryPi";
 import { roonRenderer } from "./roon";
 import { synologyRenderer } from "./synology";
+import { required } from "@/test/required";
 
 // Backend metrics keys per service (top-level keys returned in `metrics: {}`)
 // from apps/backend/src/domain/services/<kind>/<Kind>Service.ts. Health-side
@@ -335,7 +336,7 @@ describe("renderer summary key audit", () => {
     it(`${kind} summary keys exist in backend stats payload (or are tagged source:'health')`, () => {
       for (const metric of renderer.summary) {
         // Dot-paths read the first path segment from the metrics object.
-        const head = metric.key.split(".")[0]!;
+        const head = required(metric.key.split(".")[0]);
         if (metric.source === "health") {
           expect(
             HEALTH_KEYS,

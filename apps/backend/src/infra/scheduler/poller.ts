@@ -66,8 +66,11 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
     const controller = new AbortController();
     const ratio = svc.pollPolicy.jitterRatio ?? 0.1;
 
+    // A call, not the bare `let`: TypeScript keeps `cancelled` narrowed to
+    // false across the await below and cannot see cancel() setting it.
+    const isCancelled = (): boolean => cancelled;
     const tick = async (): Promise<void> => {
-      if (cancelled) return;
+      if (isCancelled()) return;
       if (!paused) {
         try {
           await runner(controller.signal);
@@ -75,7 +78,7 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
           logger.error({ err: e, id: svc.id }, "poller tick failed");
         }
       }
-      if (cancelled) return;
+      if (isCancelled()) return;
       cancelTimer = clock.setTimeout(
         () => {
           void tick();
@@ -180,10 +183,11 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
     isRunning(id) {
       return tasks.has(id);
     },
-    async stop() {
+    stop() {
       for (const list of tasks.values()) list.forEach((t) => t.cancel());
       tasks.clear();
       services.clear();
+      return Promise.resolve();
     },
   };
 }

@@ -116,7 +116,7 @@ for a branch.
 
 ## Commit hooks
 
-`.githooks/pre-commit` runs `npx lint-staged` (config: `lint-staged.config.mjs`). It runs
+`.githooks/pre-commit` runs `npx lint-staged` (config: `lint-staged.config.ts`). It runs
 `eslint --fix` on staged backend and frontend sources and `prettier --write` on staged sources,
 JSON, YAML, CSS, HTML, and Markdown, then adds the results to the commit. A commit can therefore
 change staged content, including Markdown under `docs/`. Review `git show HEAD` after committing. `.githooks/pre-push` runs the heavier typecheck and test gate. Do not bypass the

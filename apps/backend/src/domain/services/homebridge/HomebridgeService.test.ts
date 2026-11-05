@@ -6,7 +6,7 @@ import type { PingProber } from "../../../infra/net/pingProbe.js";
 import { UnauthorizedError, UnavailableError } from "../../../core/errors.js";
 
 function fakePing(): PingProber {
-  return { probe: async () => ({ success: true, avgMs: 5 }) };
+  return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
 }
 
 const cfg: HomebridgeInstance = {
@@ -24,14 +24,15 @@ const cfg: HomebridgeInstance = {
   versionPath: "/api/status/homebridge-version",
   loginPath: "/api/auth/login",
   allowSelfSigned: false,
+  certSha256: "",
 };
 
 function fakeClient(handler: (path: string) => unknown): HomebridgeClient {
   return {
-    async get<T>(path: string) {
+    get<T>(path: string) {
       const v = handler(path);
-      if (v instanceof Error) throw v;
-      return v as T;
+      if (v instanceof Error) return Promise.reject(v);
+      return Promise.resolve(v as T);
     },
   };
 }

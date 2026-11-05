@@ -22,9 +22,10 @@ export class ServiceRegistry {
   }
 
   getByKind(kind: string, instanceId?: string): BaseService {
-    const list = this.byKind.get(kind);
-    if (!list || list.length === 0) throw new NotFoundError(`no instances for kind: ${kind}`);
-    if (!instanceId) return list[0]!;
+    const list = this.byKind.get(kind) ?? [];
+    const [first] = list;
+    if (!first) throw new NotFoundError(`no instances for kind: ${kind}`);
+    if (!instanceId) return first;
     const match = list.find((s) => s.instanceId === instanceId);
     if (!match) throw new NotFoundError(`instance not found: ${kind}:${instanceId}`);
     return match;

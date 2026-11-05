@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { act } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 // ---- mutable data shared across tests ----------------------------------
 type Row = {
@@ -37,7 +38,7 @@ vi.mock("@/pages/Settings/useConfigQueries", () => ({
   useUpdateService: () => ({
     mutate: vi.fn(),
     isPending: false,
-    mutateAsync: async ({
+    mutateAsync: ({
       id,
       input,
     }: {
@@ -49,6 +50,7 @@ vi.mock("@/pages/Settings/useConfigQueries", () => ({
           ? { ...s, instanceId: input.instanceId }
           : s
       );
+      return Promise.resolve();
     },
   }),
   useDeleteService: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -165,19 +167,19 @@ describe("ServiceDetailSheet after renaming the instance", () => {
         onOpenChange={() => {}}
       />
     );
-    await act(async () => {
+    await actAsync(() => {
       root.render(ui);
     });
     expect(button(container, "Edit")).toBeTruthy();
 
-    await act(async () => {
-      button(container, "Edit")!.click();
+    await actAsync(() => {
+      required(button(container, "Edit")).click();
     });
-    await act(async () => {
-      button(container, "Submit rename")!.click();
+    await actAsync(() => {
+      required(button(container, "Submit rename")).click();
     });
     // Re-render with the same props, as the parent does after the refetch.
-    await act(async () => {
+    await actAsync(() => {
       root.render(ui);
     });
 
@@ -186,7 +188,7 @@ describe("ServiceDetailSheet after renaming the instance", () => {
     expect(button(container, "Edit")).toBeTruthy();
     expect(healthCalls[healthCalls.length - 1]).toBe("renamed");
 
-    await act(async () => {
+    await actAsync(() => {
       root.unmount();
     });
   });

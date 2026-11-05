@@ -18,11 +18,11 @@ export default function SetupWizard() {
 
   const handleSkip = useCallback(() => {
     dismiss();
-    navigate("/", { replace: true });
+    void navigate("/", { replace: true });
   }, [dismiss, navigate]);
 
   const handleFinish = useCallback(() => {
-    navigate("/", { replace: true });
+    void navigate("/", { replace: true });
   }, [navigate]);
 
   const handlePick = useCallback((kind: string) => {

@@ -1,3 +1,4 @@
+import { isNonZero } from "@/lib/number";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAggregatedHealth } from "@/hooks/useAggregatedHealth";
@@ -28,7 +29,7 @@ interface SummaryProps {
 }
 
 function fmtRelative(ms: number, now: number): string {
-  if (!ms) return "—";
+  if (!isNonZero(ms)) return "—";
   const diff = Math.max(0, now - ms);
   if (diff < 1500) return "just now";
   if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;

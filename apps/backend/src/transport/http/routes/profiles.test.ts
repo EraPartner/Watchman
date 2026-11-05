@@ -31,19 +31,19 @@ function makeProfile(overrides: Partial<Profile> = {}): Profile {
 
 function makeProfileStore(overrides: Partial<ProfileStore> = {}): ProfileStore {
   return {
-    listProfiles: vi.fn(async () => [makeProfile()]),
-    getProfile: vi.fn(async () => makeProfile()),
-    createProfile: vi.fn(async () => makeProfile()),
-    updateProfile: vi.fn(async () => makeProfile()),
-    deleteProfile: vi.fn(async () => undefined),
-    serviceCounts: vi.fn(async () => ({ p1: 2 })),
-    getActiveProfileId: vi.fn(async () => "p1"),
-    setActiveProfileId: vi.fn(async () => undefined),
-    getAutoSwitch: vi.fn(async () => true),
-    setAutoSwitch: vi.fn(async () => undefined),
-    getLastSignature: vi.fn(async () => undefined),
-    setLastSignature: vi.fn(async () => undefined),
-    ensureBootstrap: vi.fn(async () => undefined),
+    listProfiles: vi.fn(() => Promise.resolve([makeProfile()])),
+    getProfile: vi.fn(() => Promise.resolve(makeProfile())),
+    createProfile: vi.fn(() => Promise.resolve(makeProfile())),
+    updateProfile: vi.fn(() => Promise.resolve(makeProfile())),
+    deleteProfile: vi.fn(() => Promise.resolve(undefined)),
+    serviceCounts: vi.fn(() => Promise.resolve({ p1: 2 })),
+    getActiveProfileId: vi.fn(() => Promise.resolve("p1")),
+    setActiveProfileId: vi.fn(() => Promise.resolve(undefined)),
+    getAutoSwitch: vi.fn(() => Promise.resolve(true)),
+    setAutoSwitch: vi.fn(() => Promise.resolve(undefined)),
+    getLastSignature: vi.fn(() => Promise.resolve(undefined)),
+    setLastSignature: vi.fn(() => Promise.resolve(undefined)),
+    ensureBootstrap: vi.fn(() => Promise.resolve(undefined)),
     ...overrides,
   };
 }
@@ -55,15 +55,15 @@ function makeApp(opts: {
 }) {
   const logger = pino({ level: "silent" });
   const registry = new ServiceRegistry();
-  const store = { loadAll: async () => [] } as unknown as ConfigStore;
+  const store = { loadAll: () => Promise.resolve([]) } as unknown as ConfigStore;
   const lifecycle = {
-    switchActiveProfile: vi.fn(async () => undefined),
+    switchActiveProfile: vi.fn(() => Promise.resolve(undefined)),
     idByStoredId: vi.fn(() => undefined),
     ...opts.lifecycle,
   } as unknown as ServiceLifecycle;
   const profileStore = makeProfileStore(opts.profiles);
   const detector: NetworkDetector = opts.detector ?? {
-    detect: vi.fn(async () => ({})),
+    detect: vi.fn(() => Promise.resolve({})),
   };
   return buildServer({
     logger,
@@ -83,10 +83,10 @@ function makeApp(opts: {
     setup: {
       store,
       http: {
-        send: async () => {
-          throw new Error();
+        send: () => {
+          return Promise.reject(new Error());
         },
-      } as HttpClient,
+      },
     },
   });
 }
@@ -97,9 +97,9 @@ describe("GET /profiles", () => {
     const res = await app.inject({ method: "GET", url: "/profiles" });
     await app.close();
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ id: string; serviceCount: number; isActive: boolean }>;
-    };
+    }>();
     expect(body.data[0]).toMatchObject({
       id: "p1",
       serviceCount: 2,
@@ -121,7 +121,7 @@ describe("GET /profiles/active", () => {
 
 describe("PUT /profiles/active", () => {
   it("switches the active profile via the lifecycle", async () => {
-    const switchFn = vi.fn(async () => undefined);
+    const switchFn = vi.fn(() => Promise.resolve(undefined));
     const app = await makeApp({ lifecycle: { switchActiveProfile: switchFn } });
     const res = await app.inject({
       method: "PUT",
@@ -135,7 +135,7 @@ describe("PUT /profiles/active", () => {
 
   it("returns 404 for an unknown profile", async () => {
     const app = await makeApp({
-      profiles: { getProfile: vi.fn(async () => undefined) },
+      profiles: { getProfile: vi.fn(() => Promise.resolve(undefined)) },
     });
     const res = await app.inject({
       method: "PUT",
@@ -164,8 +164,8 @@ describe("DELETE /profiles/:id", () => {
   it("maps invariant violations to 409", async () => {
     const app = await makeApp({
       profiles: {
-        deleteProfile: vi.fn(async () => {
-          throw new ValidationError("cannot delete the active profile");
+        deleteProfile: vi.fn(() => {
+          return Promise.reject(new ValidationError("cannot delete the active profile"));
         }),
       },
     });
@@ -179,14 +179,14 @@ describe("DELETE /profiles/:id", () => {
 describe("GET /profiles/current-network", () => {
   it("returns the detected signature and a matched profile", async () => {
     const app = await makeApp({
-      detector: { detect: vi.fn(async () => ({ gatewayMac: "aa:bb" })) },
+      detector: { detect: vi.fn(() => Promise.resolve({ gatewayMac: "aa:bb" })) },
       profiles: {
-        listProfiles: vi.fn(async () => [
+        listProfiles: vi.fn(() => Promise.resolve([
           makeProfile({
             id: "p1",
             networkSigs: [{ gatewayMac: "aa:bb", capturedAt: "x" }],
           }),
-        ]),
+        ])),
       },
     });
     const res = await app.inject({
@@ -202,10 +202,10 @@ describe("GET /profiles/current-network", () => {
 
 describe("POST /profiles/:id/capture-network", () => {
   it("captures the current signature onto the profile", async () => {
-    const updateFn = vi.fn(async () => makeProfile());
+    const updateFn = vi.fn(() => Promise.resolve(makeProfile()));
     const app = await makeApp({
       detector: {
-        detect: vi.fn(async () => ({
+        detect: vi.fn(() => Promise.resolve({
           gatewayMac: "aa:bb",
           gatewayIp: "1.1.1.1",
         })),
@@ -223,7 +223,7 @@ describe("POST /profiles/:id/capture-network", () => {
 
   it("returns 409 when no network can be detected", async () => {
     const app = await makeApp({
-      detector: { detect: vi.fn(async () => ({})) },
+      detector: { detect: vi.fn(() => Promise.resolve({})) },
     });
     const res = await app.inject({
       method: "POST",
@@ -238,8 +238,8 @@ describe("PUT /profiles/:id", () => {
   it("returns 404 when the profile does not exist", async () => {
     const app = await makeApp({
       profiles: {
-        updateProfile: vi.fn(async () => {
-          throw new NotFoundError("profile not found: nope");
+        updateProfile: vi.fn(() => {
+          return Promise.reject(new NotFoundError("profile not found: nope"));
         }),
       },
     });
@@ -255,8 +255,8 @@ describe("PUT /profiles/:id", () => {
   it("returns 400 for a duplicate name even when the name contains 'not found'", async () => {
     const app = await makeApp({
       profiles: {
-        updateProfile: vi.fn(async () => {
-          throw new ValidationError("profile name 'not found' already in use");
+        updateProfile: vi.fn(() => {
+          return Promise.reject(new ValidationError("profile name 'not found' already in use"));
         }),
       },
     });
@@ -267,6 +267,6 @@ describe("PUT /profiles/:id", () => {
     });
     await app.close();
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe("VALIDATION");
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("VALIDATION");
   });
 });

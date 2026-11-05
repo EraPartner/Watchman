@@ -8,7 +8,11 @@ export interface GetServiceStatusDeps {
 }
 
 export class GetServiceStatus {
-  constructor(private readonly deps: GetServiceStatusDeps) {}
+  private readonly deps: GetServiceStatusDeps;
+
+  constructor(deps: GetServiceStatusDeps) {
+    this.deps = deps;
+  }
 
   async health(
     kind: string,

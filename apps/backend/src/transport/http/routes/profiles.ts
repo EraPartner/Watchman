@@ -7,6 +7,7 @@ import type {
 import type { ServiceLifecycle } from "../../../application/ServiceLifecycle.js";
 import type { NetworkDetector } from "../../../infra/net/gatewayDetect.js";
 import { NotFoundError, ValidationError } from "../../../core/errors.js";
+import { actorHeader } from "../actorHeader.js";
 
 export interface ProfileRouteDeps {
   profiles: ProfileStore;
@@ -36,7 +37,7 @@ function toDto(
 export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
   const { profiles, store, lifecycle, detector } = deps;
 
-  return async (app) => {
+  return (app) => {
     app.get("/profiles", async () => {
       const [list, counts, activeId] = await Promise.all([
         profiles.listProfiles(),
@@ -54,7 +55,7 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
       return { data: { activeProfileId: activeId ?? null, autoSwitch } };
     });
 
-    app.put<{ Body: { profileId?: unknown } }>(
+    app.put<{ Body: { profileId?: unknown } | undefined }>(
       "/profiles/active",
       async (req, reply) => {
         const profileId =
@@ -74,7 +75,7 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
       }
     );
 
-    app.put<{ Body: { autoSwitch?: unknown } }>(
+    app.put<{ Body: { autoSwitch?: unknown } | undefined }>(
       "/profiles/settings",
       async (req, reply) => {
         if (typeof req.body?.autoSwitch !== "boolean") {
@@ -124,16 +125,16 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
 
     app.post<{ Body: unknown }>("/profiles", async (req, reply) => {
       try {
-        const actor = (req.headers["x-actor"] as string) ?? null;
+        const actor = actorHeader(req);
         const created = await profiles.createProfile(
-          (req.body ?? {}) as Record<string, unknown>,
-          actor ?? undefined
+          req.body ?? {},
+          actor
         );
         const [counts, activeId] = await Promise.all([
           profiles.serviceCounts(),
           profiles.getActiveProfileId(),
         ]);
-        return reply
+        return await reply
           .status(201)
           .send({ data: toDto(created, counts, activeId) });
       } catch (e) {
@@ -150,11 +151,11 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
       "/profiles/:id",
       async (req, reply) => {
         try {
-          const actor = (req.headers["x-actor"] as string) ?? null;
+          const actor = actorHeader(req);
           const updated = await profiles.updateProfile(
             req.params.id,
-            (req.body ?? {}) as Record<string, unknown>,
-            actor ?? undefined
+            req.body ?? {},
+            actor
           );
           const [counts, activeId] = await Promise.all([
             profiles.serviceCounts(),
@@ -178,9 +179,9 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
       "/profiles/:id",
       async (req, reply) => {
         try {
-          const actor = (req.headers["x-actor"] as string) ?? null;
-          await profiles.deleteProfile(req.params.id, actor ?? undefined);
-          return reply.status(204).send();
+          const actor = actorHeader(req);
+          await profiles.deleteProfile(req.params.id, actor);
+          return await reply.status(204).send();
         } catch (e) {
           // Invariant guards (active / non-empty / last profile) surface as 409.
           if (e instanceof ValidationError) {
@@ -229,11 +230,11 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
             !sig.gatewayMac ||
             s.gatewayMac?.toLowerCase() !== sig.gatewayMac.toLowerCase()
         );
-        const actor = (req.headers["x-actor"] as string) ?? null;
+        const actor = actorHeader(req);
         const updated = await profiles.updateProfile(
           req.params.id,
           { networkSigs: [...kept, captured] },
-          actor ?? undefined
+          actor
         );
         // Remember the current signature so the watcher treats this network as
         // known on its next tick.
@@ -245,5 +246,6 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
         return { data: toDto(updated, counts, activeId) };
       }
     );
+    return Promise.resolve();
   };
 }

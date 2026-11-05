@@ -31,14 +31,14 @@ const baseCfg: HomebridgeInstance = {
 /** HttpClient that records the tag of whichever client handled a request. */
 function recordingHttp(tag: string, calls: string[]): HttpClient {
   return {
-    async send() {
+    send() {
       calls.push(tag);
-      return {
+      return Promise.resolve({
         status: 200,
         headers: { "content-type": "application/json" },
-        text: async () => JSON.stringify({ hostname: "pi" }),
-        json: async () => ({ hostname: "pi" }) as never,
-      };
+        text: () => Promise.resolve(JSON.stringify({ hostname: "pi" })),
+        json: () => Promise.resolve(({ hostname: "pi" }) as never),
+      });
     },
   };
 }
@@ -48,7 +48,7 @@ function infraWith(
   insecure: HttpClient | undefined
 ): ServiceInfra {
   const ping: PingProber = {
-    probe: async () => ({ success: true, avgMs: 5 }),
+    probe: () => Promise.resolve({ success: true, avgMs: 5 }),
   };
   // Only the homebridge-relevant deps matter here; the rest are unused stubs.
   return {
@@ -133,15 +133,15 @@ describe("createService — synology DSM certificate pin", () => {
   /** Answers every DSM call (login and SYNO.DSM.Info) with success. */
   function dsmHttp(tag: string, calls: string[]): HttpClient {
     return {
-      async send() {
+      send() {
         calls.push(tag);
         const body = { success: true, data: { sid: "sid", model: "DS920+" } };
-        return {
+        return Promise.resolve({
           status: 200,
           headers: { "content-type": "application/json" },
-          text: async () => JSON.stringify(body),
-          json: async () => body as never,
-        };
+          text: () => Promise.resolve(JSON.stringify(body)),
+          json: () => Promise.resolve(body as never),
+        });
       },
     };
   }
@@ -199,15 +199,15 @@ describe("createService — AdGuard certificate pin", () => {
 
   function statusHttp(tag: string, calls: string[]): HttpClient {
     return {
-      async send() {
+      send() {
         calls.push(tag);
         const body = { running: true, protection_enabled: true, version: "v0.107" };
-        return {
+        return Promise.resolve({
           status: 200,
           headers: { "content-type": "application/json" },
-          text: async () => JSON.stringify(body),
-          json: async () => body as never,
-        };
+          text: () => Promise.resolve(JSON.stringify(body)),
+          json: () => Promise.resolve(body as never),
+        });
       },
     };
   }
@@ -262,7 +262,7 @@ describe("createService — certificate pins for Homebridge and qBittorrent", ()
     expect(new Set(calls)).toEqual(new Set(["pinned"]));
   });
 
-  it("qBittorrent uses a client pinned to its fingerprint", async () => {
+  it("qBittorrent uses a client pinned to its fingerprint", () => {
     const pins: string[] = [];
     const qbCfg: QbittorrentInstance = {
       kind: "qbittorrent",
@@ -287,5 +287,6 @@ describe("createService — certificate pins for Homebridge and qBittorrent", ()
     };
     createService(qbCfg, infra);
     expect(pins).toEqual(["EF:01"]);
+    return Promise.resolve();
   });
 });

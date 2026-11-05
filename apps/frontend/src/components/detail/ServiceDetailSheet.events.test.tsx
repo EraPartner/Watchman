@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
-import { act } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WsEvent } from "@/lib/wsEventBus";
+import { actAsync } from "@/test/actAsync";
 
 // ---- mutable data shared across tests ----------------------------------
 const { wsSpy, eventLogSpy, mutate } = vi.hoisted(() => ({
-  wsSpy: vi.fn(),
-  eventLogSpy: vi.fn(),
+  wsSpy: vi.fn<(type: string, handler: (ev: WsEvent) => void) => void>(),
+  eventLogSpy: vi.fn<(events: ReadonlyArray<{ message: string }>) => void>(),
   mutate: vi.fn(),
 }));
-const wsHandler = () => wsSpy.mock.lastCall?.[1] as (ev: WsEvent) => void;
+const wsHandler = () => required(wsSpy.mock.lastCall, "a WebSocket subscription")[1];
 const loggedEvents = () =>
-  (eventLogSpy.mock.lastCall?.[0] as ReadonlyArray<{ message: string }>) ?? [];
+  eventLogSpy.mock.lastCall?.[0] ?? [];
 
 const rows = [
   {
@@ -111,6 +111,7 @@ vi.mock("./ConfigPanel", () => ({ ConfigPanel: () => null }));
 vi.mock("@/pages/Settings/ServiceEditor", () => ({ default: () => null }));
 
 import { ServiceDetailSheet } from "./ServiceDetailSheet";
+import { required } from "@/test/required";
 
 describe("ServiceDetailSheet reused across tiles", () => {
   beforeEach(() => {
@@ -141,10 +142,10 @@ describe("ServiceDetailSheet reused across tiles", () => {
         onOpenChange={() => {}}
       />
     );
-    await act(async () => {
+    await actAsync(() => {
       root.render(sheet("bitcoin"));
     });
-    await act(async () => {
+    await actAsync(() => {
       wsHandler()({
         type: "alert",
         service: "bitcoin",
@@ -156,13 +157,13 @@ describe("ServiceDetailSheet reused across tiles", () => {
     });
     expect(loggedEvents().map((e) => e.message)).toEqual(["node behind"]);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(sheet("tor"));
     });
     // Regression: the Tor sheet listed Bitcoin's "node behind" alert.
     expect(loggedEvents()).toEqual([]);
 
-    await act(async () => {
+    await actAsync(() => {
       root.unmount();
     });
   });
@@ -171,7 +172,7 @@ describe("ServiceDetailSheet reused across tiles", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
-    await act(async () => {
+    await actAsync(() => {
       root.render(
         <ServiceDetailSheet
           kind="bitcoin"
@@ -181,10 +182,10 @@ describe("ServiceDetailSheet reused across tiles", () => {
         />
       );
     });
-    const disable = Array.from(container.querySelectorAll("button")).find(
+    const disable = required(Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent === "Disable"
-    )!;
-    await act(async () => {
+    ));
+    await actAsync(() => {
       disable.click();
     });
     expect(mutate).toHaveBeenCalledWith(
@@ -203,7 +204,7 @@ describe("ServiceDetailSheet reused across tiles", () => {
       },
       expect.anything()
     );
-    await act(async () => {
+    await actAsync(() => {
       root.unmount();
     });
   });

@@ -12,6 +12,7 @@ import {
   UnavailableError,
   ValidationError,
 } from "../../core/errors.js";
+import { required } from "../../test/required.js";
 
 interface DsmEnvelope {
   success: boolean;
@@ -39,7 +40,7 @@ let state: {
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   let body = "";
-  req.on("data", (c: Buffer) => (body += c));
+  req.on("data", (c: Buffer) => (body += c.toString()));
   req.on("end", () => {
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${port}`);
     const params = {
@@ -73,8 +74,8 @@ function handler(req: IncomingMessage, res: ServerResponse) {
 
     // First-call errors (consumed on use)
     if (key in state.firstCallErrors) {
-      const code = state.firstCallErrors[key]!;
-      delete state.firstCallErrors[key];
+      const code = required(state.firstCallErrors[key]);
+      Reflect.deleteProperty(state.firstCallErrors, key);
       const envelope: DsmEnvelope = { success: false, error: { code } };
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(envelope));
@@ -83,7 +84,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
 
     // Persistent errors
     if (key in state.persistentErrors) {
-      const code = state.persistentErrors[key]!;
+      const code = required(state.persistentErrors[key]);
       const envelope: DsmEnvelope = { success: false, error: { code } };
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(envelope));
@@ -473,10 +474,10 @@ describe("createDsmClient", () => {
 
   it("says to pin the certificate when DSM's certificate is not trusted", async () => {
     const http = {
-      send: async () => {
-        throw new UnavailableError("http request failed: POST https://nas:5001/webapi/auth.cgi", {
+      send: () => {
+        return Promise.reject(new UnavailableError("http request failed: POST https://nas:5001/webapi/auth.cgi", {
           cause: "self-signed certificate",
-        });
+        }));
       },
     };
     const client = createDsmClient({
@@ -495,7 +496,7 @@ describe("createDsmClient", () => {
       cause: "connect ECONNREFUSED",
     });
     const client = createDsmClient({
-      http: { send: async () => { throw original; } },
+      http: { send: () => { return Promise.reject(original); } },
       config: makeConfig({ baseUrl: "http://nas:5000" }),
     });
     await expect(client.call("SYNO.DSM.Info", 2, "getinfo")).rejects.toBe(original);

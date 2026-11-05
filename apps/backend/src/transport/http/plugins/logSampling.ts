@@ -7,21 +7,23 @@ export interface LogSamplingOptions {
   healthPaths?: readonly string[];
 }
 
-const plugin: FastifyPluginAsync<LogSamplingOptions> = async (app, opts) => {
+const plugin: FastifyPluginAsync<LogSamplingOptions> = (app, opts) => {
   const rate = Math.max(1, opts.healthSampleRate ?? 20);
   const skipUAs = (opts.skipUserAgents ?? ['ELB-HealthChecker', 'kube-probe', 'GoogleHC']).map((s) => s.toLowerCase());
   const healthPaths = opts.healthPaths ?? ['/meta/health'];
   let seen = 0;
 
-  app.addHook('onRequest', async (req) => {
+  app.addHook('onRequest', (req) => {
     const url = req.url.split('?')[0] ?? req.url;
-    const ua = (req.headers['user-agent'] ?? '').toString().toLowerCase();
+    const ua = (req.headers['user-agent'] ?? '').toLowerCase();
     const isHealth = healthPaths.includes(url);
     const isSkipUA = skipUAs.some((s) => ua.includes(s));
     if (isSkipUA || (isHealth && seen++ % rate !== 0)) {
       (req as unknown as { log: { level: string } }).log.level = 'silent';
     }
+    return Promise.resolve();
   });
+  return Promise.resolve();
 };
 
 export const logSamplingPlugin = fp(plugin, { name: 'logSampling' });

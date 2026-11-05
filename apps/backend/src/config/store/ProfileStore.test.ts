@@ -8,6 +8,7 @@ import {
 import { ValidationError } from "../../core/errors.js";
 import { runConfigMigrations } from "./migrations.js";
 import { createProfileStore, type ProfileStore } from "./ProfileStore.js";
+import { required } from "../../test/required.js";
 
 async function insertRawService(
   pool: DuckDbPool,
@@ -93,13 +94,11 @@ describe("ProfileStore", () => {
 
     const all = await store.listProfiles();
     expect(all).toHaveLength(1);
-    expect(all[0]!.name).toBe("Default");
-    expect(await store.getActiveProfileId()).toBe(all[0]!.id);
+    expect(required(all[0]).name).toBe("Default");
+    expect(await store.getActiveProfileId()).toBe(required(all[0]).id);
 
     const counts = await store.serviceCounts();
-    expect(counts[all[0]!.id]).toBe(2);
-    void svc1;
-    void svc2;
+    expect(counts[required(all[0]).id]).toBe(2);
   });
 
   it("ensureBootstrap is idempotent and keeps a valid active profile", async () => {
@@ -112,7 +111,7 @@ describe("ProfileStore", () => {
 
   it("enforces delete invariants (active, non-empty, last)", async () => {
     await store.ensureBootstrap();
-    const defaultProfile = (await store.listProfiles())[0]!;
+    const defaultProfile = required((await store.listProfiles())[0]);
     const office = await store.createProfile({ name: "Office" });
 
     // active profile cannot be deleted
@@ -163,6 +162,6 @@ describe("ProfileStore", () => {
     });
     expect(updated.networkSigs).toHaveLength(1);
     // normalized to lowercase
-    expect(updated.networkSigs[0]!.gatewayMac).toBe("aa:bb:cc:dd:ee:ff");
+    expect(required(updated.networkSigs[0]).gatewayMac).toBe("aa:bb:cc:dd:ee:ff");
   });
 });

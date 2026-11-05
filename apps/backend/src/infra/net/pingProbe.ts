@@ -60,7 +60,7 @@ function runOnce(cmd: string, args: string[], timeoutMs: number, signal?: AbortS
       if (signal.aborted) return reject(new Error('aborted'));
       signal.addEventListener('abort', onAbort, { once: true });
     }
-    child.stdout.on('data', (d) => (stdout += d.toString()));
+    child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
     child.on('close', (code) => {
       if (signal) signal.removeEventListener('abort', onAbort);
       if (signal?.aborted) reject(new Error('aborted'));
@@ -90,7 +90,9 @@ export function repliedToPing(stdout: string): boolean {
  */
 export function pingCountFor(count: number, timeoutMs: number): number {
   const fits = Math.max(1, Math.floor(timeoutMs / 1000));
-  return Math.max(1, Math.min(Math.floor(count) || 1, fits));
+  // NaN and 0 both fall back to one ping
+  const whole = Math.floor(count);
+  return Math.max(1, Math.min(whole > 0 ? whole : 1, fits));
 }
 
 const REPLY_LINE = /bytes from .*time[=<]\s*([\d.]+)\s*ms/g;

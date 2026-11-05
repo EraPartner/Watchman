@@ -6,14 +6,14 @@ describe('Result', () => {
     const r = ok(1);
     expect(isOk(r)).toBe(true);
     expect(isErr(r)).toBe(false);
-    if (r.ok) expect(r.value).toBe(1);
+    expect(r.value).toBe(1);
   });
 
   it('err + isErr', () => {
     const r = err('bad');
     expect(isErr(r)).toBe(true);
     expect(isOk(r)).toBe(false);
-    if (!r.ok) expect(r.error).toBe('bad');
+    expect(r.error).toBe('bad');
   });
 
   it('map transforms ok only', () => {

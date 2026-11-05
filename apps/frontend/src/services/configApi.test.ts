@@ -1,10 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ApiRequestOptions } from "./apiClient/types";
+import { required } from "@/test/required";
 
-const requestMock = vi.fn();
+/** The JSON body a request was sent with, as a plain object. */
+function jsonBody(opts: ApiRequestOptions | undefined): Record<string, unknown> {
+  if (typeof opts?.body !== "string") throw new Error("request had no JSON body");
+  const parsed: unknown = JSON.parse(opts.body);
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("request body is not a JSON object");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+const requestMock =
+  vi.fn<(endpoint: string, options?: ApiRequestOptions) => Promise<unknown>>();
 
 vi.mock("./ApiClient", () => ({
   sharedCore: {
-    request: (...args: unknown[]) => requestMock(...args),
+    request: (...args: Parameters<typeof requestMock>) => requestMock(...args),
   },
 }));
 
@@ -48,10 +61,10 @@ describe("configApi", () => {
       enabled: true,
       config: { host: "10.0.0.1" },
     });
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = required(requestMock.mock.calls[0]);
     expect(url).toBe("/config/services");
-    expect(opts.method).toBe("POST");
-    const body = JSON.parse(opts.body);
+    expect(opts?.method).toBe("POST");
+    const body = jsonBody(opts);
     expect(body.kind).toBe("bitcoin");
     expect(body.host).toBe("10.0.0.1");
   });
@@ -59,31 +72,31 @@ describe("configApi", () => {
   it("createService without config still sends valid body", async () => {
     requestMock.mockResolvedValue({});
     await configApi.createService({ kind: "tor", instanceId: "main", enabled: true });
-    const [, opts] = requestMock.mock.calls[0];
-    const body = JSON.parse(opts.body);
+    const [, opts] = required(requestMock.mock.calls[0]);
+    const body = jsonBody(opts);
     expect(body.kind).toBe("tor");
   });
 
   it("updateService sends PUT to /config/services/:id", async () => {
     requestMock.mockResolvedValue({});
     await configApi.updateService("tor:main", { enabled: false });
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = required(requestMock.mock.calls[0]);
     expect(url).toBe("/config/services/tor%3Amain");
-    expect(opts.method).toBe("PUT");
+    expect(opts?.method).toBe("PUT");
   });
 
   it("deleteService sends DELETE to /config/services/:id", async () => {
     requestMock.mockResolvedValue(undefined);
     await configApi.deleteService("bitcoin:main");
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = required(requestMock.mock.calls[0]);
     expect(url).toBe("/config/services/bitcoin%3Amain");
-    expect(opts.method).toBe("DELETE");
+    expect(opts?.method).toBe("DELETE");
   });
 
   it("testService sends POST to /config/services/:id/test", async () => {
     requestMock.mockResolvedValue({ ok: true, latencyMs: 42 });
     const result = await configApi.testService("synology:main");
-    const [url] = requestMock.mock.calls[0];
+    const [url] = required(requestMock.mock.calls[0]);
     expect(url).toBe("/config/services/synology%3Amain/test");
     expect(result.ok).toBe(true);
   });
@@ -113,10 +126,10 @@ describe("configApi", () => {
     requestMock.mockResolvedValue(importResult);
     const bundle = { version: 1 as const, exportedAt: "2024-01-01", payload: "data" };
     await configApi.importConfig(bundle);
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = required(requestMock.mock.calls[0]);
     expect(url).toBe("/config/import");
-    expect(opts.method).toBe("POST");
-    const body = JSON.parse(opts.body);
+    expect(opts?.method).toBe("POST");
+    const body = jsonBody(opts);
     expect(body.version).toBe(1);
   });
 });

@@ -57,7 +57,7 @@ export interface KindMeta {
   kind: ServiceKind;
   label: string;
   description: string;
-  schema: z.ZodTypeAny;
+  schema: z.ZodType;
   fields: ReadonlyArray<FieldMeta>;
   secretFields: ReadonlyArray<string>;
 }

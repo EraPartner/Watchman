@@ -32,11 +32,11 @@ function makeSubSocket(): FakeSubSocket {
       return {
         async next() {
           // Poll until there's a frame or socket is closed
-          while (true) {
+          for (;;) {
             if (idx < frameQueue.length) {
-              return { value: frameQueue[idx++]!, done: false };
+              return { value: required(frameQueue[idx++]), done: false };
             }
-            if (socketClosed) return { value: undefined as unknown as Buffer[], done: true };
+            if (socketClosed) return { value: undefined, done: true };
             await new Promise((r) => setTimeout(r, 5));
           }
         },
@@ -49,13 +49,15 @@ function makeSubSocket(): FakeSubSocket {
 }
 
 vi.mock('zeromq', () => ({
-  Subscriber: class {
-    constructor() { return makeSubSocket(); }
-  },
+  // `new Subscriber()` returns the fake socket.
+  Subscriber: vi.fn(function Subscriber() {
+    return makeSubSocket();
+  }),
 }));
 
 import { zmqConnect } from './zmqSubscriberImpl.js';
 import type { ZmqMessage } from './zmqSubscriber.js';
+import { required } from "../../test/required.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,7 +82,7 @@ describe('zmqConnect', () => {
 
   it('connects to endpoint and subscribes to topics', async () => {
     const handle = await zmqConnect('tcp://127.0.0.1:28332', ['hashblock']);
-    const sock = socketInstance!;
+    const sock = required(socketInstance);
 
     expect(sock.connect).toHaveBeenCalledWith('tcp://127.0.0.1:28332');
     expect(sock.subscribe).toHaveBeenCalledWith('hashblock');
@@ -90,7 +92,7 @@ describe('zmqConnect', () => {
 
   it('subscribes to multiple topics', async () => {
     const handle = await zmqConnect('tcp://127.0.0.1:28332', ['hashblock', 'rawtx']);
-    const sock = socketInstance!;
+    const sock = required(socketInstance);
 
     expect(sock.subscribe).toHaveBeenCalledWith('hashblock');
     expect(sock.subscribe).toHaveBeenCalledWith('rawtx');
@@ -104,7 +106,7 @@ describe('zmqConnect', () => {
     handle.onMessage((m) => messages.push(m));
 
     const data = Buffer.alloc(32, 0xab);
-    socketInstance!.emitFrames(makeFrames('hashblock', data, 42));
+    required(socketInstance).emitFrames(makeFrames('hashblock', data, 42));
 
     await waitFor(50);
 
@@ -122,7 +124,7 @@ describe('zmqConnect', () => {
     handle.onMessage((m) => messages.push(m));
 
     // Only 2 frames, no sequence buffer
-    socketInstance!.emitFrames([Buffer.from('hashblock'), Buffer.from('data')]);
+    required(socketInstance).emitFrames([Buffer.from('hashblock'), Buffer.from('data')]);
 
     await waitFor(50);
 
@@ -138,7 +140,7 @@ describe('zmqConnect', () => {
     const unsub = handle.onMessage((m) => received.push(m));
     unsub();
 
-    socketInstance!.emitFrames(makeFrames('hashblock', Buffer.from('data'), 1));
+    required(socketInstance).emitFrames(makeFrames('hashblock', Buffer.from('data'), 1));
     await waitFor(50);
 
     expect(received).toHaveLength(0);
@@ -152,11 +154,11 @@ describe('zmqConnect', () => {
     handle.onMessage((m) => received.push(m));
 
     await handle.close();
-    socketInstance!.emitFrames(makeFrames('hashblock', Buffer.from('post-close'), 99));
+    required(socketInstance).emitFrames(makeFrames('hashblock', Buffer.from('post-close'), 99));
     await waitFor(30);
 
     expect(received).toHaveLength(0);
-    expect(socketInstance!.close).toHaveBeenCalled();
+    expect(required(socketInstance).close).toHaveBeenCalled();
   });
 
   it('close() clears all handlers', async () => {
@@ -168,7 +170,7 @@ describe('zmqConnect', () => {
 
     await handle.close();
 
-    socketInstance!.emitFrames(makeFrames('hashblock', Buffer.from('data'), 5));
+    required(socketInstance).emitFrames(makeFrames('hashblock', Buffer.from('data'), 5));
     await waitFor(30);
 
     expect(received1).toHaveLength(0);
@@ -186,8 +188,8 @@ describe('zmqConnect', () => {
     handle.onMessage(() => { throw new Error('boom'); });
     handle.onMessage((m) => messages.push(m));
 
-    socketInstance!.emitFrames(makeFrames('hashblock', Buffer.alloc(32, 1), 1));
-    socketInstance!.emitFrames(makeFrames('hashblock', Buffer.alloc(32, 2), 2));
+    required(socketInstance).emitFrames(makeFrames('hashblock', Buffer.alloc(32, 1), 1));
+    required(socketInstance).emitFrames(makeFrames('hashblock', Buffer.alloc(32, 2), 2));
     await waitFor(50);
 
     expect(messages.map((m) => m.sequence)).toEqual([1, 2]);

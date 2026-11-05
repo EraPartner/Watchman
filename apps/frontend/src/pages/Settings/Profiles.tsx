@@ -39,7 +39,7 @@ function ProfileEditor({
   onCancel,
   onSubmit,
 }: {
-  existing?: Profile;
+  existing?: Profile | undefined;
   submitting: boolean;
   onCancel: () => void;
   onSubmit: (v: FormValues) => Promise<void>;
@@ -127,6 +127,8 @@ export default function Profiles() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const currentMac = network?.signature.gatewayMac;
+  const currentNetworkLabel = network?.signature.subnet ?? currentMac;
+  const networkRecognized = Boolean(network?.matchedProfileId);
 
   return (
     <SettingsLayout
@@ -144,7 +146,7 @@ export default function Profiles() {
       )}
       {error && (
         <p className="text-fs-label text-[var(--crit)]">
-          {(error as Error).message ?? "Failed to load"}
+          {error.message || "Failed to load"}
         </p>
       )}
 
@@ -154,9 +156,9 @@ export default function Profiles() {
             <>
               Current network:{" "}
               <span className="font-mono text-[var(--text-hi)]">
-                {network?.signature.subnet ?? currentMac}
+                {currentNetworkLabel}
               </span>{" "}
-              {network?.matchedProfileId ? (
+              {networkRecognized ? (
                 <span className="text-[var(--ok)]">· recognized</span>
               ) : (
                 <span className="text-[var(--warn)]">· unrecognized</span>
@@ -287,10 +289,12 @@ export default function Profiles() {
               onSubmit={async (v) => {
                 // Send an emptied description as "" (not undefined, which
                 // JSON drops) so the backend clears it instead of keeping it.
+                // An empty color is left out, as JSON dropped the old
+                // `color: undefined`.
                 const patch = {
                   name: v.name,
                   description: v.description,
-                  color: v.color || undefined,
+                  ...(v.color ? { color: v.color } : {}),
                 };
                 if (editor.mode === "edit") {
                   await updateMut.mutateAsync({ id: editor.profile.id, patch });
@@ -306,7 +310,7 @@ export default function Profiles() {
 
       {pendingDelete ? (
         <ConfirmDialog
-          open={!!pendingDelete}
+          open
           onOpenChange={(open) => !open && setPendingDelete(null)}
           title={`Delete profile "${pendingDelete.name}"?`}
           description={

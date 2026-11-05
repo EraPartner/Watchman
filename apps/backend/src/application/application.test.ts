@@ -6,22 +6,26 @@ import { UnavailableError } from '../core/errors.js';
 import { GetServiceStatus } from './GetServiceStatus.js';
 import { GetAggregatedHealth } from './GetAggregatedHealth.js';
 import { ListInstances } from './ListInstances.js';
+import { required } from "../test/required.js";
 
 class FakeSvc extends BaseService {
   readonly kind: string;
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
-  constructor(kind: string, instanceId: string, private readonly healthy = true) {
+  private readonly healthy: boolean;
+
+  constructor(kind: string, instanceId: string, healthy = true) {
     super();
+    this.healthy = healthy;
     this.kind = kind;
     this.instanceId = instanceId;
   }
-  async checkHealth(): Promise<HealthResult> {
-    if (!this.healthy) return err(new UnavailableError('down'));
-    return ok({ reachable: true, at: 1 });
+  checkHealth(): Promise<HealthResult> {
+    if (!this.healthy) return Promise.resolve(err(new UnavailableError('down')));
+    return Promise.resolve(ok({ reachable: true, at: 1 }));
   }
-  async getStats(): Promise<StatsResult> {
-    return ok({ metrics: { count: 1 }, at: 1 });
+  getStats(): Promise<StatsResult> {
+    return Promise.resolve(ok({ metrics: { count: 1 }, at: 1 }));
   }
 }
 
@@ -54,8 +58,8 @@ describe('GetAggregatedHealth', () => {
     const uc = new GetAggregatedHealth(r);
     const out = await uc.run(s());
     expect(out).toHaveLength(2);
-    expect(out[0]!.result.ok).toBe(true);
-    expect(out[1]!.result.ok).toBe(false);
+    expect(required(out[0]).result.ok).toBe(true);
+    expect(required(out[1]).result.ok).toBe(false);
   });
 });
 

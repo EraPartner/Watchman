@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { isNonZero } from "@/lib/number";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
 import { queryKeys } from "../lib/queryKeys";
@@ -39,10 +40,14 @@ export const useServiceHealth = (
   kind: string,
   instance?: string
 ): AggregatedHealthResult => {
-  const { data, isLoading } = useAggregatedHealth();
+  const query = useAggregatedHealth();
+  // Read separately so the "loading but already has data" case below is not
+  // narrowed away by the query result's status union.
+  const data = query.data;
+  const isLoading = query.isLoading;
   return {
     data: pickHealth(data, kind, instance),
-    isLoading: isLoading && !data,
+    isLoading: isLoading && data === undefined,
     error: pickError(data, kind, instance),
   };
 };
@@ -80,14 +85,19 @@ export const useServiceStats = (
   useEffect(() => {
     if (!query.data) return;
     if (trackedMetrics.length === 0) return;
+    // Typed as a number, but read defensively: the payload is untyped JSON.
+    const rawAt: unknown = query.data.at;
+    const parsedAt = Number(rawAt);
     const at =
-      typeof query.data.at === "number"
-        ? query.data.at
-        : Number(query.data.at) || Date.now();
+      typeof rawAt === "number"
+        ? rawAt
+        : isNonZero(parsedAt)
+          ? parsedAt
+          : Date.now();
     recordStats(
       kind,
       instance,
-      query.data.metrics as Record<string, unknown>,
+      query.data.metrics,
       trackedMetrics,
       at
     );

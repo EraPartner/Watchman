@@ -2,8 +2,10 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { anyString } from "@/test/matchers";
 import { useWebSocket } from "./useWebSocket";
 import { subscribeWsEvent, type WsEvent } from "../lib/wsEventBus";
+import { actAsync } from "@/test/actAsync";
 
 const {
   invalidateQueries,
@@ -77,8 +79,10 @@ class FakeWebSocket {
   onmessage: SocketHandler<{ data: string }> = null;
   sent: string[] = [];
 
+  readonly url: string;
+
   constructor(url: string) {
-    void url;
+    this.url = url;
     FakeWebSocket.instances.push(this);
   }
 
@@ -98,6 +102,13 @@ class FakeWebSocket {
   emitRawMessage(data: string) {
     this.onmessage?.({ data });
   }
+}
+
+/** The nth socket the hook opened; fails the test if it was never opened. */
+function socketAt(index: number): FakeWebSocket {
+  const socket = FakeWebSocket.instances[index];
+  if (!socket) throw new Error(`no WebSocket #${index} was opened`);
+  return socket;
 }
 
 let mockedNow = 0;
@@ -145,11 +156,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.emitMessage({
@@ -178,7 +189,7 @@ describe("useWebSocket", () => {
       queryKey: ["services", "health"],
     });
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.disconnect();
       root.unmount();
     });
@@ -189,11 +200,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={() => {}} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.emitMessage({
@@ -220,7 +231,7 @@ describe("useWebSocket", () => {
       {
         message: {
           type: "unknown",
-          timestamp: expect.any(String),
+          timestamp: anyString(),
         },
       }
     );
@@ -236,11 +247,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.disconnect();
       hookApi?.sendMessage({ type: "ping" });
     });
@@ -249,7 +260,7 @@ describe("useWebSocket", () => {
       "[WEBSOCKET] Cannot send message: not connected"
     );
 
-    await act(async () => {
+    await actAsync(() => {
       root.unmount();
     });
   });
@@ -260,11 +271,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.readyState = FakeWebSocket.OPEN;
@@ -272,7 +283,7 @@ describe("useWebSocket", () => {
       throw new Error("send failed");
     };
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.sendMessage({ type: "ping" });
     });
 
@@ -281,7 +292,7 @@ describe("useWebSocket", () => {
       expect.objectContaining({ message: "send failed" })
     );
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.disconnect();
       root.unmount();
     });
@@ -293,11 +304,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.emitRawMessage("{not-json");
@@ -307,7 +318,7 @@ describe("useWebSocket", () => {
       expect.any(SyntaxError)
     );
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.disconnect();
       root.unmount();
     });
@@ -319,14 +330,14 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
-    await act(async () => {
+    await actAsync(() => {
       socket.close(1006, "abnormal");
     });
 
@@ -351,7 +362,7 @@ describe("useWebSocket", () => {
       expect.objectContaining({ minIntervalMs: 5000 })
     );
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.disconnect();
       root.unmount();
     });
@@ -363,11 +374,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    const first = FakeWebSocket.instances[0];
+    const first = socketAt(0);
     await act(async () => {
       first.readyState = FakeWebSocket.OPEN;
       first.onopen?.();
@@ -381,7 +392,7 @@ describe("useWebSocket", () => {
     // The backend is still down: the retry fails at once, and the next one
     // (4s backoff) lands inside the 5s throttle window.
     await act(async () => {
-      FakeWebSocket.instances[1].close(1006, "refused");
+      socketAt(1).close(1006, "refused");
       await vi.advanceTimersByTimeAsync(4000);
     });
     expect(loggerDebug).toHaveBeenCalledWith(
@@ -396,7 +407,7 @@ describe("useWebSocket", () => {
     });
     expect(FakeWebSocket.instances).toHaveLength(3);
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.disconnect();
       root.unmount();
     });
@@ -408,12 +419,12 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    const first = FakeWebSocket.instances[0];
-    await act(async () => {
+    const first = socketAt(0);
+    await actAsync(() => {
       first.readyState = FakeWebSocket.OPEN;
       first.onopen?.();
     });
@@ -425,8 +436,8 @@ describe("useWebSocket", () => {
       first.close(1006, "network changed");
       await vi.advanceTimersByTimeAsync(2000);
     });
-    const second = FakeWebSocket.instances[1];
-    await act(async () => {
+    const second = socketAt(1);
+    await actAsync(() => {
       second.readyState = FakeWebSocket.OPEN;
       second.onopen?.();
     });
@@ -442,7 +453,7 @@ describe("useWebSocket", () => {
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey });
     }
 
-    await act(async () => {
+    await actAsync(() => {
       hookApi?.disconnect();
       root.unmount();
     });
@@ -455,11 +466,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={() => {}} />);
     });
 
-    FakeWebSocket.instances[0].emitMessage({
+    socketAt(0).emitMessage({
       type: "alert",
       level: "error",
       message: "bitcoin:backup: timeout",
@@ -486,11 +497,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={() => {}} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.emitMessage({
@@ -499,7 +510,7 @@ describe("useWebSocket", () => {
       instanceId: "main",
     });
 
-    await act(async () => {
+    await actAsync(() => {
       root.unmount();
     });
 
@@ -516,11 +527,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={() => {}} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.emitMessage({
@@ -560,11 +571,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={() => {}} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.emitMessage({
@@ -596,11 +607,11 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={() => {}} />);
     });
 
-    const socket = FakeWebSocket.instances[0];
+    const socket = socketAt(0);
     expect(socket).toBeTruthy();
 
     socket.emitMessage({
@@ -636,12 +647,12 @@ describe("useWebSocket", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe onHook={(value) => (hookApi = value)} />);
     });
 
-    await act(async () => {
-      const socket = FakeWebSocket.instances[0];
+    await actAsync(() => {
+      const socket = socketAt(0);
       expect(socket).toBeTruthy();
 
       socket.close(1006, "abnormal");
@@ -660,8 +671,8 @@ describe("useWebSocket", () => {
     );
 
     // ...but it keeps retrying at the capped delay, without repeating the toast
-    await act(async () => {
-      FakeWebSocket.instances[0].close(1006, "abnormal");
+    await actAsync(() => {
+      socketAt(0).close(1006, "abnormal");
     });
     // (not "last call": the mocked useQueryClient returns a new client each
     // render, so the mount effect re-runs connect() and logs a throttle)

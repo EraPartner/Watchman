@@ -192,7 +192,7 @@ export class IpfsService extends BaseService {
 
       const peersCount = Array.isArray(peers)
         ? peers.length
-        : peers && Array.isArray((peers as { Peers?: unknown[] }).Peers)
+        : peers && Array.isArray(peers.Peers)
           ? (peers as { Peers: unknown[] }).Peers.length
           : 0;
 

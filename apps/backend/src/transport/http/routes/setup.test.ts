@@ -22,16 +22,17 @@ vi.mock("../../../infra/http/pinnedClient.js", () => ({
 
 import { pairBridge } from "../../../domain/services/philipsBridge/huePairing.js";
 import { createPinnedClient } from "../../../infra/http/pinnedClient.js";
+import { required } from "../../../test/required.js";
 
 const CERT_HASH = "aabbcc00" + "0".repeat(56);
 
 function makeApp() {
   const logger = pino({ level: "silent" });
-  const fakeStore = { loadAll: async () => [] } as unknown as ConfigStore;
+  const fakeStore = { loadAll: () => Promise.resolve([]) } as unknown as ConfigStore;
   const fakeLifecycle = {} as ServiceLifecycle;
   const fakeHttp = {
-    send: async () => {
-      throw new Error("not used");
+    send: () => {
+      return Promise.reject(new Error("not used"));
     },
   } as HttpClient;
   const registry = new ServiceRegistry();
@@ -47,13 +48,13 @@ function makeApp() {
       store: fakeStore,
       lifecycle: fakeLifecycle,
       registry,
-      profiles: { getProfile: async () => undefined },
+      profiles: { getProfile: () => Promise.resolve(undefined) },
     },
     profiles: {
       profiles: {} as never,
       store: fakeStore,
       lifecycle: fakeLifecycle,
-      detector: { detect: async () => ({}) },
+      detector: { detect: () => Promise.resolve({}) },
     },
     setup: { store: fakeStore, http: fakeHttp },
   });
@@ -156,7 +157,7 @@ describe("POST /setup/philips-bridge/pair", () => {
       url: "/setup/philips-bridge/pair",
       payload: { host: "192.168.1.50" },
     });
-    const deps = vi.mocked(pairBridge).mock.calls[0]![1];
+    const deps = required(vi.mocked(pairBridge).mock.calls[0])[1];
     expect(deps.httpForCert).toBe(createPinnedClient);
     await app.close();
   });

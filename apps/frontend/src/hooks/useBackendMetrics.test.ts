@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const useQueryMock = vi.fn();
-const sharedCoreMock = vi.fn();
+const useQueryMock = vi.fn<(...args: unknown[]) => unknown>();
+const sharedCoreMock = vi.fn<(...args: unknown[]) => unknown>();
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
@@ -85,7 +85,7 @@ describe("useBackendMetrics", () => {
     useBackendMetrics();
 
     expect(useQueryMock).toHaveBeenCalledTimes(1);
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryKey: unknown[];
       refetchInterval: number;
       staleTime: number;
@@ -109,7 +109,7 @@ describe("useBackendMetrics", () => {
 
     useBackendMetrics();
 
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryFn: () => Promise<unknown>;
     };
     const result = await opts.queryFn();

@@ -2,22 +2,23 @@ import { describe, it, expect, vi } from 'vitest';
 import { createHomebridgeClient, type HomebridgeClientConfig } from './homebridgeClient.js';
 import type { HttpClient, HttpRequest, HttpResponse } from '../../../infra/http/client.js';
 import { UnauthorizedError, UnavailableError } from '../../../core/errors.js';
+import { required } from "../../../test/required.js";
 
 type Handler = (req: HttpRequest) => Partial<HttpResponse> & { status: number; body?: string };
 
 function fakeHttp(handler: Handler): { http: HttpClient; calls: HttpRequest[] } {
   const calls: HttpRequest[] = [];
   const http: HttpClient = {
-    async send(req) {
+    send(req) {
       calls.push(req);
       const r = handler(req);
       const body = r.body ?? '';
-      return {
+      return Promise.resolve({
         status: r.status,
         headers: r.headers ?? {},
-        text: async () => body,
-        json: async () => JSON.parse(body),
-      };
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve(JSON.parse(body)),
+      });
     },
   };
   return { http, calls };
@@ -149,18 +150,18 @@ describe('homebridgeClient', () => {
           await loginGate;
           return {
             status: 200, headers: {},
-            text: async () => '{"token":"hb-fresh"}',
-            json: async () => ({ token: 'hb-fresh' }),
+            text: () => Promise.resolve('{"token":"hb-fresh"}'),
+            json: () => Promise.resolve({ token: 'hb-fresh' }),
           };
         }
         if ((req.headers?.['authorization'] ?? '') === 'Bearer hb-fresh') {
           return {
             status: 200, headers: { 'content-type': 'application/json' },
-            text: async () => '{"ok":true}',
-            json: async () => ({ ok: true }),
+            text: () => Promise.resolve('{"ok":true}'),
+            json: () => Promise.resolve({ ok: true }),
           };
         }
-        return { status: 401, headers: {}, text: async () => '', json: async () => ({}) };
+        return { status: 401, headers: {}, text: () => Promise.resolve(''), json: () => Promise.resolve({}) };
       }),
     };
     const client = createHomebridgeClient({ http, config: { ...baseCfg, username: 'u', password: 'p' } });
@@ -186,24 +187,24 @@ describe('homebridgeClient', () => {
   it('HB1 — uses refreshed token for all requests after first 401', async () => {
     const responses: HttpResponse[] = [
       // request 1 first attempt → 401
-      { status: 401, headers: {}, text: async () => '', json: async () => ({}) },
+      { status: 401, headers: {}, text: () => Promise.resolve(''), json: () => Promise.resolve({}) },
       // login → token
-      { status: 200, headers: {}, text: async () => '{"token":"new-tok"}', json: async () => ({ token: 'new-tok' }) },
+      { status: 200, headers: {}, text: () => Promise.resolve('{"token":"new-tok"}'), json: () => Promise.resolve({ token: 'new-tok' }) },
       // request 1 retry → 200
-      { status: 200, headers: { 'content-type': 'application/json' }, text: async () => '{"v":1}', json: async () => ({ v: 1 }) },
+      { status: 200, headers: { 'content-type': 'application/json' }, text: () => Promise.resolve('{"v":1}'), json: () => Promise.resolve({ v: 1 }) },
       // request 2 (subsequent) → 200
-      { status: 200, headers: { 'content-type': 'application/json' }, text: async () => '{"v":2}', json: async () => ({ v: 2 }) },
+      { status: 200, headers: { 'content-type': 'application/json' }, text: () => Promise.resolve('{"v":2}'), json: () => Promise.resolve({ v: 2 }) },
     ];
     let idx = 0;
     const { http, calls } = fakeHttp(() => {
-      const r = responses[idx++]!;
+      const r = required(responses[idx++]);
       return { status: r.status, headers: r.headers, body: '' };
     });
     // Override fakeHttp to return proper text/json from HttpResponse objects
     const smartHttp: HttpClient = {
-      send: async (req: HttpRequest): Promise<HttpResponse> => {
+      send: (req: HttpRequest): Promise<HttpResponse> => {
         calls.push(req);
-        return responses[idx++]!;
+        return Promise.resolve(required(responses[idx++]));
       },
     };
     idx = 0;

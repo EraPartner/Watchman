@@ -18,6 +18,17 @@ const EMPTY: AggregatedHealth = {
   fetchedAt: 0,
 };
 
+function isAggregatedEntry(v: unknown): v is AggregatedEntry {
+  if (typeof v !== "object" || v === null) return false;
+  const e = v as Record<string, unknown>;
+  return (
+    typeof e["kind"] === "string" &&
+    typeof e["instanceId"] === "string" &&
+    typeof e["result"] === "object" &&
+    e["result"] !== null
+  );
+}
+
 function aggregatedKey(kind: string, instanceId: string): string {
   return `${kind}::${instanceId}`;
 }
@@ -26,17 +37,11 @@ export const useAggregatedHealth = (refetchInterval = 10000) => {
   return useQuery<AggregatedHealth>({
     queryKey: queryKeys.servicesHealth(),
     queryFn: async () => {
-      const raw = await apiClient.getAggregatedServices();
-      const entries: AggregatedEntry[] = Array.isArray(raw) ? raw : [];
+      // The response is untyped JSON: keep only well-formed entries.
+      const raw: unknown = await apiClient.getAggregatedServices();
+      const entries = Array.isArray(raw) ? raw.filter(isAggregatedEntry) : [];
       const byKey = new Map<string, AggregatedEntry>();
       for (const entry of entries) {
-        if (!entry || typeof entry !== "object") continue;
-        if (
-          typeof entry.kind !== "string" ||
-          typeof entry.instanceId !== "string"
-        ) {
-          continue;
-        }
         byKey.set(aggregatedKey(entry.kind, entry.instanceId), entry);
       }
       return { entries, byKey, fetchedAt: Date.now() };
@@ -71,9 +76,7 @@ function resultToSnapshot(entry: AggregatedEntry): HealthSnapshot | undefined {
     reachable: false,
     at: Date.now(),
   };
-  if (entry.result.error?.message !== undefined) {
-    snapshot.message = entry.result.error.message;
-  }
+  snapshot.message = entry.result.error.message;
   return snapshot;
 }
 
@@ -100,8 +103,8 @@ export function pickError(
  * when there is no real data yet (the empty placeholder has fetchedAt 0).
  */
 export function staleHealthSince(query: {
-  isError?: boolean;
-  data?: AggregatedHealth;
+  isError?: boolean | undefined;
+  data?: AggregatedHealth | undefined;
 }): number | undefined {
   if (!query.isError) return undefined;
   const fetchedAt = query.data?.fetchedAt ?? 0;
