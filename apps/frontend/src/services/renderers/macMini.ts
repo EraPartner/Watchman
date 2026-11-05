@@ -54,9 +54,36 @@ export const macMiniRenderer: ServiceRenderer<Stats> = {
       ],
     },
     {
+      title: "Memory",
+      metrics: [
+        { key: "memTotalBytes", label: "Total", format: fmtBytes },
+        { key: "memActiveBytes", label: "Active", format: fmtBytes },
+        { key: "memWiredBytes", label: "Wired", format: fmtBytes },
+        { key: "memFreeBytes", label: "Free", format: fmtBytes },
+        // macOS's own pressure signal: percent of memory still available
+        { key: "memPressureFreePercent", label: "Memory available (pressure)", format: fmtPercent(0, 100) },
+        { key: "swapUsedBytes", label: "Swap used", format: fmtBytes },
+        { key: "swapTotalBytes", label: "Swap total", format: fmtBytes },
+      ],
+    },
+    {
+      title: "Health",
+      metrics: [
+        { key: "smartPassed", label: "SMART passed", format: fmtRaw },
+        { key: "diskModel", label: "Disk model", format: fmtRaw },
+        { key: "diskTemp", label: "Disk temperature", format: fmtTempC },
+        { key: "thermalWarning", label: "Thermal warning", format: fmtRaw },
+        { key: "cpuSpeedLimit", label: "CPU speed limit %", format: fmtRaw },
+        { key: "onAC", label: "On AC power", format: fmtRaw },
+        { key: "batteryPercent", label: "Battery", format: fmtPercent(0, 100) },
+      ],
+    },
+    {
       title: "Host",
       metrics: [
         { key: "host", label: "Hostname", format: fmtRaw },
+        { key: "ipAddress", label: "IP address (en0)", format: fmtRaw },
+        { key: "interfaceUp", label: "en0 up", format: fmtRaw },
         { key: "uptime", label: "Uptime", format: fmtUptime },
       ],
     },
@@ -75,7 +102,11 @@ export const macMiniRenderer: ServiceRenderer<Stats> = {
     const cpu = getNum(stats, "cpuUsagePercent");
     const temp = getNum(stats, "cpuTemp");
     const disk = getNum(stats, "diskUsagePercent");
+    if (stats && dotGet(stats, "smartPassed") === false) return "crit";
     if ((cpu ?? 0) >= 90 || (temp ?? 0) >= 90 || (disk ?? 0) >= 95) return "crit";
+    if (stats && dotGet(stats, "thermalWarning") === true) return "warn";
+    const pressureFree = getNum(stats, "memPressureFreePercent");
+    if (pressureFree !== undefined && pressureFree <= 10) return "warn";
     if ((cpu ?? 0) >= 80 || (temp ?? 0) >= 80 || (disk ?? 0) >= 85) return "warn";
     return "ok";
   },

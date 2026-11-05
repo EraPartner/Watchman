@@ -71,6 +71,21 @@ interface ToggleStatus {
   enabled?: boolean;
 }
 
+/** One /control/querylog entry; only the fields Watchman summarises. */
+interface QueryLogEntry {
+  client?: string;
+  question?: { name?: string };
+  reason?: string;
+  elapsedMs?: string | number;
+}
+
+interface QueryLogResponse {
+  data?: QueryLogEntry[];
+}
+
+/** Entries read per poll when the opt-in query log is on. */
+export const QUERY_LOG_LIMIT = 100;
+
 interface DnsInfo {
   upstream_dns?: string[];
   upstream_mode?: string;
@@ -98,6 +113,9 @@ export class AdGuardService extends BaseService {
   private readonly parentalMemo: TtlMemo<ToggleStatus>;
   private readonly safesearchMemo: TtlMemo<ToggleStatus>;
   private readonly dnsInfoMemo: TtlMemo<DnsInfo>;
+  private readonly readQueryLog: boolean;
+  /** Admin credentials over plain http to another host: shown as a warning. */
+  private readonly cleartextCredentials: boolean;
 
   constructor(deps: AdGuardDeps) {
     super();
@@ -107,7 +125,13 @@ export class AdGuardService extends BaseService {
     this.baseUrl = deps.config.baseUrl.replace(/\/+$/, "");
     this.timeoutMs = deps.config.timeoutMs;
     this.pinger = deps.ping;
-    this.pingHost = new URL(deps.config.baseUrl).hostname;
+    const url = new URL(deps.config.baseUrl);
+    this.pingHost = url.hostname;
+    this.readQueryLog = deps.config.readQueryLog;
+    this.cleartextCredentials =
+      url.protocol === "http:" &&
+      Boolean(deps.config.username || deps.config.password) &&
+      !isLoopbackHost(url.hostname);
     this.now = deps.now;
     if (deps.config.username || deps.config.password) {
       const token = Buffer.from(
@@ -169,6 +193,7 @@ export class AdGuardService extends BaseService {
         parental,
         safesearch,
         dnsInfo,
+        queryLog,
       ] = await Promise.all([
         this.get<AdGuardStatus>("/control/status", signal),
         this.get<AdGuardStats>("/control/stats", signal),
@@ -179,6 +204,12 @@ export class AdGuardService extends BaseService {
         this.parentalMemo(signal).catch((): ToggleStatus | null => null),
         this.safesearchMemo(signal).catch((): ToggleStatus | null => null),
         this.dnsInfoMemo(signal).catch((): DnsInfo | null => null),
+        this.readQueryLog
+          ? this.get<QueryLogResponse>(
+              `/control/querylog?limit=${QUERY_LOG_LIMIT}`,
+              signal
+            ).catch((): QueryLogResponse | null => null)
+          : Promise.resolve(null),
       ]);
 
       const totalQueries = stats.num_dns_queries ?? 0;
@@ -239,6 +270,8 @@ export class AdGuardService extends BaseService {
           safesearchEnabled: safesearch?.enabled ?? null,
           upstreamCount: (dnsInfo?.upstream_dns ?? []).length,
           upstreamMode: dnsInfo?.upstream_mode ?? null,
+          cleartextCredentials: this.cleartextCredentials,
+          ...(queryLog ? summarizeQueryLog(queryLog.data ?? []) : {}),
         },
       });
     } catch (e) {
@@ -277,6 +310,60 @@ export class AdGuardService extends BaseService {
     }
     return res.json<T>();
   }
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === "localhost" || host === "::1" || host === "[::1]" || /^127\./.test(host);
+}
+
+/** Most frequent value, or null for an empty list. */
+function mostCommon(values: readonly string[]): string | null {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [v, n] of counts) {
+    if (n > bestCount) {
+      best = v;
+      bestCount = n;
+    }
+  }
+  return best;
+}
+
+/** Scalar summary of the latest query-log page. Blocked means a Filtered*
+ *  reason other than safe search, matching blockedQueries above (safe-search
+ *  hits are rewritten and still answered). */
+export function summarizeQueryLog(entries: readonly QueryLogEntry[]): {
+  queryLogSampleSize: number;
+  queryLogBlocked: number;
+  queryLogAvgMs: number | null;
+  queryLogTopBlockedDomain: string | null;
+  queryLogTopClient: string | null;
+} {
+  const blocked = entries.filter(
+    (e) =>
+      typeof e.reason === "string" &&
+      e.reason.startsWith("Filtered") &&
+      e.reason !== "FilteredSafeSearch"
+  );
+  const elapsed = entries
+    .map((e) => Number(e.elapsedMs))
+    .filter((n) => Number.isFinite(n) && n >= 0);
+  return {
+    queryLogSampleSize: entries.length,
+    queryLogBlocked: blocked.length,
+    queryLogAvgMs:
+      elapsed.length > 0
+        ? Math.round((elapsed.reduce((a, b) => a + b, 0) / elapsed.length) * 100) / 100
+        : null,
+    queryLogTopBlockedDomain: mostCommon(
+      blocked.map((e) => e.question?.name ?? "").filter((n) => n !== "")
+    ),
+    queryLogTopClient: mostCommon(
+      entries.map((e) => e.client ?? "").filter((c) => c !== "")
+    ),
+  };
 }
 
 function topKey(arr: Array<Record<string, number>> | undefined): string {

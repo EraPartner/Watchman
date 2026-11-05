@@ -63,6 +63,9 @@ export const torRenderer: ServiceRenderer<Stats> = {
         { key: "uptimeSec", label: "Uptime", format: fmtUptime },
         { key: "versionStatus", label: "Version status", format: fmtRaw },
         { key: "metricsPortError", label: "MetricsPort", format: fmtRaw },
+        { key: "metricsPortReadBps", label: "Live read (MetricsPort)", format: fmtBytes },
+        { key: "metricsPortWrittenBps", label: "Live written (MetricsPort)", format: fmtBytes },
+        { key: "bandwidthSource", label: "Bandwidth source", format: fmtRaw },
       ],
     },
     {

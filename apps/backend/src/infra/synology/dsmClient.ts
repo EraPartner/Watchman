@@ -1,5 +1,9 @@
 import type { HttpClient, HttpRequest, HttpResponse } from "../http/client.js";
-import { UnauthorizedError, UnavailableError } from "../../core/errors.js";
+import {
+  UnauthorizedError,
+  UnavailableError,
+  ValidationError,
+} from "../../core/errors.js";
 
 export interface DsmClientConfig {
   baseUrl: string;
@@ -25,7 +29,25 @@ export interface DsmClient {
     params?: Record<string, string>,
     signal?: AbortSignal
   ): Promise<T>;
+  /** Log the current session out (best effort), so restarts and config
+   *  edits don't leave DSM sessions behind. */
+  close(): Promise<void>;
 }
+
+/** Watchman is read-only toward DSM (ADR-032): only read methods may be
+ *  called. Write methods such as set, shutdown, reboot or download are
+ *  refused before anything is sent. */
+export const DSM_READ_METHODS: ReadonlySet<string> = new Set([
+  "get",
+  "getinfo",
+  "info",
+  "list",
+  "load_info",
+]);
+
+/** Session name sent at login and logout, so DSM's connection list shows
+ *  which sessions belong to Watchman. */
+const DSM_SESSION_NAME = "Watchman";
 
 interface DsmEnvelope<T = unknown> {
   success: boolean;
@@ -110,6 +132,7 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       method: "login",
       account: config.account,
       passwd: config.password,
+      session: DSM_SESSION_NAME,
       format: "sid",
     }).toString();
     const res = await send({
@@ -193,6 +216,11 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       params: Record<string, string> = {},
       signal?: AbortSignal
     ): Promise<T> {
+      if (!DSM_READ_METHODS.has(method)) {
+        throw new ValidationError(
+          `synology dsm: refusing ${api}.${method}; Watchman only calls read methods`
+        );
+      }
       const sid = currentSid ?? (await doLogin(signal));
 
       const env = await callOnce<T>(api, version, method, params, sid, signal);
@@ -228,6 +256,31 @@ export function createDsmClient(deps: DsmClientDeps): DsmClient {
       throw new UnavailableError(
         `synology dsm ${api}.${method} error: code ${code}`
       );
+    },
+
+    async close(): Promise<void> {
+      const sid = currentSid;
+      currentSid = undefined;
+      if (!sid) return;
+      const body = new URLSearchParams({
+        api: "SYNO.API.Auth",
+        version: "3",
+        method: "logout",
+        session: DSM_SESSION_NAME,
+        _sid: sid,
+      }).toString();
+      try {
+        const res = await send({
+          url: `${base}/webapi/auth.cgi`,
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body,
+          timeoutMs: config.timeoutMs,
+        });
+        await res.text().catch(() => undefined);
+      } catch {
+        // the session expires on its own; stopping must not fail on this
+      }
     },
   };
 }

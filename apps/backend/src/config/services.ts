@@ -53,6 +53,13 @@ export const RouterInstanceSchema = BaseInstanceSchema.extend({
   ports: z.array(z.number().int().positive()).default([]),
   pingCount: z.number().int().positive().default(1),
   snmpCommunity: z.string().optional(),
+  // SNMPv3 (authPriv). When user and both keys are set, v3 is used instead of
+  // the v2c community, so no credential crosses the network in cleartext.
+  snmpUser: z.string().default(""),
+  snmpAuthKey: z.string().default(""),
+  snmpPrivKey: z.string().default(""),
+  snmpAuthProtocol: z.enum(["SHA", "MD5"]).default("SHA"),
+  snmpPrivProtocol: z.enum(["AES", "DES"]).default("AES"),
   interfaceFilter: z.array(z.string()).default([]),
 });
 
@@ -90,6 +97,10 @@ export const AdGuardInstanceSchema = BaseInstanceSchema.extend({
   baseUrl: z.string().url(),
   username: z.string().default(""),
   password: z.string().default(""),
+  // Pin AdGuard's (often self-signed) HTTPS certificate, like dsmCertSha256
+  certSha256: CertSha256Schema,
+  // Opt-in: read the recent DNS query log (per-client history, so off by default)
+  readQueryLog: z.boolean().default(false),
 });
 
 export const AlbyHubInstanceSchema = BaseInstanceSchema.extend({

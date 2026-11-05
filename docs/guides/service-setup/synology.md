@@ -12,15 +12,17 @@ aliases: [synology setup, set up synology, synology snmp]
 
 > [!abstract] What Watchman reads
 > - **SNMP v3 (normal health check):** model, DSM version, system status, CPU idle and temperature,
->   memory, uptime and interface byte counters.
+>   memory, uptime, interface byte counters, power and fan status, whether a DSM update is
+>   available, and the per-disk (status, health, temperature) and per-RAID (status) tables.
 > - **DSM Web API (optional extras):** `SYNO.Core.System.Utilization`, `SYNO.DSM.Info`,
 >   `SYNO.Core.System.Status` and `SYNO.Storage.CGI.Storage` (volume and disk health), after a login.
 >
 > (`apps/backend/src/domain/services/synology/SynologyService.ts`,
 > `apps/backend/src/infra/synology/dsmClient.ts`). Details: [[docs/integrations/synology|Synology integration]].
 
-The least-privilege setup is **SNMP v3 only**. Add DSM only if you want the volume/disk health and
-fan/power status it adds, and read the note in step 3. With DSM fields set but no SNMP user, health
+The least-privilege setup is **SNMP v3 only**, and it now covers disk, RAID, fan and power health
+too. In practice DSM's Web API needs an administrators-group account, so add DSM only if you want
+volume sizes and DSM's own volume status, and read the note in step 3. With DSM fields set but no SNMP user, health
 falls back to a `SYNO.DSM.Info` call over DSM.
 
 ## 1. Prepare the NAS
@@ -35,8 +37,8 @@ In DSM: **Control Panel → Terminal & SNMP → SNMP**.
 2. Leave SNMPv1/v2c off unless something else needs it.
 3. Tick **SNMPv3 service** and fill in:
    - **Username**: e.g. `watchman`
-   - **Protocol**: **SHA** (MD5 also works, but SHA is stronger), and a password of at least 8 characters
-   - **Privacy**: tick it, **AES** (or DES), and a second password
+   - **Protocol**: **SHA**, and a password of at least 8 characters (MD5 still works but is weak)
+   - **Privacy**: tick it, **AES**, and a second password (DES still works but is weak)
 4. Click **Apply**. If the DSM firewall is on, allow UDP 161 from the Watchman machine.
 
 Watchman always uses SNMP v3 with authentication *and* privacy (authPriv): user name, auth password
@@ -45,8 +47,11 @@ and privacy password are all required. With any of them empty, the health check 
 
 ## 3. DSM account (optional)
 
-Watchman logs in to the DSM Web API with a user name and password and keeps the session. It sends no
-two-factor code, so the account must not have 2-step verification.
+Watchman logs in to the DSM Web API with a user name and password and keeps the session, named
+`Watchman` in DSM's connection list, and logs it out when the service stops or its settings change.
+It only calls read methods (`get`, `getinfo`, `info`, `list`, `load_info`); anything else is refused
+inside Watchman before a request is sent. It sends no two-factor code, so the account must not have
+2-step verification.
 
 - Create a **separate user** for Watchman (**Control Panel → User & Group → Create**), with a long
   random password, no shared-folder access and no application permissions it doesn't need.
@@ -54,7 +59,7 @@ two-factor code, so the account must not have 2-step verification.
   Watchman reports "synology dsm account lacks permission for … (code 105); use an account in the
   administrators group" and doesn't retry that login every poll.
 - If you don't want an admin account for monitoring, leave the DSM fields empty. SNMP alone covers
-  health, CPU, memory and network.
+  health, CPU, memory, network, disks, RAID, fans and power.
 
 > [!warning] Unverified
 > Which DSM APIs a non-admin account may call was not tested against a live NAS.

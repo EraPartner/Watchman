@@ -28,6 +28,11 @@ function makeConfig(overrides: Partial<RouterInstance> = {}): RouterInstance {
     ports: [80, 443],
     pingCount: 1,
     interfaceFilter: [],
+    snmpUser: "",
+    snmpAuthKey: "",
+    snmpPrivKey: "",
+    snmpAuthProtocol: "SHA",
+    snmpPrivProtocol: "AES",
     ...overrides,
   };
 }
@@ -167,6 +172,10 @@ const SNMP_OID = {
   hrStorageDescr: "1.3.6.1.2.1.25.2.3.1.3",
   hrStorageSize: "1.3.6.1.2.1.25.2.3.1.5",
   hrStorageUsed: "1.3.6.1.2.1.25.2.3.1.6",
+  ifAdminStatus: "1.3.6.1.2.1.2.2.1.7",
+  ifOperStatus: "1.3.6.1.2.1.2.2.1.8",
+  ifInErrors: "1.3.6.1.2.1.2.2.1.14",
+  ifOutErrors: "1.3.6.1.2.1.2.2.1.20",
 } as const;
 
 function snmpConfig(overrides: Partial<RouterInstance> = {}): RouterInstance {
@@ -522,3 +531,102 @@ describe("RouterService SNMP stats (R1)", () => {
   });
 });
 
+
+describe("RouterService SNMP hardening and link state", () => {
+  const rows = (oid: string, pairs: Array<[string, string]>) =>
+    pairs.map(([idx, value]) => ({ oid: `${oid}.${idx}`, value }));
+
+  it("uses SNMPv3 instead of the v2c community when v3 credentials are set", async () => {
+    const reqs: SnmpWalkRequest[] = [];
+    const snmp: SnmpGetter = {
+      get: async () => ({ values: [] }),
+      walk: async (req) => {
+        reqs.push(req);
+        return { rows: [] };
+      },
+    };
+    const svc = new RouterService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      snmp,
+      config: makeConfig({
+        snmpCommunity: "public",
+        snmpUser: "watchman",
+        snmpAuthKey: "authkey123",
+        snmpPrivKey: "privkey123",
+      }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(reqs.length).toBeGreaterThan(0);
+    for (const r of reqs) {
+      expect(r.v2c).toBeUndefined();
+      expect(r.v3).toMatchObject({ user: "watchman", authProtocol: "SHA", privProtocol: "AES" });
+    }
+    if (res.ok) expect(res.value.metrics.snmpVersion).toBe("v3");
+  });
+
+  it("enables SNMP with v3 alone (no community)", async () => {
+    const snmp = fakeSnmp({
+      [SNMP_OID.sysUpTime]: rows(SNMP_OID.sysUpTime, [["0", "42"]]),
+    });
+    const svc = new RouterService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      snmp,
+      config: makeConfig({ snmpUser: "u", snmpAuthKey: "a".repeat(8), snmpPrivKey: "p".repeat(8) }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    if (res.ok) expect(res.value.metrics.sysUptime).toBe(42);
+  });
+
+  it("leaves loopback out of the default (unfiltered) traffic totals", async () => {
+    const snmp = fakeSnmp({
+      [SNMP_OID.ifDescr]: rows(SNMP_OID.ifDescr, [["1", "lo"], ["2", "eth0"]]),
+      [SNMP_OID.ifHCInOctets]: rows(SNMP_OID.ifHCInOctets, [["1", "999"], ["2", "500"]]),
+      [SNMP_OID.ifHCOutOctets]: rows(SNMP_OID.ifHCOutOctets, [["1", "888"], ["2", "300"]]),
+    });
+    const svc = new RouterService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      snmp,
+      config: snmpConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    if (res.ok) {
+      expect(res.value.metrics.ifInOctets).toBe(500);
+      expect(res.value.metrics.ifOutOctets).toBe(300);
+    }
+  });
+
+  it("counts links that are configured up but down, ignoring admin-down ports, and sums errors", async () => {
+    const snmp = fakeSnmp({
+      [SNMP_OID.ifDescr]: rows(SNMP_OID.ifDescr, [["1", "eth0"], ["2", "eth1"], ["3", "eth2"]]),
+      // eth2 is shut down on purpose
+      [SNMP_OID.ifAdminStatus]: rows(SNMP_OID.ifAdminStatus, [["1", "1"], ["2", "1"], ["3", "2"]]),
+      [SNMP_OID.ifOperStatus]: rows(SNMP_OID.ifOperStatus, [["1", "1"], ["2", "2"], ["3", "2"]]),
+      [SNMP_OID.ifInErrors]: rows(SNMP_OID.ifInErrors, [["1", "3"], ["2", "0"], ["3", "0"]]),
+      [SNMP_OID.ifOutErrors]: rows(SNMP_OID.ifOutErrors, [["1", "1"], ["2", "0"], ["3", "0"]]),
+    });
+    const svc = new RouterService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      snmp,
+      config: snmpConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics).toMatchObject({
+        linksUp: 1,
+        linksDown: 1,
+        linksDownNames: "eth1",
+        ifErrors: 4,
+        snmpVersion: "v2c",
+      });
+    }
+  });
+});

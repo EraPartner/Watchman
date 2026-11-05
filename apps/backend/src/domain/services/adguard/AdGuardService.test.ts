@@ -86,6 +86,18 @@ function handler(req: IncomingMessage, res: ServerResponse) {
         ],
       })
     );
+  } else if (url.startsWith("/control/querylog")) {
+    res.writeHead(200);
+    res.end(
+      JSON.stringify({
+        data: [
+          { client: "192.168.1.10", question: { name: "ads.example.com" }, reason: "FilteredBlackList", elapsedMs: "0.5" },
+          { client: "192.168.1.10", question: { name: "ads.example.com" }, reason: "FilteredBlackList", elapsedMs: "1.5" },
+          { client: "192.168.1.20", question: { name: "good.example.com" }, reason: "NotFilteredNotFound", elapsedMs: "4" },
+          { client: "192.168.1.20", question: { name: "www.google.com" }, reason: "FilteredSafeSearch", elapsedMs: "2" },
+        ],
+      })
+    );
   } else if (url === "/control/filtering/status") {
     res.writeHead(200);
     res.end(
@@ -179,6 +191,8 @@ function makeConfig(overrides: Partial<AdGuardInstance> = {}): AdGuardInstance {
     baseUrl: `http://127.0.0.1:${port}`,
     username: "",
     password: "",
+    certSha256: "",
+    readQueryLog: false,
     ...overrides,
   };
 }
@@ -434,5 +448,72 @@ describe("AdGuardService", () => {
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.reachable).toBe(false);
+  });
+});
+
+describe("AdGuardService query log (opt-in) and transport warning", () => {
+  it("does not read the query log unless enabled", async () => {
+    const svc = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    const asked = Object.keys(state.pathCounts).filter((p) => p.startsWith("/control/querylog"));
+    expect(asked).toEqual([]);
+    if (res.ok) expect(res.value.metrics).not.toHaveProperty("queryLogSampleSize");
+  });
+
+  it("summarises the latest query-log page when enabled", async () => {
+    const svc = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ readQueryLog: true }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    expect(state.pathCounts["/control/querylog?limit=100"]).toBe(1);
+    if (res.ok) {
+      expect(res.value.metrics).toMatchObject({
+        queryLogSampleSize: 4,
+        // safe search is rewritten, not blocked
+        queryLogBlocked: 2,
+        queryLogAvgMs: 2,
+        queryLogTopBlockedDomain: "ads.example.com",
+        queryLogTopClient: "192.168.1.10",
+      });
+    }
+  });
+
+  it("flags credentials sent over plain http to another host, not to localhost", async () => {
+    const local = new AdGuardService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ username: "u", password: "p" }),
+      now: () => 0,
+    });
+    const res = await local.getStats(new AbortController().signal);
+    if (res.ok) expect(res.value.metrics.cleartextCredentials).toBe(false);
+
+    const remote = new AdGuardService({
+      // answers every endpoint with an empty object
+      http: {
+        send: async () => ({
+          status: 200,
+          headers: { "content-type": "application/json" },
+          text: async () => "{}",
+          json: async () => ({}) as never,
+        }),
+      },
+      ping: fakePing(),
+      config: makeConfig({ baseUrl: "http://192.168.1.2", username: "u", password: "p" }),
+      now: () => 0,
+    });
+    const remoteRes = await remote.getStats(new AbortController().signal);
+    expect(remoteRes.ok).toBe(true);
+    if (remoteRes.ok) expect(remoteRes.value.metrics.cleartextCredentials).toBe(true);
   });
 });

@@ -48,6 +48,7 @@ function fakeDsm(responses: Record<string, unknown>): DsmClient {
       if (key in responses) return responses[key] as never;
       throw new Error(`unexpected dsm call: ${key}`);
     },
+    close: async () => undefined,
   };
 }
 
@@ -238,12 +239,13 @@ describe("SynologyService", () => {
     }
     expect(calls[0]?.credentials.user).toBe("u");
     expect(calls[0]?.credentials.authProtocol).toBe("SHA");
-    expect(calls[0]?.oids.length).toBe(12);
-    // regression: these OIDs are serialNumber / upgradeAvailable / disk-table
-    // columns, not CPU, memory or volume size
+    expect(calls[0]?.oids.length).toBe(16);
+    // upgradeAvailable is read only as itself, after the 12 original scalars
+    expect(calls[0]?.oids.indexOf("1.3.6.1.4.1.6574.1.5.4.0")).toBe(15);
+    // regression: these OIDs are serialNumber / disk-table columns, not CPU,
+    // memory or volume size
     for (const wrong of [
       "1.3.6.1.4.1.6574.1.5.2.0",
-      "1.3.6.1.4.1.6574.1.5.4.0",
       "1.3.6.1.4.1.6574.1.5.5.0",
       "1.3.6.1.4.1.6574.1.5.6.0",
       "1.3.6.1.4.1.6574.2.1.1.4.0",
@@ -383,6 +385,63 @@ describe("SynologyService", () => {
     }
   });
 
+  it("getStats reports disk, RAID, fan, power and upgrade health from SNMP alone (no DSM account)", async () => {
+    const snmpValues = [
+      '"DS920"', "500000", '"DS920+"', '"DSM 7.2"', "1", "63", "42",
+      "8388608", "2097152", "0", "0", "0",
+      "1", // powerStatus Normal
+      "2", // systemFanStatus Failed
+      "1", // cpuFanStatus Normal
+      "1", // upgradeAvailable Available
+    ];
+    const table = {
+      ...IF_WALK,
+      // three disks: normal, crashed status, normal status but health Warning
+      "1.3.6.1.4.1.6574.2.1.1.5": [["0", "1"], ["1", "5"], ["2", "1"]] as Array<[string, string]>,
+      "1.3.6.1.4.1.6574.2.1.1.6": [["0", "34"], ["1", "41"], ["2", "38"]] as Array<[string, string]>,
+      "1.3.6.1.4.1.6574.2.1.1.13": [["0", "1"], ["1", "1"], ["2", "2"]] as Array<[string, string]>,
+      // two arrays: one scrubbing (fine), one degraded
+      "1.3.6.1.4.1.6574.3.1.1.3": [["0", "13"], ["1", "11"]] as Array<[string, string]>,
+    };
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values: snmpValues }), [], walkFrom(table)),
+      config: makeConfig(),
+      ping: fakePing(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics).toMatchObject({
+        powerStatus: "normal",
+        sysFanStatus: "failed",
+        cpuFanStatus: "normal",
+        upgradeAvailable: true,
+        diskCount: 3,
+        diskDegradedCount: 2,
+        diskTempMax: 41,
+        raidCount: 2,
+        raidDegradedCount: 1,
+      });
+    }
+  });
+
+  it("SNMP health tables that are absent add no health keys", async () => {
+    const svc = new SynologyService({
+      snmp: fakeSnmp(() => ({ values: Array.from({ length: 12 }, () => "0") })),
+      config: makeConfig(),
+      ping: fakePing(),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      for (const key of ["diskCount", "raidCount", "diskTempMax", "upgradeAvailable", "powerStatus"]) {
+        expect(res.value.metrics).not.toHaveProperty(key);
+      }
+    }
+  });
+
   it("getStats omits DSM metrics when DSM calls throw", async () => {
     const snmpValues = [
       "0",
@@ -410,6 +469,7 @@ describe("SynologyService", () => {
         call: async () => {
           throw new Error("DSM unreachable");
         },
+        close: async () => undefined,
       },
       now: () => 0,
     });
@@ -646,6 +706,7 @@ describe("SynologyService", () => {
         call: async () => {
           throw new UnauthorizedError("synology dsm login failed: code 400");
         },
+        close: async () => undefined,
       },
       now: () => 0,
     });
@@ -663,6 +724,7 @@ describe("SynologyService", () => {
         call: async () => {
           throw new UnauthorizedError("synology dsm login failed: code 400");
         },
+        close: async () => undefined,
       },
       now: () => 0,
     });
@@ -767,6 +829,7 @@ describe("SynologyService", () => {
         call: async () => {
           throw new UnauthorizedError("synology dsm login failed: code 400");
         },
+        close: async () => undefined,
       },
       now: () => 0,
     });

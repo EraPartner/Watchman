@@ -7,6 +7,9 @@ import {
   DF_CMD,
   TOP_CMD,
   parseUptimeSeconds,
+  parseMemoryStatusLevel,
+  parseSwapUsage,
+  parsePmsetTherm,
 } from "./MacMiniService.js";
 import { SSH_SEGMENT_DELIMITER } from "../../../infra/ssh/compound.js";
 import { UnauthorizedError, UnavailableError } from "../../../core/errors.js";
@@ -624,5 +627,68 @@ describe("MacMiniService APFS and power edge cases", () => {
     if (!res.ok) return;
     expect(res.value.metrics.batteryCharging).toBe(false);
     expect(res.value.metrics.onAC).toBe(true);
+  });
+});
+
+describe("Mac memory pressure, swap and thermal state", () => {
+  it("parses kern.memorystatus_level", () => {
+    expect(parseMemoryStatusLevel("72\n")).toBe(72);
+    expect(parseMemoryStatusLevel("")).toBeNull();
+    expect(parseMemoryStatusLevel("sysctl: unknown oid")).toBeNull();
+  });
+
+  it("parses vm.swapusage", () => {
+    expect(
+      parseSwapUsage("total = 2048.00M  used = 1024.50M  free = 1023.50M  (encrypted)")
+    ).toEqual({ totalBytes: 2048 * 1024 ** 2, usedBytes: Math.round(1024.5 * 1024 ** 2) });
+    expect(parseSwapUsage("total = 0.00M  used = 0.00M  free = 0.00M")).toEqual({
+      totalBytes: 0,
+      usedBytes: 0,
+    });
+    expect(parseSwapUsage("")).toBeNull();
+  });
+
+  it("parses pmset -g therm", () => {
+    expect(
+      parsePmsetTherm(
+        "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+      )
+    ).toEqual({ cpuSpeedLimit: null, thermalWarning: false });
+    expect(
+      parsePmsetTherm("CPU_Scheduler_Limit = 100\nCPU_Available_CPUs = 8\nCPU_Speed_Limit = 70\nThermal Warning Level = 1")
+    ).toEqual({ cpuSpeedLimit: 70, thermalWarning: true });
+    expect(parsePmsetTherm("")).toEqual({ cpuSpeedLimit: null, thermalWarning: null });
+  });
+
+  it("reports them in getStats", async () => {
+    const svc = new MacMiniService({
+      ping: fakePing({ success: true, avgMs: 1 }),
+      ssh: fakeSsh({
+        uptime: { stdout: UPTIME_OUT, stderr: "", code: 0 },
+        "sysctl -n kern.memorystatus_level": { stdout: "64", stderr: "", code: 0 },
+        "sysctl -n vm.swapusage": {
+          stdout: "total = 1024.00M  used = 256.00M  free = 768.00M",
+          stderr: "",
+          code: 0,
+        },
+        "pmset -g therm": {
+          stdout: "Note: No thermal warning level has been recorded",
+          stderr: "",
+          code: 0,
+        },
+      }),
+      config: makeConfig({ sshUser: "me", sshKeyPath: "/tmp/id_rsa" }),
+      now: () => 0,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics).toMatchObject({
+        memPressureFreePercent: 64,
+        swapTotalBytes: 1024 ** 3,
+        swapUsedBytes: 256 * 1024 ** 2,
+        thermalWarning: false,
+      });
+    }
   });
 });

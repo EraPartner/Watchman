@@ -172,7 +172,7 @@ traffic/read           → bytes read from wire
 traffic/written        → bytes written to wire
 trafficDeltaRead       → bytes read since last poll (Task B6)
 trafficDeltaWritten    → bytes written since last poll (Task B6)
-version/current        → Tor version
+version                → Tor version (GETINFO version)
 dormant                → 1 if dormant, 0 if active
 process/descriptor-limit → max open file descriptors
 

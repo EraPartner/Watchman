@@ -10,8 +10,11 @@ import { getPiModel } from "./piModel.js";
 import { parseRpiInfo, type RpiInfo } from "./parseRpiInfo.js";
 import { shellQuote, shellQuotePath } from "../../../core/shellQuote.js";
 
-/** Per-poll measurements (one compound SSH exec; positional outputs). */
-const DYNAMIC_COMMANDS: readonly string[] = [
+const SYSTEMCTL_OK = "__watchman_systemctl_ok__";
+
+/** Per-poll measurements (one compound SSH exec; positional outputs). Also
+ *  the command list the read-only probe script must print, in this order. */
+export const PI_DYNAMIC_COMMANDS: readonly string[] = [
   "vcgencmd measure_temp",
   "vcgencmd measure_clock arm",
   "vcgencmd measure_volts core",
@@ -19,10 +22,19 @@ const DYNAMIC_COMMANDS: readonly string[] = [
   "cat /proc/loadavg",
   "cat /proc/meminfo",
   "cat /proc/uptime",
+  // CPU busy % comes from the delta of two polls' aggregate "cpu" lines
+  "head -n 1 /proc/stat",
+  "df -kP /",
+  // "ro" here means the root filesystem was remounted read-only, a common
+  // SD-card failure symptom
+  "findmnt -no OPTIONS /",
+  // the marker separates "no failed units" from "systemctl missing/failed"
+  `systemctl --failed --no-legend --plain && echo ${SYSTEMCTL_OK}`,
+  "cat /proc/net/dev",
 ];
 
 /** Immutable per boot — fetched once per service lifetime, then cached. */
-const STATIC_COMMANDS: readonly string[] = [
+export const PI_STATIC_COMMANDS: readonly string[] = [
   "cat /proc/cpuinfo",
   "cat /etc/os-release",
 ];
@@ -54,6 +66,25 @@ export interface PiStatsSnapshot {
   isRpi: boolean;
   rpiCliAvailable: boolean;
   rpiCliError?: string;
+  /** /proc/meminfo, bytes (direct SSH only). */
+  memTotalBytes: number | null;
+  memAvailableBytes: number | null;
+  swapTotalBytes: number | null;
+  swapUsedBytes: number | null;
+  /** CPU busy % between this poll and the previous one (direct SSH only). */
+  cpuUsagePercent: number | null;
+  /** Root filesystem from `df -kP /`, bytes. */
+  diskTotalBytes: number | null;
+  diskUsedBytes: number | null;
+  diskUsagePercent: number | null;
+  /** True when / is mounted read-only (SD-card failure symptom). */
+  rootReadOnly: boolean | null;
+  /** Failed systemd units; null when systemctl could not be asked. */
+  failedUnits: number | null;
+  failedUnitNames: string | null;
+  /** Network byte rates summed over non-loopback interfaces. */
+  netRxBps: number | null;
+  netTxBps: number | null;
   /** Set when pigpiod could not be reached; SSH data may still be present. */
   pigpioError?: string;
 }
@@ -80,6 +111,12 @@ interface DirectPiInfo {
   hwRevision: number | null;
   /** /proc/cpuinfo `Model` text, e.g. "Raspberry Pi 5 Model B Rev 1.0". */
   modelName: string | null;
+  mem: MemInfo | null;
+  cpuUsagePercent: number | null;
+  disk: DfRoot | null;
+  rootReadOnly: boolean | null;
+  failedUnits: string[] | null;
+  net: { rxBps: number; txBps: number } | null;
 }
 
 export class PiStatsCollector {
@@ -91,6 +128,10 @@ export class PiStatsCollector {
     hwRevision: number | null;
     modelName: string | null;
   } | null = null;
+
+  // previous samples for the per-poll CPU and network deltas
+  private lastCpu: CpuSample | null = null;
+  private lastNet: { at: number; rx: number; tx: number } | null = null;
 
   constructor(private readonly deps: PiStatsDeps) {}
 
@@ -116,6 +157,19 @@ export class PiStatsCollector {
       processor: null,
       isRpi: false,
       rpiCliAvailable: false,
+      memTotalBytes: null,
+      memAvailableBytes: null,
+      swapTotalBytes: null,
+      swapUsedBytes: null,
+      cpuUsagePercent: null,
+      diskTotalBytes: null,
+      diskUsedBytes: null,
+      diskUsagePercent: null,
+      rootReadOnly: null,
+      failedUnits: null,
+      failedUnitNames: null,
+      netRxBps: null,
+      netTxBps: null,
     };
 
     // pigpiod is optional when SSH or the relay is configured: it doesn't run
@@ -214,6 +268,28 @@ export class PiStatsCollector {
     if (info.prettyName !== null) snapshot.prettyName = info.prettyName;
     if (info.processor !== null) snapshot.processor = info.processor;
     if (info.isRpi) snapshot.isRpi = true;
+    if (info.mem) {
+      snapshot.memTotalBytes = info.mem.totalBytes;
+      snapshot.memAvailableBytes = info.mem.availableBytes;
+      snapshot.swapTotalBytes = info.mem.swapTotalBytes;
+      snapshot.swapUsedBytes = info.mem.swapUsedBytes;
+    }
+    snapshot.cpuUsagePercent = info.cpuUsagePercent;
+    if (info.disk) {
+      snapshot.diskTotalBytes = info.disk.totalBytes;
+      snapshot.diskUsedBytes = info.disk.usedBytes;
+      snapshot.diskUsagePercent = info.disk.usagePercent;
+    }
+    snapshot.rootReadOnly = info.rootReadOnly;
+    if (info.failedUnits !== null) {
+      snapshot.failedUnits = info.failedUnits.length;
+      snapshot.failedUnitNames =
+        info.failedUnits.length > 0 ? info.failedUnits.join(", ") : null;
+    }
+    if (info.net) {
+      snapshot.netRxBps = info.net.rxBps;
+      snapshot.netTxBps = info.net.txBps;
+    }
     // pigpiod (when it answered) already set the model; without it (Pi 5,
     // no pigpiod) /proc/cpuinfo carries the same revision code
     if (snapshot.hwRevision === null) {
@@ -274,8 +350,8 @@ export class PiStatsCollector {
     // One compound exec per cycle; static files only until cached
     const wantStatic = this.staticInfo === null;
     const commands = wantStatic
-      ? [...DYNAMIC_COMMANDS, ...STATIC_COMMANDS]
-      : DYNAMIC_COMMANDS;
+      ? [...PI_DYNAMIC_COMMANDS, ...PI_STATIC_COMMANDS]
+      : PI_DYNAMIC_COMMANDS;
     const res = await this.deps.ssh.exec(req(compoundCommand(commands)));
     const segments = splitSegments(res.stdout, commands.length);
 
@@ -283,17 +359,37 @@ export class PiStatsCollector {
       throw new UnavailableError("pi direct ssh produced no output");
     }
 
-    const [
-      tempOut,
-      clockOut,
-      voltsOut,
-      throttledOut,
-      loadOut,
-      memOut,
-      uptimeOut,
-      cpuinfoOut,
-      osOut,
-    ] = segments;
+    const seg = (cmd: string): string =>
+      segments[commands.indexOf(cmd)] ?? "";
+    const [tempOut, clockOut, voltsOut, throttledOut, loadOut, memOut, uptimeOut] =
+      PI_DYNAMIC_COMMANDS.slice(0, 7).map(seg);
+    const [statOut, dfOut, findmntOut, systemctlOut, netDevOut] =
+      PI_DYNAMIC_COMMANDS.slice(7).map(seg);
+    const cpuinfoOut = wantStatic ? seg(PI_STATIC_COMMANDS[0]!) : "";
+    const osOut = wantStatic ? seg(PI_STATIC_COMMANDS[1]!) : "";
+
+    const at = this.deps.now();
+    const cpu = parseProcStatCpu(statOut ?? "");
+    let cpuUsagePercent: number | null = null;
+    if (cpu) {
+      if (this.lastCpu) cpuUsagePercent = cpuBusyPercent(this.lastCpu, cpu);
+      this.lastCpu = cpu;
+    }
+    const netTotals = parseProcNetDev(netDevOut ?? "");
+    let net: { rxBps: number; txBps: number } | null = null;
+    if (netTotals) {
+      const last = this.lastNet;
+      if (last && at > last.at) {
+        const dt = (at - last.at) / 1000;
+        const dRx = netTotals.rx - last.rx;
+        const dTx = netTotals.tx - last.tx;
+        // a negative delta is a counter reset (reboot, interface change)
+        if (dRx >= 0 && dTx >= 0) {
+          net = { rxBps: Math.round(dRx / dt), txBps: Math.round(dTx / dt) };
+        }
+      }
+      this.lastNet = { at, ...netTotals };
+    }
 
     if (wantStatic) {
       const cpuInfo = parseProcCpuinfo(cpuinfoOut ?? "");
@@ -319,6 +415,12 @@ export class PiStatsCollector {
       isRpi: this.staticInfo?.isRpi ?? false,
       hwRevision: this.staticInfo?.hwRevision ?? null,
       modelName: this.staticInfo?.modelName ?? null,
+      mem: parseProcMeminfo(memOut ?? ""),
+      cpuUsagePercent,
+      disk: parseDfRoot(dfOut ?? ""),
+      rootReadOnly: parseMountReadOnly(findmntOut ?? ""),
+      failedUnits: parseFailedUnits(systemctlOut ?? ""),
+      net,
     };
   }
 
@@ -353,6 +455,133 @@ export class PiStatsCollector {
     const parsed: unknown = JSON.parse(res.stdout);
     return parseRpiInfo(parsed, this.deps.now);
   }
+}
+
+// ─── /proc, df, findmnt, systemctl parsers ─────────────────────────────────────
+
+interface MemInfo {
+  totalBytes: number | null;
+  availableBytes: number | null;
+  swapTotalBytes: number | null;
+  swapUsedBytes: number | null;
+}
+
+export function parseProcMeminfo(out: string): MemInfo | null {
+  const kb = (field: string): number | null => {
+    const m = out.match(new RegExp(`^${field}:\\s+(\\d+)\\s+kB`, "im"));
+    if (!m || !m[1]) return null;
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) ? n * 1024 : null;
+  };
+  const totalBytes = kb("MemTotal");
+  if (totalBytes === null) return null;
+  const swapTotal = kb("SwapTotal");
+  const swapFree = kb("SwapFree");
+  return {
+    totalBytes,
+    availableBytes: kb("MemAvailable"),
+    swapTotalBytes: swapTotal,
+    swapUsedBytes:
+      swapTotal !== null && swapFree !== null
+        ? Math.max(0, swapTotal - swapFree)
+        : null,
+  };
+}
+
+interface CpuSample {
+  idle: number;
+  total: number;
+}
+
+/** Aggregate "cpu" line of /proc/stat: user nice system idle iowait irq
+ *  softirq steal …; idle time is idle + iowait. */
+export function parseProcStatCpu(out: string): CpuSample | null {
+  const m = out.match(/^cpu\s+([\d\s]+)$/m);
+  if (!m || !m[1]) return null;
+  const nums = m[1].trim().split(/\s+/).map((x) => parseInt(x, 10));
+  if (nums.length < 4 || nums.some((n) => !Number.isFinite(n))) return null;
+  // guest/guest_nice (fields 9-10) are already counted in user/nice
+  const total = nums.slice(0, 8).reduce((a, b) => a + b, 0);
+  const idle = (nums[3] ?? 0) + (nums[4] ?? 0);
+  return { idle, total };
+}
+
+export function cpuBusyPercent(prev: CpuSample, cur: CpuSample): number | null {
+  const dTotal = cur.total - prev.total;
+  const dIdle = cur.idle - prev.idle;
+  if (dTotal <= 0 || dIdle < 0) return null;
+  return Number((((dTotal - dIdle) / dTotal) * 100).toFixed(1));
+}
+
+interface DfRoot {
+  totalBytes: number;
+  usedBytes: number;
+  usagePercent: number;
+}
+
+/** `df -kP /`: header, then "fs 1024-blocks used available capacity% mount". */
+export function parseDfRoot(out: string): DfRoot | null {
+  const line = out
+    .trim()
+    .split("\n")
+    .find((l) => /\s\/$/.test(l.trim()));
+  if (!line) return null;
+  const parts = line.trim().split(/\s+/);
+  const total = parseInt(parts[1] ?? "", 10);
+  const used = parseInt(parts[2] ?? "", 10);
+  const avail = parseInt(parts[3] ?? "", 10);
+  if (![total, used, avail].every(Number.isFinite) || total <= 0) return null;
+  // df's own capacity: used / (used + available), excluding reserved blocks
+  const denom = used + avail;
+  return {
+    totalBytes: total * 1024,
+    usedBytes: used * 1024,
+    usagePercent: denom > 0 ? Math.round((used / denom) * 100) : 0,
+  };
+}
+
+/** `findmnt -no OPTIONS /` prints e.g. "rw,noatime"; null when unknown. */
+export function parseMountReadOnly(out: string): boolean | null {
+  const opts = out.trim().split("\n")[0]?.trim() ?? "";
+  if (opts === "") return null;
+  const list = opts.split(",");
+  if (list.includes("ro")) return true;
+  if (list.includes("rw")) return false;
+  return null;
+}
+
+/** `systemctl --failed --no-legend --plain && echo <marker>`: one unit per
+ *  line, then the marker. Without the marker systemctl was not available. */
+export function parseFailedUnits(out: string): string[] | null {
+  const lines = out.trim().split("\n").map((l) => l.trim());
+  if (!lines.includes(SYSTEMCTL_OK)) return null;
+  return lines
+    .filter((l) => l !== "" && l !== SYSTEMCTL_OK)
+    .map((l) => l.split(/\s+/)[0] ?? "")
+    .filter((u) => u !== "");
+}
+
+/** Sum of receive/transmit bytes over all interfaces except loopback. */
+export function parseProcNetDev(out: string): { rx: number; tx: number } | null {
+  let rx = 0;
+  let tx = 0;
+  let seen = 0;
+  for (const line of out.split("\n")) {
+    const m = line.match(/^\s*([^:\s]+):\s*(.*)$/);
+    if (!m || !m[1] || m[2] === undefined) continue;
+    if (m[1] === "lo") continue;
+    const f = m[2].trim().split(/\s+/).map((x) => Number(x));
+    // fields: rx bytes packets errs drop fifo frame compressed multicast,
+    // then tx bytes …
+    const r = f[0];
+    const t = f[8];
+    if (r === undefined || t === undefined) continue;
+    if (!Number.isFinite(r) || !Number.isFinite(t)) continue;
+    rx += r;
+    tx += t;
+    seen += 1;
+  }
+  return seen > 0 ? { rx, tx } : null;
 }
 
 // ─── vcgencmd parsers ──────────────────────────────────────────────────────────

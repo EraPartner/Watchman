@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { createService } from "./registerServices.js";
 import type { ServiceInfra } from "./registerServices.js";
-import type { HomebridgeInstance, SynologyInstance } from "../config/services.js";
+import type {
+  AdGuardInstance,
+  HomebridgeInstance,
+  SynologyInstance,
+} from "../config/services.js";
 import type { HttpClient } from "../infra/http/client.js";
 import type { PingProber } from "../infra/net/pingProbe.js";
 
@@ -171,6 +175,66 @@ describe("createService — synology DSM certificate pin", () => {
 
     await svc.checkHealth(new AbortController().signal);
 
+    expect(new Set(calls)).toEqual(new Set(["strict"]));
+  });
+});
+
+describe("createService — AdGuard certificate pin", () => {
+  const adguardCfg: AdGuardInstance = {
+    kind: "adguard",
+    instanceId: "main",
+    enabled: true,
+    pollPolicy: { healthMs: 10_000, statsMs: 30_000, jitterRatio: 0.1 },
+    cacheTtlMs: 10_000,
+    timeoutMs: 5_000,
+    baseUrl: "https://adguard.local",
+    username: "watchman",
+    password: "pass",
+    certSha256: "",
+    readQueryLog: false,
+  };
+
+  function statusHttp(tag: string, calls: string[]): HttpClient {
+    return {
+      async send() {
+        calls.push(tag);
+        const body = { running: true, protection_enabled: true, version: "v0.107" };
+        return {
+          status: 200,
+          headers: { "content-type": "application/json" },
+          text: async () => JSON.stringify(body),
+          json: async () => body as never,
+        };
+      },
+    };
+  }
+
+  it("sends AdGuard requests only through a client pinned to the fingerprint", async () => {
+    const calls: string[] = [];
+    const pins: string[] = [];
+    const infra: ServiceInfra = {
+      ...infraWith(statusHttp("strict", calls), undefined),
+      pinnedHttp: (sha) => {
+        pins.push(sha);
+        return statusHttp("pinned", calls);
+      },
+    };
+    const svc = createService({ ...adguardCfg, certSha256: "AB:CD" }, infra);
+    await svc.checkHealth(new AbortController().signal);
+    expect(pins).toEqual(["AB:CD"]);
+    expect(new Set(calls)).toEqual(new Set(["pinned"]));
+  });
+
+  it("uses the strict client when no fingerprint is set", async () => {
+    const calls: string[] = [];
+    const infra: ServiceInfra = {
+      ...infraWith(statusHttp("strict", calls), undefined),
+      pinnedHttp: () => {
+        throw new Error("no pinned client expected");
+      },
+    };
+    const svc = createService(adguardCfg, infra);
+    await svc.checkHealth(new AbortController().signal);
     expect(new Set(calls)).toEqual(new Set(["strict"]));
   });
 });

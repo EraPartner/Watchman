@@ -153,6 +153,18 @@ On APFS (macOS 10.15+) `/` is the sealed system volume, whose Used column is onl
 
 **Command**: `export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; which smartctl >/dev/null 2>&1 && smartctl -j -a disk0 2>/dev/null || true` — adds the Homebrew prefixes (each compound segment runs in its own subshell, so it can't rely on the temperature segment's PATH), feature-detects `smartctl` binary; returns JSON output if available, silently succeeds with empty string if not installed.
 
+### Memory pressure, swap and thermal state
+
+| Metric | Command | Notes |
+| --- | --- | --- |
+| `memPressureFreePercent` | `sysctl -n kern.memorystatus_level` | Percent of memory macOS considers available; the tile warns at 10 % or less |
+| `swapTotalBytes`, `swapUsedBytes` | `sysctl -n vm.swapusage` | |
+| `thermalWarning` | `pmset -g therm` | `true` when a thermal warning level is recorded; the tile warns |
+| `cpuSpeedLimit` | `pmset -g therm` | `CPU_Speed_Limit`, printed on Intel Macs (Apple Silicon output UNVERIFIED) |
+
+A failed SMART check (`smartPassed: false`) turns the tile red. The read-only probe script for the
+`authorized_keys` forced command is `packaging/probes/watchman-probe-mac.sh`.
+
 ## Service Class
 
 `apps/backend/src/domain/services/macMini/MacMiniService.ts`

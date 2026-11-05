@@ -53,6 +53,12 @@ export const MAC_STATS_COMMANDS: readonly string[] = [
   TOP_CMD,
   "ifconfig en0",
   SMART_CMD,
+  // memory pressure: percent of memory macOS considers available (the
+  // signal Activity Monitor's pressure graph is based on)
+  "sysctl -n kern.memorystatus_level",
+  "sysctl -n vm.swapusage",
+  // thermal throttling state (CPU speed limit / thermal warning level)
+  "pmset -g therm",
 ];
 
 export class MacMiniService extends BaseService {
@@ -129,6 +135,9 @@ export class MacMiniService extends BaseService {
         topOut,
         ifconfigOut,
         smartOut,
+        pressureOut,
+        swapOut,
+        thermOut,
       ] = splitSegments(out, MAC_STATS_COMMANDS.length);
 
       if (!uptimeOut && !dfOut) {
@@ -146,6 +155,9 @@ export class MacMiniService extends BaseService {
       const topCpu = parseTopCpu(topOut ?? "");
       const netInfo = parseIfconfig(ifconfigOut ?? "");
       const smart = parseSmartctl(smartOut ?? "");
+      const memPressureFreePercent = parseMemoryStatusLevel(pressureOut ?? "");
+      const swap = parseSwapUsage(swapOut ?? "");
+      const therm = parsePmsetTherm(thermOut ?? "");
 
       return ok({
         at: this.now(),
@@ -178,6 +190,11 @@ export class MacMiniService extends BaseService {
           onAC: power?.onAC ?? null,
           batteryPercent: power?.batteryPercent ?? null,
           batteryCharging: power?.batteryCharging ?? null,
+          memPressureFreePercent,
+          swapTotalBytes: swap?.totalBytes ?? null,
+          swapUsedBytes: swap?.usedBytes ?? null,
+          cpuSpeedLimit: therm.cpuSpeedLimit,
+          thermalWarning: therm.thermalWarning,
           ipAddress: netInfo?.ipAddress ?? null,
           interfaceUp: netInfo?.interfaceUp ?? null,
           uptime,
@@ -210,6 +227,57 @@ export class MacMiniService extends BaseService {
     }
     return res.stdout;
   }
+}
+
+/** `sysctl -n kern.memorystatus_level`: 0-100, percent of memory available. */
+export function parseMemoryStatusLevel(out: string): number | null {
+  const t = out.trim();
+  if (!/^\d+$/.test(t)) return null;
+  const n = parseInt(t, 10);
+  return n >= 0 && n <= 100 ? n : null;
+}
+
+const SIZE_UNITS: Record<string, number> = {
+  K: 1024,
+  M: 1024 ** 2,
+  G: 1024 ** 3,
+  T: 1024 ** 4,
+};
+
+/** `sysctl -n vm.swapusage`: "total = 2048.00M  used = 1024.50M  free = …". */
+export function parseSwapUsage(
+  out: string
+): { totalBytes: number; usedBytes: number } | null {
+  const field = (name: string): number | null => {
+    const m = out.match(new RegExp(`${name}\\s*=\\s*([0-9.]+)([KMGT])`, "i"));
+    if (!m || !m[1] || !m[2]) return null;
+    const n = parseFloat(m[1]);
+    const unit = SIZE_UNITS[m[2].toUpperCase()];
+    return Number.isFinite(n) && unit ? Math.round(n * unit) : null;
+  };
+  const totalBytes = field("total");
+  const usedBytes = field("used");
+  return totalBytes !== null && usedBytes !== null
+    ? { totalBytes, usedBytes }
+    : null;
+}
+
+/** `pmset -g therm`. "CPU_Speed_Limit = 100" is printed on Intel Macs only
+ *  (UNVERIFIED on Apple Silicon); a recorded thermal warning level means the
+ *  system is throttling for heat. */
+export function parsePmsetTherm(out: string): {
+  cpuSpeedLimit: number | null;
+  thermalWarning: boolean | null;
+} {
+  const limit = out.match(/CPU_Speed_Limit\s*=\s*(\d+)/i);
+  const cpuSpeedLimit = limit && limit[1] ? parseInt(limit[1], 10) : null;
+  let thermalWarning: boolean | null = null;
+  if (/no thermal warning level has been recorded/i.test(out)) {
+    thermalWarning = false;
+  } else if (/thermal warning level/i.test(out)) {
+    thermalWarning = true;
+  }
+  return { cpuSpeedLimit, thermalWarning };
 }
 
 function parseCpuLoad(uptime: string): number | null {

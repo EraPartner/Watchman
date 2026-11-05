@@ -7,7 +7,11 @@ import {
 } from "node:http";
 import { createDsmClient, type DsmClientConfig } from "./dsmClient.js";
 import { createHttpClient } from "../http/client.js";
-import { UnauthorizedError, UnavailableError } from "../../core/errors.js";
+import {
+  UnauthorizedError,
+  UnavailableError,
+  ValidationError,
+} from "../../core/errors.js";
 
 interface DsmEnvelope {
   success: boolean;
@@ -495,5 +499,44 @@ describe("createDsmClient", () => {
       config: makeConfig({ baseUrl: "http://nas:5000" }),
     });
     await expect(client.call("SYNO.DSM.Info", 2, "getinfo")).rejects.toBe(original);
+  });
+});
+
+describe("createDsmClient read-only guard and session hygiene", () => {
+  it("refuses write methods without contacting DSM", async () => {
+    const client = createDsmClient({ http: createHttpClient(), config: makeConfig() });
+    for (const [api, method] of [
+      ["SYNO.Core.System", "shutdown"],
+      ["SYNO.Core.System", "reboot"],
+      ["SYNO.Core.Upgrade.Server.Download", "start"],
+      ["SYNO.Core.Hardware.FanSpeed", "set"],
+    ] as const) {
+      await expect(client.call(api, 1, method)).rejects.toBeInstanceOf(ValidationError);
+    }
+    expect(state.calls).toHaveLength(0);
+  });
+
+  it("names its session at login and logs it out on close", async () => {
+    const client = createDsmClient({ http: createHttpClient(), config: makeConfig() });
+    await client.call("SYNO.DSM.Info", 2, "getinfo");
+    const login = state.calls.find((c) => c.params["method"] === "login");
+    expect(login?.params["session"]).toBe("Watchman");
+
+    await client.close();
+    const logout = state.calls.find((c) => c.params["method"] === "logout");
+    expect(logout?.path).toBe("/webapi/auth.cgi");
+    expect(logout?.params["_sid"]).toBe("test-sid-1");
+    expect(logout?.params["session"]).toBe("Watchman");
+
+    // nothing to log out a second time
+    const before = state.calls.length;
+    await client.close();
+    expect(state.calls).toHaveLength(before);
+  });
+
+  it("close without a session sends nothing", async () => {
+    const client = createDsmClient({ http: createHttpClient(), config: makeConfig() });
+    await client.close();
+    expect(state.calls).toHaveLength(0);
   });
 });

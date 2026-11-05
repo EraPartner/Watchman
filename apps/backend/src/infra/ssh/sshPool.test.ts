@@ -414,11 +414,34 @@ describe('createSshPool', () => {
     const verifierOf = (client: InstanceType<typeof MockClient>) =>
       (client.connect.mock.calls[0]![0] as ConnectOpts).hostVerifier;
 
-    it('sets no host verifier when no fingerprint is pinned', () => {
+    it('trusts the first key of an unpinned host and reports its fingerprint once', () => {
+      const seen: Array<[string, number, string]> = [];
+      const pool = createSshPool({ onUnpinnedHostKey: (h, p, fp) => seen.push([h, p, fp]) });
+      void pool.exec(makeReq()).catch(() => undefined);
+      const verify = verifierOf(clientInstances[0]!)!;
+      expect(verify(HOST_KEY)).toBe(true);
+      expect(verify(HOST_KEY)).toBe(true);
+      expect(seen).toEqual([['10.0.0.1', 22, PIN]]);
+      pool.destroy();
+    });
+
+    it('refuses an unpinned host whose key changed since first seen', async () => {
       const pool = createSshPool();
       void pool.exec(makeReq()).catch(() => undefined);
-      expect(verifierOf(clientInstances[0]!)).toBeUndefined();
-      pool.destroy();
+      expect(verifierOf(clientInstances[0]!)!(HOST_KEY)).toBe(true);
+      // the first connection drops; the reconnect meets a different key
+      clientInstances[0]!.emitClose();
+      const execPromise = pool.exec(makeReq());
+      const client = clientInstances[1]!;
+      const impostor = Buffer.from('impostor host key blob');
+      expect(verifierOf(client)!(impostor)).toBe(false);
+      client.emitError('Handshake failed: host key verification failed');
+      client.emitClose();
+      const error = await execPromise.catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(UnauthorizedError);
+      expect((error as Error).message).toContain('changed since first seen');
+      expect((error as Error).message).toContain(PIN);
+      expect(client.exec).not.toHaveBeenCalled();
     });
 
     it('connects when the server presents the pinned key', async () => {

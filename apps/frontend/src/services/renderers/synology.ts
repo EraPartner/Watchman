@@ -91,6 +91,22 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
       ],
     },
     {
+      title: "Health",
+      metrics: [
+        { key: "powerStatus", label: "Power", format: fmtRaw },
+        { key: "sysFanStatus", label: "System fan", format: fmtRaw },
+        { key: "cpuFanStatus", label: "CPU fan", format: fmtRaw },
+        { key: "diskCount", label: "Disks", format: fmtRaw },
+        { key: "diskDegradedCount", label: "Disks not healthy", format: fmtRaw },
+        { key: "diskTempMax", label: "Hottest disk", format: fmtTempC },
+        { key: "raidCount", label: "Storage pools (RAID)", format: fmtRaw },
+        { key: "raidDegradedCount", label: "Pools degraded", format: fmtRaw },
+        { key: "volumeCount", label: "Volumes", format: fmtRaw },
+        { key: "volumeDegradedCount", label: "Volumes not normal", format: fmtRaw },
+        { key: "upgradeAvailable", label: "DSM update available", format: fmtRaw },
+      ],
+    },
+    {
       title: "Status",
       metrics: [
         { key: "host", label: "Host", format: fmtRaw, source: 'health' },
@@ -133,6 +149,14 @@ export const synologyRenderer: ServiceRenderer<SynologyStats> = {
     // (SYNOLOGY-SYSTEM-MIB systemStatus 2 = Failed maps to "Warning")
     const status = stats ? dotGet(stats, "systemStatus") : undefined;
     if (status === "Warning") return "crit";
+    // a failing disk, degraded pool/volume or failed fan/PSU is critical
+    for (const key of ["diskDegradedCount", "raidDegradedCount", "volumeDegradedCount"]) {
+      if ((getNum(stats, key) ?? 0) > 0) return "crit";
+    }
+    for (const key of ["powerStatus", "sysFanStatus", "cpuFanStatus"]) {
+      const v = stats ? dotGet(stats, key) : undefined;
+      if (typeof v === "string" && v !== "" && v.toLowerCase() !== "normal") return "crit";
+    }
     const cpu = getNum(stats, "cpuUsage");
     const temp = getNum(stats, "cpuTemp");
     if ((cpu ?? 0) >= 90 || (temp ?? 0) >= 80) return "crit";

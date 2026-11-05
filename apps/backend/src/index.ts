@@ -76,7 +76,13 @@ async function main(): Promise<void> {
     ? env.DATA_DIR
     : resolve(process.cwd(), env.DATA_DIR);
 
-  const sshPool = createSshPool();
+  const sshPool = createSshPool({
+    onUnpinnedHostKey: (host, port, fingerprint) =>
+      logger.warn(
+        { host, port, fingerprint },
+        "ssh host key not pinned; trusting it for this run. Pin it in the service settings to verify it across restarts"
+      ),
+  });
   const infra = {
     http: createHttpClient(),
     insecureHttp: createInsecureHttpClient(),

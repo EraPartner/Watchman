@@ -12,7 +12,9 @@ aliases: [mac mini setup, set up mac mini, macos ssh monitoring]
 
 > [!abstract] What Watchman reads
 > Health is an ICMP ping. Stats come from one SSH command per cycle that runs `uptime`, `df`,
-> `vm_stat`, `pmset -g batt`, `top -l 2 -n 0 -s 1`, `ifconfig en0` and, if installed, `smctemp`
+> `vm_stat`, `pmset -g batt`, `top -l 2 -n 0 -s 1`, `ifconfig en0`,
+> `sysctl -n kern.memorystatus_level` (memory pressure), `sysctl -n vm.swapusage`,
+> `pmset -g therm` (thermal state) and, if installed, `smctemp`
 > (or `osx-cpu-temp`) and `smartctl` (`MAC_STATS_COMMANDS` in
 > `apps/backend/src/domain/services/macMini/MacMiniService.ts`). Nothing needs admin rights.
 > Details: [[docs/integrations/macmini|Mac Mini integration]].
@@ -38,15 +40,34 @@ Watchman logs in with a private key only (no SSH passwords). On the **machine th
 ssh-keygen -t ed25519 -f ~/.ssh/watchman_macmini -C watchman
 ```
 
+**Install the read-only probe script (recommended).** It makes the key able to run only
+Watchman's fixed list of read commands, enforced by the Mac's own `sshd`, so a leaked key can't
+run anything else. Copy [`packaging/probes/watchman-probe-mac.sh`](../../../packaging/probes/watchman-probe-mac.sh)
+to the Mac and install it root-owned:
+
+```bash
+sudo install -o root -g wheel -m 755 watchman-probe-mac.sh /usr/local/bin/watchman-probe
+```
+
 Then put the public key into `/Users/watchman/.ssh/authorized_keys` on the Mac Mini, with
 restrictions in front of it:
 
 ```text
-restrict,from="192.168.1.10" ssh-ed25519 AAAA… watchman
+restrict,command="/usr/local/bin/watchman-probe",from="192.168.1.10" ssh-ed25519 AAAA… watchman
 ```
 
-- `restrict` turns off port, agent and X11 forwarding and terminals; running commands still works.
+- `command=` makes `sshd` run the probe script for every login with this key, whatever command
+  the client sends. The script prints exactly what Watchman would have asked for.
+- `restrict` turns off port, agent and X11 forwarding and terminals.
 - `from=` accepts the key only from the Watchman machine's address.
+- Update the script when you update Watchman (it's generated from the code and a test keeps them
+  in sync). An old script still works; newer numbers just stay empty.
+- If you skip the script, leave out `command="…"`. Watchman then sends the same commands itself.
+
+> [!warning] Raspberry Pi relay
+> If this Mac also relays Raspberry Pi stats (the legacy fallback in the Raspberry Pi guide), use
+> a **separate key** for the relay without `command=`: the probe script answers with Mac stats,
+> which the relay can't use.
 
 Make sure the folder and file belong to `watchman` with modes `700` and `600`.
 
@@ -56,7 +77,9 @@ Make sure the folder and file belong to `watchman` with modes `700` and `600`.
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-Copy the `SHA256:…` part for the next step. Without a pin Watchman accepts any host key.
+Copy the `SHA256:…` part for the next step. Without a pin Watchman trusts the first host key it
+sees after each start, refuses a different key until restart, and logs the fingerprint it saw
+(`ssh host key not pinned`) so you can copy it into the pin field.
 
 ## 3. Add it in Watchman
 

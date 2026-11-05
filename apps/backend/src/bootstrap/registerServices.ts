@@ -90,7 +90,16 @@ function buildService(
     case "qbittorrent":
       return new QBittorrentService({ http, ping, config: instance, now });
     case "adguard":
-      return new AdGuardService({ http, ping, config: instance, now });
+      return new AdGuardService({
+        // a pinned fingerprint admits AdGuard's self-signed certificate and
+        // nothing else, so the admin password goes only to that server
+        http: instance.certSha256
+          ? (pinnedHttp ?? createPinnedClient)(instance.certSha256)
+          : http,
+        ping,
+        config: instance,
+        now,
+      });
     case "albyHub":
       return new AlbyHubService({ http, ping, config: instance, now });
     case "tor":

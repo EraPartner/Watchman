@@ -127,6 +127,26 @@ DSM metrics are enabled when **all three** of the DSM fields are non-empty in th
 
 **Status**: **SY2** — Complete (3 new tests + existing SNMP tests).
 
+## SNMP hardware health (no DSM account needed)
+
+`getStats()` also reads Synology's health MIBs over the same SNMPv3 session, so a NAS monitored
+with SNMP only still reports failing hardware:
+
+| Metric | Source | Notes |
+| --- | --- | --- |
+| `powerStatus`, `sysFanStatus`, `cpuFanStatus` | SYNOLOGY-SYSTEM-MIB `.1.3.0`, `.1.4.1.0`, `.1.4.2.0` | `"normal"` / `"failed"`. DSM's `SYNO.Core.System.Status` values win when DSM is configured |
+| `upgradeAvailable` | SYNOLOGY-SYSTEM-MIB `.1.5.4.0` | `true` only for 1 (Available) |
+| `diskCount`, `diskDegradedCount` | SYNOLOGY-DISK-MIB walks of `diskStatus` (`.2.1.1.5`) and `diskHealthStatus` (`.2.1.1.13`, DSM 7.1+) | A disk counts as degraded when status ≠ Normal or health ≠ Normal. Used only when DSM storage data is absent |
+| `diskTempMax` | `diskTemperature` (`.2.1.1.6`) | Hottest disk, °C |
+| `raidCount`, `raidDegradedCount` | SYNOLOGY-RAID-MIB `raidStatus` (`.3.1.1.3`) | Normal (1) and DataScrubbing (13) are healthy; anything else counts as degraded |
+
+The tile turns red for any degraded disk, pool or volume, or a failed fan or power supply. OIDs are
+from Synology's DiskStation MIB guide and were not checked against a live NAS.
+
+The DSM client only calls read methods (`get`, `getinfo`, `info`, `list`, `load_info`) and refuses
+anything else before sending it; it names its session `Watchman` and logs it out when the service
+stops.
+
 ## Health Model (Phase 0a)
 
 Two-tier health via `withHostPing` helper:
