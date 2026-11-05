@@ -2,9 +2,12 @@ import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
-import typescriptEslint from "@typescript-eslint/eslint-plugin";
-import typescriptParser from "@typescript-eslint/parser";
+import tseslint from "typescript-eslint";
 import react from "eslint-plugin-react";
+import { strictTypeAwareRules } from "../../config/eslint-type-aware.mjs";
+
+const typescriptEslint = tseslint.plugin;
+const typescriptParser = tseslint.parser;
 
 export default [
   {
@@ -83,9 +86,17 @@ export default [
     },
   },
   {
+    // Type-aware linting with the same rule set as EraPartner/Vision
+    // (strict-type-checked as errors, see config/eslint-type-aware.mjs).
     files: ["**/*.{ts,tsx}"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
+      ...strictTypeAwareRules(tseslint),
       "no-undef": "off",
     },
   },
