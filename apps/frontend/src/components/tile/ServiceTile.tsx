@@ -385,7 +385,7 @@ export function ServiceTile({
                 </span>
               ) : null}
             </div>
-            {subtitle !== null && subtitle !== undefined ? (
+            {subtitle !== null ? (
               <div className="mt-s-1 truncate text-fs-label text-[var(--text-lo)]">
                 {subtitle}
               </div>

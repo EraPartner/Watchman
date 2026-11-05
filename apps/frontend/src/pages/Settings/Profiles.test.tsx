@@ -91,12 +91,9 @@ function inputByLabel(root: HTMLElement, label: RegExp): HTMLInputElement {
 }
 
 async function typeInto(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )?.set;
   await actAsync(() => {
-    setter?.call(input, value);
+    // The prototype's native setter, so React's value tracker sees a change.
+    Reflect.set(window.HTMLInputElement.prototype, "value", value, input);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }

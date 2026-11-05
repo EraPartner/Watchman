@@ -7,8 +7,8 @@ import {
   RENDERERS,
   getRenderer,
   rendererTrackedMetrics,
-  type ServiceRenderer,
 } from "./index";
+import { actAsync } from "@/test/actAsync";
 
 // A broad stats object touching keys many renderers read, so tone/customPanel
 // branches actually execute instead of short-circuiting on `undefined`.
@@ -125,12 +125,12 @@ async function renderNode(node: ReactNode): Promise<void> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(<div>{node}</div>));
+  await actAsync(() => root.render(<div>{node}</div>));
   act(() => root.unmount());
 }
 
 describe("service renderers", () => {
-  const entries = Object.values(RENDERERS) as ServiceRenderer[];
+  const entries = Object.values(RENDERERS);
 
   it("registers a renderer for every keyed kind", () => {
     expect(entries.length).toBeGreaterThanOrEqual(13);

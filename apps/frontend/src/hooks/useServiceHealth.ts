@@ -40,11 +40,14 @@ export const useServiceHealth = (
   kind: string,
   instance?: string
 ): AggregatedHealthResult => {
-  const { data, isLoading } = useAggregatedHealth();
+  const query = useAggregatedHealth();
+  // Read separately so the "loading but already has data" case below is not
+  // narrowed away by the query result's status union.
+  const data = query.data;
+  const isLoading = query.isLoading;
   return {
     data: pickHealth(data, kind, instance),
-    // A pending query (isLoading) never has data yet.
-    isLoading,
+    isLoading: isLoading && data === undefined,
     error: pickError(data, kind, instance),
   };
 };
@@ -82,10 +85,12 @@ export const useServiceStats = (
   useEffect(() => {
     if (!query.data) return;
     if (trackedMetrics.length === 0) return;
-    const parsedAt = Number(query.data.at);
+    // Typed as a number, but read defensively: the payload is untyped JSON.
+    const rawAt: unknown = query.data.at;
+    const parsedAt = Number(rawAt);
     const at =
-      typeof query.data.at === "number"
-        ? query.data.at
+      typeof rawAt === "number"
+        ? rawAt
         : isNonZero(parsedAt)
           ? parsedAt
           : Date.now();

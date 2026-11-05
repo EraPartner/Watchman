@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
 import { Button } from "../../components/primitives";
 import type {
   FieldMeta,
@@ -204,7 +204,7 @@ export default function ServiceEditor({
     );
   }
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     if (!selectedKind) return setError("Pick a service kind");

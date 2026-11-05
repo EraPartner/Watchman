@@ -1,7 +1,7 @@
 import {
   forwardRef,
   type ComponentPropsWithoutRef,
-  type ElementRef,
+  type ComponentRef,
 } from "react";
 import * as D from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
@@ -13,7 +13,7 @@ export const DialogPortal = D.Portal;
 export const DialogClose = D.Close;
 
 export const DialogOverlay = forwardRef<
-  ElementRef<typeof D.Overlay>,
+  ComponentRef<typeof D.Overlay>,
   ComponentPropsWithoutRef<typeof D.Overlay>
 >(({ className, ...rest }, ref) => (
   <D.Overlay
@@ -29,7 +29,7 @@ export const DialogOverlay = forwardRef<
 DialogOverlay.displayName = "DialogOverlay";
 
 export const DialogContent = forwardRef<
-  ElementRef<typeof D.Content>,
+  ComponentRef<typeof D.Content>,
   ComponentPropsWithoutRef<typeof D.Content>
 >(({ className, children, ...rest }, ref) => (
   <DialogPortal>
@@ -60,7 +60,7 @@ export const DialogContent = forwardRef<
 DialogContent.displayName = "DialogContent";
 
 export const DialogTitle = forwardRef<
-  ElementRef<typeof D.Title>,
+  ComponentRef<typeof D.Title>,
   ComponentPropsWithoutRef<typeof D.Title>
 >(({ className, ...rest }, ref) => (
   <D.Title
@@ -72,7 +72,7 @@ export const DialogTitle = forwardRef<
 DialogTitle.displayName = "DialogTitle";
 
 export const DialogDescription = forwardRef<
-  ElementRef<typeof D.Description>,
+  ComponentRef<typeof D.Description>,
   ComponentPropsWithoutRef<typeof D.Description>
 >(({ className, ...rest }, ref) => (
   <D.Description
