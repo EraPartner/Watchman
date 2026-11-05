@@ -139,18 +139,26 @@ function handler(req: IncomingMessage, res: ServerResponse) {
             alltime_dl: 5000,
             alltime_ul: 9000,
             global_ratio: "1.80",
+            total_peer_connections: 12,
+            queued_io_jobs: 0,
+            use_alt_speed_limits: false,
           },
           torrents: {
-            abc: { ...TORRENT_LIST[0] },
+            abc: { ...TORRENT_LIST[0], tracker: "http://t.example/announce" },
             def: { ...TORRENT_LIST[1] },
-            c: { state: "pausedDL" },
-            d: { state: "stalledUP" },
+            // paused with no working tracker: not counted
+            c: { state: "pausedDL", tracker: "" },
+            // seeding with no working tracker: counted
+            d: { state: "stalledUP", tracker: "" },
           },
+          categories: { movies: { name: "movies" }, tv: { name: "tv" } },
         }
       : {
           rid: responseRid,
           full_update: false,
           server_state: { dht_nodes: 75 },
+          categories: { music: { name: "music" } },
+          categories_removed: ["tv"],
         };
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
@@ -693,5 +701,28 @@ describe("QBittorrentService", () => {
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.reachable).toBe(false);
+  });
+
+  it("counts active torrents without a working tracker, categories and peer connections", async () => {
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const first = await svc.getStats(new AbortController().signal);
+    expect(first.ok).toBe(true);
+    if (first.ok) {
+      expect(first.value.metrics).toMatchObject({
+        torrentsNoWorkingTracker: 1,
+        categoryCount: 2,
+        peerConnections: 12,
+        queuedIoJobs: 0,
+        altSpeedLimits: false,
+      });
+    }
+    // delta: +music, -tv
+    const second = await svc.getStats(new AbortController().signal);
+    expect(second.ok && second.value.metrics.categoryCount).toBe(2);
   });
 });

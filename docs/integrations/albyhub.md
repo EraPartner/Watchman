@@ -2,7 +2,7 @@
 title: Alby Hub Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -89,6 +89,7 @@ Additional metrics available when using deterministic NWC endpoints:
 | `setupCompleted` | bool \| null   | Whether wallet setup is complete                                   |
 | `backendType`    | string \| null | Backend type (e.g., "lnd", "cln")                                  |
 | `appCount`       | number \| null | Count of connected apps (`/api/apps` `totalCount`; a bare array from older hubs is also accepted); null without a token or if the endpoint fails |
+| `tokenStatus`    | string         | `none` (no token), `ok` (a protected endpoint answered 2xx), `rejected` (any of `/api/apps`, `/api/balances`, `/api/channels` answered 401/403: token expired, revoked or wrong; adds `warning` and turns the tile amber), `unknown` (no protected endpoint answered) |
 
 ### Wallet and Channel Fields (NWC mode, token configured)
 

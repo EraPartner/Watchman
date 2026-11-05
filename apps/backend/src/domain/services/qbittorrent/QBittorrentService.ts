@@ -34,6 +34,8 @@ interface Torrent {
   uploaded?: number;
   eta?: number;
   category?: string;
+  /** first tracker with a working status; "" when none is working */
+  tracker?: string;
 }
 
 interface ServerState {
@@ -49,6 +51,9 @@ interface ServerState {
   alltime_dl?: number;
   alltime_ul?: number;
   global_ratio?: string;
+  total_peer_connections?: number;
+  queued_io_jobs?: number;
+  use_alt_speed_limits?: boolean;
 }
 
 interface MainData {
@@ -57,6 +62,8 @@ interface MainData {
   server_state?: ServerState;
   torrents?: Record<string, Torrent>;
   torrents_removed?: string[];
+  categories?: Record<string, unknown>;
+  categories_removed?: string[];
 }
 
 interface Preferences {
@@ -133,6 +140,7 @@ export class QBittorrentService extends BaseService {
   private recentWarnings: string[] = [];
   private cachedServerState: ServerState = {};
   private cachedTorrents: Record<string, Torrent> = {};
+  private cachedCategories = new Set<string>();
   private readonly versionMemo: TtlMemo<string>;
   private readonly prefsMemo: TtlMemo<Preferences>;
 
@@ -198,7 +206,14 @@ export class QBittorrentService extends BaseService {
       if (mainData.full_update) {
         this.cachedServerState = mainData.server_state ?? {};
         this.cachedTorrents = mainData.torrents ?? {};
+        this.cachedCategories = new Set(Object.keys(mainData.categories ?? {}));
       } else {
+        for (const name of Object.keys(mainData.categories ?? {})) {
+          this.cachedCategories.add(name);
+        }
+        for (const name of mainData.categories_removed ?? []) {
+          this.cachedCategories.delete(name);
+        }
         if (mainData.server_state) {
           this.cachedServerState = {
             ...this.cachedServerState,
@@ -245,8 +260,17 @@ export class QBittorrentService extends BaseService {
       let paused = 0;
       let completed = 0;
       let errored = 0;
+      let noWorkingTracker = 0;
       for (const t of Object.values(torrents)) {
         const state = t.state ?? "";
+        // an active torrent whose trackers all fail (or that has none) can
+        // only find peers via DHT/PeX: the usual "why is it stuck" cause
+        if (
+          (DOWNLOADING_STATES.has(state) || SEEDING_STATES.has(state)) &&
+          t.tracker === ""
+        ) {
+          noWorkingTracker++;
+        }
         if (DOWNLOADING_STATES.has(state)) downloading++;
         else if (SEEDING_STATES.has(state)) seeding++;
         else if (PAUSED_STATES.has(state)) paused++;
@@ -291,7 +315,10 @@ export class QBittorrentService extends BaseService {
         else if (entry.type === 4) this.recentWarnings.unshift(entry.message);
       }
       this.recentErrors = this.recentErrors.slice(0, MAX_RECENT_LOG_ENTRIES);
-      this.recentWarnings = this.recentWarnings.slice(0, MAX_RECENT_LOG_ENTRIES);
+      this.recentWarnings = this.recentWarnings.slice(
+        0,
+        MAX_RECENT_LOG_ENTRIES
+      );
 
       const serverState = this.cachedServerState;
 
@@ -305,6 +332,11 @@ export class QBittorrentService extends BaseService {
           torrentsPaused: paused,
           torrentsCompleted: completed,
           torrentsError: errored,
+          torrentsNoWorkingTracker: noWorkingTracker,
+          categoryCount: this.cachedCategories.size,
+          peerConnections: serverState.total_peer_connections ?? null,
+          queuedIoJobs: serverState.queued_io_jobs ?? null,
+          altSpeedLimits: serverState.use_alt_speed_limits ?? null,
           dlSpeed: serverState.dl_info_speed ?? 0,
           upSpeed: serverState.up_info_speed ?? 0,
           // prefer all-time totals; fall back to session totals on older builds

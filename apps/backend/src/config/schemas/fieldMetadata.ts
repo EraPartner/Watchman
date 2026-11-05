@@ -299,6 +299,13 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
         help: "Path to Tor control_auth_cookie. Takes precedence over password when set.",
       },
       {
+        name: "metricsUrl",
+        label: "MetricsPort URL",
+        type: "url",
+        placeholder: "http://127.0.0.1:9035/metrics",
+        help: "Optional. Tor's read-only MetricsPort (torrc: MetricsPort + MetricsPortPolicy accept <Watchman IP>). Adds the relay overload counters.",
+      },
+      {
         name: "pingCount",
         label: "ICMP probe count",
         type: "number",

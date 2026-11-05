@@ -2,7 +2,7 @@
 title: Tor Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -44,9 +44,10 @@ Configure via the Settings UI or the `/config` API (DuckDB config store). Enviro
 | `useControlPort`  | boolean | `false`                          | no       | no      | Probe via ControlPort + ICMP; falls back to Onionoo when off-LAN       |
 | `host`            | string  | `127.0.0.1`                      | no       | no      | IP/hostname of the relay (ICMP and ControlPort connection)             |
 | `controlPort`     | number  | `9051`                           | no       | no      | TCP port for the Tor control protocol                                  |
-| `controlPassword` | string  | —                                | no       | **yes** | Plaintext ControlPort password; leave empty for cookie auth or no auth |
+| `controlPassword` | string  | —                                | no       | **yes** | Plaintext ControlPort password; leave empty for cookie auth or no auth. Line breaks are rejected (schema and client), since they would end `AUTHENTICATE` and send the rest as another command |
 | `cookieAuthFile`  | string  | —                                | no       | no      | Path to `control_auth_cookie`; takes precedence over password when set |
 | `pingCount`       | number  | `1`                              | no       | no      | Number of ICMP pings per health check (capped at `timeoutMs` / 1000)   |
+| `metricsUrl`      | url     | `""`                             | no       | no      | Optional Tor MetricsPort URL (e.g. `http://127.0.0.1:9035/metrics`); read with `GET` in both modes |
 
 ### Shared base fields
 
@@ -116,7 +117,7 @@ Cookie auth needs `CookieAuthentication 1` in `torrc`. The cookie file is `<Data
   - Valid signals: `NEWNYM`, `SHUTDOWN`, `DUMP_STATS`, `DEBUG`, `SIGTERM`, `RELOAD`, `REOPEN_LOGS`, `CLEARDNSCACHE`
   - Response: `250 OK` or `5xx` error
   - The client exposes `signal()`, but `TorService` never calls it: polling only sends
-    `GETINFO` commands and the `SETEVENTS BW` subscription (`TorService.ts`,
+    `GETINFO` commands and the `SETEVENTS BW WARN ERR` subscription (`TorService.ts`,
     `eventSubscription.ts`), so Watchman stays read-only
     toward Tor ([[docs/adr/032-monitoring-only-no-service-control|ADR-032]]).
 
@@ -177,6 +178,17 @@ process/descriptor-limit → max open file descriptors
 
 accounting/bytes       → total bytes in current accounting period
 accounting/bytes-left  → bytes remaining in period
+hibernating            → GETINFO accounting/hibernating: "awake" | "soft" | "hard"; null when accounting is off (tile amber on soft/hard)
+
+bootstrapProgress      → PROGRESS=<n> from GETINFO status/bootstrap-phase; null when absent
+versionStatus          → GETINFO status/version/current ("recommended", "obsolete", …); null when absent
+uptimeSec              → GETINFO uptime (seconds); null on Tor versions without it
+orPortReachable        → GETINFO status/reachability-succeeded/or ("1"/"0" → true/false; null on client-only nodes); tile amber on false
+dirPortReachable       → GETINFO status/reachability-succeeded/dir (same)
+recentWarnings         → newest-first WARN/ERR log events from the subscription ("WARN: …"), max 10
+
+Each new GETINFO group is fetched on its own, like the existing ones, so a key an older Tor or a
+client-only node lacks only nulls that value.
 
 bwRead                 → realtime bytes read/sec from BW events (Phase 0b+, Task B5); null when no BW event in the last 30 s
 bwWritten              → realtime bytes written/sec from BW events (Phase 0b+, Task B5); null when no BW event in the last 30 s
@@ -194,7 +206,7 @@ consensusWeightFraction → relay fractional consensus weight (from Onionoo enri
 
 When `useControlPort=true`, `TorService.onStart()` creates an event subscription that:
 
-- Subscribes to `BW` (bandwidth) events via `SETEVENTS BW`
+- Subscribes to `BW` (bandwidth) events plus Tor's `WARN` and `ERR` log events via `SETEVENTS BW WARN ERR`
 - Parses `650 BW <bytes read> <bytes written>` async events (positional, one per second)
 - Updates instance fields `bwRead` and `bwWritten` for inclusion in next stats poll
 - If no BW event has arrived for 30 s (subscription failed at start or the socket dropped), stats report `bwRead`/`bwWritten` as `null` and the subscription is reopened in the background
@@ -230,6 +242,19 @@ The ControlPort path is now the primary polling source. To supplement ControlPor
 - The Onionoo path (ControlPort-less) remains unchanged, returning full Onionoo metrics
 
 Returns `StatsResult::ok()` with metrics map or `err(UnavailableError)` on connect failure.
+
+### MetricsPort (optional, both modes)
+
+When `metricsUrl` is set, every stats poll also `GET`s Tor's MetricsPort (Prometheus text, counters
+only) and adds:
+
+```
+overload          → every tor_relay_load_* counter, summed over labels, e.g. { "tor_relay_load_tcp_exhaustion_total": 0, … }
+metricsPortError  → null when read; otherwise why (non-2xx, with a MetricsPortPolicy hint on 403, or unreachable). Never fails the stats.
+```
+
+The exact counter names depend on the Tor version (unverified against a live relay). Tor needs
+`MetricsPort` and a `MetricsPortPolicy` that accepts the Watchman host.
 
 ### Onionoo API Mode
 

@@ -9,10 +9,7 @@ import { AlbyHubService } from "./AlbyHubService.js";
 import { createHttpClient } from "../../../infra/http/client.js";
 import type { AlbyHubInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
-import type {
-  HttpClient,
-  HttpResponse,
-} from "../../../infra/http/client.js";
+import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
 import { TimeoutError } from "../../../core/errors.js";
 
 function fakePing(): PingProber {
@@ -524,6 +521,47 @@ describe("AlbyHubService", () => {
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
     expect(unread()).toEqual([]);
+  });
+
+  it("NWC getStats reports a rejected (e.g. expired) token instead of silent nulls", async () => {
+    const { http } = trackingHttp((url) =>
+      url.endsWith("/api/info") ? 200 : 401
+    );
+    const svc = new AlbyHubService({
+      http,
+      ping: fakePing(),
+      config: makeConfig({ legacyProbe: false, token: "expired" }),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.tokenStatus).toBe("rejected");
+      expect(String(res.value.metrics.warning)).toContain("token rejected");
+      expect(res.value.metrics.balanceLightningSpendableMsat).toBeNull();
+    }
+  });
+
+  it("NWC getStats reports tokenStatus ok with a working token and none without", async () => {
+    state.nwcMode = true;
+    const withToken = new AlbyHubService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ legacyProbe: false, token: "nwc_tok" }),
+      now: () => 1,
+    });
+    const ok1 = await withToken.getStats(new AbortController().signal);
+    expect(ok1.ok && ok1.value.metrics.tokenStatus).toBe("ok");
+    expect(ok1.ok && "warning" in ok1.value.metrics).toBe(false);
+
+    const without = new AlbyHubService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ legacyProbe: false }),
+      now: () => 1,
+    });
+    const ok2 = await without.getStats(new AbortController().signal);
+    expect(ok2.ok && ok2.value.metrics.tokenStatus).toBe("none");
   });
 
   it("legacy probe reads every response body", async () => {

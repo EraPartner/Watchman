@@ -2,7 +2,7 @@
 title: Set up Alby Hub
 type: guide
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags: [guide, setup, services, albyhub, lightning, credentials, read-only]
 description: Create a read-only Alby Hub token and add the hub to Watchman
 aliases: [alby hub setup, set up alby hub]
@@ -37,8 +37,8 @@ Copy the token from the reply.
 
 - `permission: "readonly"` is what makes the token read-only. Don't leave it out.
 - The token expires after `tokenExpiryDays` (30 if left out), and stops working if you change the
-  unlock password. When it does, the wallet numbers disappear from the tile; repeat this step and
-  paste the new token.
+  unlock password. When it does, the tile turns amber and the stats show
+  `tokenStatus: rejected`; repeat this step and paste the new token.
 - Don't put the curl command in your shell history if the machine is shared (prefix it with a space
   in bash/zsh with `HISTCONTROL=ignorespace`, or type the password into a file).
 

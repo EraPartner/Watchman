@@ -2,6 +2,7 @@ import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
 import {
   dotGet,
+  fmtBool,
   fmtBytes,
   fmtNumber,
   fmtPercent,
@@ -11,6 +12,16 @@ import {
 } from "./formatters";
 
 type BitcoinStatsMetrics = Record<string, unknown>;
+
+const fmtAgo = (v: unknown): string => {
+  if (typeof v !== "number" || !Number.isFinite(v)) return "—";
+  if (v < 60) return `${Math.round(v)}s ago`;
+  if (v < 3_600) return `${Math.floor(v / 60)}m ago`;
+  return `${Math.floor(v / 3_600)}h ${Math.floor((v % 3_600) / 60)}m ago`;
+};
+
+const fmtList = (v: unknown): string =>
+  Array.isArray(v) ? (v.length === 0 ? "none" : v.join("; ")) : "—";
 
 export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
   kind: "bitcoin",
@@ -49,6 +60,11 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
         { key: "blockchainSize", label: "On-disk size", format: fmtBytes },
         { key: "difficulty", label: "Difficulty", format: fmtNumber(0) },
         { key: "networkHashPs", label: "Network H/s", format: fmtNumber(0) },
+        // seconds since the tip block's timestamp (block clocks are rough)
+        { key: "tipAgeSec", label: "Last block", format: fmtAgo },
+        { key: "forkTipsCount", label: "Fork tips", format: fmtNumber(0) },
+        { key: "pruned", label: "Pruned", format: fmtBool("yes", "no") },
+        { key: "warnings", label: "Node warnings", format: fmtList },
       ],
     },
     {
@@ -74,6 +90,16 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
         { key: "zmqBlockCount", label: "Blocks seen", format: fmtNumber(0) },
         // null (shown as "—") unless zmqRawtxEndpoint is configured
         { key: "zmqTxCount", label: "Txs seen", format: fmtNumber(0) },
+        {
+          key: "zmqBlocksMissed",
+          label: "Blocks missed",
+          format: fmtNumber(0),
+        },
+        {
+          key: "zmqStale",
+          label: "Delivery",
+          format: (v) => (v === true ? "silent" : v === false ? "ok" : "—"),
+        },
       ],
     },
     {
@@ -119,6 +145,8 @@ export const bitcoinRenderer: ServiceRenderer<BitcoinStatsMetrics> = {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
     if (dotGet(stats, "initialBlockDownload") === true) return "warn";
+    const warnings = dotGet(stats, "warnings");
+    if (Array.isArray(warnings) && warnings.length > 0) return "warn";
     const connections = dotGet(stats, "connections");
     if (typeof connections === "number" && connections <= 1) return "warn";
     return "ok";

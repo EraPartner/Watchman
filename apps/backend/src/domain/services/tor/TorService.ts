@@ -3,6 +3,7 @@ import {
   type HealthResult,
   type HostHealth,
   type PollPolicy,
+  type StatsMetricValue,
   type StatsResult,
 } from "../../BaseService.js";
 import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
@@ -267,7 +268,7 @@ export class TorService extends BaseService {
    */
   private async readMetricsPort(
     signal: AbortSignal
-  ): Promise<Record<string, unknown> | null> {
+  ): Promise<Record<string, StatsMetricValue> | null> {
     if (this.metricsUrl === "") return null;
     try {
       const res = await this.http.send({

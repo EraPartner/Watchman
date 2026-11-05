@@ -2,7 +2,7 @@
 title: Bitcoin Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -123,6 +123,27 @@ Extended stats **(BT1 — Bitcoin Extended Stats)**:
 
 Each value is converted from Bitcoin Core's BTC/kvB to sat/vB and is `null` when the node has insufficient mempool history to produce an estimate.
 
+**Node state from the same batch** (no extra RPC):
+
+| Metric              | Source                                                   | Notes |
+| ------------------- | -------------------------------------------------------- | ----- |
+| `tipAgeSec`         | `getblockchaininfo.time`, else `mediantime`               | Seconds since the tip block's timestamp; null when neither field exists. Block timestamps can be off by up to ~2 h, so this is a rough "is the node stuck" signal |
+| `pruned`, `pruneHeight` | `getblockchaininfo.pruned` / `pruneheight`            | `pruneHeight` null when not pruned |
+| `warnings`          | `getblockchaininfo.warnings` + `getnetworkinfo.warnings`  | De-duplicated list (string on older Core, array on newer); the tile turns amber when non-empty |
+| `reachableNetworks` | `getnetworkinfo.networks[].reachable`                     | e.g. `["ipv4","onion"]` |
+
+**Slow-lane extras** (separate batch, 10-minute ttlMemo): `getchaintips` and `getmemoryinfo`.
+They are kept out of the main batch because `rpcwhitelist` rejects a whole batch when one method is
+not allowed; if the extras batch fails, only these metrics are null and `extrasError` says why.
+
+| Metric              | Source                         | Notes |
+| ------------------- | ------------------------------ | ----- |
+| `chainTipsCount`    | `getchaintips`                 | All known tips |
+| `forkTipsCount`     | `getchaintips` (`status != "active"`) | Stale / fork / header-only tips |
+| `longestForkLength` | `getchaintips[].branchlen`      | Longest non-active branch |
+| `memoryLockedUsed`, `memoryLockedTotal` | `getmemoryinfo.locked` | Bytes |
+| `extrasError`       | —                              | null when the extras batch succeeded |
+
 All BT1 metrics are optional and graceful — if a Bitcoin node is older and doesn't support these RPCs, they default to safe zero/false values. No probe dependency; cached data on timeout.
 
 ## Real-Time Block Monitoring (BT2 — ZMQ Subscription)
@@ -161,6 +182,8 @@ When `zmqHashblockEndpoint` is configured, `getStats()` exposes these additional
 | `zmqBlockCount`    | number | Count of ZMQ `hashblock` events since service start           |
 | `zmqConnected`     | boolean | Whether the ZMQ subscription is running                      |
 | `zmqError`         | string \| null | Why the subscription failed to start (null when connected) |
+| `zmqBlocksMissed`  | number | `hashblock` messages lost, from gaps in ZMQ's per-topic sequence numbers (a lower number = node restart, new baseline) |
+| `zmqStale`         | boolean | RPC saw the tip advance more than 2 min ago and no `hashblock` arrived since. ZMQ `connect()` never fails for an endpoint nobody publishes on, so `zmqConnected` alone can't show this |
 
 When `zmqRawtxEndpoint` is configured, Watchman also subscribes to the `rawtx` topic. Each
 transaction notification is only counted; the transaction itself is not decoded or stored.
@@ -170,6 +193,7 @@ transaction notification is only counted; the transaction itself is not decoded 
 | `zmqTxCount`        | number \| null | Count of ZMQ `rawtx` events since service start; always present, `null` when `zmqRawtxEndpoint` is unset |
 | `zmqRawtxConnected` | boolean        | Whether the rawtx subscription is running (present only when `zmqRawtxEndpoint` is set) |
 | `zmqRawtxError`     | string \| null | Why the rawtx subscription failed to start (present only when `zmqRawtxEndpoint` is set) |
+| `zmqTxMissed`       | number         | `rawtx` messages lost, from sequence gaps (present only when `zmqRawtxEndpoint` is set) |
 
 When `zmqHashblockEndpoint` and `zmqRawtxEndpoint` are the same endpoint, Watchman opens one socket
 subscribed to both topics, so `zmqConnected`/`zmqError` and `zmqRawtxConnected`/`zmqRawtxError`

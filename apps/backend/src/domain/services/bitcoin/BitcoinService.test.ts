@@ -309,7 +309,8 @@ describe("BitcoinService", () => {
     });
     const health = await svc.checkHealth(new AbortController().signal);
     expect(health.ok && health.value.reachable).toBe(false);
-    if (health.ok) expect(health.value.message).toContain("Loading block index");
+    if (health.ok)
+      expect(health.value.message).toContain("Loading block index");
     const stats = await svc.getStats(new AbortController().signal);
     expect(!stats.ok && stats.error.message).toContain("Loading block index");
   });
@@ -427,7 +428,7 @@ describe("BitcoinService", () => {
     expect(state.calls).not.toContain("getpeerinfo");
   });
 
-  it("BT1 — getStats issues a single batched HTTP request", async () => {
+  it("BT1 — getStats issues one batched request per poll; extras ride a 10-min lane", async () => {
     const svc = new BitcoinService({
       http: createHttpClient(),
       ping: fakePing(),
@@ -436,7 +437,10 @@ describe("BitcoinService", () => {
     });
     const res = await svc.getStats(new AbortController().signal);
     expect(res.ok).toBe(true);
-    expect(state.requests).toBe(1);
+    // core batch + the separate getchaintips/getmemoryinfo batch
+    expect(state.requests).toBe(2);
+    await svc.getStats(new AbortController().signal);
+    expect(state.requests).toBe(3);
   });
 
   it("BT1 — getStats converts estimatesmartfee to sat/vB", async () => {
@@ -844,5 +848,212 @@ describe("BitcoinService — ZMQ (BT2)", () => {
     if (res.ok) {
       expect(res.value.metrics.zmqBlockCount).toBe(0);
     }
+  });
+
+  describe("tip age, warnings and slow-lane extras", () => {
+    it("reports tip age, pruning, reachable networks and the node's warnings", async () => {
+      state.responses["getblockchaininfo"] = {
+        ...(state.responses["getblockchaininfo"] as object),
+        time: 1_700_000_000,
+        mediantime: 1_699_999_000,
+        pruned: true,
+        pruneheight: 700_000,
+        warnings: ["This is a pre-release test build"],
+      };
+      state.responses["getnetworkinfo"] = {
+        ...(state.responses["getnetworkinfo"] as object),
+        networks: [
+          { name: "ipv4", reachable: true },
+          { name: "ipv6", reachable: false },
+          { name: "onion", reachable: true },
+        ],
+        warnings: "This is a pre-release test build",
+      };
+      const svc = new BitcoinService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig(),
+        now: () => 1_700_000_600_000,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics).toMatchObject({
+          tipAgeSec: 600,
+          pruned: true,
+          pruneHeight: 700_000,
+          reachableNetworks: ["ipv4", "onion"],
+          warnings: ["This is a pre-release test build"],
+        });
+      }
+    });
+
+    it("falls back to mediantime and reports null without either", async () => {
+      state.responses["getblockchaininfo"] = {
+        ...(state.responses["getblockchaininfo"] as object),
+        mediantime: 1_000,
+      };
+      const svc = new BitcoinService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig(),
+        now: () => 1_060_000,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok && res.value.metrics.tipAgeSec).toBe(60);
+
+      state.responses["getblockchaininfo"] = { chain: "main", blocks: 1 };
+      const svc2 = new BitcoinService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig(),
+        now: () => 1_060_000,
+      });
+      const res2 = await svc2.getStats(new AbortController().signal);
+      expect(res2.ok && res2.value.metrics.tipAgeSec).toBeNull();
+    });
+
+    it("summarizes chain tips and locked memory from the extras batch", async () => {
+      state.responses["getchaintips"] = [
+        { height: 850000, branchlen: 0, status: "active" },
+        { height: 849990, branchlen: 2, status: "valid-fork" },
+        { height: 849000, branchlen: 1, status: "valid-headers" },
+      ];
+      state.responses["getmemoryinfo"] = {
+        locked: { used: 1024, total: 65536 },
+      };
+      const svc = new BitcoinService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig(),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics).toMatchObject({
+          chainTipsCount: 3,
+          forkTipsCount: 2,
+          longestForkLength: 2,
+          memoryLockedUsed: 1024,
+          memoryLockedTotal: 65536,
+          extrasError: null,
+        });
+      }
+      expect(state.calls).toEqual(
+        expect.arrayContaining(["getchaintips", "getmemoryinfo"])
+      );
+    });
+
+    it("an rpcwhitelist that lacks the extras only blanks them, core stats stay", async () => {
+      // a fake that answers 403 for the extras batch only, like rpcwhitelist
+      const http = createHttpClient();
+      const svc = new BitcoinService({
+        http: {
+          send: async (req) => {
+            if (String(req.body).includes("getchaintips")) {
+              return {
+                status: 403,
+                headers: {},
+                text: async () => "",
+                json: async <T>() => ({}) as T,
+              };
+            }
+            return http.send(req);
+          },
+        },
+        ping: fakePing(),
+        config: makeConfig(),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.blocks).toBe(850000);
+        expect(res.value.metrics.chainTipsCount).toBeNull();
+        expect(String(res.value.metrics.extrasError)).toContain("rpcwhitelist");
+      }
+    });
+  });
+
+  describe("ZMQ delivery checks", () => {
+    it("counts hashblock messages missed from gaps in the sequence numbers", async () => {
+      const zmq = makeFakeZmq();
+      const svc = new BitcoinService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
+        now: () => 0,
+        zmqConnect: zmq.connect,
+      });
+      await svc.onStart();
+      zmq.emit(hashblockMsg("aa".repeat(32), 5));
+      zmq.emit(hashblockMsg("bb".repeat(32), 6));
+      zmq.emit(hashblockMsg("cc".repeat(32), 9)); // 7 and 8 lost
+      zmq.emit(hashblockMsg("dd".repeat(32), 0)); // node restarted: new baseline
+      zmq.emit(hashblockMsg("ee".repeat(32), 1));
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok && res.value.metrics.zmqBlocksMissed).toBe(2);
+      await svc.onStop();
+    });
+
+    it("flags ZMQ stale when RPC sees new blocks but no hashblock arrives", async () => {
+      let tick = 0;
+      const zmq = makeFakeZmq();
+      const svc = new BitcoinService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
+        now: () => tick,
+        zmqConnect: zmq.connect,
+      });
+      await svc.onStart();
+      const chain = state.responses["getblockchaininfo"] as Record<
+        string,
+        unknown
+      >;
+      const stats = () => svc.getStats(new AbortController().signal);
+
+      await stats(); // baseline height 850000
+      state.responses["getblockchaininfo"] = { ...chain, blocks: 850001 };
+      tick = 10_000;
+      const first = await stats();
+      // inside the grace period: not yet stale
+      expect(first.ok && first.value.metrics.zmqStale).toBe(false);
+
+      tick = 10_000 + 3 * 60 * 1000;
+      const later = await stats();
+      expect(later.ok && later.value.metrics.zmqStale).toBe(true);
+
+      // the hashblock finally arrives: no longer stale
+      zmq.emit(hashblockMsg("ab".repeat(32), 1));
+      const recovered = await stats();
+      expect(recovered.ok && recovered.value.metrics.zmqStale).toBe(false);
+      await svc.onStop();
+    });
+
+    it("is not stale when ZMQ delivered the block before the poll", async () => {
+      let tick = 0;
+      const zmq = makeFakeZmq();
+      const svc = new BitcoinService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
+        now: () => tick,
+        zmqConnect: zmq.connect,
+      });
+      await svc.onStart();
+      const chain = state.responses["getblockchaininfo"] as Record<
+        string,
+        unknown
+      >;
+      await svc.getStats(new AbortController().signal);
+      zmq.emit(hashblockMsg("ab".repeat(32), 1));
+      state.responses["getblockchaininfo"] = { ...chain, blocks: 850001 };
+      tick = 10 * 60 * 1000;
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok && res.value.metrics.zmqStale).toBe(false);
+      await svc.onStop();
+    });
   });
 });

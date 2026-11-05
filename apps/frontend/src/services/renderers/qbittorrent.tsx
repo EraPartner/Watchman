@@ -196,6 +196,12 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
         { key: "torrentsSeeding", label: "Seeding", format: fmtNumber(0) },
         { key: "torrentsPaused", label: "Paused", format: fmtNumber(0) },
         { key: "torrentsCompleted", label: "Completed", format: fmtNumber(0) },
+        {
+          key: "torrentsNoWorkingTracker",
+          label: "No working tracker",
+          format: fmtNumber(0),
+        },
+        { key: "categoryCount", label: "Categories", format: fmtNumber(0) },
       ],
     },
     {
@@ -204,6 +210,11 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
         { key: "connectionStatus", label: "Connection", format: fmtRaw },
         { key: "freeSpaceOnDisk", label: "Free space", format: fmtBytes },
         { key: "dhtNodes", label: "DHT nodes", format: fmtNumber(0) },
+        {
+          key: "peerConnections",
+          label: "Peer connections",
+          format: fmtNumber(0),
+        },
         { key: "listenPort", label: "Port", format: fmtRaw },
         { key: "version", label: "Version", format: fmtRaw },
         { key: "ratio", label: "Ratio", format: fmtRaw },

@@ -2,7 +2,7 @@
 title: Set up Bitcoin Core
 type: guide
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags: [guide, setup, services, bitcoin, rpc, zmq, credentials, read-only, rpcwhitelist]
 description: Create a whitelisted read-only RPC user in Bitcoin Core and add the node to Watchman
 aliases: [bitcoin setup, set up bitcoin core, bitcoin rpc user]
@@ -19,7 +19,8 @@ aliases: [bitcoin setup, set up bitcoin core, bitcoin rpc user]
 The full list of RPC methods Watchman calls:
 
 `getblockchaininfo`, `getnetworkinfo`, `getmempoolinfo`, `uptime`, `getnettotals`,
-`getmininginfo`, `getindexinfo`, `estimatesmartfee`, `getzmqnotifications`
+`getmininginfo`, `getindexinfo`, `estimatesmartfee`, `getzmqnotifications`, plus `getchaintips`
+and `getmemoryinfo` every 10 minutes in a separate batch
 
 ## 1. Create a whitelisted RPC user
 
@@ -36,11 +37,15 @@ makes this user effectively read-only.
    ```ini
    server=1
    rpcauth=watchman:<salt>$<hash>
-   rpcwhitelist=watchman:getblockchaininfo,getnetworkinfo,getmempoolinfo,uptime,getnettotals,getmininginfo,getindexinfo,estimatesmartfee,getzmqnotifications
+   rpcwhitelist=watchman:getblockchaininfo,getnetworkinfo,getmempoolinfo,uptime,getnettotals,getmininginfo,getindexinfo,estimatesmartfee,getzmqnotifications,getchaintips,getmemoryinfo
    rpcwhitelistdefault=0
    ```
    `rpcwhitelistdefault=0` matters: without it, setting any whitelist locks every *other* RPC user
    (including the cookie user that `bitcoin-cli` uses) out of all methods.
+
+   Watchman asks for `getchaintips` and `getmemoryinfo` in their own batch. If an older whitelist
+   lacks them, only the fork-tip and memory numbers stay empty (the stats show `extrasError`);
+   everything else keeps working. Add the two methods to fill them in.
 3. If Watchman runs on a different machine than the node, also let the RPC server listen on the
    LAN and accept only the Watchman host:
    ```ini
