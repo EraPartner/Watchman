@@ -101,8 +101,16 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
         required: true,
         default: "http://127.0.0.1:5001",
       },
+      {
+        name: "apiAuth",
+        label: "API auth",
+        type: "password",
+        secret: true,
+        placeholder: "bearer:<token>",
+        help: "Only for a node with API.Authorizations: the AuthSecret, e.g. bearer:<token> or basic:<user>:<password>. Limit its AllowedPaths to the read endpoints Watchman uses (see the IPFS setup guide).",
+      },
     ]),
-    secretFields: [],
+    secretFields: ["apiAuth"],
   },
   router: {
     kind: "router",

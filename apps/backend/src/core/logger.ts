@@ -19,6 +19,7 @@ export const REDACTED_LOG_KEYS = [
   "authHeader",
   "authToken",
   "rpcPassword",
+  "apiAuth",
   "controlPassword",
   "dsmPassword",
   "applicationKey",

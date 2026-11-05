@@ -9,9 +9,11 @@ import type { HttpClient } from "../../../infra/http/client.js";
 import { ok, err } from "../../../core/result.js";
 import {
   UnavailableError,
+  UnauthorizedError,
   TimeoutError,
   isDomainError,
 } from "../../../core/errors.js";
+import { sumPrometheusSamples } from "../../../core/prometheusText.js";
 import { ttlMemo, type TtlMemo } from "../../../core/ttlMemo.js";
 import type { IpfsInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
@@ -63,7 +65,17 @@ interface BitswapStat {
 
 interface RepoStat {
   RepoSize?: number;
+  /** Datastore.StorageMax in bytes (Kubo reports it with size-only too) */
+  StorageMax?: number;
   NumObjects?: number;
+}
+
+/** Values Watchman reads from Kubo's own Prometheus endpoint. */
+interface KuboPromStats {
+  /** Go heap bytes in use (go_memstats_alloc_bytes) */
+  goAllocBytes: number | null;
+  /** DHT provide count: legacy reprovider or sweep provider counter */
+  providesTotal: number | null;
 }
 
 // pin/ls returns the full pin list (large on big pin sets) and stats/dht
@@ -85,6 +97,7 @@ export class IpfsService extends BaseService {
   private readonly pinLsMemo: TtlMemo<PinLs>;
   private readonly dhtMemo: TtlMemo<DhtEntry[]>;
   private readonly repoObjectsMemo: TtlMemo<RepoStat>;
+  private readonly authHeader: string | undefined;
 
   constructor(deps: IpfsDeps) {
     super();
@@ -96,6 +109,7 @@ export class IpfsService extends BaseService {
     this.pinger = deps.ping;
     this.pingHost = new URL(deps.config.apiUrl).hostname;
     this.now = deps.now;
+    this.authHeader = kuboAuthHeader(deps.config.apiAuth);
     this.pinLsMemo = ttlMemo(SLOW_LANE_TTL_MS, deps.now, (signal) =>
       this.post<PinLs>("/api/v0/pin/ls?type=recursive&quiet=true", signal)
     );
@@ -144,6 +158,7 @@ export class IpfsService extends BaseService {
         pinLs,
         listenAddrs,
         repoObjects,
+        prom,
       ] = await Promise.all([
         this.post<{ Version?: string }>("/api/v0/version", signal),
         this.post<{ ID?: string; Addresses?: string[] }>("/api/v0/id", signal),
@@ -172,6 +187,7 @@ export class IpfsService extends BaseService {
           (): SwarmAddrsListen | null => null
         ),
         this.repoObjectsMemo(signal).catch((): RepoStat | null => null),
+        this.fetchPrometheus(signal).catch((): KuboPromStats | null => null),
       ]);
 
       const peersCount = Array.isArray(peers)
@@ -190,9 +206,19 @@ export class IpfsService extends BaseService {
       );
       const pinnedCount = pinLs?.Keys ? Object.keys(pinLs.Keys).length : null;
       const listenAddrCount = listenAddrs?.Strings?.length ?? null;
+      // diag/sys has no Go heap figure in current Kubo; the Prometheus
+      // endpoint does (go_memstats_alloc_bytes). MemoryAlloc stays a fallback.
+      const memAllocBytes = prom?.goAllocBytes ?? diagSys?.MemoryAlloc ?? null;
       const memAllocMb =
-        diagSys?.MemoryAlloc != null
-          ? Math.round(diagSys.MemoryAlloc / 1_048_576)
+        memAllocBytes != null ? Math.round(memAllocBytes / 1_048_576) : null;
+      const repoSize = repo?.RepoSize ?? null;
+      const storageMax =
+        typeof repo?.StorageMax === "number" && repo.StorageMax > 0
+          ? repo.StorageMax
+          : null;
+      const storageUsedPercent =
+        repoSize !== null && storageMax !== null
+          ? Math.round((repoSize / storageMax) * 1000) / 10
           : null;
       const sysMemUsedMb =
         typeof diagSys?.memory?.virt === "number"
@@ -206,7 +232,9 @@ export class IpfsService extends BaseService {
           nodeId: id.ID ?? null,
           addressCount: id.Addresses?.length ?? 0,
           peers: peersCount,
-          repoSize: repo?.RepoSize ?? null,
+          repoSize,
+          storageMax,
+          storageUsedPercent,
           numObjects: repoObjects?.NumObjects ?? null,
           bwTotalIn: bw?.TotalIn ?? null,
           bwTotalOut: bw?.TotalOut ?? null,
@@ -226,6 +254,7 @@ export class IpfsService extends BaseService {
           bitswapDataSent: bitswap?.DataSent ?? null,
           bitswapDupBlocks: bitswap?.DupBlksReceived ?? null,
           bitswapWantlistCount: bitswap?.Wantlist?.length ?? null,
+          providesTotal: prom?.providesTotal ?? null,
         },
       });
     } catch (e) {
@@ -251,12 +280,49 @@ export class IpfsService extends BaseService {
     }
   }
 
+  private headers(): Record<string, string> {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    if (this.authHeader) headers["authorization"] = this.authHeader;
+    return headers;
+  }
+
+  /**
+   * Kubo's Prometheus endpoint on the RPC port (GET, read-only). A node with
+   * API.Authorizations needs "/debug/metrics/prometheus" in AllowedPaths.
+   */
+  private async fetchPrometheus(signal: AbortSignal): Promise<KuboPromStats> {
+    const path = "/debug/metrics/prometheus";
+    const res = await this.http.send({
+      url: `${this.baseUrl}${path}`,
+      method: "GET",
+      headers: this.authHeader ? { authorization: this.authHeader } : {},
+      signal,
+      timeoutMs: this.timeoutMs,
+    });
+    if (res.status < 200 || res.status >= 300) {
+      await res.text().catch(() => "");
+      throw new UnavailableError(`ipfs ${path} returned ${res.status}`);
+    }
+    const samples = sumPrometheusSamples(await res.text());
+    const legacy = samples.get("provider_reprovider_provide_count");
+    const sweep = samples.get("provider_provides_total");
+    return {
+      goAllocBytes: samples.get("go_memstats_alloc_bytes") ?? null,
+      providesTotal:
+        legacy !== undefined || sweep !== undefined
+          ? (legacy ?? 0) + (sweep ?? 0)
+          : null,
+    };
+  }
+
   // Kubo's RPC is POST-only since 0.5 — a GET would just earn a 405.
   private async post<T>(path: string, signal: AbortSignal): Promise<T> {
     const res = await this.http.send({
       url: `${this.baseUrl}${path}`,
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: this.headers(),
       body: "",
       signal,
       timeoutMs: this.timeoutMs,
@@ -269,11 +335,12 @@ export class IpfsService extends BaseService {
     const res = await this.http.send({
       url: `${this.baseUrl}${path}`,
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: this.headers(),
       body: "",
       signal,
       timeoutMs: this.timeoutMs,
     });
+    await throwIfAuthRejected(res, path);
     if (res.status < 200 || res.status >= 300) {
       const text = await res.text().catch(() => "");
       throw new UnavailableError(
@@ -292,6 +359,7 @@ export class IpfsService extends BaseService {
     res: { status: number; text: () => Promise<string> },
     path: string
   ): Promise<T> {
+    await throwIfAuthRejected(res, path);
     if (res.status < 200 || res.status >= 300) {
       const text = await res.text().catch(() => "");
       throw new UnavailableError(
@@ -305,4 +373,36 @@ export class IpfsService extends BaseService {
       return text as unknown as T;
     }
   }
+}
+
+/**
+ * Authorization header from the apiAuth field, in Kubo's own `--api-auth` /
+ * AuthSecret notation: "basic:<user>:<password>" or "bearer:<token>". A value
+ * without a scheme prefix is sent as a bearer token. Empty = no header.
+ */
+export function kuboAuthHeader(apiAuth: string): string | undefined {
+  const value = apiAuth.trim();
+  if (value === "") return undefined;
+  const lower = value.toLowerCase();
+  if (lower.startsWith("basic:")) {
+    const userPass = value.slice("basic:".length);
+    return `Basic ${Buffer.from(userPass).toString("base64")}`;
+  }
+  if (lower.startsWith("bearer:")) {
+    return `Bearer ${value.slice("bearer:".length)}`;
+  }
+  return `Bearer ${value}`;
+}
+
+/** 401/403 from Kubo means the RPC wants (other) credentials: report it as an
+ *  auth problem rather than the node being down. */
+async function throwIfAuthRejected(
+  res: { status: number; text: () => Promise<string> },
+  path: string
+): Promise<void> {
+  if (res.status !== 401 && res.status !== 403) return;
+  await res.text().catch(() => "");
+  throw new UnauthorizedError(
+    `ipfs ${path} returned ${res.status}: set API auth to a Kubo API.Authorizations secret that allows this path`
+  );
 }

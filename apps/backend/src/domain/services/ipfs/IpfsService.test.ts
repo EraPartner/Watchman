@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createServer, type Server } from "node:http";
-import { IpfsService } from "./IpfsService.js";
+import { IpfsService, kuboAuthHeader } from "./IpfsService.js";
 import { createHttpClient } from "../../../infra/http/client.js";
 import type { IpfsInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
@@ -19,7 +19,19 @@ let state: {
   dhtCalls: number;
   pinLsUrl: string;
   repoStatUrls: string[];
+  /** Authorization header the fake Kubo requires (null = open RPC) */
+  requireAuth: string | null;
+  authHeaders: Array<string | undefined>;
+  promMethods: string[];
 };
+
+const PROM_TEXT = [
+  "# HELP go_memstats_alloc_bytes Number of bytes allocated and still in use.",
+  "# TYPE go_memstats_alloc_bytes gauge",
+  "go_memstats_alloc_bytes 3.145728e+07",
+  "# TYPE provider_reprovider_provide_count counter",
+  "provider_reprovider_provide_count 120",
+].join("\n");
 
 // Kubo stats/dht shape: one object per table, peers grouped by bucket
 const DHT_NDJSON = [
@@ -41,6 +53,27 @@ beforeAll(
     new Promise<void>((resolve) => {
       server = createServer((req, res) => {
         const url = req.url ?? "";
+        state.authHeaders.push(req.headers.authorization);
+        if (
+          state.requireAuth !== null &&
+          req.headers.authorization !== state.requireAuth
+        ) {
+          res.writeHead(401);
+          res.end("Unauthorized");
+          return;
+        }
+        if (url === "/debug/metrics/prometheus") {
+          state.promMethods.push(req.method ?? "");
+          if (state.failOptional) {
+            res.writeHead(500);
+            res.end();
+            return;
+          }
+          res.setHeader("content-type", "text/plain; version=0.0.4");
+          res.writeHead(200);
+          res.end(PROM_TEXT);
+          return;
+        }
         state.methods.push(req.method ?? "");
 
         if (state.failMode === "down") {
@@ -87,7 +120,9 @@ beforeAll(
         } else if (url.startsWith("/api/v0/repo/stat")) {
           state.repoStatUrls.push(url);
           res.writeHead(200);
-          res.end(JSON.stringify({ RepoSize: 1234, NumObjects: 42 }));
+          res.end(
+            JSON.stringify({ RepoSize: 1234, StorageMax: 10_000, NumObjects: 42 })
+          );
         } else if (url.startsWith("/api/v0/stats/bw")) {
           res.writeHead(200);
           res.end(
@@ -167,7 +202,7 @@ afterAll(
 );
 
 beforeEach(() => {
-  state = { failMode: "none", failOptional: false, methods: [], pinLsCalls: 0, dhtCalls: 0, pinLsUrl: "", repoStatUrls: [] };
+  state = { failMode: "none", failOptional: false, methods: [], pinLsCalls: 0, dhtCalls: 0, pinLsUrl: "", repoStatUrls: [], requireAuth: null, authHeaders: [], promMethods: [] };
 });
 
 function makeConfig(overrides: Partial<IpfsInstance> = {}): IpfsInstance {
@@ -179,6 +214,7 @@ function makeConfig(overrides: Partial<IpfsInstance> = {}): IpfsInstance {
     cacheTtlMs: 10_000,
     timeoutMs: 2_000,
     apiUrl: `http://127.0.0.1:${port}`,
+    apiAuth: "",
     ...overrides,
   };
 }
@@ -415,5 +451,98 @@ describe("IpfsService", () => {
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.reachable).toBe(false);
+  });
+
+  it("issues only POST to the RPC and GET to the Prometheus endpoint", async () => {
+    const svc = new IpfsService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 0,
+    });
+    await svc.getStats(new AbortController().signal);
+    expect(state.promMethods).toEqual(["GET"]);
+  });
+
+  it("reads Go heap and provide count from Kubo's Prometheus endpoint", async () => {
+    const svc = new IpfsService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // regression: memAllocMb was always null because diag/sys has no
+      // MemoryAlloc key in current Kubo
+      expect(res.value.metrics.memAllocMb).toBe(30);
+      expect(res.value.metrics.providesTotal).toBe(120);
+    }
+  });
+
+  it("reports repo usage against Datastore.StorageMax", async () => {
+    const svc = new IpfsService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.metrics.storageMax).toBe(10_000);
+      expect(res.value.metrics.storageUsedPercent).toBe(12.3);
+    }
+  });
+
+  it("sends no Authorization header when apiAuth is empty", async () => {
+    const svc = new IpfsService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => 1,
+    });
+    await svc.getStats(new AbortController().signal);
+    expect(state.authHeaders.every((h) => h === undefined)).toBe(true);
+  });
+
+  it("sends the configured bearer secret on every request", async () => {
+    state.requireAuth = "Bearer s3cret";
+    const svc = new IpfsService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ apiAuth: "bearer:s3cret" }),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.metrics.version).toBe("0.28.0");
+    expect(state.authHeaders.every((h) => h === "Bearer s3cret")).toBe(true);
+  });
+
+  it("reports a rejected secret as an auth error, not as the node being down", async () => {
+    state.requireAuth = "Bearer right";
+    const svc = new IpfsService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ apiAuth: "wrong" }),
+      now: () => 1,
+    });
+    const stats = await svc.getStats(new AbortController().signal);
+    expect(stats.ok).toBe(false);
+    if (!stats.ok) expect(stats.error.code).toBe("UNAUTHORIZED");
+  });
+});
+
+describe("kuboAuthHeader", () => {
+  it("maps Kubo's --api-auth notation to an Authorization header", () => {
+    expect(kuboAuthHeader("")).toBeUndefined();
+    expect(kuboAuthHeader("  ")).toBeUndefined();
+    expect(kuboAuthHeader("bearer:abc")).toBe("Bearer abc");
+    expect(kuboAuthHeader("abc")).toBe("Bearer abc");
+    expect(kuboAuthHeader("basic:user:pa:ss")).toBe(
+      `Basic ${Buffer.from("user:pa:ss").toString("base64")}`
+    );
   });
 });

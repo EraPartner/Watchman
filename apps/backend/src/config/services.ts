@@ -42,6 +42,9 @@ const CertSha256Schema = z
 export const IpfsInstanceSchema = BaseInstanceSchema.extend({
   kind: z.literal("ipfs"),
   apiUrl: z.string().url().default("http://127.0.0.1:5001"),
+  /** Kubo RPC secret in --api-auth notation ("bearer:<token>" or
+   *  "basic:<user>:<password>"), for nodes with API.Authorizations. */
+  apiAuth: z.string().default(""),
 });
 
 export const RouterInstanceSchema = BaseInstanceSchema.extend({
@@ -177,9 +180,17 @@ export const TorInstanceSchema = BaseInstanceSchema.extend({
   host: z.string().default("127.0.0.1"),
   pingCount: z.number().int().positive().default(1),
   controlPort: z.number().int().min(1).max(65535).default(9051),
-  controlPassword: z.string().default(""),
+  // CR/LF would end the AUTHENTICATE line and let the rest run as a second
+  // control command, so they are never valid here
+  controlPassword: z
+    .string()
+    .regex(/^[^\r\n]*$/, "must not contain line breaks")
+    .default(""),
   cookieAuthFile: z.string().default(""),
   useControlPort: z.boolean().default(false),
+  /** Optional Tor MetricsPort URL (read-only Prometheus counters), e.g.
+   *  http://127.0.0.1:9035/metrics. Empty = not used. */
+  metricsUrl: z.union([z.literal(""), z.string().url()]).default(""),
 });
 
 export const ServiceInstanceSchema = z.discriminatedUnion("kind", [
