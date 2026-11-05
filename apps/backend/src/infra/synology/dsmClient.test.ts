@@ -12,6 +12,7 @@ import {
   UnavailableError,
   ValidationError,
 } from "../../core/errors.js";
+import { required } from "../../test/required.js";
 
 interface DsmEnvelope {
   success: boolean;
@@ -73,7 +74,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
 
     // First-call errors (consumed on use)
     if (key in state.firstCallErrors) {
-      const code = state.firstCallErrors[key]!;
+      const code = required(state.firstCallErrors[key]);
       delete state.firstCallErrors[key];
       const envelope: DsmEnvelope = { success: false, error: { code } };
       res.writeHead(200, { "content-type": "application/json" });
@@ -83,7 +84,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
 
     // Persistent errors
     if (key in state.persistentErrors) {
-      const code = state.persistentErrors[key]!;
+      const code = required(state.persistentErrors[key]);
       const envelope: DsmEnvelope = { success: false, error: { code } };
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(envelope));

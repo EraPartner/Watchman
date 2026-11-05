@@ -6,6 +6,7 @@ import { HandshakeLimiter } from "./HandshakeLimiter.js";
 import { Broadcaster } from "./Broadcaster.js";
 import { createEventBus } from "../../core/eventBus.js";
 import { WS_OPEN, type WsClient } from "./types.js";
+import { required } from "../../test/required.js";
 
 interface FakeWsOpts {
   readyState?: number;
@@ -299,7 +300,7 @@ describe("Broadcaster", () => {
     const sent = bc.alert("info", "hi");
     expect(sent).toBe(2);
     expect(a.sent.length).toBe(1);
-    expect(JSON.parse(a.sent[0]!)).toMatchObject({
+    expect(JSON.parse(required(a.sent[0]))).toMatchObject({
       type: "alert",
       level: "info",
       message: "hi",
@@ -333,7 +334,7 @@ describe("Broadcaster", () => {
       at: 123,
     });
     expect(a.sent.length).toBe(1);
-    const msg = JSON.parse(a.sent[0]!);
+    const msg = JSON.parse(required(a.sent[0]));
     expect(msg).toMatchObject({
       type: "service_update",
       scope: "health",
@@ -369,7 +370,7 @@ describe("Broadcaster", () => {
       at: 123,
       snapshot: snap,
     });
-    const msg = JSON.parse(a.sent[0]!);
+    const msg = JSON.parse(required(a.sent[0]));
     expect(msg.snapshot).toMatchObject(snap);
     bc.stop();
   });
@@ -387,7 +388,7 @@ describe("Broadcaster", () => {
       instanceId: "main",
       at: 123,
     });
-    const msg = JSON.parse(a.sent[0]!);
+    const msg = JSON.parse(required(a.sent[0]));
     expect("snapshot" in msg).toBe(false);
     bc.stop();
   });
@@ -407,7 +408,7 @@ describe("Broadcaster", () => {
       at: 456,
       snapshot: snap,
     });
-    const msg = JSON.parse(a.sent[0]!);
+    const msg = JSON.parse(required(a.sent[0]));
     expect(msg.snapshot).toMatchObject(snap);
     bc.stop();
   });
@@ -449,19 +450,19 @@ describe("Broadcaster", () => {
     });
 
     expect(a.sent.length).toBe(3);
-    expect(JSON.parse(a.sent[0]!)).toMatchObject({
+    expect(JSON.parse(required(a.sent[0]))).toMatchObject({
       type: "service_config_changed",
       kind: "bitcoin",
       instanceId: "main",
       action: "created",
     });
-    expect(JSON.parse(a.sent[1]!)).toMatchObject({
+    expect(JSON.parse(required(a.sent[1]))).toMatchObject({
       type: "service_config_changed",
       kind: "bitcoin",
       instanceId: "main2",
       action: "updated",
     });
-    expect(JSON.parse(a.sent[2]!)).toMatchObject({
+    expect(JSON.parse(required(a.sent[2]))).toMatchObject({
       type: "service_config_changed",
       kind: "bitcoin",
       instanceId: "main2",
@@ -556,7 +557,7 @@ describe("Broadcaster", () => {
       now: () => 0,
     });
     bc.welcome(a, "1.2.3");
-    expect(JSON.parse(a.sent[0]!)).toMatchObject({
+    expect(JSON.parse(required(a.sent[0]))).toMatchObject({
       type: "connection",
       serverVersion: "1.2.3",
     });

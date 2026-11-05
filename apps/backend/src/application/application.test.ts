@@ -6,6 +6,7 @@ import { UnavailableError } from '../core/errors.js';
 import { GetServiceStatus } from './GetServiceStatus.js';
 import { GetAggregatedHealth } from './GetAggregatedHealth.js';
 import { ListInstances } from './ListInstances.js';
+import { required } from "../test/required.js";
 
 class FakeSvc extends BaseService {
   readonly kind: string;
@@ -57,8 +58,8 @@ describe('GetAggregatedHealth', () => {
     const uc = new GetAggregatedHealth(r);
     const out = await uc.run(s());
     expect(out).toHaveLength(2);
-    expect(out[0]!.result.ok).toBe(true);
-    expect(out[1]!.result.ok).toBe(false);
+    expect(required(out[0]).result.ok).toBe(true);
+    expect(required(out[1]).result.ok).toBe(false);
   });
 });
 

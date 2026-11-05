@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { createTorManager, type TorConfig, type FsLike, type Clock, type SpawnLike } from './torManager.js';
 import type { TcpProber } from '../net/tcpProbe.js';
 import type { Logger } from '../../core/logger.js';
+import { required } from "../../test/required.js";
 
 function fakeLogger(): Logger {
   const noop = () => undefined;
@@ -127,7 +128,7 @@ describe('torManager', () => {
     const p = await mgr.createTorConfig();
     expect(p).toBe('/tmp/tor-data/torrc');
     expect(fs.writes).toHaveLength(1);
-    const [, content] = fs.writes[0]!;
+    const [, content] = required(fs.writes[0]);
     expect(content).toContain('SocksPort 9050');
     expect(content).toContain('ControlPort 9051');
     expect(content).toContain('DataDirectory /tmp/tor-data');

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createMetricsRegistry } from './metrics.js';
 import { createBreaker } from '../infra/circuitBreaker/breaker.js';
 import { systemClock } from './clock.js';
+import { required } from "../test/required.js";
 
 describe('MetricsRegistry', () => {
   it('snapshots registered breakers', () => {
@@ -10,7 +11,7 @@ describe('MetricsRegistry', () => {
     reg.registerBreaker(b);
     const snap = reg.snapshot();
     expect(snap.breakers.bitcoin).toBeDefined();
-    expect(snap.breakers.bitcoin!.state).toBe('closed');
+    expect(required(snap.breakers.bitcoin).state).toBe('closed');
   });
 
   it('includes poller stats when set', () => {

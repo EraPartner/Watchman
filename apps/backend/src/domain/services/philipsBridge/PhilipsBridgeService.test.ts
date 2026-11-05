@@ -4,6 +4,7 @@ import type { PingProber, PingResult } from "../../../infra/net/pingProbe.js";
 import type { PhilipsBridgeInstance } from "../../../config/services.js";
 import type { HttpClient, HttpRequest } from "../../../infra/http/client.js";
 import { UnauthorizedError } from "../../../core/errors.js";
+import { required } from "../../../test/required.js";
 
 function makeConfig(
   overrides: Partial<PhilipsBridgeInstance> = {}
@@ -202,7 +203,7 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
     await svc.getStats(new AbortController().signal);
     const calls = vi.mocked(http.send).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
-    const headers = calls[0]![0].headers ?? {};
+    const headers = required(calls[0])[0].headers ?? {};
     expect(headers["hue-application-key"]).toBe("test-app-key");
   });
 
@@ -215,7 +216,7 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
       now: () => 0,
     });
     await svc.getStats(new AbortController().signal);
-    const url = vi.mocked(http.send).mock.calls[0]![0].url;
+    const url = required(vi.mocked(http.send).mock.calls[0])[0].url;
     expect(url).toContain("/clip/v2/resource/light");
   });
 
@@ -261,7 +262,7 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
       now: () => t,
     });
     const res = await svc.checkHealth(new AbortController().signal);
-    const url = vi.mocked(http.send).mock.calls[0]![0].url;
+    const url = required(vi.mocked(http.send).mock.calls[0])[0].url;
     expect(url).toContain("/clip/v2/resource/bridge");
     expect(bodyRead).toBe(true);
     expect(res.ok && res.value.latencyMs).toBe(40);

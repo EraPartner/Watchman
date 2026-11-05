@@ -18,6 +18,7 @@ import type { ConfigStore } from "../../config/store/ConfigStore.js";
 import type { ServiceLifecycle } from "../../application/ServiceLifecycle.js";
 import type { HttpClient } from "../../infra/http/client.js";
 import { SERVER_VERSION } from "../../version.js";
+import { required } from "../../test/required.js";
 
 class FakeSvc extends BaseService {
   readonly kind: string;
@@ -108,7 +109,7 @@ describe("http routes", () => {
     const body = res.json() as {
       data: Array<{ result: { ok: boolean; error?: unknown } }>;
     };
-    expect(body.data[0]!.result).toEqual({
+    expect(required(body.data[0]).result).toEqual({
       ok: false,
       error: { code: "UNAVAILABLE", message: "down" },
     });

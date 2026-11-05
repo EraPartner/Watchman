@@ -184,7 +184,7 @@ export class SynologyService extends BaseService {
       },
       async (sig) => {
         if (!this.credentialsReady && this.dsm) {
-          return this.probeDsm(sig);
+          return this.probeDsm(this.dsm, sig);
         }
         if (!this.credentialsReady) {
           return {
@@ -229,7 +229,7 @@ export class SynologyService extends BaseService {
 
   /** DSM-only mode (no SNMPv3 credentials): DSM is the only data source, so it
    *  defines health. SYNO.DSM.Info getinfo is the same read getStats makes. */
-  private async probeDsm(sig: AbortSignal): Promise<{
+  private async probeDsm(dsm: DsmClient, sig: AbortSignal): Promise<{
     reachable: boolean;
     latencyMs?: number;
     message?: string;
@@ -237,7 +237,7 @@ export class SynologyService extends BaseService {
   }> {
     const started = this.now();
     try {
-      const info = await this.dsm!.call<DsmInfoData>(
+      const info = await dsm.call<DsmInfoData>(
         "SYNO.DSM.Info",
         1,
         "getinfo",

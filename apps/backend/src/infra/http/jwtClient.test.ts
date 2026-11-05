@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createJwtClient } from './jwtClient.js';
 import type { HttpClient, HttpRequest, HttpResponse } from './client.js';
+import { required } from "../../test/required.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ describe('createJwtClient', () => {
 
     await client.send({ url: 'http://example.com/api', method: 'GET' });
 
-    const req = vi.mocked(inner.send).mock.calls[0]![0];
+    const req = required(vi.mocked(inner.send).mock.calls[0])[0];
     expect(req.headers?.['authorization']).toBe('Bearer initial-token');
   });
 
@@ -61,8 +62,8 @@ describe('createJwtClient', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
 
     const [firstReq, secondReq] = vi.mocked(inner.send).mock.calls;
-    expect(firstReq![0].headers?.['authorization']).toBe('Bearer stale');
-    expect(secondReq![0].headers?.['authorization']).toBe('Bearer refreshed-token');
+    expect(required(firstReq)[0].headers?.['authorization']).toBe('Bearer stale');
+    expect(required(secondReq)[0].headers?.['authorization']).toBe('Bearer refreshed-token');
   });
 
   it('consumes the discarded 401 body before retrying', async () => {
@@ -110,9 +111,9 @@ describe('createJwtClient', () => {
       client.send({ url: 'http://x.com/3', method: 'GET' }),
     ]);
 
-    expect(r1!.status).toBe(200);
-    expect(r2!.status).toBe(200);
-    expect(r3!.status).toBe(200);
+    expect(required(r1).status).toBe(200);
+    expect(required(r2).status).toBe(200);
+    expect(required(r3).status).toBe(200);
     // Only ONE refresh call despite three concurrent 401s
     expect(refresh).toHaveBeenCalledTimes(1);
   });
@@ -140,7 +141,7 @@ describe('createJwtClient', () => {
     await client.send({ url: 'http://example.com/b', method: 'GET' });
 
     const calls = vi.mocked(inner.send).mock.calls;
-    expect(calls[2]![0].headers?.['authorization']).toBe('Bearer new-token');
+    expect(required(calls[2])[0].headers?.['authorization']).toBe('Bearer new-token');
   });
 
   it('refresh returning empty string — no authorization header injected on retry', async () => {
@@ -149,7 +150,7 @@ describe('createJwtClient', () => {
     const client = createJwtClient(inner, { initialToken: 'stale', refresh });
 
     await client.send({ url: 'http://example.com', method: 'GET' });
-    const retryReq = vi.mocked(inner.send).mock.calls[1]![0];
+    const retryReq = required(vi.mocked(inner.send).mock.calls[1])[0];
     // Empty token → no Bearer header on retry
     expect(retryReq.headers?.['authorization']).toBeUndefined();
   });
@@ -160,11 +161,11 @@ describe('createJwtClient', () => {
     const client = createJwtClient(inner, { refresh });
 
     await client.send({ url: 'http://example.com', method: 'GET' });
-    const firstReq = vi.mocked(inner.send).mock.calls[0]![0];
+    const firstReq = required(vi.mocked(inner.send).mock.calls[0])[0];
     // No initial token → no authorization header on first attempt
     expect(firstReq.headers?.['authorization']).toBeUndefined();
     // After refresh, retry should have the token
-    const retryReq = vi.mocked(inner.send).mock.calls[1]![0];
+    const retryReq = required(vi.mocked(inner.send).mock.calls[1])[0];
     expect(retryReq.headers?.['authorization']).toBe('Bearer first-token');
   });
 });

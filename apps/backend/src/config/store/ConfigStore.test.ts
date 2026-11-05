@@ -11,6 +11,7 @@ import { createEncryptor, deriveKey } from "./encryption.js";
 import { runConfigMigrations } from "./migrations.js";
 import { createConfigStore, type ConfigStore } from "./ConfigStore.js";
 import { createProfileStore } from "./ProfileStore.js";
+import { required } from "../../test/required.js";
 
 describe("ConfigStore", () => {
   let pool: DuckDbPool;
@@ -53,11 +54,11 @@ describe("ConfigStore", () => {
 
     const loaded = await store.get(created.id);
     expect(loaded).not.toBeNull();
-    expect((loaded!.config as { password: string }).password).toBe(
+    expect((required(loaded).config as { password: string }).password).toBe(
       "supersecret"
     );
 
-    const redacted = store.redact(loaded!);
+    const redacted = store.redact(required(loaded));
     expect((redacted.config as { password: string }).password).toBe("***");
 
     const updated = await store.update(created.id, {
@@ -110,10 +111,10 @@ describe("ConfigStore", () => {
 
     const reloaded = await store.get(created.id);
     expect(
-      (reloaded!.config as { snmpCommunity?: string }).snmpCommunity
+      (required(reloaded).config as { snmpCommunity?: string }).snmpCommunity
     ).toBeUndefined();
     expect(
-      (store.redact(reloaded!).config as { snmpCommunity?: string })
+      (store.redact(required(reloaded)).config as { snmpCommunity?: string })
         .snmpCommunity
     ).toBeUndefined();
   });
@@ -159,7 +160,7 @@ describe("ConfigStore", () => {
     expect(updated.config.timeoutMs).toBe(9_000);
 
     const reloaded = await store.get(created.id);
-    expect(reloaded!.config.pollPolicy.healthMs).toBe(60_000);
+    expect(required(reloaded).config.pollPolicy.healthMs).toBe(60_000);
   });
 
   it("persists a service without secret fields", async () => {
@@ -169,7 +170,7 @@ describe("ConfigStore", () => {
       apiUrl: "http://127.0.0.1:5001",
     });
     const loaded = await store.get(created.id);
-    expect(loaded!.config.kind).toBe("ipfs");
+    expect(required(loaded).config.kind).toBe("ipfs");
   });
 
   it("writes audit rows and lists them newest first", async () => {
@@ -186,7 +187,7 @@ describe("ConfigStore", () => {
     await store.delete(a.id);
     const audit = await store.listAudit();
     expect(audit.length).toBeGreaterThanOrEqual(3);
-    expect(audit[0]!.action).toBe("delete");
+    expect(required(audit[0]).action).toBe("delete");
   });
 
   it("breaks audit ts ties by insertion order (newest id first)", async () => {
@@ -203,7 +204,7 @@ describe("ConfigStore", () => {
     const audit = await store.listAudit();
     expect(audit.map((e) => e.action)).toEqual(["rename", "update"]);
     // TIMESTAMP is read back as UTC regardless of the host time zone.
-    expect(audit[0]!.ts.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    expect(required(audit[0]).ts.toISOString()).toBe("2026-01-01T00:00:00.000Z");
   });
 
   it("listAudit falls back to the default limit for a non-finite value", async () => {
@@ -237,7 +238,7 @@ describe("ConfigStore", () => {
         errors: [],
       });
       const [svc] = await store.loadAll();
-      expect((svc!.config as { password: string }).password).toBe(
+      expect((required(svc).config as { password: string }).password).toBe(
         "supersecret"
       );
 
@@ -277,7 +278,7 @@ describe("ConfigStore", () => {
       expect(result.updated).toBe(1);
       const all = await store.loadAll();
       expect(all).toHaveLength(1);
-      expect((all[0]!.config as { apiUrl: string }).apiUrl).toBe(
+      expect((required(all[0]).config as { apiUrl: string }).apiUrl).toBe(
         "http://127.0.0.1:5002"
       );
     });
@@ -338,7 +339,7 @@ describe("ConfigStore", () => {
       const entries = encryptor.decryptJson<Array<{ profileId: string }>>(
         Buffer.from(bundle.payload, "base64")
       );
-      expect(entries[0]!.profileId).toBe("home");
+      expect(required(entries[0]).profileId).toBe("home");
     });
 
     it("explains a conflict with an unloadable row and counts skipped rows on export", async () => {
@@ -356,7 +357,7 @@ describe("ConfigStore", () => {
       const exportRow = (await store.listAudit()).find(
         (e) => e.action === "export"
       );
-      expect(exportRow!.diff).toEqual({ count: 0, skipped: 1 });
+      expect(required(exportRow).diff).toEqual({ count: 0, skipped: 1 });
 
       const result = await store.importBundle(
         bundleOf([
@@ -373,7 +374,7 @@ describe("ConfigStore", () => {
         ])
       );
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]!.message).toMatch(/fails to load/);
+      expect(required(result.errors[0]).message).toMatch(/fails to load/);
     });
 
     it("rejects a bundle encrypted with a different master key", async () => {
@@ -428,10 +429,10 @@ describe("ConfigStore", () => {
       const audit = await store.listAudit();
       const renameRow = audit.find((a) => a.action === "rename");
       expect(renameRow).toBeDefined();
-      expect(renameRow!.targetId).toBe(created.id);
-      expect(renameRow!.targetKind).toBe("ipfs");
-      expect(renameRow!.diff).toEqual({ from: "old", to: "new" });
-      expect(renameRow!.actor).toBe("tester");
+      expect(required(renameRow).targetId).toBe(created.id);
+      expect(required(renameRow).targetKind).toBe("ipfs");
+      expect(required(renameRow).diff).toEqual({ from: "old", to: "new" });
+      expect(required(renameRow).actor).toBe("tester");
 
       expect(renamedEvents).toEqual([
         {
@@ -504,7 +505,7 @@ describe("ConfigStore", () => {
       // Renaming bitcoin/main → bitcoin/shared should be fine even though
       // ipfs/shared already exists.
       const all = await store.loadAll();
-      const btc = all.find((s) => s.kind === "bitcoin")!;
+      const btc = required(all.find((s) => s.kind === "bitcoin"));
       const renamed = await store.update(btc.id, {
         kind: "bitcoin",
         instanceId: "shared",
@@ -679,7 +680,7 @@ describe("ConfigStore", () => {
       });
       const [entry] = await store.listAudit(1);
       // Regression: ts was ignored and the row got the current time.
-      expect(entry!.ts.getTime()).toBe(ts.getTime());
+      expect(required(entry).ts.getTime()).toBe(ts.getTime());
     });
 
     it("create leaves no row when its audit entry can't be written", async () => {
@@ -702,7 +703,7 @@ describe("ConfigStore", () => {
         ).rejects.toThrow();
       });
       const reloaded = await store.get(svc.id);
-      expect(reloaded!.instanceId).toBe("one");
+      expect(required(reloaded).instanceId).toBe("one");
       expect(renamedEvents).toEqual([]);
     });
 
@@ -777,7 +778,7 @@ describe("ConfigStore", () => {
           networkSigs: [expect.objectContaining({ gatewayIp: "10.0.0.1" })],
         });
         const [svc] = await b.store.loadAll();
-        expect(svc!.profileId).toBe(restored!.id);
+        expect(required(svc).profileId).toBe(required(restored).id);
       } finally {
         await a.pool.close();
         await b.pool.close();
@@ -808,9 +809,9 @@ describe("ConfigStore", () => {
           (p) => p.name.toLowerCase() === "home"
         );
         expect(homes).toHaveLength(1);
-        expect(homes[0]!.description).toBe("local");
+        expect(required(homes[0]).description).toBe("local");
         const [svc] = await b.store.loadAll();
-        expect(svc!.profileId).toBe(local.id);
+        expect(required(svc).profileId).toBe(local.id);
       } finally {
         await a.pool.close();
         await b.pool.close();

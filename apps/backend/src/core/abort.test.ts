@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { linkAbort, withTimeout } from './abort.js';
 import { TimeoutError } from './errors.js';
+import { required } from "../test/required.js";
 
 describe('linkAbort', () => {
   it('returns an unaborted signal with no inputs', () => {
@@ -50,7 +51,7 @@ describe('withTimeout', () => {
   it('does not keep the event loop alive', () => {
     const spy = vi.spyOn(globalThis, 'setTimeout');
     withTimeout(60_000);
-    const timer = spy.mock.results[0]!.value as NodeJS.Timeout;
+    const timer = required(spy.mock.results[0]).value as NodeJS.Timeout;
     spy.mockRestore();
     expect(timer.hasRef()).toBe(false);
     clearTimeout(timer);

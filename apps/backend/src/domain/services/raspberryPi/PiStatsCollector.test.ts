@@ -21,6 +21,7 @@ import type {
 } from "../../../infra/ssh/sshExecutor.js";
 import type { RaspberryPiInstance } from "../../../config/services.js";
 import { SSH_SEGMENT_DELIMITER } from "../../../infra/ssh/compound.js";
+import { required } from "../../../test/required.js";
 
 function makeConfig(
   overrides: Partial<RaspberryPiInstance> = {}
@@ -308,8 +309,8 @@ describe("PiStatsCollector host basics (direct SSH)", () => {
   });
 
   it("computes CPU busy % from two /proc/stat samples", () => {
-    const a = parseProcStatCpu("cpu  100 0 100 700 100 0 0 0 0 0")!;
-    const b = parseProcStatCpu("cpu  150 0 150 750 150 0 0 0 0 0")!;
+    const a = required(parseProcStatCpu("cpu  100 0 100 700 100 0 0 0 0 0"));
+    const b = required(parseProcStatCpu("cpu  150 0 150 750 150 0 0 0 0 0"));
     // 200 jiffies passed, 100 of them idle/iowait
     expect(cpuBusyPercent(a, b)).toBe(50);
     expect(cpuBusyPercent(b, a)).toBeNull();

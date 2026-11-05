@@ -1,4 +1,4 @@
-import snmp from 'net-snmp';
+import snmp, { type Session, type Varbind } from 'net-snmp';
 import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/errors.js';
 import type {
   SnmpGetRequest,
@@ -8,12 +8,6 @@ import type {
   SnmpWalkResult,
   SnmpWalkRow,
 } from './snmpGetter.js';
-
-interface Varbind {
-  oid: string;
-  type: number;
-  value: unknown;
-}
 
 function mapAuthProto(p?: 'SHA' | 'MD5'): number {
   return p === 'MD5' ? snmp.AuthProtocols.md5 : snmp.AuthProtocols.sha;
@@ -31,18 +25,16 @@ function varbindToString(vb: Varbind): string {
     if (vb.type === snmp.ObjectType.Counter64) return decodeUnsignedBE(vb.value);
     return vb.value.toString('utf8');
   }
-  return String(vb.value);
+  const v = vb.value;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'bigint' || typeof v === 'boolean') return v.toString();
+  return JSON.stringify(v) ?? '';
 }
 
 function decodeUnsignedBE(buf: Buffer): string {
   let n = 0n;
   for (const byte of buf) n = (n << 8n) | BigInt(byte);
   return n.toString();
-}
-
-interface NetSnmpSession {
-  close(): void;
-  on(event: 'error', listener: (err: Error) => void): unknown;
 }
 
 /**
@@ -53,7 +45,7 @@ interface NetSnmpSession {
  * process, so every session gets one.
  */
 function runOnSession<T>(
-  session: NetSnmpSession,
+  session: Session,
   op: 'get' | 'walk',
   timeoutMs: number,
   signal: AbortSignal | undefined,
@@ -92,6 +84,29 @@ function runOnSession<T>(
   });
 }
 
+/** A v2c session when a community is given, otherwise a v3 (authPriv) one. */
+function walkSession(req: SnmpWalkRequest): Session {
+  const options = { port: 161, timeout: req.timeoutMs, retries: 1 };
+  if (req.v2c) {
+    return snmp.createSession(req.host, req.v2c.community, { ...options, version: snmp.Version2c });
+  }
+  if (!req.v3) {
+    throw new UnauthorizedError('snmp: walk needs v2c or v3 credentials');
+  }
+  return snmp.createV3Session(
+    req.host,
+    {
+      name: req.v3.user,
+      level: snmp.SecurityLevel.authPriv,
+      authProtocol: mapAuthProto(req.v3.authProtocol),
+      authKey: req.v3.authKey,
+      privProtocol: mapPrivProto(req.v3.privProtocol),
+      privKey: req.v3.privKey,
+    },
+    { ...options, version: snmp.Version3 },
+  );
+}
+
 export function createSnmpGetter(): SnmpGetter {
   return {
     async get(req: SnmpGetRequest): Promise<SnmpGetResult> {
@@ -115,7 +130,7 @@ export function createSnmpGetter(): SnmpGetter {
       const session = snmp.createV3Session(req.host, user, options);
 
       return await runOnSession<SnmpGetResult>(session, 'get', req.timeoutMs, req.signal, (done) => {
-        session.get([...req.oids], (err: Error | null, varbinds: Varbind[]) => {
+        session.get([...req.oids], (err, varbinds) => {
           if (err) {
             done(err);
             return;
@@ -130,25 +145,7 @@ export function createSnmpGetter(): SnmpGetter {
     },
 
     async walk(req: SnmpWalkRequest): Promise<SnmpWalkResult> {
-      const session = req.v2c
-        ? snmp.createSession(req.host, req.v2c.community, {
-            port: 161,
-            version: snmp.Version2c,
-            timeout: req.timeoutMs,
-            retries: 1,
-          })
-        : snmp.createV3Session(
-            req.host,
-            {
-              name: req.v3!.user,
-              level: snmp.SecurityLevel.authPriv,
-              authProtocol: mapAuthProto(req.v3!.authProtocol),
-              authKey: req.v3!.authKey,
-              privProtocol: mapPrivProto(req.v3!.privProtocol),
-              privKey: req.v3!.privKey,
-            },
-            { port: 161, version: snmp.Version3, timeout: req.timeoutMs, retries: 1 },
-          );
+      const session = walkSession(req);
 
       const collected: SnmpWalkRow[] = [];
       return await runOnSession<SnmpWalkResult>(session, 'walk', req.timeoutMs, req.signal, (done) => {

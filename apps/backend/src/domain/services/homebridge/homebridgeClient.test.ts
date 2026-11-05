@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createHomebridgeClient, type HomebridgeClientConfig } from './homebridgeClient.js';
 import type { HttpClient, HttpRequest, HttpResponse } from '../../../infra/http/client.js';
 import { UnauthorizedError, UnavailableError } from '../../../core/errors.js';
+import { required } from "../../../test/required.js";
 
 type Handler = (req: HttpRequest) => Partial<HttpResponse> & { status: number; body?: string };
 
@@ -196,14 +197,14 @@ describe('homebridgeClient', () => {
     ];
     let idx = 0;
     const { http, calls } = fakeHttp(() => {
-      const r = responses[idx++]!;
+      const r = required(responses[idx++]);
       return { status: r.status, headers: r.headers, body: '' };
     });
     // Override fakeHttp to return proper text/json from HttpResponse objects
     const smartHttp: HttpClient = {
       send: (req: HttpRequest): Promise<HttpResponse> => {
         calls.push(req);
-        return Promise.resolve(responses[idx++]!);
+        return Promise.resolve(required(responses[idx++]));
       },
     };
     idx = 0;

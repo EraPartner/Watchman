@@ -376,7 +376,7 @@ export class PhilipsBridgeService extends BaseService {
   }
 
   private apiHeaders(): Record<string, string> {
-    return { "hue-application-key": this.applicationKey! };
+    return this.applicationKey ? { "hue-application-key": this.applicationKey } : {};
   }
 
   private async probeApi(

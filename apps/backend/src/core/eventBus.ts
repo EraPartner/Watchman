@@ -86,13 +86,10 @@ export function createEventBus(onError?: (err: unknown) => void): EventBus {
       }
     },
     on(event, handler) {
-      let set = handlers.get(event);
-      if (!set) {
-        set = new Set();
-        handlers.set(event, set);
-      }
+      const set = handlers.get(event) ?? new Set<Handler<unknown>>();
+      handlers.set(event, set);
       set.add(handler as Handler<unknown>);
-      return () => set!.delete(handler as Handler<unknown>);
+      return () => set.delete(handler as Handler<unknown>);
     },
   };
 }

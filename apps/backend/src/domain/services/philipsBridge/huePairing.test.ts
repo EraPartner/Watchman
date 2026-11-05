@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { pairBridge } from './huePairing.js';
 import type { HttpClient, HttpRequest } from '../../../infra/http/client.js';
 import { UnavailableError, ValidationError } from '../../../core/errors.js';
+import { required } from "../../../test/required.js";
 
 const FAKE_CERT_HASH = 'aabbcc112233aabbcc112233aabbcc112233aabbcc112233aabbcc112233aabb';
 
@@ -36,7 +37,7 @@ describe('pairBridge', () => {
   it('posts to /api with devicetype only (no unused entertainment client key)', async () => {
     const http = fakeHttp(200, [{ success: { username: 'key' } }]);
     await pairBridge('192.168.1.50', { http, probeCertHash: fakeProbeCertHash });
-    const req = vi.mocked(http.send).mock.calls[0]![0];
+    const req = required(vi.mocked(http.send).mock.calls[0])[0];
     expect(req.url).toBe('https://192.168.1.50/api');
     expect(req.method).toBe('POST');
     const body = JSON.parse(req.body as string);
@@ -137,7 +138,7 @@ describe('pairBridge', () => {
     const probeSpy = vi.fn((_h: string, _p: number, _t: number) => Promise.resolve(FAKE_CERT_HASH));
     await pairBridge('192.168.1.50', { http, probeCertHash: probeSpy }, 3_000);
     expect(probeSpy).toHaveBeenCalledWith('192.168.1.50', 443, 3_000);
-    const req = vi.mocked(http.send).mock.calls[0]![0];
+    const req = required(vi.mocked(http.send).mock.calls[0])[0];
     expect(req.timeoutMs).toBe(3_000);
   });
 });

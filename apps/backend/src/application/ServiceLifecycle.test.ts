@@ -73,6 +73,7 @@ vi.mock("../bootstrap/registerServices.js", () => ({
 }));
 
 import { createServiceLifecycle } from "./ServiceLifecycle.js";
+import { required } from "../test/required.js";
 
 function makeStoredService(
   id: string,
@@ -373,7 +374,7 @@ describe("ServiceLifecycle", () => {
     await vi.waitFor(() => expect(releaseGet).toBeDefined());
     records.delete(storedId);
     const del = lifecycle.applyDelete(storedId);
-    releaseGet!();
+    required(releaseGet)();
     await Promise.all([update, del]);
 
     expect(registry.has("ipfs:race")).toBe(false);

@@ -178,8 +178,8 @@ export function createProfileStore(
       [key]
     );
     const rows = res.getRowObjects() as Array<Record<string, unknown>>;
-    if (rows.length === 0) return undefined;
-    return parseJson<unknown>(rows[0]!["value"], undefined);
+    const [row] = rows;
+    return row ? parseJson<unknown>(row["value"], undefined) : undefined;
   }
 
   async function writeSetting(
@@ -212,7 +212,8 @@ export function createProfileStore(
           [id]
         );
         const rows = res.getRowObjects() as Array<Record<string, unknown>>;
-        return rows.length === 0 ? undefined : rowToProfile(rows[0]!);
+        const [row] = rows;
+        return row ? rowToProfile(row) : undefined;
       });
     },
 
@@ -408,7 +409,8 @@ export function createProfileStore(
       const profiles = await this.listProfiles();
       let activeId = await this.getActiveProfileId();
 
-      if (profiles.length === 0) {
+      const [firstProfile] = profiles;
+      if (!firstProfile) {
         const created = await this.createProfile(
           { name: DEFAULT_PROFILE_NAME },
           "bootstrap"
@@ -418,7 +420,7 @@ export function createProfileStore(
         log?.info({ profileId: activeId }, "created Default profile");
       } else if (!activeId || !profiles.some((p) => p.id === activeId)) {
         // No active profile, or it points at a deleted one — pin the first.
-        activeId = profiles[0]!.id;
+        activeId = firstProfile.id;
         await this.setActiveProfileId(activeId, "bootstrap");
       }
 

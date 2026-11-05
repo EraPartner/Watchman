@@ -16,6 +16,7 @@ import type {
   TorEventSubscriptionFactory,
   TorEventHandler,
 } from "../../../infra/tor/eventSubscription.js";
+import { required } from "../../../test/required.js";
 
 let server: Server;
 let port: number;
@@ -556,7 +557,7 @@ describe("TorService", () => {
             requested.push(...keys);
             const bad = keys.find((k) => !SPEC_KEYS.has(k) && !k.startsWith("ns/id/") && !k.startsWith("ip-to-country/"));
             if (bad) return Promise.reject(new Error(`552 Unrecognized key "${bad}"`));
-            return Promise.resolve(new Map(keys.filter((k) => values.has(k)).map((k) => [k, values.get(k)!])));
+            return Promise.resolve(new Map(keys.filter((k) => values.has(k)).map((k) => [k, required(values.get(k))])));
           },
           getconf: () => Promise.resolve(new Map()),
           signal: () => {

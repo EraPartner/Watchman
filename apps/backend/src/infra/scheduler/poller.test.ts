@@ -6,6 +6,7 @@ import { BaseService, type HealthResult, type StatsResult, type PollPolicy } fro
 import { ok, err } from '../../core/result.js';
 import { UnavailableError } from '../../core/errors.js';
 import pino from 'pino';
+import { required } from "../../test/required.js";
 
 const silentLogger = pino({ level: 'silent' });
 
@@ -134,7 +135,7 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const seen: Array<boolean> = [];
     bus.on('service.health.updated', (p) => {
-      seen.push(p.snapshot!.reachable);
+      seen.push(required(p.snapshot).reachable);
     });
     let releaseOld!: (r: HealthResult) => void;
     const oldSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, async () =>
@@ -167,7 +168,7 @@ describe('BackgroundPoller', () => {
     let reason: unknown;
     const svc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, () =>
       new Promise<HealthResult>((resolve) => {
-        const sig = svc.lastHealthSignal!;
+        const sig = required(svc.lastHealthSignal);
         sig.addEventListener('abort', () => {
           reason = sig.reason;
           resolve(ok({ reachable: false, at: 0 }));

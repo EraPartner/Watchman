@@ -439,8 +439,8 @@ export function createConfigStore(
           [id]
         );
         const rows = result.getRowObjects() as Array<Record<string, unknown>>;
-        if (rows.length === 0) return null;
-        return rowToStored(rows[0]!);
+        const [row] = rows;
+        return row ? rowToStored(row) : null;
       });
     },
 
@@ -653,9 +653,10 @@ export function createConfigStore(
           );
           return res.getRowObjects() as Array<Record<string, unknown>>;
         });
-        if (identity.length === 0) return;
-        kind = String(identity[0]!["kind"] ?? "");
-        instanceId = String(identity[0]!["instance_id"] ?? "");
+        const [row] = identity;
+        if (!row) return;
+        kind = String(row["kind"] ?? "");
+        instanceId = String(row["instance_id"] ?? "");
       }
       await inTransaction(async (c) => {
         await c.run(`DELETE FROM app_service_instance WHERE id = ?`, [id]);

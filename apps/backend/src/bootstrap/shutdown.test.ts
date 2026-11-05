@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pino } from 'pino';
 import { registerShutdown, runShutdownSteps } from './shutdown.js';
+import { required } from "../test/required.js";
 
 const silentLogger = pino({ level: 'silent' });
 const EVENTS = ['SIGINT', 'SIGTERM', 'SIGHUP', 'disconnect'] as const;
@@ -50,7 +51,7 @@ describe('registerShutdown', () => {
   afterEach(() => {
     for (const e of EVENTS) {
       for (const l of process.listeners(e as NodeJS.Signals)) {
-        if (!before.get(e)!.includes(l)) process.removeListener(e, l as never);
+        if (!required(before.get(e)).includes(l)) process.removeListener(e, l as never);
       }
     }
     exit.mockRestore();

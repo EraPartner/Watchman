@@ -22,6 +22,7 @@ vi.mock("../../../infra/http/pinnedClient.js", () => ({
 
 import { pairBridge } from "../../../domain/services/philipsBridge/huePairing.js";
 import { createPinnedClient } from "../../../infra/http/pinnedClient.js";
+import { required } from "../../../test/required.js";
 
 const CERT_HASH = "aabbcc00" + "0".repeat(56);
 
@@ -156,7 +157,7 @@ describe("POST /setup/philips-bridge/pair", () => {
       url: "/setup/philips-bridge/pair",
       payload: { host: "192.168.1.50" },
     });
-    const deps = vi.mocked(pairBridge).mock.calls[0]![1];
+    const deps = required(vi.mocked(pairBridge).mock.calls[0])[1];
     expect(deps.httpForCert).toBe(createPinnedClient);
     await app.close();
   });

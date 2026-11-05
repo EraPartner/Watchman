@@ -88,8 +88,9 @@ class BreakerGuardedService extends BaseService {
     this.kind = inner.kind;
     this.instanceId = inner.instanceId;
     this.pollPolicy = inner.pollPolicy;
-    if (inner.onStart) this.onStart = () => inner.onStart!();
-    if (inner.onStop) this.onStop = () => inner.onStop!();
+    // Optional-call keeps `inner` as the receiver.
+    if (inner.onStart) this.onStart = () => inner.onStart?.() ?? Promise.resolve();
+    if (inner.onStop) this.onStop = () => inner.onStop?.() ?? Promise.resolve();
   }
 
   override onStart?: () => Promise<void>;

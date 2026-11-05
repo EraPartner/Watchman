@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { RoonConnectFn, RoonHandle, RoonZone } from './roonClient.js';
+import { required } from "../../test/required.js";
 
 // ─── Fake factory ──────────────────────────────────────────────────────────────
 
@@ -101,7 +102,7 @@ describe('RoonHandle contract', () => {
     fake.simulatePair([makeZone({ state: 'playing' })]);
     expect(h.isPaired()).toBe(true);
     expect(h.getZones()).toHaveLength(1);
-    expect(h.getZones()[0]!.state).toBe('playing');
+    expect(required(h.getZones()[0]).state).toBe('playing');
   });
 
   it('fires onZonesChanged callback when zones update', async () => {
@@ -129,8 +130,8 @@ describe('RoonHandle contract', () => {
     });
     fake.simulatePair([makeZone({ state: 'stopped' })]);
     fake.simulateZoneChange([makeZone({ state: 'playing', nowPlaying: { oneLine: 'Yellow Submarine' } })]);
-    expect(h.getZones()[0]!.state).toBe('playing');
-    expect(h.getZones()[0]!.nowPlaying?.oneLine).toBe('Yellow Submarine');
+    expect(required(h.getZones()[0]).state).toBe('playing');
+    expect(required(h.getZones()[0]).nowPlaying?.oneLine).toBe('Yellow Submarine');
   });
 
   it('clears zones and unpairs on simulateUnpair', async () => {

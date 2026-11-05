@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { reconnectDelay, SseStatusError, startSseStream } from "./sseClient.js";
+import { required } from "../../test/required.js";
 
 let server: Server;
 let port: number;
@@ -78,11 +79,11 @@ describe("startSseStream", () => {
     });
 
     await waitFor(() => activeRes !== null);
-    activeRes!.write("data: hello\n\n");
-    activeRes!.write("data: line1\ndata: line2\n\n");
+    required(activeRes).write("data: hello\n\n");
+    required(activeRes).write("data: line1\ndata: line2\n\n");
     // payload split across writes
-    activeRes!.write("data: par");
-    activeRes!.write("tial\n\n");
+    required(activeRes).write("data: par");
+    required(activeRes).write("tial\n\n");
 
     await waitFor(() => messages.length >= 3);
     expect(messages[0]).toBe("hello");
@@ -106,9 +107,9 @@ describe("startSseStream", () => {
     await waitFor(() => activeRes !== null);
     const bytes = Buffer.from('data: {"name":"Küche"}\n\n', "utf8");
     const split = bytes.indexOf(0xc3) + 1; // between the two bytes of "ü"
-    activeRes!.write(bytes.subarray(0, split));
+    required(activeRes).write(bytes.subarray(0, split));
     await new Promise((r) => setTimeout(r, 20));
-    activeRes!.write(bytes.subarray(split));
+    required(activeRes).write(bytes.subarray(split));
 
     await waitFor(() => messages.length >= 1);
     expect(messages[0]).toBe('{"name":"Küche"}');

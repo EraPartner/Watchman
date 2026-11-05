@@ -247,7 +247,8 @@ export class BitcoinService extends BaseService {
   }
 
   override async onStart(): Promise<void> {
-    if (!this.zmqConnectFn) return;
+    const connect = this.zmqConnectFn;
+    if (!connect) return;
     // one socket per endpoint: hashblock and rawtx share it when they match
     const topicsByEndpoint = new Map<string, string[]>();
     if (this.zmqHashblockEndpoint) {
@@ -262,7 +263,7 @@ export class BitcoinService extends BaseService {
 
     await Promise.all(
       [...topicsByEndpoint].map(([endpoint, topics]) =>
-        this.openZmq(this.zmqConnectFn!, endpoint, topics)
+        this.openZmq(connect, endpoint, topics)
       )
     );
 

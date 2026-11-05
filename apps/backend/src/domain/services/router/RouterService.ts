@@ -15,6 +15,10 @@ import type {
   SnmpV3Credentials,
 } from "../../../infra/snmp/snmpGetter.js";
 
+type RouterSnmpCredentials =
+  | { v2c: SnmpV2cCredentials }
+  | { v3: SnmpV3Credentials };
+
 const OID = {
   sysUpTime: "1.3.6.1.2.1.1.3",
   ifDescr: "1.3.6.1.2.1.2.2.1.2",
@@ -53,10 +57,7 @@ export class RouterService extends BaseService {
   private readonly timeoutMs: number;
   private readonly pingCount: number;
   private readonly interfaceFilter: ReadonlyArray<string>;
-  private readonly snmpCredentials:
-    | { v2c: SnmpV2cCredentials }
-    | { v3: SnmpV3Credentials }
-    | null;
+  private readonly snmpCredentials: RouterSnmpCredentials | null;
   private readonly pinger: PingProber;
   private readonly tcp: TcpProber;
   private readonly snmp: SnmpGetter | undefined;
@@ -174,15 +175,20 @@ export class RouterService extends BaseService {
       return ok({ at: this.now(), metrics: base });
     }
 
-    const snmpMetrics = await this.collectSnmpMetrics(signal);
+    const snmpMetrics = await this.collectSnmpMetrics(
+      this.snmp,
+      this.snmpCredentials,
+      signal
+    );
     return ok({ at: this.now(), metrics: { ...base, ...snmpMetrics } });
   }
 
   private async collectSnmpMetrics(
+    snmp: SnmpGetter,
+    credentials: RouterSnmpCredentials,
     signal: AbortSignal
   ): Promise<Record<string, unknown>> {
     try {
-      const credentials = this.snmpCredentials!;
       const host = this.host;
       const timeoutMs = this.timeoutMs;
 
@@ -193,7 +199,7 @@ export class RouterService extends BaseService {
       const walk = (
         subtree: string
       ): Promise<ReadonlyArray<{ oid: string; value: string }> | null> =>
-        this.snmp!.walk({ host, subtree, ...credentials, timeoutMs, signal }).then(
+        snmp.walk({ host, subtree, ...credentials, timeoutMs, signal }).then(
           (r) => r.rows,
           () => null
         );

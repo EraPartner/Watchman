@@ -8,6 +8,7 @@ import type {
 } from "../infra/net/gatewayDetect.js";
 import type { ProfileStore } from "../config/store/ProfileStore.js";
 import type { ServiceLifecycle } from "./ServiceLifecycle.js";
+import { required } from "../test/required.js";
 
 const silentLogger = pino({ level: "silent" });
 
@@ -141,7 +142,7 @@ describe("NetworkWatcher.tick", () => {
     await watcher.tick();
     expect(calls).toEqual([]);
     expect(events).toHaveLength(1);
-    expect(events[0]!.signature.gatewayMac).toBe("cafe-mac");
+    expect(required(events[0]).signature.gatewayMac).toBe("cafe-mac");
   });
 
   it("is a no-op when the signature is unchanged (manual override sticks)", async () => {
@@ -205,7 +206,7 @@ describe("NetworkWatcher.tick", () => {
     ];
     const { lifecycle, calls } = makeLifecycle();
     const watcher = createNetworkWatcher({
-      detector: { detect: () => Promise.resolve(readings.shift()!) },
+      detector: { detect: () => Promise.resolve(required(readings.shift())) },
       profiles: makeProfiles(state),
       lifecycle,
       bus: createEventBus(),
@@ -231,7 +232,7 @@ describe("NetworkWatcher.tick", () => {
     ];
     const { lifecycle, calls } = makeLifecycle();
     const watcher = createNetworkWatcher({
-      detector: { detect: () => Promise.resolve(readings.shift()!) },
+      detector: { detect: () => Promise.resolve(required(readings.shift())) },
       profiles: makeProfiles(state),
       lifecycle,
       bus: createEventBus(),

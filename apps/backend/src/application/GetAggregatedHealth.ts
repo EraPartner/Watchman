@@ -24,22 +24,21 @@ export class GetAggregatedHealth {
 
   async run(signal: AbortSignal): Promise<readonly AggregatedEntry[]> {
     const services = this.registry.all();
-    const settled = await Promise.allSettled(
+    return Promise.all(
       services.map(async (s) => {
-        // Serve the poller-published snapshot; only probe live before the
-        // first poll has completed (e.g. right after startup/registration).
-        if (this.snapshots) return this.snapshots.readHealth(s, signal);
-        return s.checkHealth(signal);
+        let result: HealthResult;
+        try {
+          // Serve the poller-published snapshot; only probe live before the
+          // first poll has completed (e.g. right after startup/registration).
+          result = this.snapshots
+            ? await this.snapshots.readHealth(s, signal)
+            : await s.checkHealth(signal);
+        } catch (err) {
+          result = { ok: false, error: toUnavailable(err) };
+        }
+        return { id: s.id, kind: s.kind, instanceId: s.instanceId, result };
       })
     );
-    return services.map((s, i) => {
-      const r = settled[i]!;
-      const result: HealthResult =
-        r.status === "fulfilled"
-          ? r.value
-          : { ok: false, error: toUnavailable(r.reason) };
-      return { id: s.id, kind: s.kind, instanceId: s.instanceId, result };
-    });
   }
 }
 

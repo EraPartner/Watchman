@@ -62,11 +62,10 @@ export async function pairBridge(
     throw new UnavailableError('unexpected response from Hue bridge');
   }
 
-  if (!Array.isArray(items) || items.length === 0) {
+  const item = Array.isArray(items) ? items[0] : undefined;
+  if (!item) {
     throw new UnavailableError('unexpected response from Hue bridge');
   }
-
-  const item = items[0]!;
 
   if ('error' in item) {
     if (item.error.type === 101) {
