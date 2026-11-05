@@ -34,7 +34,7 @@
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
     "fastify-plugin": "^5.1.0",
-    "lru-cache": "^10.4.3",
+    "lru-cache": "^11.5.3",
     "net-snmp": "^3.29.2",
     "node-roon-api-transport": "github:RoonLabs/node-roon-api-transport#2ee60008a4cdb90c34ff3de58bb4b949067f1d20",
     "pigpio-client": "^1.5.3",
