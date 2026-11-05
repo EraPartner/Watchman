@@ -1,5 +1,9 @@
-import snmp, { type Session, type Varbind } from 'net-snmp';
-import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/errors.js';
+import snmp, { type Session, type Varbind } from "net-snmp";
+import {
+  TimeoutError,
+  UnavailableError,
+  UnauthorizedError,
+} from "../../core/errors.js";
 import type {
   SnmpGetRequest,
   SnmpGetResult,
@@ -7,30 +11,32 @@ import type {
   SnmpWalkRequest,
   SnmpWalkResult,
   SnmpWalkRow,
-} from './snmpGetter.js';
+} from "./snmpGetter.js";
 
-function mapAuthProto(p?: 'SHA' | 'MD5'): number {
-  return p === 'MD5' ? snmp.AuthProtocols.md5 : snmp.AuthProtocols.sha;
+function mapAuthProto(p?: "SHA" | "MD5"): number {
+  return p === "MD5" ? snmp.AuthProtocols.md5 : snmp.AuthProtocols.sha;
 }
 
-function mapPrivProto(p?: 'AES' | 'DES'): number {
-  return p === 'DES' ? snmp.PrivProtocols.des : snmp.PrivProtocols.aes;
+function mapPrivProto(p?: "AES" | "DES"): number {
+  return p === "DES" ? snmp.PrivProtocols.des : snmp.PrivProtocols.aes;
 }
 
 function varbindToString(vb: Varbind): string {
-  if (vb.value == null) return '';
+  if (vb.value == null) return "";
   if (Buffer.isBuffer(vb.value)) {
     // net-snmp hands Counter64 back as the raw big-endian BER content bytes
     // (variable length, possibly with a leading 0x00), not as a number
-    if (vb.type === snmp.ObjectType.Counter64) return decodeUnsignedBE(vb.value);
-    return vb.value.toString('utf8');
+    if (vb.type === snmp.ObjectType.Counter64)
+      return decodeUnsignedBE(vb.value);
+    return vb.value.toString("utf8");
   }
   const v = vb.value;
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'bigint' || typeof v === 'boolean') return v.toString();
-  // undefined for a function or symbol, which a typo'd decoder could hand back
-  const json: string | undefined = JSON.stringify(v);
-  return json ?? '';
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "bigint" || typeof v === "boolean")
+    return v.toString();
+  // JSON.stringify yields undefined for these, which a typo'd decoder could hand back
+  if (typeof v === "function" || typeof v === "symbol") return "";
+  return JSON.stringify(v);
 }
 
 function decodeUnsignedBE(buf: Buffer): string {
@@ -48,10 +54,10 @@ function decodeUnsignedBE(buf: Buffer): string {
  */
 function runOnSession<T>(
   session: Session,
-  op: 'get' | 'walk',
+  op: "get" | "walk",
   timeoutMs: number,
   signal: AbortSignal | undefined,
-  start: (done: (err: Error | null, value?: T) => void) => void,
+  start: (done: (err: Error | null, value?: T) => void) => void
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -59,27 +65,36 @@ function runOnSession<T>(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      try { session.close(); } catch { /* ignore */ }
+      signal?.removeEventListener("abort", onAbort);
+      try {
+        session.close();
+      } catch {
+        /* ignore */
+      }
       fn();
     };
     const timer = setTimeout(() => {
-      settle(() => reject(new TimeoutError(`snmp ${op} timed out after ${timeoutMs}ms`)));
+      settle(() =>
+        reject(new TimeoutError(`snmp ${op} timed out after ${timeoutMs}ms`))
+      );
     }, timeoutMs + 500);
     const onAbort = (): void => {
       settle(() => reject(new TimeoutError(`snmp ${op} aborted`)));
     };
-    session.on('error', (err: Error) => {
-      settle(() => reject(new UnavailableError(`snmp ${op} failed: ${err.message}`)));
+    session.on("error", (err: Error) => {
+      settle(() =>
+        reject(new UnavailableError(`snmp ${op} failed: ${err.message}`))
+      );
     });
     if (signal?.aborted) {
       onAbort();
       return;
     }
-    signal?.addEventListener('abort', onAbort, { once: true });
+    signal?.addEventListener("abort", onAbort, { once: true });
     start((err, value) => {
       settle(() => {
-        if (err) reject(new UnavailableError(`snmp ${op} failed: ${err.message}`));
+        if (err)
+          reject(new UnavailableError(`snmp ${op} failed: ${err.message}`));
         else resolve(value as T);
       });
     });
@@ -90,10 +105,13 @@ function runOnSession<T>(
 function walkSession(req: SnmpWalkRequest): Session {
   const options = { port: 161, timeout: req.timeoutMs, retries: 1 };
   if (req.v2c) {
-    return snmp.createSession(req.host, req.v2c.community, { ...options, version: snmp.Version2c });
+    return snmp.createSession(req.host, req.v2c.community, {
+      ...options,
+      version: snmp.Version2c,
+    });
   }
   if (!req.v3) {
-    throw new UnauthorizedError('snmp: walk needs v2c or v3 credentials');
+    throw new UnauthorizedError("snmp: walk needs v2c or v3 credentials");
   }
   return snmp.createV3Session(
     req.host,
@@ -105,7 +123,7 @@ function walkSession(req: SnmpWalkRequest): Session {
       privProtocol: mapPrivProto(req.v3.privProtocol),
       privKey: req.v3.privKey,
     },
-    { ...options, version: snmp.Version3 },
+    { ...options, version: snmp.Version3 }
   );
 }
 
@@ -113,7 +131,7 @@ export function createSnmpGetter(): SnmpGetter {
   return {
     async get(req: SnmpGetRequest): Promise<SnmpGetResult> {
       if (!req.credentials.user) {
-        throw new UnauthorizedError('snmp: missing v3 user');
+        throw new UnauthorizedError("snmp: missing v3 user");
       }
       const user = {
         name: req.credentials.user,
@@ -131,42 +149,54 @@ export function createSnmpGetter(): SnmpGetter {
       };
       const session = snmp.createV3Session(req.host, user, options);
 
-      return await runOnSession<SnmpGetResult>(session, 'get', req.timeoutMs, req.signal, (done) => {
-        session.get([...req.oids], (err, varbinds) => {
-          if (err) {
-            done(err);
-            return;
-          }
-          const values = varbinds.map((vb) => {
-            if (snmp.isVarbindError(vb)) return '';
-            return varbindToString(vb);
+      return await runOnSession<SnmpGetResult>(
+        session,
+        "get",
+        req.timeoutMs,
+        req.signal,
+        (done) => {
+          session.get([...req.oids], (err, varbinds) => {
+            if (err) {
+              done(err);
+              return;
+            }
+            const values = varbinds.map((vb) => {
+              if (snmp.isVarbindError(vb)) return "";
+              return varbindToString(vb);
+            });
+            done(null, { values });
           });
-          done(null, { values });
-        });
-      });
+        }
+      );
     },
 
     async walk(req: SnmpWalkRequest): Promise<SnmpWalkResult> {
       const session = walkSession(req);
 
       const collected: SnmpWalkRow[] = [];
-      return await runOnSession<SnmpWalkResult>(session, 'walk', req.timeoutMs, req.signal, (done) => {
-        session.subtree(
-          req.subtree,
-          20,
-          (varbinds: Varbind[]) => {
-            for (const vb of varbinds) {
-              if (!snmp.isVarbindError(vb)) {
-                collected.push({ oid: vb.oid, value: varbindToString(vb) });
+      return await runOnSession<SnmpWalkResult>(
+        session,
+        "walk",
+        req.timeoutMs,
+        req.signal,
+        (done) => {
+          session.subtree(
+            req.subtree,
+            20,
+            (varbinds: Varbind[]) => {
+              for (const vb of varbinds) {
+                if (!snmp.isVarbindError(vb)) {
+                  collected.push({ oid: vb.oid, value: varbindToString(vb) });
+                }
               }
+            },
+            (err: Error | null) => {
+              if (err) done(err);
+              else done(null, { rows: collected });
             }
-          },
-          (err: Error | null) => {
-            if (err) done(err);
-            else done(null, { rows: collected });
-          },
-        );
-      });
+          );
+        }
+      );
     },
   };
 }

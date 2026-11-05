@@ -278,7 +278,9 @@ export class AlbyHubService extends BaseService {
       // undici keeps their sockets until GC (e.g. 401s once the JWT expires)
       await Promise.all(
         [infoRes, appsRes, balancesRes, channelsRes].map((r) =>
-          r && (r.status < 200 || r.status >= 300) ? discard(r) : Promise.resolve()
+          r && (r.status < 200 || r.status >= 300)
+            ? discard(r)
+            : Promise.resolve()
         )
       );
 
@@ -298,10 +300,9 @@ export class AlbyHubService extends BaseService {
 
       const reachable =
         infoRes !== null && infoRes.status >= 200 && infoRes.status < 300;
-      const info =
-        reachable
-          ? ((await this.parseJson(infoRes)) as NwcInfo | null)
-          : null;
+      const info = reachable
+        ? ((await this.parseJson(infoRes)) as NwcInfo | null)
+        : null;
 
       let appCount: number | null = null;
       if (appsRes && appsRes.status >= 200 && appsRes.status < 300) {
@@ -454,7 +455,8 @@ export class AlbyHubService extends BaseService {
     }
     const payload = await this.parseJson(res);
     if (!payload || typeof payload !== "object") return null;
-    const body = (payload as InfoPayload).data ?? payload;
+    const info = payload as InfoPayload;
+    const body = info.data ?? info;
     return {
       name: body.name ?? body.title ?? body.service ?? "Alby Hub",
       version: body.version ?? body.app_version ?? body.api_version ?? null,

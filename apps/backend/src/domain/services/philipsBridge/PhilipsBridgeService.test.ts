@@ -32,12 +32,14 @@ function fakePing(result: PingResult): PingProber {
 
 function fakeHttp(status: number, body: unknown): FakeHttp {
   return {
-    send: vi.fn<HttpClient["send"]>((_req: HttpRequest) => Promise.resolve({
-      status,
-      headers: {},
-      text: () => Promise.resolve(JSON.stringify(body)),
-      json: <T>() => Promise.resolve(body as T),
-    })),
+    send: vi.fn<HttpClient["send"]>((_req: HttpRequest) =>
+      Promise.resolve({
+        status,
+        headers: {},
+        text: () => Promise.resolve(JSON.stringify(body)),
+        json: <T>() => Promise.resolve(body as T),
+      })
+    ),
   };
 }
 
@@ -241,23 +243,22 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
   it("health probes the small bridge resource, reads its body and times the API call", async () => {
     let t = 0;
     let bodyRead = false;
-    const http: HttpClient = {
-      send: vi.fn((_req: HttpRequest) => {
-        t += 40;
-        return Promise.resolve({
-          status: 200,
-          headers: {},
-          text: () => {
-            bodyRead = true;
-            return Promise.resolve("{}");
-          },
-          json: <T>() => {
-            bodyRead = true;
-            return Promise.resolve({} as T);
-          },
-        });
-      }),
-    };
+    const send = vi.fn((_req: HttpRequest) => {
+      t += 40;
+      return Promise.resolve({
+        status: 200,
+        headers: {},
+        text: () => {
+          bodyRead = true;
+          return Promise.resolve("{}");
+        },
+        json: <T>() => {
+          bodyRead = true;
+          return Promise.resolve({} as T);
+        },
+      });
+    });
+    const http: HttpClient = { send };
     const svc = new PhilipsBridgeService({
       ping: fakePing({ success: false }),
       http,
@@ -265,18 +266,17 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
       now: () => t,
     });
     const res = await svc.checkHealth(new AbortController().signal);
-    const url = required(vi.mocked(http.send).mock.calls[0])[0].url;
+    const url = required(send.mock.calls[0])[0].url;
     expect(url).toContain("/clip/v2/resource/bridge");
     expect(bodyRead).toBe(true);
     expect(res.ok && res.value.latencyMs).toBe(40);
   });
 
   it("service unreachable when API call throws", async () => {
-    const http: HttpClient = {
-      send: vi.fn(() => {
-        return Promise.reject(new Error("connection refused"));
-      }),
-    };
+    const send = vi.fn(() => {
+      return Promise.reject(new Error("connection refused"));
+    });
+    const http: HttpClient = { send };
     const svc = new PhilipsBridgeService({
       ping: fakePing({ success: false }),
       http,
@@ -357,7 +357,7 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
             status: 404,
             headers: {},
             text: () => Promise.resolve(""),
-            json: <T>() => Promise.resolve(({}) as T),
+            json: <T>() => Promise.resolve({} as T),
           });
         }
         return Promise.resolve({

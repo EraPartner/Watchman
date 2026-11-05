@@ -15,8 +15,7 @@ import type { EventBus } from "../../core/eventBus.js";
  * `socket.remoteAddress`, which is undefined once the socket has closed.
  */
 function clientIp(req: FastifyRequest): string {
-  const ip: string | undefined = req.ip;
-  return ip ?? req.socket.remoteAddress ?? "unknown";
+  return req.ip !== "" ? req.ip : (req.socket.remoteAddress ?? "unknown");
 }
 
 export interface WsPluginOptions {
