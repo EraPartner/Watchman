@@ -11,8 +11,8 @@
  * Uses a relative path (".githooks") so it resolves correctly both on the host
  * and when the repository is checked out at another path.
  *
- * Mirrors Vision's scripts/setup-git-hooks.js (ESM here -- this package is
- * "type": "module"). Replaces husky as the hook-wiring mechanism.
+ * Mirrors Vision's scripts/setup-git-hooks.js (TypeScript here, run by Node's
+ * built-in type stripping). Replaces husky as the hook-wiring mechanism.
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -22,13 +22,13 @@ import { fileURLToPath } from "node:url";
 const HOOKS_DIR = ".githooks";
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-function git(args) {
+function git(args: string[]): string {
   return execFileSync("git", args, { stdio: ["ignore", "pipe", "ignore"] })
     .toString()
     .trim();
 }
 
-function main() {
+function main(): void {
   try {
     if (git(["rev-parse", "--is-inside-work-tree"]) !== "true") return;
   } catch {
@@ -59,7 +59,7 @@ function main() {
     console.log(`[setup-git-hooks] core.hooksPath -> ${HOOKS_DIR}`);
   } catch (err) {
     console.log(
-      `[setup-git-hooks] could not set core.hooksPath (${err.message}); ` +
+      `[setup-git-hooks] could not set core.hooksPath (${err instanceof Error ? err.message : "unknown error"}); ` +
         `run "git config core.hooksPath ${HOOKS_DIR}" manually.`
     );
   }

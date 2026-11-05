@@ -49,7 +49,7 @@ if (existsSync(envExample)) cpSync(envExample, join(stageDir, ".env.example"));
 const repoRoot = resolve(backendDir, "..", "..");
 execFileSync(
   process.execPath,
-  [join(repoRoot, "scripts", "verify-git-dependencies.mjs")],
+  [join(repoRoot, "scripts", "verify-git-dependencies.ts")],
   { cwd: repoRoot, stdio: "inherit" }
 );
 execFileSync(

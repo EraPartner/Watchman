@@ -1,0 +1,30 @@
+{
+  "//": "Strict check for the repo's tooling scripts (scripts/, config/, root *.config.ts, apps/desktop/scripts). Node runs them directly with its built-in type stripping, so only erasable syntax is allowed. CI runs it in the desktop typecheck step: npx tsc --noEmit -p ../../tsconfig.json.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "config/**/*.ts",
+    "*.config.ts",
+    "apps/desktop/scripts/**/*.mts"
+  ]
+}

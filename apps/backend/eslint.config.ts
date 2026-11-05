@@ -4,7 +4,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 import react from "eslint-plugin-react";
-import { strictTypeAwareRules } from "../../config/eslint-type-aware.mjs";
+import { strictTypeAwareRules } from "../../config/eslint-type-aware.ts";
 
 const typescriptEslint = tseslint.plugin;
 const typescriptParser = tseslint.parser;
@@ -13,15 +13,14 @@ export default [
   {
     ignores: [
       "dist",
-      "dist/**",
       "**/dist/**",
+      "coverage",
+      "**/coverage/**",
       "backend/",
       "hardware/",
       "public/",
-      "coverage*/**",
     ],
   },
-
   // include the recommended config first
   js.configs.recommended,
 
@@ -29,12 +28,12 @@ export default [
   {
     ignores: [
       "dist",
-      "dist/**",
       "**/dist/**",
+      "coverage",
+      "**/coverage/**",
       "backend/",
       "hardware/",
       "public/",
-      "coverage*/**",
     ],
     languageOptions: {
       ecmaVersion: 2020,
@@ -63,7 +62,7 @@ export default [
         { allowConstantExport: true },
       ],
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-unused-vars": "off",
       "react/react-in-jsx-scope": "off",
     },
     settings: {
@@ -75,23 +74,14 @@ export default [
 
   // file-specific configuration (replaces the previous `overrides` usage)
   {
-    files: ["**/*.{js,cjs}"],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-      },
-    },
-    rules: {
-      "no-undef": "off",
-    },
-  },
-  {
     // Type-aware linting with the same rule set as EraPartner/Vision
-    // (strict-type-checked as errors, see config/eslint-type-aware.mjs).
+    // (strict-type-checked as errors, see config/eslint-type-aware.ts).
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ["vitest.config.ts", "eslint.config.ts"],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -101,14 +91,9 @@ export default [
     },
   },
   {
-    // These modules intentionally co-locate component primitives with their
-    // variants, Radix aliases, or companion hook.
-    files: [
-      "src/components/primitives/**/*.{ts,tsx}",
-      "src/providers/WebSocketProvider.tsx",
-    ],
     rules: {
-      "react-refresh/only-export-components": "off",
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
 ];

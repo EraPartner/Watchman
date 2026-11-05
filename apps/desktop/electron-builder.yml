@@ -8,7 +8,7 @@ files:
   - assets/**/*
   - package.json
 # Backend is staged as a self-contained production tree by
-# scripts/stage-backend.mjs (run from the `package` script) — its node_modules
+# scripts/stage-backend.mts (run from the `package` script) — its node_modules
 # is complete, unlike the hoisted workspace ../backend/node_modules.
 extraResources:
   - from: ../backend/.bundle/dist

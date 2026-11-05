@@ -206,7 +206,7 @@ WATCHMAN_DEV_URL=http://localhost:5173 npm run electron:dev
 
 `npm run dist` builds for the **host** platform/arch. Because the bundled backend
 carries a native (`@duckdb`) binding, build each platform on that platform (or a
-matching cross-build) so `stage-backend.mjs` installs the correct binding. macOS
+matching cross-build) so `stage-backend.mts` installs the correct binding. macOS
 is the primary, fully-exercised target.
 
 ### macOS (arm64)
@@ -226,7 +226,7 @@ needs a one-time right-click → Open to clear Gatekeeper.
 
 > [!important] Backend is staged, and the target is arm64-only
 > Because the backend's runtime dependencies are hoisted to the repo-root
-> `node_modules`, `npm run package` first runs `scripts/stage-backend.mjs`, which
+> `node_modules`, `npm run package` first runs `scripts/stage-backend.mts`, which
 > materialises a complete **production** dependency tree from the backend's
 > standalone lockfile into `apps/backend/.bundle` (gitignored). electron-builder
 > bundles that, not the sparse workspace `node_modules` — otherwise the packaged

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // The desktop bundle installs the backend from its standalone lockfile
-// (apps/desktop/scripts/stage-backend.mjs runs `npm ci` there). Dependabot
+// (apps/desktop/scripts/stage-backend.mts runs `npm ci` there). Dependabot
 // only updates the root lockfile, so a backend dependency bump leaves
 // apps/backend/package-lock.json behind and `npm ci` refuses it. This check
 // is offline: it compares the declared specs, not the resolved tree.
@@ -17,17 +17,30 @@ const dependencyFields = [
   "peerDependencies",
 ];
 
-function readJson(path) {
+type DependencyMap = Record<string, string>;
+type Manifest = Partial<Record<string, DependencyMap>>;
+interface Lockfile {
+  packages?: Record<string, Manifest>;
+}
+
+function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-const manifest = readJson(manifestPath);
-const lockRoot = readJson(lockPath).packages?.[""] ?? {};
+// Shapes come from npm's own files; a missing field reads as empty below.
+const manifest = readJson(manifestPath) as Manifest;
+const lockRoot = (readJson(lockPath) as Lockfile).packages?.[""] ?? {};
 
-const mismatches = [];
+interface Mismatch {
+  field: string;
+  name: string;
+  packageJson: string | null;
+  lockfile: string | null;
+}
+const mismatches: Mismatch[] = [];
 for (const field of dependencyFields) {
-  const declared = manifest[field] ?? {};
-  const locked = lockRoot[field] ?? {};
+  const declared: DependencyMap = manifest[field] ?? {};
+  const locked: DependencyMap = lockRoot[field] ?? {};
   const names = new Set([...Object.keys(declared), ...Object.keys(locked)]);
   for (const name of names) {
     if (declared[name] !== locked[name]) {

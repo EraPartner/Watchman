@@ -7,7 +7,17 @@
  * union member, and a number used as a condition or `||` fallback, where 0 (a
  * valid metric value) behaves like "missing".
  */
-export const typeAwareRules = {
+type RuleEntry = unknown;
+type Rules = Record<string, RuleEntry>;
+
+/** The part of the `typescript-eslint` module this file reads. */
+interface TsEslintConfigs {
+  configs: {
+    strictTypeChecked: ReadonlyArray<{ rules?: Readonly<Rules> | undefined }>;
+  };
+}
+
+export const typeAwareRules: Rules = {
   "@typescript-eslint/switch-exhaustiveness-check": [
     "error",
     { considerDefaultExhaustiveForUnions: true },
@@ -54,13 +64,13 @@ export const typeAwareRules = {
  * `typescript-eslint` module because this shared file sits outside the
  * workspaces' node_modules.
  */
-export function strictTypeAwareRules(tseslint) {
+export function strictTypeAwareRules(tseslint: TsEslintConfigs): Rules {
   return {
     ...Object.fromEntries(
       tseslint.configs.strictTypeChecked
         .flatMap((config) => Object.entries(config.rules ?? {}))
         // Each project keeps its own unused-variable severity and pattern.
-        .filter(([rule]) => rule !== "@typescript-eslint/no-unused-vars"),
+        .filter(([rule]) => rule !== "@typescript-eslint/no-unused-vars")
     ),
     // Style only: `() => setX(1)` returning void is not a type hole.
     "@typescript-eslint/no-confusing-void-expression": "off",

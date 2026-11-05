@@ -1,6 +1,8 @@
 import { defineConfig, loadEnv } from "vite";
 import type { ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/postcss";
+import autoprefixer from "autoprefixer";
 import path from "path";
 
 /** Top-level backend route prefixes that should be proxied to the Fastify
@@ -50,6 +52,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
+    // PostCSS plugins (formerly postcss.config.js), kept in this TypeScript file.
+    css: {
+      postcss: {
+        plugins: [tailwindcss(), autoprefixer()],
+      },
+    },
     plugins: [
       // Fast Refresh is always on in @vitejs/plugin-react v6; the old
       // `fastRefresh` option no longer exists.
