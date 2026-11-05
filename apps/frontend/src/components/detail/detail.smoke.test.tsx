@@ -79,7 +79,7 @@ describe("ChartsPanel", () => {
 
   it("renders chart cards for provided specs", async () => {
     const charts = [
-      { metric: "bw", label: "Bandwidth", kind: "area" as const, format: (v: number) => `${v}` },
+      { metric: "bw", label: "Bandwidth", kind: "area" as const, format: (v: unknown) => String(v) },
     ];
     const { container, root } = await render(
       <ChartsPanel kind="tor" instanceId="main" charts={charts} tone="ok" />
@@ -90,7 +90,7 @@ describe("ChartsPanel", () => {
 
   it("shows sample count in chart card", async () => {
     const charts = [
-      { metric: "peers", label: "Peers", kind: "line" as const, format: (v: number) => `${v}` },
+      { metric: "peers", label: "Peers", kind: "line" as const, format: (v: unknown) => String(v) },
     ];
     const { container, root } = await render(
       <ChartsPanel kind="ipfs" instanceId={undefined} charts={charts} tone="neutral" />
@@ -115,6 +115,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: { host: "127.0.0.1", port: 9051 },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-02T00:00:00Z",
@@ -131,6 +132,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -146,6 +148,7 @@ describe("ConfigPanel", () => {
       kind: "bitcoin",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: { host: "10.0.0.1", port: 8332 },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -162,6 +165,7 @@ describe("ConfigPanel", () => {
       kind: "bitcoin",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: { rpcPassword: "***" },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -177,6 +181,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: false,
+      profileId: "default",
       config: { isRelay: true, metadata: { region: "us-east" } },
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -194,6 +199,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -223,6 +229,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
@@ -253,6 +260,7 @@ describe("ConfigPanel", () => {
       kind: "tor",
       instanceId: "main",
       enabled: true,
+      profileId: "default",
       config: {},
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",

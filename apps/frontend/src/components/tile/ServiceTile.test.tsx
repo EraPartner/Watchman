@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React, { act } from "react";
+import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fmtRaw, fmtNumber } from "@/services/renderers/formatters";
@@ -15,7 +15,6 @@ const defaultRenderer = (): ServiceRenderer => ({
   kind: "bitcoin",
   summary: [],
   tone: () => "ok" as const,
-  subtitle: undefined,
   detail: [],
   charts: [],
 });
@@ -208,7 +207,6 @@ describe("ServiceTile metric source resolution", () => {
         { key: "host", label: "Host", format: fmtRaw },
       ],
       tone: () => "ok" as const,
-      subtitle: undefined,
       detail: [],
       charts: [],
     };
@@ -239,7 +237,6 @@ describe("ServiceTile metric source resolution", () => {
       kind: "bitcoin",
       summary: [{ key: "blocks", label: "Blocks", format: fmtNumber(0) }],
       tone: () => "ok" as const,
-      subtitle: undefined,
       detail: [],
       charts: [],
     };
@@ -273,7 +270,6 @@ describe("ServiceTile metric source resolution", () => {
         },
       ],
       tone: () => "ok" as const,
-      subtitle: undefined,
       detail: [],
       charts: [],
     };

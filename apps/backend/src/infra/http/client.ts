@@ -25,7 +25,8 @@ export interface HttpResponse {
   status: number;
   headers: Readonly<Record<string, string | string[] | undefined>>;
   text(): Promise<string>;
-  json<T = unknown>(): Promise<T>;
+  /** Parsed body. Untyped wire data: callers narrow or validate it. */
+  json(): Promise<unknown>;
 }
 
 export interface HttpClient {
@@ -53,7 +54,7 @@ export function createHttpClient(opts: HttpClientOptions = {}): HttpClient {
             Record<string, string | string[] | undefined>
           >,
           text: () => res.body.text(),
-          json: <T>() => res.body.json() as Promise<T>,
+          json: () => res.body.json(),
         };
       } catch (e) {
         // domain errors (timeout, pin mismatch from a pinned dispatcher, …)

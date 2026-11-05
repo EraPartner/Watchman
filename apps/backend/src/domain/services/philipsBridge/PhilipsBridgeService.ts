@@ -418,7 +418,7 @@ export class PhilipsBridgeService extends BaseService {
       }
       throw new Error(`hue ${path} returned ${res.status}`);
     }
-    const body = await res.json<HueListResponse<HueResource>>();
+    const body = (await res.json()) as HueListResponse<HueResource>;
     return body.data ?? [];
   }
 
@@ -447,7 +447,7 @@ export class PhilipsBridgeService extends BaseService {
         }
         return {};
       }
-      const body = await res.json<HueListResponse<HueLight>>();
+      const body = (await res.json()) as HueListResponse<HueLight>;
       const lights = body.data ?? [];
       // seed the live map so SSE deltas keep it current from here on;
       // rebuild it so lights removed while unobserved don't linger

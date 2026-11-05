@@ -103,6 +103,7 @@ const existingService: ServiceInstance = {
   kind: "ipfs",
   instanceId: "primary",
   enabled: true,
+  profileId: "default",
   config: { kind: "ipfs", instanceId: "primary", enabled: true, apiUrl: "http://127.0.0.1:5001" },
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",

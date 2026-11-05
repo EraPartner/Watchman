@@ -25,12 +25,17 @@ function makeConfig(overrides: Partial<RoonInstance> = {}): RoonInstance {
 
 // ─── Fake Roon connect ────────────────────────────────────────────────────────
 
-function makeFakeConnect(): { connect: RoonConnectFn; handle: RoonHandle } {
+interface FakeRoonHandle extends RoonHandle {
+  /** Lets tests inject state before onStart resolves. */
+  _setZones(z: RoonZone[], p: boolean): void;
+}
+
+function makeFakeConnect(): { connect: RoonConnectFn; handle: FakeRoonHandle } {
   let zones: RoonZone[] = [];
   let paired = false;
   let closed = false;
 
-  const handle: RoonHandle = {
+  const handle: FakeRoonHandle = {
     getZones: () => (closed ? [] : [...zones]),
     isPaired: () => !closed && paired,
     close: async () => {
@@ -38,12 +43,10 @@ function makeFakeConnect(): { connect: RoonConnectFn; handle: RoonHandle } {
       zones = [];
       paired = false;
     },
-  };
-
-  // Allow tests to inject state before onStart resolves
-  (handle as unknown as Record<string, unknown>)._setZones = (z: RoonZone[], p: boolean) => {
-    zones = z;
-    paired = p;
+    _setZones: (z: RoonZone[], p: boolean) => {
+      zones = z;
+      paired = p;
+    },
   };
 
   const connect: RoonConnectFn = async () => handle;
@@ -175,7 +178,7 @@ describe('RoonService — Roon API (RN2)', () => {
       roonConnect: connect,
     });
     await svc.onStart();
-    (handle as unknown as Record<string, unknown>)._setZones(
+    handle._setZones(
       [{ zoneId: 'z1', displayName: 'Kitchen', state: 'playing', queueItemsRemaining: 1, queueTimeRemaining: 120, outputCount: 1, nowPlaying: { oneLine: 'Abbey Road' } }],
       true,
     );
@@ -258,7 +261,7 @@ describe('RoonService — Roon API (RN2)', () => {
       roonConnect: connect,
     });
     await svc.onStart();
-    (handle as unknown as Record<string, unknown>)._setZones(
+    handle._setZones(
       [{ zoneId: 'z1', displayName: 'Kitchen', state: 'paused', queueItemsRemaining: 3, queueTimeRemaining: 600, outputCount: 1, outputNames: ['Kitchen DAC'] }],
       true,
     );

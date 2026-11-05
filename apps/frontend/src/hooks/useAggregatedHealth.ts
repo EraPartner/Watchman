@@ -100,8 +100,8 @@ export function pickError(
  * when there is no real data yet (the empty placeholder has fetchedAt 0).
  */
 export function staleHealthSince(query: {
-  isError?: boolean;
-  data?: AggregatedHealth;
+  isError?: boolean | undefined;
+  data?: AggregatedHealth | undefined;
 }): number | undefined {
   if (!query.isError) return undefined;
   const fetchedAt = query.data?.fetchedAt ?? 0;

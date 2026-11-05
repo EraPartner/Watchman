@@ -125,7 +125,7 @@ describe("useAggregatedHealth", () => {
     useAggregatedHealth(15000);
 
     expect(useQueryMock).toHaveBeenCalledTimes(1);
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryKey: unknown[];
       refetchInterval: number;
       retry: number;
@@ -144,7 +144,7 @@ describe("useAggregatedHealth", () => {
 
     useAggregatedHealth();
 
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryFn: () => Promise<AggregatedHealth>;
     };
     const result = await opts.queryFn();
@@ -159,7 +159,7 @@ describe("useAggregatedHealth", () => {
 
     useAggregatedHealth();
 
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryFn: () => Promise<AggregatedHealth>;
     };
     const result = await opts.queryFn();
@@ -177,7 +177,7 @@ describe("useAggregatedHealth", () => {
 
     useAggregatedHealth();
 
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryFn: () => Promise<AggregatedHealth>;
     };
     const result = await opts.queryFn();

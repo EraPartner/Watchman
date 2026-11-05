@@ -85,7 +85,7 @@ describe("useBackendMetrics", () => {
     useBackendMetrics();
 
     expect(useQueryMock).toHaveBeenCalledTimes(1);
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryKey: unknown[];
       refetchInterval: number;
       staleTime: number;
@@ -109,7 +109,7 @@ describe("useBackendMetrics", () => {
 
     useBackendMetrics();
 
-    const opts = useQueryMock.mock.calls[0][0] as {
+    const opts = useQueryMock.mock.calls[0]?.[0] as {
       queryFn: () => Promise<unknown>;
     };
     const result = await opts.queryFn();

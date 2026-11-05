@@ -122,7 +122,9 @@ describe("NetworkWatcher.tick", () => {
     const { lifecycle, calls } = makeLifecycle();
     const bus = createEventBus();
     const events: EventMap["profile.network.unrecognized"][] = [];
-    bus.on("profile.network.unrecognized", (p) => events.push(p));
+    bus.on("profile.network.unrecognized", (p) => {
+      events.push(p);
+    });
 
     const watcher = createNetworkWatcher({
       detector: makeDetector({ gatewayMac: "cafe-mac" }),

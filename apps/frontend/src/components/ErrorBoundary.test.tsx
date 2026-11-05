@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,7 +13,8 @@ vi.mock("../lib/logger", () => ({
 
 import { ErrorBoundary } from "./ErrorBoundary";
 
-function Thrower({ message = "boom" }: { message?: string }) {
+// Declared as returning null so it is a valid JSX component; it always throws.
+function Thrower({ message = "boom" }: { message?: string }): null {
   throw new Error(message);
 }
 

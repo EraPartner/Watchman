@@ -14,12 +14,15 @@ import type {
   SshExecResult,
   SshExecRequest,
 } from "../../../infra/ssh/sshExecutor.js";
-import type { RaspberryPiInstance } from "../../../config/services.js";
+import {
+  RaspberryPiInstanceSchema,
+  type RaspberryPiInstance,
+} from "../../../config/services.js";
 
 function makeConfig(
   overrides: Partial<RaspberryPiInstance> = {}
 ): RaspberryPiInstance {
-  return {
+  return RaspberryPiInstanceSchema.parse({
     kind: "raspberryPi",
     instanceId: "main",
     enabled: true,
@@ -37,7 +40,7 @@ function makeConfig(
     rpiCliPath: "/opt/rpi/cli.js",
     pingCount: 1,
     ...overrides,
-  };
+  });
 }
 
 interface FakeHandleOpts {

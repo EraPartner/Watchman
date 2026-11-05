@@ -69,7 +69,7 @@ async function readEnvelope<T>(
     throw new UnavailableError(`synology dsm ${what}: HTTP ${res.status}`);
   }
   try {
-    return await res.json<DsmEnvelope<T>>();
+    return (await res.json()) as DsmEnvelope<T>;
   } catch {
     throw new UnavailableError(`synology dsm ${what}: response is not JSON`);
   }

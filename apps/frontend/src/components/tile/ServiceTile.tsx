@@ -52,13 +52,13 @@ const SPARKLINE_TONE: Record<
 
 export interface ServiceTileProps {
   kind: ServiceKind;
-  instanceId?: string;
+  instanceId?: string | undefined;
   instance?: ServiceInstance;
   size?: TileSize;
   density?: TileDensity;
   onOpenDetail?: (ctx: {
     kind: ServiceKind;
-    instanceId?: string;
+    instanceId?: string | undefined;
     renderer: ServiceRenderer;
   }) => void;
   className?: string;

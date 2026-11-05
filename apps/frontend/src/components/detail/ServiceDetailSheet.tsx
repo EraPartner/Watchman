@@ -59,7 +59,7 @@ function fmtMs(ms?: number): string | undefined {
 
 export interface ServiceDetailSheetProps {
   kind: ServiceKind | undefined;
-  instanceId?: string;
+  instanceId?: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

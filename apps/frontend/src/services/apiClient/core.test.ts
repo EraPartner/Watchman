@@ -51,7 +51,7 @@ describe("ApiClientCore.request", () => {
     const core = new ApiClientCore();
     await expect(core.request("/x")).resolves.toEqual({ foo: 1 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0] ?? [];
     expect(url).toBe("/x");
     expect((opts as RequestInit).method).toBe("GET");
   });
@@ -115,7 +115,7 @@ describe("ApiClientCore.request", () => {
     fetchMock.mockResolvedValue(mockResponse({ json: { data: { ok: true } } }));
     const core = new ApiClientCore();
     await core.request("/create", { method: "POST", body: '{"a":1}' });
-    const opts = fetchMock.mock.calls[0][1] as RequestInit;
+    const opts = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect((opts.headers as Record<string, string>)["Content-Type"]).toBe(
       "application/json"
     );
@@ -129,7 +129,7 @@ describe("ApiClientCore.request", () => {
       body: "x=1",
       headers: { "content-type": "application/x-www-form-urlencoded" },
     });
-    const headers = (fetchMock.mock.calls[0][1] as RequestInit)
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit)
       .headers as Record<string, string>;
     expect(headers["content-type"]).toBe("application/x-www-form-urlencoded");
     expect(headers["Content-Type"]).toBeUndefined();
@@ -141,7 +141,7 @@ describe("ApiClientCore.request", () => {
     const h = new Headers();
     h.set("X-Token", "abc");
     await core.request("/h", { headers: h });
-    const headers = (fetchMock.mock.calls[0][1] as RequestInit)
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit)
       .headers as Record<string, string>;
     expect(headers["x-token"]).toBe("abc");
   });
@@ -155,7 +155,7 @@ describe("ApiClientCore.request", () => {
         ["X-B", "2"],
       ],
     });
-    const headers = (fetchMock.mock.calls[0][1] as RequestInit)
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit)
       .headers as Record<string, string>;
     expect(headers["X-A"]).toBe("1");
     expect(headers["X-B"]).toBe("2");

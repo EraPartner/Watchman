@@ -24,6 +24,7 @@ const cfg: HomebridgeInstance = {
   versionPath: "/api/status/homebridge-version",
   loginPath: "/api/auth/login",
   allowSelfSigned: false,
+  certSha256: "",
 };
 
 function fakeClient(handler: (path: string) => unknown): HomebridgeClient {

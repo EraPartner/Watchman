@@ -170,7 +170,8 @@ export class ApiClientCore {
       method,
       headers,
       signal,
-      body: options?.body as BodyInit | null | undefined,
+      // fetch treats a null body like an absent one.
+      body: (options?.body ?? null) as BodyInit | null,
     };
 
     const promise = (async () => {

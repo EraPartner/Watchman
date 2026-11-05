@@ -648,7 +648,9 @@ export class BitcoinService extends BaseService {
         `bitcoin rpc batch returned ${res.status}: ${text.slice(0, 200)}`
       );
     }
-    const env = await res.json<Array<RpcEnvelope<unknown> & { id?: number }>>();
+    const env = (await res.json()) as Array<
+      RpcEnvelope<unknown> & { id?: number }
+    >;
     if (!Array.isArray(env)) {
       throw new UnavailableError("bitcoin rpc batch returned a non-array");
     }
@@ -677,7 +679,7 @@ export class BitcoinService extends BaseService {
         `bitcoin rpc ${method} returned ${res.status}: ${text.slice(0, 200)}`
       );
     }
-    const env = await res.json<RpcEnvelope<T>>();
+    const env = (await res.json()) as RpcEnvelope<T>;
     if (env.error) {
       throw new UnavailableError(
         `bitcoin rpc ${method} error: ${env.error.message ?? "unknown"}`

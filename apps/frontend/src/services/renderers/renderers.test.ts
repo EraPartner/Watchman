@@ -76,22 +76,22 @@ describe("routerRenderer", () => {
   });
 
   it("tone returns ok for healthy router", () => {
-    const tone = routerRenderer.tone?.({ stats: { reachable: true }, health: { status: "online" } as unknown as import("../apiClient/types").HealthSnapshot });
+    const tone = routerRenderer.tone?.({ stats: { reachable: true }, health: { status: "online" } });
     expect(tone).toBe("ok");
   });
 
   it("tone returns crit for offline status", () => {
-    const tone = routerRenderer.tone?.({ stats: {}, health: { status: "offline" } as unknown as import("../apiClient/types").HealthSnapshot });
+    const tone = routerRenderer.tone?.({ stats: {}, health: { status: "offline" } });
     expect(tone).toBe("crit");
   });
 
   it("tone returns warn for warning status", () => {
-    const tone = routerRenderer.tone?.({ stats: {}, health: { status: "warning" } as unknown as import("../apiClient/types").HealthSnapshot });
+    const tone = routerRenderer.tone?.({ stats: {}, health: { status: "warning" } });
     expect(tone).toBe("warn");
   });
 
   it("tone returns crit when stats show reachable=false", () => {
-    const tone = routerRenderer.tone?.({ stats: { reachable: false }, health: { status: "online" } as unknown as import("../apiClient/types").HealthSnapshot });
+    const tone = routerRenderer.tone?.({ stats: { reachable: false }, health: { status: "online" } });
     expect(tone).toBe("crit");
   });
 

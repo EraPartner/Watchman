@@ -8,14 +8,17 @@ export type WsEventType =
   | "connection"
   | "service_update"
   | "alert"
-  | "metrics";
+  | "metrics"
+  | "service_config_changed"
+  | "profile_switched"
+  | "profile_network_unrecognized";
 
 export interface WsEvent {
   type: WsEventType;
-  service?: string;
-  instanceId?: string;
-  level?: "info" | "warning" | "error";
-  message?: string;
+  service?: string | undefined;
+  instanceId?: string | undefined;
+  level?: "info" | "warning" | "error" | undefined;
+  message?: string | undefined;
   data?: unknown;
   timestamp: string;
 }

@@ -77,7 +77,7 @@ describe("useServiceInstances", () => {
     useServiceInstances();
 
     expect(useQueryMock).toHaveBeenCalledTimes(1);
-    const options = useQueryMock.mock.calls[0][0] as {
+    const options = useQueryMock.mock.calls[0]?.[0] as {
       queryKey: unknown[];
       queryFn: () => Promise<unknown>;
       refetchInterval: number;

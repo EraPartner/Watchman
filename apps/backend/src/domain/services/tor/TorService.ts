@@ -767,7 +767,7 @@ export class TorService extends BaseService {
         `onionoo returned ${res.status}: ${text.slice(0, 200)}`
       );
     }
-    return res.json<OnionooResponse>();
+    return (await res.json()) as OnionooResponse;
   }
 
   // Onionoo enrichment (country/AS/consensus weight) changes on the order of

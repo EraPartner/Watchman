@@ -17,10 +17,10 @@ class Stub extends BaseService {
   readonly instanceId = "main";
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 1000 };
   statsCalls = 0;
-  async checkHealth(): Promise<HealthResult> {
+  async checkHealth(_signal: AbortSignal): Promise<HealthResult> {
     return ok({ reachable: true, at: 0 });
   }
-  async getStats(): Promise<StatsResult> {
+  async getStats(_signal: AbortSignal): Promise<StatsResult> {
     this.statsCalls++;
     return ok({ metrics: { n: this.statsCalls }, at: this.statsCalls });
   }

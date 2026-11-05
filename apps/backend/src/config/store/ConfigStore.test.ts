@@ -26,8 +26,12 @@ describe("ConfigStore", () => {
     const bus = createEventBus();
     renamedEvents = [];
     updatedEvents = [];
-    bus.on("config:service.renamed", (p) => renamedEvents.push(p));
-    bus.on("config:service.updated", (p) => updatedEvents.push(p));
+    bus.on("config:service.renamed", (p) => {
+      renamedEvents.push(p);
+    });
+    bus.on("config:service.updated", (p) => {
+      updatedEvents.push(p);
+    });
     store = createConfigStore(pool, encryptor, bus);
   });
 

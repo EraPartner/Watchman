@@ -28,7 +28,7 @@ import type { ServiceKind } from "@/services/renderers/types";
 
 interface OpenCtx {
   kind: ServiceKind;
-  instanceId?: string;
+  instanceId?: string | undefined;
 }
 
 type EditorState = { mode: "closed" } | { mode: "create" };

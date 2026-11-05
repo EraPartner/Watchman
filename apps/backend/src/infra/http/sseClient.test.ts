@@ -46,6 +46,13 @@ afterAll(
     })
 );
 
+// A function, not inline code: the server callback reassigns activeRes, which
+// control-flow narrowing in the test body cannot see.
+function endActiveResponse(): void {
+  activeRes?.end();
+  activeRes = null;
+}
+
 function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
   return new Promise((resolve, reject) => {
     const started = Date.now();
@@ -83,8 +90,7 @@ describe("startSseStream", () => {
     expect(messages[2]).toBe("partial");
 
     abort.abort();
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
   });
 
   it("decodes multi-byte UTF-8 split across chunks", async () => {
@@ -108,8 +114,7 @@ describe("startSseStream", () => {
     expect(messages[0]).toBe('{"name":"Küche"}');
 
     abort.abort();
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
   });
 
   it("reconnects after the server drops the stream", async () => {
@@ -126,16 +131,14 @@ describe("startSseStream", () => {
     });
 
     await waitFor(() => connections >= 1);
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
     await waitFor(() => connections >= 2);
     // a clean end loses events too, so callers are told (e.g. to re-seed)
     expect(errors).toHaveLength(1);
     expect(String(errors[0])).toMatch(/sse stream ended/);
 
     abort.abort();
-    activeRes?.end();
-    activeRes = null;
+    endActiveResponse();
   });
 
   it("reports non-2xx responses via onError and keeps retrying until aborted", async () => {

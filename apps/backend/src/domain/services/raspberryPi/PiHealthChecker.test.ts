@@ -2,11 +2,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { PiHealthChecker } from './PiHealthChecker.js';
 import type { PigpioClient, PigpioHandle } from '../../../infra/gpio/pigpioClient.js';
 import type { PingProber } from '../../../infra/net/pingProbe.js';
-import type { RaspberryPiInstance } from '../../../config/services.js';
+import {
+  RaspberryPiInstanceSchema,
+  type RaspberryPiInstance,
+} from '../../../config/services.js';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const CONFIG: RaspberryPiInstance = {
+const CONFIG: RaspberryPiInstance = RaspberryPiInstanceSchema.parse({
   kind: 'raspberryPi',
   instanceId: 'main',
   enabled: true,
@@ -16,7 +19,7 @@ const CONFIG: RaspberryPiInstance = {
   pollPolicy: { healthMs: 10_000, statsMs: 30_000, jitterRatio: 0.1 },
   cacheTtlMs: 10_000,
   timeoutMs: 3_000,
-};
+});
 
 function makeFakeHandle(): PigpioHandle {
   return {
@@ -34,7 +37,7 @@ function makeFakePigpio(connectImpl: () => Promise<PigpioHandle>): PigpioClient 
 
 function makeFakePing(success: boolean, avgMs = 5): PingProber {
   return {
-    probe: vi.fn(async () => ({ success, avgMs: success ? avgMs : undefined })),
+    probe: vi.fn(async () => (success ? { success, avgMs } : { success })),
   };
 }
 

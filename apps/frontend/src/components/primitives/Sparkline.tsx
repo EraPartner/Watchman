@@ -5,7 +5,7 @@ export type SparklineTone = "neutral" | "ok" | "warn" | "crit" | "accent";
 
 export interface SparklineProps extends Omit<
   SVGAttributes<SVGSVGElement>,
-  "children"
+  "children" | "fill"
 > {
   /** Numeric series. Non-finite values are filtered. */
   data: ReadonlyArray<number>;

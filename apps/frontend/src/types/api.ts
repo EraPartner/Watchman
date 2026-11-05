@@ -1,7 +1,7 @@
 // API Response Types
 export interface ServiceHealth {
   status: "online" | "offline" | "warning" | "loading";
-  error?: string;
+  error?: string | undefined;
 }
 
 export interface BitcoinStats {

@@ -14,7 +14,7 @@ function makeFakeRoon(): FakeRoonControl {
   let handle: {
     zones: Map<string, RoonZone>;
     paired: boolean;
-    onZonesChanged?: (z: ReadonlyArray<RoonZone>) => void;
+    onZonesChanged?: ((z: ReadonlyArray<RoonZone>) => void) | undefined;
     closed: boolean;
   } | null = null;
 

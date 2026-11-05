@@ -48,7 +48,7 @@ describe("configApi", () => {
       enabled: true,
       config: { host: "10.0.0.1" },
     });
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = requestMock.mock.calls[0] ?? [];
     expect(url).toBe("/config/services");
     expect(opts.method).toBe("POST");
     const body = JSON.parse(opts.body);
@@ -59,7 +59,7 @@ describe("configApi", () => {
   it("createService without config still sends valid body", async () => {
     requestMock.mockResolvedValue({});
     await configApi.createService({ kind: "tor", instanceId: "main", enabled: true });
-    const [, opts] = requestMock.mock.calls[0];
+    const [, opts] = requestMock.mock.calls[0] ?? [];
     const body = JSON.parse(opts.body);
     expect(body.kind).toBe("tor");
   });
@@ -67,7 +67,7 @@ describe("configApi", () => {
   it("updateService sends PUT to /config/services/:id", async () => {
     requestMock.mockResolvedValue({});
     await configApi.updateService("tor:main", { enabled: false });
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = requestMock.mock.calls[0] ?? [];
     expect(url).toBe("/config/services/tor%3Amain");
     expect(opts.method).toBe("PUT");
   });
@@ -75,7 +75,7 @@ describe("configApi", () => {
   it("deleteService sends DELETE to /config/services/:id", async () => {
     requestMock.mockResolvedValue(undefined);
     await configApi.deleteService("bitcoin:main");
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = requestMock.mock.calls[0] ?? [];
     expect(url).toBe("/config/services/bitcoin%3Amain");
     expect(opts.method).toBe("DELETE");
   });
@@ -83,7 +83,7 @@ describe("configApi", () => {
   it("testService sends POST to /config/services/:id/test", async () => {
     requestMock.mockResolvedValue({ ok: true, latencyMs: 42 });
     const result = await configApi.testService("synology:main");
-    const [url] = requestMock.mock.calls[0];
+    const [url] = requestMock.mock.calls[0] ?? [];
     expect(url).toBe("/config/services/synology%3Amain/test");
     expect(result.ok).toBe(true);
   });
@@ -113,7 +113,7 @@ describe("configApi", () => {
     requestMock.mockResolvedValue(importResult);
     const bundle = { version: 1 as const, exportedAt: "2024-01-01", payload: "data" };
     await configApi.importConfig(bundle);
-    const [url, opts] = requestMock.mock.calls[0];
+    const [url, opts] = requestMock.mock.calls[0] ?? [];
     expect(url).toBe("/config/import");
     expect(opts.method).toBe("POST");
     const body = JSON.parse(opts.body);

@@ -138,6 +138,9 @@ function makeStore(initial: Map<string, StoredService>): ConfigStore {
     async importBundle() {
       return { imported: 0, updated: 0, skipped: 0, errors: [] };
     },
+    async loadErrors() {
+      return [];
+    },
   };
 }
 
@@ -257,7 +260,9 @@ describe("ServiceLifecycle", () => {
     const poller = makePoller();
     const bus = createEventBus();
     const switched: Array<{ profileId: string; reason: string }> = [];
-    bus.on("profile.switched", (p) => switched.push(p));
+    bus.on("profile.switched", (p) => {
+      switched.push(p);
+    });
 
     const lifecycle = createServiceLifecycle({
       store,

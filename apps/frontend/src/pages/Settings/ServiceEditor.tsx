@@ -14,13 +14,13 @@ import {
 import { readConnectionTest } from "@/lib/connectionTest";
 
 interface ServiceEditorProps {
-  existing?: ServiceInstance;
-  presetKind?: string;
-  hideKind?: boolean;
-  hideCancel?: boolean;
+  existing?: ServiceInstance | undefined;
+  presetKind?: string | undefined;
+  hideKind?: boolean | undefined;
+  hideCancel?: boolean | undefined;
   onSubmit: (input: ServiceInstanceInput) => Promise<void>;
   onCancel: () => void;
-  submitting?: boolean;
+  submitting?: boolean | undefined;
 }
 
 type FormValue = string | number | boolean | number[] | string[];
@@ -90,7 +90,7 @@ function initialValues(
   return values;
 }
 
-function arrayToCsv(v: FormValue): string {
+function arrayToCsv(v: FormValue | null | undefined): string {
   if (Array.isArray(v)) return v.join(", ");
   return v === undefined || v === null ? "" : String(v);
 }
@@ -471,10 +471,10 @@ interface FieldInputProps {
   field: FieldMeta;
   value: FormValue | undefined;
   onChange: (v: FormValue) => void;
-  secretPlaceholder?: string;
+  secretPlaceholder?: string | undefined;
   /** Set for a saved, optional secret: toggles clearing it on save. */
-  onToggleClearSecret?: () => void;
-  secretCleared?: boolean;
+  onToggleClearSecret?: (() => void) | undefined;
+  secretCleared?: boolean | undefined;
 }
 
 function FieldInput({

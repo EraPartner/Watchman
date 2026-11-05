@@ -115,8 +115,8 @@ vi.mock("@/components/tile/ServiceTile", () => ({
     onOpenDetail,
   }: {
     kind: string;
-    instanceId?: string;
-    onOpenDetail?: (ctx: { kind: string; instanceId?: string }) => void;
+    instanceId?: string | undefined;
+    onOpenDetail?: (ctx: { kind: string; instanceId?: string | undefined }) => void;
   }) =>
     h(
       "button",

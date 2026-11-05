@@ -29,8 +29,8 @@ export interface MetricValueProps
   extends HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof metricVariants> {
   value: ReactNode;
-  unit?: string;
-  label?: string;
+  unit?: string | undefined;
+  label?: string | undefined;
 }
 
 export const MetricValue = forwardRef<HTMLSpanElement, MetricValueProps>(

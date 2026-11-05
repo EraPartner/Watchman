@@ -16,7 +16,7 @@ import {
   useCaptureNetwork,
 } from "@/pages/Settings/useProfileQueries";
 
-function Dot({ color }: { color?: string | null }) {
+function Dot({ color }: { color?: string | null | undefined }) {
   return (
     <span
       aria-hidden

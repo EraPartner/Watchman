@@ -39,7 +39,7 @@ function ProfileEditor({
   onCancel,
   onSubmit,
 }: {
-  existing?: Profile;
+  existing?: Profile | undefined;
   submitting: boolean;
   onCancel: () => void;
   onSubmit: (v: FormValues) => Promise<void>;
@@ -287,10 +287,12 @@ export default function Profiles() {
               onSubmit={async (v) => {
                 // Send an emptied description as "" (not undefined, which
                 // JSON drops) so the backend clears it instead of keeping it.
+                // An empty color is left out, as JSON dropped the old
+                // `color: undefined`.
                 const patch = {
                   name: v.name,
                   description: v.description,
-                  color: v.color || undefined,
+                  ...(v.color ? { color: v.color } : {}),
                 };
                 if (editor.mode === "edit") {
                   await updateMut.mutateAsync({ id: editor.profile.id, patch });
