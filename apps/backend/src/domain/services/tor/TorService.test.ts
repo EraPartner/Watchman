@@ -100,6 +100,10 @@ beforeEach(() => {
   };
 });
 
+/** getinfo round trips per ControlPort stats poll when the node has no
+ *  fingerprint/address (so ns/id and ip-to-country are skipped). */
+const GETINFO_CALLS_PER_POLL = 8;
+
 function makeConfig(overrides: Partial<TorInstance> = {}): TorInstance {
   return {
     kind: "tor",
@@ -711,19 +715,17 @@ describe("TorService", () => {
         ["traffic/read", "4000"],
         ["traffic/written", "2500"],
       ]);
-      // Each getStatsControlPort does 4 getinfo calls (core, accounting,
-      // orconn/circuit listings, relay identity — ns/country are skipped when
-      // identity is empty).
-      const torControl = sequenceTorControl([
-        poll1,
-        new Map(),
-        new Map(),
-        new Map(),
-        poll2,
-        new Map(),
-        new Map(),
-        new Map(),
-      ]);
+      // Each getStatsControlPort does 8 getinfo calls (core, accounting,
+      // orconn/circuit listings, relay identity, status, uptime,
+      // reachability, hibernation — ns/country are skipped when identity is
+      // empty).
+      const empty = (): Map<string, string> => new Map();
+      const torControl = sequenceTorControl(
+        [poll1, poll2].flatMap((core) => [
+          core,
+          ...Array.from({ length: GETINFO_CALLS_PER_POLL - 1 }, empty),
+        ])
+      );
       const svc = new TorService({
         http: createHttpClient(),
         ping: fakePing(),
@@ -757,9 +759,7 @@ describe("TorService", () => {
       const torControl = sequenceTorControl(
         [before, afterRestart, later].flatMap((core) => [
           core,
-          empty(),
-          empty(),
-          empty(),
+          ...Array.from({ length: GETINFO_CALLS_PER_POLL - 1 }, empty),
         ])
       );
       const svc = new TorService({
