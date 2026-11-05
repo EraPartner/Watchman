@@ -295,3 +295,55 @@ describe("synologyRenderer DSM error", () => {
     expect(tone({ dsmError: "x" }, "offline")).toBe("crit");
   });
 });
+
+describe("synologyRenderer hardware health", () => {
+  const tone = (stats: Record<string, unknown>) =>
+    synologyRenderer.tone({ stats, health: { status: "online" } });
+  const base = { systemStatus: "Normal", cpuUsage: 10, cpuTemp: 40 };
+
+  it("is critical for a failing disk, degraded pool or failed fan/PSU", () => {
+    expect(tone({ ...base, diskDegradedCount: 0, raidDegradedCount: 0, powerStatus: "normal" })).toBe("ok");
+    expect(tone({ ...base, diskDegradedCount: 1 })).toBe("crit");
+    expect(tone({ ...base, raidDegradedCount: 1 })).toBe("crit");
+    expect(tone({ ...base, volumeDegradedCount: 1 })).toBe("crit");
+    expect(tone({ ...base, sysFanStatus: "failed" })).toBe("crit");
+    expect(tone({ ...base, powerStatus: "" })).toBe("ok");
+  });
+
+  it("lists the health rows in the detail sheet", () => {
+    const keys = synologyRenderer.detail.flatMap((g) => g.metrics.map((m) => m.key));
+    expect(keys).toEqual(
+      expect.arrayContaining(["diskDegradedCount", "raidDegradedCount", "diskTempMax", "upgradeAvailable"])
+    );
+  });
+});
+
+describe("host renderers: new health signals", () => {
+  const piTone = (stats: Record<string, unknown>) =>
+    raspberryPiRenderer.tone({ stats, health: { status: "online" } });
+  const macTone = (stats: Record<string, unknown>) =>
+    macMiniRenderer.tone({ stats, health: { status: "online" } });
+
+  it("Pi: read-only root is critical, failed units and a full disk warn", () => {
+    expect(piTone({ cpuTemp: 40, throttled: 0, rootReadOnly: false, failedUnits: 0 })).toBe("ok");
+    expect(piTone({ cpuTemp: 40, rootReadOnly: true })).toBe("crit");
+    expect(piTone({ cpuTemp: 40, failedUnits: 2 })).toBe("warn");
+    expect(piTone({ cpuTemp: 40, diskUsagePercent: 93 })).toBe("warn");
+  });
+
+  it("Mac: failed SMART is critical, thermal warning and low memory warn", () => {
+    expect(macTone({ cpuUsagePercent: 5, smartPassed: true, thermalWarning: false, memPressureFreePercent: 60 })).toBe("ok");
+    expect(macTone({ cpuUsagePercent: 5, smartPassed: false })).toBe("crit");
+    expect(macTone({ cpuUsagePercent: 5, thermalWarning: true })).toBe("warn");
+    expect(macTone({ cpuUsagePercent: 5, memPressureFreePercent: 8 })).toBe("warn");
+  });
+});
+
+describe("routerRenderer link state", () => {
+  it("warns when a configured-up link is down", () => {
+    const tone = (stats: Record<string, unknown>) =>
+      routerRenderer.tone({ stats, health: { status: "online" } });
+    expect(tone({ linksDown: 0 })).toBe("ok");
+    expect(tone({ linksDown: 1, linksDownNames: "eth1" })).toBe("warn");
+  });
+});

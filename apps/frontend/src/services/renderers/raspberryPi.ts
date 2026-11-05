@@ -1,6 +1,21 @@
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
-import { dotGet, fmtNumber, fmtRaw, fmtTempC, fmtUptime, fmtVolt } from "./formatters";
+import type { MetricFormatter } from "./types";
+import {
+  dotGet,
+  fmtBytes,
+  fmtNumber,
+  fmtPercent,
+  fmtRaw,
+  fmtTempC,
+  fmtUptime,
+  fmtVolt,
+} from "./formatters";
+
+const fmtRate: MetricFormatter = (v) => {
+  const s = fmtBytes(v);
+  return s === "—" ? s : `${s}/s`;
+};
 
 type Stats = Record<string, unknown>;
 
@@ -49,6 +64,7 @@ export const raspberryPiRenderer: ServiceRenderer<Stats> = {
         { key: "clockRate", label: "Clock rate", format: fmtNumber(0) },
         { key: "voltage", label: "Core voltage", format: fmtVolt },
         { key: "throttled", label: "Throttle status", format: fmtThrottled },
+        { key: "cpuUsagePercent", label: "CPU usage", format: fmtPercent(1, 100) },
         { key: "load", label: "Load avg (1m)", format: fmtNumber(2) },
       ],
     },
@@ -56,6 +72,27 @@ export const raspberryPiRenderer: ServiceRenderer<Stats> = {
       title: "Memory",
       metrics: [
         { key: "memory", label: "Total RAM", format: fmtRaw },
+        { key: "memAvailableBytes", label: "Available", format: fmtBytes },
+        { key: "swapUsedBytes", label: "Swap used", format: fmtBytes },
+        { key: "swapTotalBytes", label: "Swap total", format: fmtBytes },
+      ],
+    },
+    {
+      title: "Disk and network",
+      metrics: [
+        { key: "diskUsagePercent", label: "Root disk used", format: fmtPercent(0, 100) },
+        { key: "diskUsedBytes", label: "Root disk used (bytes)", format: fmtBytes },
+        { key: "diskTotalBytes", label: "Root disk size", format: fmtBytes },
+        { key: "rootReadOnly", label: "Root mounted read-only", format: fmtRaw },
+        { key: "netRxBps", label: "Receive rate", format: fmtRate },
+        { key: "netTxBps", label: "Transmit rate", format: fmtRate },
+      ],
+    },
+    {
+      title: "Services",
+      metrics: [
+        { key: "failedUnits", label: "Failed systemd units", format: fmtRaw },
+        { key: "failedUnitNames", label: "Failed units", format: fmtRaw },
       ],
     },
     {
@@ -78,6 +115,7 @@ export const raspberryPiRenderer: ServiceRenderer<Stats> = {
     { metric: "clockRate", label: "Clock rate", kind: "line", format: fmtNumber(0) },
     { metric: "voltage", label: "Core voltage", kind: "line", format: fmtVolt },
     { metric: "load", label: "Load avg", kind: "line", format: fmtNumber(2) },
+    { metric: "cpuUsagePercent", label: "CPU usage", kind: "area", format: fmtPercent(0, 100) },
   ],
 
   tone: ({ stats, health }) => {
@@ -85,6 +123,8 @@ export const raspberryPiRenderer: ServiceRenderer<Stats> = {
     if (health?.status === "warning") return "warn";
     // Only current throttling warns: the since-boot bits stay set after a
     // single brown-out, which kept the tile amber until the next reboot.
+    // a root filesystem remounted read-only usually means a failing SD card
+    if (stats && dotGet(stats, "rootReadOnly") === true) return "crit";
     const throttled = currentThrottled(stats);
     if (throttled !== undefined && throttled !== 0) return "warn";
     const temp = stats ? dotGet(stats, "cpuTemp") : undefined;
@@ -92,6 +132,10 @@ export const raspberryPiRenderer: ServiceRenderer<Stats> = {
       if (temp >= 80) return "crit";
       if (temp >= 70) return "warn";
     }
+    const failed = stats ? dotGet(stats, "failedUnits") : undefined;
+    if (typeof failed === "number" && failed > 0) return "warn";
+    const disk = stats ? dotGet(stats, "diskUsagePercent") : undefined;
+    if (typeof disk === "number" && disk >= 90) return "warn";
     return "ok";
   },
 };

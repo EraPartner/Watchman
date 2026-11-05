@@ -81,4 +81,19 @@ describe("pinned fingerprint fields", () => {
     expect(schema.safeParse({ kind: "synology", host: "h", dsmCertSha256: CERT.replace(/:/g, "").toLowerCase() }).success).toBe(true);
     expect(schema.safeParse({ kind: "synology", host: "h", dsmCertSha256: "AB:CD" }).success).toBe(false);
   });
+
+  it("validates the AdGuard certificate pin and keeps the query log off by default", () => {
+    const schema = KIND_META.adguard.schema;
+    const parsed = schema.parse({ kind: "adguard", baseUrl: "https://h" }) as Record<string, unknown>;
+    expect(parsed["readQueryLog"]).toBe(false);
+    expect(parsed["certSha256"]).toBe("");
+    expect(schema.safeParse({ kind: "adguard", baseUrl: "https://h", certSha256: CERT }).success).toBe(true);
+    expect(schema.safeParse({ kind: "adguard", baseUrl: "https://h", certSha256: "AB:CD" }).success).toBe(false);
+  });
+
+  it("treats the router SNMPv3 keys as secrets", () => {
+    expect(KIND_META.router.secretFields).toEqual(
+      expect.arrayContaining(["snmpCommunity", "snmpAuthKey", "snmpPrivKey"])
+    );
+  });
 });

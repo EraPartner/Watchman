@@ -4,7 +4,13 @@ import { TimeoutError, UnavailableError, UnauthorizedError } from '../../core/er
 import { expandHome } from '../../core/expandHome.js';
 import type { SshExecRequest, SshExecResult, SshExecutor } from './sshExecutor.js';
 import { exitResult } from './exitResult.js';
-import { hostKeyMismatch } from './hostKey.js';
+import { hostKeyFingerprint, hostKeyMismatch } from './hostKey.js';
+
+export interface SshPoolOptions {
+  /** Called once per host:port the first time an unpinned host key is seen,
+   *  so the operator can copy the fingerprint into the pin field. */
+  onUnpinnedHostKey?: (host: string, port: number, fingerprint: string) => void;
+}
 
 export interface SshPool extends SshExecutor {
   /** Close all persistent connections and release resources. */
@@ -127,8 +133,12 @@ function execOnReady(client: Client, req: SshExecRequest): Promise<SshExecResult
  * fresh connection (with the credentials of that request), so a host that is
  * down or no longer configured is not reconnected in the background.
  */
-export function createSshPool(): SshPool {
+export function createSshPool(options: SshPoolOptions = {}): SshPool {
   const entries = new Map<PoolKey, PoolEntry>();
+  // Trust on first use for hosts without a pinned fingerprint: the first key
+  // a host:port presents in this process is remembered, and a different key
+  // later is refused (a pin in config always takes precedence).
+  const firstSeenHostKeys = new Map<string, string>();
 
   async function doConnect(key: PoolKey, entry: PoolEntry): Promise<void> {
     const { connectArgs } = entry;
@@ -153,17 +163,33 @@ export function createSshPool(): SshPool {
       ...(privateKey ? { privateKey } : {}),
       ...(connectArgs.passphrase ? { passphrase: connectArgs.passphrase } : {}),
       ...(connectArgs.password ? { password: connectArgs.password } : {}),
-      ...(connectArgs.hostKey ? { hostVerifier: (key: Buffer) => verifyHostKey(entry, key) } : {}),
+      hostVerifier: (key: Buffer) => verifyHostKey(entry, key),
     });
   }
 
   /** Runs during the handshake, before any credentials are sent. */
   function verifyHostKey(entry: PoolEntry, key: Buffer): boolean {
-    const { host, hostKey } = entry.connectArgs;
-    const actual = hostKey ? hostKeyMismatch(key, hostKey) : null;
-    if (actual === null) return true;
+    const { host, port, hostKey } = entry.connectArgs;
+    if (hostKey) {
+      const actual = hostKeyMismatch(key, hostKey);
+      if (actual === null) return true;
+      entry.hostKeyError = new UnauthorizedError(
+        `ssh host key mismatch for ${host}: expected ${hostKey}, server presented ${actual}`,
+      );
+      return false;
+    }
+    const presented = hostKeyFingerprint(key);
+    const seenKey = `${host}:${port}`;
+    const seen = firstSeenHostKeys.get(seenKey);
+    if (seen === undefined) {
+      firstSeenHostKeys.set(seenKey, presented);
+      options.onUnpinnedHostKey?.(host, port, presented);
+      return true;
+    }
+    if (seen === presented) return true;
     entry.hostKeyError = new UnauthorizedError(
-      `ssh host key mismatch for ${host}: expected ${hostKey}, server presented ${actual}`,
+      `ssh host key for ${host} changed since first seen: was ${seen}, server presented ${presented}. ` +
+        'If the change is expected, pin the new fingerprint (or restart Watchman).',
     );
     return false;
   }

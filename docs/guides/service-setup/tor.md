@@ -16,8 +16,9 @@ aliases: [tor setup, set up tor relay, tor controlport]
 > - **ControlPort mode:** ICMP ping plus a Tor control connection that only sends `AUTHENTICATE`,
 >   `GETINFO` (traffic, version, circuits, accounting, bootstrap, reachability self-test, uptime)
 >   and `SETEVENTS BW WARN ERR` for live bandwidth and Tor's own warnings.
-> - **MetricsPort (optional, both modes):** a `GET` of Tor's Prometheus endpoint for the relay
->   overload counters (`tor_relay_load_*`).
+> - **MetricsPort (recommended for live data, both modes):** a `GET` of Tor's Prometheus endpoint
+>   for live traffic (`tor_relay_traffic_bytes`) and the relay overload counters
+>   (`tor_relay_load_*`). It needs no control credential and accepts no commands.
 >   When the ControlPort can't be reached, Watchman falls back to Onionoo by itself.
 >
 > (`apps/backend/src/domain/services/tor/TorService.ts`, `apps/backend/src/infra/tor/`). Details:
@@ -27,8 +28,9 @@ aliases: [tor setup, set up tor relay, tor controlport]
 
 | Use                 | When                                                                  |
 | ------------------- | --------------------------------------------------------------------- |
+| **Onionoo + MetricsPort** (recommended) | Read-only end to end. Onionoo gives flags, weight, country and AS; MetricsPort (2b) adds live traffic and overload counters. No control-port credential anywhere. |
 | **Onionoo**         | Simplest and fully read-only. Data lags by about an hour. Works from anywhere. |
-| **ControlPort**     | Live traffic numbers. Needs access to the relay's control port, which has no read-only mode. |
+| **ControlPort**     | Optional. Adds circuits, accounting, bootstrap and the reachability self-test. Needs access to the relay's control port, which has no read-only mode. |
 
 ## 1. Onionoo mode
 
@@ -39,7 +41,8 @@ nickname.
 
 Watchman makes these requests from its own IP to the Onionoo service run by the Tor Project. In
 ControlPort mode it still asks Onionoo about once an hour for country and AS details, and uses it as
-the fallback.
+the fallback. Once the ControlPort has reported the relay's fingerprint, Watchman asks Onionoo
+with an exact `lookup=<fingerprint>` instead of searching by nickname.
 
 ## 2. ControlPort mode
 
@@ -86,10 +89,13 @@ Watchman's ControlPort at onion-grater's port instead of Tor's.
 > onion-grater's behaviour is from whonix.org/wiki/Dev/onion-grater; no Watchman profile has been
 > tested.
 
-## 2b. MetricsPort (optional)
+## 2b. MetricsPort (recommended for live data)
 
 Tor can serve its own counters over HTTP in Prometheus format. It only reports numbers and accepts
-no commands. In `torrc`:
+no commands, so it is the read-only way to get live traffic: Watchman turns the
+`tor_relay_traffic_bytes` totals into read/written rates from the second poll on, and in Onionoo
+mode the tile's bandwidth then shows that live rate instead of Onionoo's hourly figure
+(`bandwidthSource: metricsport`). In `torrc`:
 
 ```text
 MetricsPort 127.0.0.1:9035
@@ -101,8 +107,9 @@ that exposing the metrics publicly is dangerous for Tor users: keep it on localh
 LAN address. Then set **MetricsPort URL** in Watchman to `http://127.0.0.1:9035/metrics`.
 
 > [!warning] Unverified
-> Watchman reads every `tor_relay_load_*` counter it finds, summed over labels. The exact names
-> depend on the Tor version and weren't checked against a live relay.
+> Watchman reads every `tor_relay_load_*` counter it finds, summed over labels, and
+> `tor_relay_traffic_bytes{direction="read"|"written"}`. The exact names depend on the Tor version
+> (MetricsPort relay metrics need Tor 0.4.7 or later) and weren't checked against a live relay.
 
 ## 3. Add it in Watchman
 
@@ -118,7 +125,7 @@ LAN address. Then set **MetricsPort URL** in Watchman to `http://127.0.0.1:9035/
 | ControlPort password          | Only for password auth                                                        |
 | Cookie auth file              | Only for cookie auth, the path on the Watchman machine. Wins over the password when set. |
 | ICMP probe count              | Default 1                                                                     |
-| MetricsPort URL               | Optional, see 2b                                                              |
+| MetricsPort URL               | Recommended, see 2b                                                           |
 
 ## 4. Check it works
 

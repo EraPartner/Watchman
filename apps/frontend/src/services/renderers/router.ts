@@ -58,6 +58,12 @@ export const routerRenderer: ServiceRenderer<Stats> = {
         { key: "ifOutBps", label: "Upload", format: fmtRate },
         { key: "ifInOctets", label: "Bytes in", format: fmtBytes },
         { key: "ifOutOctets", label: "Bytes out", format: fmtBytes },
+        { key: "linksUp", label: "Links up", format: fmtNumber(0) },
+        // configured up (ifAdminStatus) but not passing traffic (ifOperStatus)
+        { key: "linksDown", label: "Links down", format: fmtNumber(0) },
+        { key: "linksDownNames", label: "Down links", format: fmtRaw },
+        { key: "ifErrors", label: "Interface errors (total)", format: fmtNumber(0) },
+        { key: "snmpVersion", label: "SNMP version", format: fmtRaw },
       ],
     },
   ],
@@ -73,6 +79,8 @@ export const routerRenderer: ServiceRenderer<Stats> = {
     if (health?.status === "offline") return "crit";
     if (health?.status === "warning") return "warn";
     if (stats && dotGet(stats, "reachable") === false) return "crit";
+    const down = stats ? dotGet(stats, "linksDown") : undefined;
+    if (typeof down === "number" && down > 0) return "warn";
     return "ok";
   },
 };

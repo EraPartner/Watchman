@@ -44,6 +44,28 @@ const OIDS = {
   memoryBuffer: "1.3.6.1.4.1.2021.4.14.0", // memBuffer, kB
   memoryCached: "1.3.6.1.4.1.2021.4.15.0", // memCached, kB
   sysUpTime: "1.3.6.1.2.1.1.3.0", // fallback when hrSystemUptime is absent
+  // SYNOLOGY-SYSTEM-MIB health scalars (1 = Normal, 2 = Failed); appended so
+  // the positional indexes above stay unchanged
+  powerStatus: "1.3.6.1.4.1.6574.1.3.0",
+  systemFanStatus: "1.3.6.1.4.1.6574.1.4.1.0",
+  cpuFanStatus: "1.3.6.1.4.1.6574.1.4.2.0",
+  // upgradeAvailable: 1 Available, 2 Unavailable, 3 Connecting,
+  // 4 Disconnected, 5 Others
+  upgradeAvailable: "1.3.6.1.4.1.6574.1.5.4.0",
+} as const;
+
+// Per-disk and per-RAID health tables (Synology DiskStation MIB guide).
+// Read with walks so a NAS with any number of bays works.
+const HEALTH_WALK = {
+  // SYNOLOGY-DISK-MIB diskStatus: 1 Normal, 2 Initialized, 3 NotInitialized,
+  // 4 SystemPartitionFailed, 5 Crashed
+  diskStatus: "1.3.6.1.4.1.6574.2.1.1.5",
+  diskTemperature: "1.3.6.1.4.1.6574.2.1.1.6",
+  // diskHealthStatus (DSM 7.1+): 1 Normal, 2 Warning, 3 Critical, 4 Failing
+  diskHealthStatus: "1.3.6.1.4.1.6574.2.1.1.13",
+  // SYNOLOGY-RAID-MIB raidStatus: 1 Normal, 2 Repairing, 11 Degrade,
+  // 12 Crashed, 13 DataScrubbing, … (see synologyRaidHealthy)
+  raidStatus: "1.3.6.1.4.1.6574.3.1.1.3",
 } as const;
 
 // Interface counters are walked, not read at ifIndex=1: on Linux (DSM)
@@ -148,6 +170,10 @@ export class SynologyService extends BaseService {
     );
   }
 
+  override async onStop(): Promise<void> {
+    await this.dsm?.close();
+  }
+
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
     return withHostPing(
       {
@@ -243,6 +269,30 @@ export class SynologyService extends BaseService {
    * a walk it depends on failed or came back empty, so a partial sample is
    * never reported as traffic or used as a rate baseline.
    */
+  /** Disk and RAID health over SNMP, so a NAS without a DSM admin account
+   *  still reports failing disks and degraded arrays. Each table is optional:
+   *  an older DSM without diskHealthStatus keeps the other columns. */
+  private async walkHealth(signal: AbortSignal): Promise<SnmpHealth | null> {
+    const walk = (subtree: string): Promise<WalkRows | null> =>
+      this.snmp
+        .walk({
+          host: this.host,
+          subtree,
+          v3: this.credentials,
+          timeoutMs: this.timeoutMs,
+          signal,
+        })
+        .then((r) => r.rows)
+        .catch(() => null);
+    const [status, temp, health, raid] = await Promise.all([
+      walk(HEALTH_WALK.diskStatus),
+      walk(HEALTH_WALK.diskTemperature),
+      walk(HEALTH_WALK.diskHealthStatus),
+      walk(HEALTH_WALK.raidStatus),
+    ]);
+    return summarizeSnmpHealth(status, temp, health, raid);
+  }
+
   private async walkNetwork(signal: AbortSignal): Promise<NetSample | null> {
     const walk = (subtree: string): Promise<WalkRows | null> =>
       this.snmp
@@ -303,6 +353,7 @@ export class SynologyService extends BaseService {
       const [
         snmpResult,
         netResult,
+        healthResult,
         utilizationResult,
         dsmInfoResult,
         sysStatusResult,
@@ -318,6 +369,7 @@ export class SynologyService extends BaseService {
             })
           : snmpUnavailable(),
         this.credentialsReady ? this.walkNetwork(signal) : snmpUnavailable(),
+        this.credentialsReady ? this.walkHealth(signal) : Promise.resolve(null),
         this.dsm?.call<UtilizationData>(
           "SYNO.Core.System.Utilization",
           1,
@@ -467,6 +519,13 @@ export class SynologyService extends BaseService {
       const storage =
         storageResult.status === "fulfilled" ? storageResult.value : null;
 
+      const snmpHealth =
+        healthResult.status === "fulfilled" ? healthResult.value : null;
+      const powerStatus = statusText(toOptInt(v[12]));
+      const systemFanStatus = statusText(toOptInt(v[13]));
+      const cpuFanStatus = statusText(toOptInt(v[14]));
+      const upgradeCode = toOptInt(v[15]);
+
       const volumes = storage?.volumes ?? null;
       const disks = storage?.disks ?? null;
 
@@ -546,6 +605,36 @@ export class SynologyService extends BaseService {
                 sysFanStatus: sysStatus.sys_fan_status ?? "",
                 powerStatus: sysStatus.power_status ?? "",
               }
+            : {
+                // SNMP-only mode: the same fan/power states from the MIB
+                ...(cpuFanStatus !== null ? { cpuFanStatus } : {}),
+                ...(systemFanStatus !== null
+                  ? { sysFanStatus: systemFanStatus }
+                  : {}),
+                ...(powerStatus !== null ? { powerStatus } : {}),
+              }),
+          ...(upgradeCode !== undefined
+            ? { upgradeAvailable: upgradeCode === 1 }
+            : {}),
+          ...(snmpHealth !== null
+            ? {
+                ...(snmpHealth.diskTempMax !== null
+                  ? { diskTempMax: snmpHealth.diskTempMax }
+                  : {}),
+                ...(snmpHealth.raidCount > 0
+                  ? {
+                      raidCount: snmpHealth.raidCount,
+                      raidDegradedCount: snmpHealth.raidDegradedCount,
+                    }
+                  : {}),
+              }
+            : {}),
+          // SNMP disk table when DSM storage is not available
+          ...(disks === null && snmpHealth !== null && snmpHealth.diskCount > 0
+            ? {
+                diskCount: snmpHealth.diskCount,
+                diskDegradedCount: snmpHealth.diskDegradedCount,
+              }
             : {}),
           ...(volumes !== null
             ? {
@@ -607,6 +696,70 @@ export function selectExternalInterfaces(
     if (hit.length > 0) return new Set(hit.map(([idx]) => idx));
   }
   return new Set(candidates.map(([idx]) => idx));
+}
+
+/** SYNOLOGY-SYSTEM-MIB power/fan status: 1 Normal, 2 Failed. Lower-case to
+ *  match the DSM API's strings for the same fields. */
+function statusText(code: number | undefined): string | null {
+  if (code === 1) return "normal";
+  if (code === 2) return "failed";
+  return null;
+}
+
+interface SnmpHealth {
+  diskCount: number;
+  diskDegradedCount: number;
+  diskTempMax: number | null;
+  raidCount: number;
+  raidDegradedCount: number;
+}
+
+/** raidStatus values that are not a fault: Normal (1) and routine
+ *  DataScrubbing (13). Everything else (Repairing, Degrade, Crashed,
+ *  Migrating, Expanding, …) counts as degraded. */
+function synologyRaidHealthy(code: number): boolean {
+  return code === 1 || code === 13;
+}
+
+export function summarizeSnmpHealth(
+  status: WalkRows | null,
+  temp: WalkRows | null,
+  health: WalkRows | null,
+  raid: WalkRows | null
+): SnmpHealth | null {
+  if (status === null && temp === null && health === null && raid === null) {
+    return null;
+  }
+  const disks = new Map<string, { status?: number; health?: number }>();
+  for (const row of status ?? []) {
+    const n = toOptInt(row.value);
+    if (n !== undefined) disks.set(lastArc(row.oid), { status: n });
+  }
+  for (const row of health ?? []) {
+    const n = toOptInt(row.value);
+    if (n === undefined) continue;
+    const idx = lastArc(row.oid);
+    disks.set(idx, { ...disks.get(idx), health: n });
+  }
+  let diskDegradedCount = 0;
+  for (const d of disks.values()) {
+    const badStatus = d.status !== undefined && d.status !== 1;
+    const badHealth = d.health !== undefined && d.health !== 1;
+    if (badStatus || badHealth) diskDegradedCount += 1;
+  }
+  const temps = (temp ?? [])
+    .map((r) => toOptInt(r.value))
+    .filter((n): n is number => n !== undefined && n > 0);
+  const raidCodes = (raid ?? [])
+    .map((r) => toOptInt(r.value))
+    .filter((n): n is number => n !== undefined);
+  return {
+    diskCount: disks.size,
+    diskDegradedCount,
+    diskTempMax: temps.length > 0 ? Math.max(...temps) : null,
+    raidCount: raidCodes.length,
+    raidDegradedCount: raidCodes.filter((c) => !synologyRaidHealthy(c)).length,
+  };
 }
 
 function toOptInt(raw: string | undefined): number | undefined {

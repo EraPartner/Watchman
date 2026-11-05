@@ -9,7 +9,11 @@ import { ok } from "../../../core/result.js";
 import type { RouterInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 import type { TcpProber } from "../../../infra/net/tcpProbe.js";
-import type { SnmpGetter } from "../../../infra/snmp/snmpGetter.js";
+import type {
+  SnmpGetter,
+  SnmpV2cCredentials,
+  SnmpV3Credentials,
+} from "../../../infra/snmp/snmpGetter.js";
 
 const OID = {
   sysUpTime: "1.3.6.1.2.1.1.3",
@@ -22,7 +26,15 @@ const OID = {
   ifHCOutOctets: "1.3.6.1.2.1.31.1.1.1.10",
   arpTable: "1.3.6.1.2.1.4.22.1.2",
   hrProcessorLoad: "1.3.6.1.2.1.25.3.3.1.2",
+  // per-interface state: 1 up, 2 down (admin = configured, oper = actual)
+  ifAdminStatus: "1.3.6.1.2.1.2.2.1.7",
+  ifOperStatus: "1.3.6.1.2.1.2.2.1.8",
+  ifInErrors: "1.3.6.1.2.1.2.2.1.14",
+  ifOutErrors: "1.3.6.1.2.1.2.2.1.20",
 } as const;
+
+/** Loopback never carries the router's own traffic and only inflates totals. */
+const LOOPBACK_IF = /^lo\d*$/i;
 
 export interface RouterDeps {
   ping: PingProber;
@@ -41,7 +53,10 @@ export class RouterService extends BaseService {
   private readonly timeoutMs: number;
   private readonly pingCount: number;
   private readonly interfaceFilter: ReadonlyArray<string>;
-  private readonly snmpCommunity: string | undefined;
+  private readonly snmpCredentials:
+    | { v2c: SnmpV2cCredentials }
+    | { v3: SnmpV3Credentials }
+    | null;
   private readonly pinger: PingProber;
   private readonly tcp: TcpProber;
   private readonly snmp: SnmpGetter | undefined;
@@ -65,7 +80,22 @@ export class RouterService extends BaseService {
     this.timeoutMs = deps.config.timeoutMs;
     this.pingCount = deps.config.pingCount;
     this.interfaceFilter = deps.config.interfaceFilter;
-    this.snmpCommunity = deps.config.snmpCommunity;
+    const c = deps.config;
+    // SNMPv3 wins when fully configured: the v2c community is cleartext
+    this.snmpCredentials =
+      c.snmpUser && c.snmpAuthKey && c.snmpPrivKey
+        ? {
+            v3: {
+              user: c.snmpUser,
+              authKey: c.snmpAuthKey,
+              privKey: c.snmpPrivKey,
+              authProtocol: c.snmpAuthProtocol,
+              privProtocol: c.snmpPrivProtocol,
+            },
+          }
+        : c.snmpCommunity
+          ? { v2c: { community: c.snmpCommunity } }
+          : null;
     this.pinger = deps.ping;
     this.tcp = deps.tcp;
     this.snmp = deps.snmp;
@@ -140,7 +170,7 @@ export class RouterService extends BaseService {
       configured: Boolean(this.host),
     };
 
-    if (!this.snmpCommunity || !this.snmp) {
+    if (!this.snmpCredentials || !this.snmp) {
       return ok({ at: this.now(), metrics: base });
     }
 
@@ -152,8 +182,7 @@ export class RouterService extends BaseService {
     signal: AbortSignal
   ): Promise<Record<string, unknown>> {
     try {
-      const community = this.snmpCommunity!;
-      const v2c = { community };
+      const credentials = this.snmpCredentials!;
       const host = this.host;
       const timeoutMs = this.timeoutMs;
 
@@ -164,7 +193,7 @@ export class RouterService extends BaseService {
       const walk = (
         subtree: string
       ): Promise<ReadonlyArray<{ oid: string; value: string }> | null> =>
-        this.snmp!.walk({ host, subtree, v2c, timeoutMs, signal }).then(
+        this.snmp!.walk({ host, subtree, ...credentials, timeoutMs, signal }).then(
           (r) => r.rows,
           () => null
         );
@@ -177,6 +206,10 @@ export class RouterService extends BaseService {
         walk(OID.ifHCOutOctets),
         walk(OID.arpTable),
         walk(OID.hrProcessorLoad),
+        walk(OID.ifAdminStatus),
+        walk(OID.ifOperStatus),
+        walk(OID.ifInErrors),
+        walk(OID.ifOutErrors),
       ] as const);
       if (results.every((r) => r === null)) return {};
       const none: ReadonlyArray<{ oid: string; value: string }> = [];
@@ -189,6 +222,10 @@ export class RouterService extends BaseService {
         hcOutRows,
         arpRows,
         cpuRows,
+        adminRows,
+        operRows,
+        inErrRows,
+        outErrRows,
       ] = results;
 
       const uptimeRaw = uptimeRows?.[0] ? Number(uptimeRows[0].value) : NaN;
@@ -214,7 +251,9 @@ export class RouterService extends BaseService {
 
       const activeIndexes = new Set<string>();
       if (this.interfaceFilter.length === 0) {
-        for (const idx of indexToDescr.keys()) activeIndexes.add(idx);
+        for (const [idx, name] of indexToDescr) {
+          if (!LOOPBACK_IF.test(name)) activeIndexes.add(idx);
+        }
       } else {
         for (const [idx, name] of indexToDescr) {
           if (this.interfaceFilter.includes(name)) activeIndexes.add(idx);
@@ -288,8 +327,49 @@ export class RouterService extends BaseService {
         this.lastOctets = { at, ...octets };
       }
 
+      // Links that are configured up but not passing traffic. Admin-down
+      // ports are intentional and never count.
+      const statusByIdx = (rows: Rows): Map<string, number> =>
+        new Map(
+          (rows ?? none).map((r) => [
+            r.oid.split(".").at(-1) ?? "",
+            parseInt(r.value, 10),
+          ])
+        );
+      let links:
+        | { up: number; down: number; downNames: string[] }
+        | undefined;
+      if (operRows !== null && adminRows !== null) {
+        const admin = statusByIdx(adminRows);
+        const oper = statusByIdx(operRows);
+        const downNames: string[] = [];
+        let up = 0;
+        for (const idx of activeIndexes) {
+          if (admin.get(idx) !== 1) continue;
+          const state = oper.get(idx);
+          if (state === 1) up += 1;
+          else if (state === 2) downNames.push(indexToDescr.get(idx) ?? idx);
+        }
+        links = { up, down: downNames.length, downNames };
+      }
+      const ifErrors =
+        inErrRows !== null && outErrRows !== null
+          ? sumOctets(inErrRows) + sumOctets(outErrRows)
+          : undefined;
+
       return {
         ...(sysUptime !== undefined ? { sysUptime } : {}),
+        ...(links
+          ? {
+              linksUp: links.up,
+              linksDown: links.down,
+              ...(links.downNames.length > 0
+                ? { linksDownNames: links.downNames.join(", ") }
+                : {}),
+            }
+          : {}),
+        ...(ifErrors !== undefined ? { ifErrors } : {}),
+        snmpVersion: "v3" in credentials ? "v3" : "v2c",
         ...(connectedClients !== undefined ? { connectedClients } : {}),
         ...(cpuLoad !== undefined ? { cpuLoad } : {}),
         ...(octets ? { ifInOctets: octets.in, ifOutOctets: octets.out } : {}),

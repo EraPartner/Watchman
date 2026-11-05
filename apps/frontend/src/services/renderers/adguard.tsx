@@ -208,6 +208,26 @@ export const adguardRenderer: ServiceRenderer<Stats> = {
         { key: "httpPort", label: "HTTP port", format: fmtRaw },
         { key: "upstreamCount", label: "Upstreams", format: fmtNumber(0) },
         { key: "upstreamMode", label: "Upstream mode", format: fmtRaw },
+        { key: "topUpstream", label: "Top upstream", format: fmtRaw },
+        { key: "topUpstreamAvgMs", label: "Top upstream avg (ms)", format: fmtNumber(2) },
+      ],
+    },
+    {
+      // only filled when "Read the DNS query log" is on (off by default)
+      title: "Recent queries (query log)",
+      metrics: [
+        { key: "queryLogSampleSize", label: "Entries read", format: fmtNumber(0) },
+        { key: "queryLogBlocked", label: "Blocked", format: fmtNumber(0) },
+        { key: "queryLogAvgMs", label: "Avg response (ms)", format: fmtNumber(2) },
+        { key: "queryLogTopBlockedDomain", label: "Most blocked", format: fmtRaw },
+        { key: "queryLogTopClient", label: "Busiest client", format: fmtRaw },
+      ],
+    },
+    {
+      title: "Security",
+      metrics: [
+        // AdGuard has no read-only user: the polled password is an admin one
+        { key: "cleartextCredentials", label: "Admin password sent over plain http", format: fmtRaw },
       ],
     },
   ],

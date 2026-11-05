@@ -12,15 +12,30 @@ aliases: [adguard setup, set up adguard home]
 
 > [!abstract] What Watchman reads
 > Status, query statistics, filter lists, clients, DHCP leases and which protections are on, all through
-> `GET /control/*` with HTTP Basic auth. It never changes settings
+> `GET /control/*` with HTTP Basic auth. If you turn it on, also the latest 100 entries of the DNS
+> query log (`GET /control/querylog`, off by default). It never changes settings
 > (`apps/backend/src/domain/services/adguard/AdGuardService.ts`). Details:
 > [[docs/integrations/adguard|AdGuard Home integration]].
 
 ## 1. Prepare AdGuard Home
 
 Nothing to enable: the API is the same HTTP server as the AdGuard Home web interface. Note the
-address you use to open the web interface, including the port, for example `http://192.168.1.2`
+address you use to open the web interface, including the port, for example `https://192.168.1.2`
 or `http://192.168.1.2:3000`.
+
+**Prefer HTTPS.** The password Watchman sends on every poll is an admin password (see step 2).
+Over `http://` to another machine it crosses your network in clear text, and the tile's
+**Security** row says so. Turn on encryption in AdGuard Home (**Settings → Encryption settings**)
+and use the `https://` address. With AdGuard's own self-signed certificate, put its SHA-256
+fingerprint in **Certificate fingerprint**; Watchman then trusts exactly that certificate:
+
+```bash
+openssl s_client -connect 192.168.1.2:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
+```
+
+> [!warning] Unverified
+> Whether AdGuard's encryption settings cover the admin web interface on every install type was
+> not tested here.
 
 ## 2. Create credentials
 
@@ -53,9 +68,11 @@ If you turned authentication off in AdGuard Home, leave both fields empty in Wat
 
 | Field    | Enter                                                                          |
 | -------- | ------------------------------------------------------------------------------ |
-| Base URL | The web interface address from step 1, e.g. `http://192.168.1.2`. No trailing path. |
+| Base URL | The web interface address from step 1, e.g. `https://192.168.1.2`. No trailing path. |
 | Username | `watchman` (or your login)                                                     |
 | Password | The password from step 2                                                       |
+| Certificate fingerprint | Only for an `https://` URL with a self-signed certificate (step 1) |
+| Read the DNS query log | Off by default. On: each poll reads the latest 100 query-log entries for the recent blocked count, most-blocked domain, busiest client and response time. The query log is per-device DNS history, so leave it off unless you want that. |
 
 Watchman pings the host taken from the Base URL, so the ping and the API always point at the same box.
 

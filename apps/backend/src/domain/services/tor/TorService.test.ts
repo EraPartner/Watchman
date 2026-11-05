@@ -19,7 +19,13 @@ import type {
 
 let server: Server;
 let port: number;
-let state: { status: number; payload: unknown; lastSearch: string | null };
+let trafficPolls = 0;
+let state: {
+  status: number;
+  payload: unknown;
+  lastSearch: string | null;
+  lastLookup?: string | null;
+};
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://localhost");
@@ -36,6 +42,18 @@ function handler(req: IncomingMessage, res: ServerResponse) {
     );
     return;
   }
+  if (url.pathname === "/metrics-traffic") {
+    trafficPolls += 1;
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end(
+      [
+        "# TYPE tor_relay_traffic_bytes counter",
+        `tor_relay_traffic_bytes{direction="read"} ${trafficPolls === 1 ? 1000 : 21000}`,
+        `tor_relay_traffic_bytes{direction="written"} ${trafficPolls === 1 ? 500 : 10500}`,
+      ].join("\n")
+    );
+    return;
+  }
   if (url.pathname === "/metrics-denied") {
     res.writeHead(403);
     res.end();
@@ -43,6 +61,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
   }
   if (url.pathname === "/details") {
     state.lastSearch = url.searchParams.get("search");
+    state.lastLookup = url.searchParams.get("lookup");
     res.writeHead(state.status, { "content-type": "application/json" });
     res.end(JSON.stringify(state.payload));
     return;
@@ -491,7 +510,7 @@ describe("TorService", () => {
       const info = new Map([
         ["traffic/read", "10240"],
         ["traffic/written", "8192"],
-        ["version/current", "0.4.8.10"],
+        ["version", "0.4.8.10"],
         ["dormant", "0"],
         ["process/descriptor-limit", "65535"],
       ]);
@@ -514,6 +533,70 @@ describe("TorService", () => {
           descriptorLimit: 65535,
         });
       }
+    });
+
+    it("getStats asks only for GETINFO keys a real Tor recognises (regression: version/current)", async () => {
+      // Tor answers 552 for the whole GETINFO when any key is unrecognised,
+      // so one wrong key in the core group blanked every core metric
+      const SPEC_KEYS = new Set([
+        "traffic/read", "traffic/written", "version", "dormant",
+        "process/descriptor-limit", "accounting/bytes", "accounting/bytes-left",
+        "orconn-status", "circuit-status", "fingerprint", "address",
+        "status/bootstrap-phase", "status/version/current", "uptime",
+        "status/reachability-succeeded/or", "status/reachability-succeeded/dir",
+        "accounting/hibernating", "status/circuit-established", "network-liveness",
+      ]);
+      const values = new Map([["version", "0.4.8.10"], ["traffic/read", "1"]]);
+      const requested: string[] = [];
+      const strict: TorControlClient = {
+        connect: async () => ({
+          getinfo: async (keys: string[]) => {
+            requested.push(...keys);
+            const bad = keys.find((k) => !SPEC_KEYS.has(k) && !k.startsWith("ns/id/") && !k.startsWith("ip-to-country/"));
+            if (bad) throw new Error(`552 Unrecognized key "${bad}"`);
+            return new Map(keys.filter((k) => values.has(k)).map((k) => [k, values.get(k)!]));
+          },
+          getconf: async () => new Map(),
+          signal: async () => {
+            throw new Error("Watchman must not send SIGNAL");
+          },
+          close: async () => undefined,
+        }),
+      };
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: strict,
+        config: makeConfig({ useControlPort: true }),
+        now: () => 99,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) expect(res.value.metrics).toMatchObject({ version: "0.4.8.10", trafficRead: 1 });
+      expect(requested).not.toContain("version/current");
+    });
+
+    it("asks Onionoo by exact fingerprint once the ControlPort reported it (nicknames are not unique)", async () => {
+      const ownFp = "A".repeat(40);
+      state.payload = {
+        relays: [
+          { nickname: "MyRelay", fingerprint: "B".repeat(40), as_name: "Someone else" },
+          { nickname: "MyRelay", fingerprint: ownFp, as_name: "Our AS" },
+        ],
+      };
+      const info = new Map([["fingerprint", ownFp], ["version", "0.4.8.10"]]);
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(info),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 99,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      expect(state.lastLookup).toBe(ownFp);
+      expect(state.lastSearch).toBeNull();
+      if (res.ok) expect(res.value.metrics.asName).toBe("Our AS");
     });
 
     it("getStats connect fails → err(UnavailableError)", async () => {
@@ -786,7 +869,7 @@ describe("TorService", () => {
     const localInfo = new Map([
       ["traffic/read", "100"],
       ["traffic/written", "50"],
-      ["version/current", "0.4.8.10"],
+      ["version", "0.4.8.10"],
       [
         "orconn-status",
         "$f1~alpha CONNECTED\n$f2~beta CONNECTED\n$f3~gamma LAUNCHED",
@@ -1208,6 +1291,37 @@ describe("TorService", () => {
       if (res.ok) {
         expect(res.value.metrics.metricsPortError).toContain("403");
         expect(res.value.metrics.nickname).toBe("MyRelay");
+      }
+    });
+
+    it("MetricsPort traffic gives live rates, which replace Onionoo's hourly bandwidth", async () => {
+      trafficPolls = 0;
+      let nowMs = 0;
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig({ metricsUrl: `http://127.0.0.1:${port}/metrics-traffic` }),
+        now: () => nowMs,
+      });
+      const first = await svc.getStats(new AbortController().signal);
+      expect(first.ok).toBe(true);
+      if (first.ok) {
+        expect(first.value.metrics.metricsPortReadBytes).toBe(1000);
+        // no rate before a second sample: Onionoo's figure stays
+        expect(first.value.metrics.bandwidthCurrent).toBe(5000);
+        expect(first.value.metrics).not.toHaveProperty("bandwidthSource");
+      }
+      nowMs = 10_000;
+      const second = await svc.getStats(new AbortController().signal);
+      expect(second.ok).toBe(true);
+      if (second.ok) {
+        expect(second.value.metrics).toMatchObject({
+          metricsPortReadBps: 2000,
+          metricsPortWrittenBps: 1000,
+          bandwidthCurrent: 2000,
+          bandwidthSource: "metricsport",
+        });
       }
     });
 

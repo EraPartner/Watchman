@@ -162,6 +162,21 @@ When direct SSH is used (PI1):
 | `pigpioVersion`   | number  | pigpio daemon version (if available)                                |
 | `pigpioError`     | string  | Present when pigpiod was unreachable but SSH data was collected     |
 
+### Host basics (direct SSH)
+
+| Metric | Command | Notes |
+| --- | --- | --- |
+| `memTotalBytes`, `memAvailableBytes`, `swapTotalBytes`, `swapUsedBytes` | `cat /proc/meminfo` | |
+| `cpuUsagePercent` | `head -n 1 /proc/stat` | Busy % between two polls; null on the first |
+| `diskTotalBytes`, `diskUsedBytes`, `diskUsagePercent` | `df -kP /` | Root filesystem; the tile warns at 90 % |
+| `rootReadOnly` | `findmnt -no OPTIONS /` | `true` turns the tile red (usual sign of a failing SD card) |
+| `failedUnits`, `failedUnitNames` | `systemctl --failed --no-legend --plain` | Null when systemctl could not be asked; the tile warns when > 0 |
+| `netRxBps`, `netTxBps` | `cat /proc/net/dev` | Summed over every interface except `lo`, from the second poll |
+
+None of these needs root. The read-only probe script for the `authorized_keys` forced command is
+`packaging/probes/watchman-probe-pi.sh`; a test keeps it equal to `PI_DYNAMIC_COMMANDS` +
+`PI_STATIC_COMMANDS`.
+
 ## Endpoints
 
 | Endpoint                             | Description                        | Query Params                                                     |

@@ -54,6 +54,16 @@ Configuration lives in the DuckDB config store, managed via the Settings UI or t
 
 **Authentication:** When `username` or `password` is non-empty, the service sends an `Authorization: Basic <base64>` header on every API request. Both fields default to empty (no auth).
 
+### Transport and the opt-in query log
+
+- `certSha256` pins AdGuard's HTTPS certificate (same mechanism as Synology's `dsmCertSha256`).
+- `cleartextCredentials` is `true` when credentials are sent over `http://` to a non-loopback
+  host. AdGuard has no read-only user, so that is an admin password; the tile's Security row shows it.
+- `readQueryLog` (default `false`): when on, each stats poll also does
+  `GET /control/querylog?limit=100` and reports `queryLogSampleSize`, `queryLogBlocked` (Filtered*
+  reasons except safe search), `queryLogAvgMs`, `queryLogTopBlockedDomain` and `queryLogTopClient`.
+  Individual entries are not stored or shown.
+
 ## Endpoints
 
 No authentication or rate-limiting (single-user trusted-network design — ADR-017/ADR-025).

@@ -25,6 +25,15 @@ dependency audit, and documentation aligned with the code.
 
 ### Added
 
+- Hosts/network monitoring (read-only): Synology disk, RAID, fan, power and DSM-update status over
+  SNMPv3 alone (no DSM admin account needed); router link state (configured-up links that are
+  down) and interface error totals; Raspberry Pi CPU %, available memory and swap, root disk
+  usage, read-only-root detection, failed systemd units and network rates; Mac memory pressure,
+  swap and thermal state; Tor live traffic rates from MetricsPort; opt-in AdGuard query-log summary
+  (off by default). Tiles show these and the related existing rows (Mac memory/SMART/power,
+  AdGuard top upstream, Synology fan/power/volume health).
+- Read-only SSH probe scripts (`packaging/probes/`) for the Pi and Mac `authorized_keys`
+  `command=` forced command, generated from the stats command lists and kept in sync by a test.
 - Crypto/p2p monitoring (read-only): Bitcoin tip age, node warnings, pruning, reachable
   networks, chain-tip/fork summary and locked memory (`getchaintips`/`getmemoryinfo` in their own
   slow batch), ZMQ missed-message counts and a "silent subscription" flag; Tor bootstrap,
@@ -76,6 +85,14 @@ dependency audit, and documentation aligned with the code.
   client. Watchman is monitoring-only and never changes a monitored service (ADR-032).
 
 ### Fixed
+
+- Tor ControlPort asked for `GETINFO version/current`, which is not a key in Tor's control spec.
+  Tor answers an unknown key with 552 for the whole GETINFO, so the core ControlPort metrics
+  (traffic, version, dormant, descriptor limit) would fail with it (not checked on a live relay).
+  It now asks for `version`.
+- Tor Onionoo enrichment looks the relay up by its exact fingerprint once the ControlPort reported
+  it, instead of a nickname search that can match another relay.
+- Router traffic totals no longer include loopback when no interface filter is set.
 
 - IPFS `memAllocMb` was always null (Kubo's `diag/sys` has no `MemoryAlloc`); it now reads
   `go_memstats_alloc_bytes` from Kubo's Prometheus endpoint.
@@ -265,6 +282,13 @@ dependency audit, and documentation aligned with the code.
 
 ### Security
 
+- SSH hosts without a pinned host key are trusted on first use per run: a changed key is refused
+  until restart, and the first fingerprint is logged so it can be pinned.
+- Router SNMPv3 (authPriv) support; the v2c community is no longer the only option.
+- AdGuard: optional certificate pin, and a Security row on the tile that says when the admin
+  password goes over plain http to another host.
+- DSM client names its session, logs it out on stop, and refuses any non-read method before
+  sending it.
 - IPFS: optional `apiAuth` secret for Kubo `API.Authorizations`, so the RPC no longer has to
   stay open with full admin rights; 401/403 are reported as auth errors.
 - Tor: a control password containing a line break is rejected (schema and client) instead of

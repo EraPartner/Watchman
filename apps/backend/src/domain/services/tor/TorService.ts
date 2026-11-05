@@ -121,6 +121,13 @@ export class TorService extends BaseService {
   private lastTrafficWritten = -1;
   /** Until this timestamp, skip ControlPort and serve Onionoo (off-LAN cooldown). */
   private controlPortUnreachableUntil = 0;
+  /** The relay's own fingerprint once the ControlPort reported it. Onionoo
+   *  is then asked with an exact `lookup=` instead of a nickname search:
+   *  nicknames are not unique, so a search can match another relay. */
+  private knownFingerprint = "";
+  /** Previous MetricsPort traffic totals, for live byte rates. */
+  private lastMetricsTraffic: { at: number; read: number; written: number } | null =
+    null;
   /** Last successful Onionoo relay lookup (see ONIONOO_RELAY_TTL_MS). */
   private relayCache:
     | { at: number; latencyMs: number; relay: OnionooRelay | null }
@@ -255,10 +262,24 @@ export class TorService extends BaseService {
       this.readMetricsPort(signal),
     ]);
     if (!result.ok || metricsPort === null) return result;
-    return ok({
-      ...result.value,
-      metrics: { ...result.value.metrics, ...metricsPort },
-    });
+    const merged: Record<string, StatsMetricValue> = {
+      ...result.value.metrics,
+      ...metricsPort,
+    };
+    // Onionoo's bandwidth is an hourly observation; when MetricsPort gives a
+    // live rate, the tile shows that instead (the ControlPort path already
+    // shows its own live BW-event rate, so it is left alone)
+    const live = metricsPort["metricsPortReadBps"];
+    const liveOut = metricsPort["metricsPortWrittenBps"];
+    if (
+      merged["source"] !== "control-port" &&
+      typeof live === "number" &&
+      typeof liveOut === "number"
+    ) {
+      merged["bandwidthCurrent"] = Math.max(live, liveOut);
+      merged["bandwidthSource"] = "metricsport";
+    }
+    return ok({ ...result.value, metrics: merged });
   }
 
   /**
@@ -284,13 +305,32 @@ export class TorService extends BaseService {
           metricsPortError: `MetricsPort returned ${res.status}${res.status === 403 ? " (check MetricsPortPolicy)" : ""}`,
         };
       }
-      return {
+      const traffic = readTrafficBytes(text);
+      const out: Record<string, StatsMetricValue> = {
         metricsPortError: null,
         overload: pickPrometheusPrefix(
           sumPrometheusSamples(text),
           "tor_relay_load_"
         ),
       };
+      if (traffic) {
+        out["metricsPortReadBytes"] = traffic.read;
+        out["metricsPortWrittenBytes"] = traffic.written;
+        const at = this.now();
+        const last = this.lastMetricsTraffic;
+        if (last && at > last.at) {
+          const dt = (at - last.at) / 1000;
+          const dRead = traffic.read - last.read;
+          const dWritten = traffic.written - last.written;
+          // a negative delta is a Tor restart: skip the rate this poll
+          if (dRead >= 0 && dWritten >= 0) {
+            out["metricsPortReadBps"] = Math.round(dRead / dt);
+            out["metricsPortWrittenBps"] = Math.round(dWritten / dt);
+          }
+        }
+        this.lastMetricsTraffic = { at, ...traffic };
+      }
+      return out;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return { metricsPortError: `MetricsPort unreachable: ${msg}` };
@@ -433,7 +473,7 @@ export class TorService extends BaseService {
           [
             "traffic/read",
             "traffic/written",
-            "version/current",
+            "version",
             "dormant",
             "process/descriptor-limit",
           ],
@@ -515,6 +555,9 @@ export class TorService extends BaseService {
         const nsEntry = parseNsEntry(nsInfo.get(`ns/id/${fingerprint}`));
         const localCountry = countryInfo.get(`ip-to-country/${address}`) ?? "";
 
+        if (/^[0-9A-F]{40}$/i.test(fingerprint)) {
+          this.knownFingerprint = fingerprint.toUpperCase();
+        }
         const enriched = await this.enrich(signal);
         const bwFresh = this.bwFresh();
         this.maybeResubscribe();
@@ -540,7 +583,7 @@ export class TorService extends BaseService {
             bandwidthCurrent: bwFresh
               ? Math.max(this.bwRead, this.bwWritten)
               : null,
-            version: coreInfo.get("version/current") ?? "",
+            version: coreInfo.get("version") ?? "",
             dormant: coreInfo.get("dormant") === "1",
             descriptorLimit: parseIntMetric(
               coreInfo.get("process/descriptor-limit")
@@ -680,9 +723,13 @@ export class TorService extends BaseService {
   }
 
   private async searchRelay(signal: AbortSignal): Promise<OnionooRelay | null> {
+    const knownFp = this.knownFingerprint;
     // an empty search would return every relay, so never query without one
-    if (this.relayNickname.trim() === "") return null;
-    const url = `${this.onionooBaseUrl}/details?search=${encodeURIComponent(this.relayNickname)}`;
+    if (knownFp === "" && this.relayNickname.trim() === "") return null;
+    const url =
+      knownFp !== ""
+        ? `${this.onionooBaseUrl}/details?lookup=${knownFp}`
+        : `${this.onionooBaseUrl}/details?search=${encodeURIComponent(this.relayNickname)}`;
     const res = await this.http.send({
       url,
       method: "GET",
@@ -698,6 +745,11 @@ export class TorService extends BaseService {
     // Onionoo search also matches partial nicknames and fingerprint prefixes, so only
     // accept an exact nickname or fingerprint — anything else is a different
     // relay
+    if (knownFp !== "") {
+      return (
+        relays.find((r) => r.fingerprint?.toUpperCase() === knownFp) ?? null
+      );
+    }
     const term = this.relayNickname.trim();
     const nick = term.toLowerCase();
     const fp = term.replace(/^\$/, "").toUpperCase();
@@ -839,4 +891,28 @@ function parseNsEntry(raw: string | undefined): {
     }
   }
   return { flags, bandwidth };
+}
+
+/**
+ * Relay traffic totals from MetricsPort: `tor_relay_traffic_bytes` with a
+ * `direction="read"|"written"` label (Tor 0.4.7+; name from Tor's
+ * relay_metrics.c, UNVERIFIED against a live relay). Null when absent.
+ */
+export function readTrafficBytes(
+  text: string
+): { read: number; written: number } | null {
+  let read: number | null = null;
+  let written: number | null = null;
+  for (const raw of text.split("\n")) {
+    const m = raw
+      .trim()
+      .match(/^tor_relay_traffic_bytes\{([^}]*)\}\s+(\S+)/);
+    if (!m || !m[1] || m[2] === undefined) continue;
+    const value = Number(m[2]);
+    if (!Number.isFinite(value)) continue;
+    const dir = m[1].match(/direction="([^"]+)"/)?.[1];
+    if (dir === "read") read = (read ?? 0) + value;
+    else if (dir === "written") written = (written ?? 0) + value;
+  }
+  return read !== null && written !== null ? { read, written } : null;
 }

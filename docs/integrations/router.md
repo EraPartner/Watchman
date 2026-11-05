@@ -55,14 +55,16 @@ Router instances are managed via the Settings UI or the `/config` API (DuckDB co
 | `ports`           | number\[\]      | —        | `[]`                                   | TCP ports to probe (service tier). Empty = no TCP probe.                                                                 |
 | `pingCount`       | number          | —        | `1`                                    | Number of ICMP echo requests per health check.                                                                           |
 | `snmpCommunity`   | string (secret) | —        | —                                      | SNMPv2c community string (e.g. `public`). When set, enables SNMP stats collection. Stored encrypted with the master key. |
-| `interfaceFilter` | string\[\]      | —        | `[]`                                   | Interface names to include in traffic stats (e.g. `["eth0", "wlan0"]`). Empty = all interfaces summed.                   |
+| `snmpUser` / `snmpAuthKey` / `snmpPrivKey` | string (keys secret) | — | `""` | SNMPv3 authPriv user and passphrases. When all three are set, SNMPv3 is used and `snmpCommunity` is ignored. |
+| `snmpAuthProtocol` / `snmpPrivProtocol` | `SHA`\|`MD5` / `AES`\|`DES` | — | `SHA` / `AES` | SNMPv3 protocols; MD5/DES only for old devices. |
+| `interfaceFilter` | string\[\]      | —        | `[]`                                   | Interface names to include in traffic stats (e.g. `["eth0", "wlan0"]`). Empty = every interface except loopback (`lo`).   |
 | `timeoutMs`       | number          | —        | `5000`                                 | Per-probe timeout in milliseconds (shared by ICMP, TCP, and SNMP).                                                       |
 | `cacheTtlMs`      | number          | —        | `10000`                                | How long a cached response is served before a fresh poll is required (ms).                                               |
 | `pollPolicy`      | object          | —        | health 10 s / stats 30 s / jitter 10 % | Override polling intervals (`healthMs`, `statsMs`, `jitterRatio`).                                                       |
 
 ## SNMP Configuration (Optional)
 
-When `snmpCommunity` is set, the router service polls SNMP metrics using SNMPv2c. This provides additional visibility into router device health and network interface statistics. The SNMP walk implementation (see [[docs/architecture/backend-architecture#infrastructure-layer|Infrastructure Layer]]) performs subtree walks in parallel.
+When SNMPv3 credentials (`snmpUser`, `snmpAuthKey`, `snmpPrivKey`) are set, the router service polls SNMP metrics using SNMPv3 authPriv; otherwise, when `snmpCommunity` is set, it uses SNMPv2c (cleartext community). This provides additional visibility into router device health and network interface statistics. The SNMP walk implementation (see [[docs/architecture/backend-architecture#infrastructure-layer|Infrastructure Layer]]) performs subtree walks in parallel.
 
 The two relevant config fields are:
 
@@ -82,6 +84,10 @@ When SNMP is enabled, `getStats()` returns additional metrics alongside base met
 | `ifOutOctets`          | `1.3.6.1.2.1.31.1.1.1.10` (HC), fallback `1.3.6.1.2.1.2.2.1.16` | number | Outbound octets summed across filtered interfaces (bytes), same HC-first strategy                                                                          |
 | `ifInBps` / `ifOutBps` | derived                                                         | number | Byte rates computed from counter deltas between polls of the same counter kind (HC or 32-bit); omitted on the first poll, when a counter decreases (wrap/reboot), and when the kind changed |
 | `ifDescr`              | `1.3.6.1.2.1.2.2.1.2`                                           | array  | Network interface names (collected to build active filter set)                                                                                             |
+| `linksUp` / `linksDown` | `ifAdminStatus` `1.3.6.1.2.1.2.2.1.7`, `ifOperStatus` `1.3.6.1.2.1.2.2.1.8` | number | Among the selected interfaces that are administratively up: how many are operationally up / down. Admin-down ports are never counted. The tile turns amber when `linksDown > 0` |
+| `linksDownNames`       | derived                                                         | string | Comma-separated `ifDescr` names of the down links; omitted when none                                                                                      |
+| `ifErrors`             | `ifInErrors` `1.3.6.1.2.1.2.2.1.14` + `ifOutErrors` `1.3.6.1.2.1.2.2.1.20` | number | Cumulative error total across the selected interfaces                                                                                    |
+| `snmpVersion`          | —                                                               | string | `v3` or `v2c`, whichever was used                                                                                                                        |
 
 **Graceful degradation**: If SNMP queries fail or timeout, the service returns base metrics (host, portCount, configured) without SNMP data. No error is raised. HC-counter walks degrade independently to the 32-bit fallback. All SNMP walks run in parallel with a per-request timeout and AbortSignal propagation. Each walk degrades on its own: a router without HOST-RESOURCES-MIB (no `cpuLoad`) or a timed-out ARP walk (no `connectedClients`) keeps the other SNMP metrics; only when every walk fails are SNMP metrics omitted. Counter values that do not decode to a number are skipped, never summed as NaN.
 
@@ -92,7 +98,7 @@ The `interfaceFilter` array restricts interface statistics (`ifInOctets`, `ifOut
 1. **First walk** (`ifDescr`) builds an index-to-name map (e.g., `1 → eth0`, `2 → wlan0`)
 2. **Second pair of walks** (`ifInOctets`, `ifOutOctets`) sums values across matching indices
 
-If `interfaceFilter` is empty, all interfaces are summed. Example: `interfaceFilter: ["eth0", "wlan0"]` excludes loopback and virtual interfaces. This is useful for routers with many interface types.
+If `interfaceFilter` is empty, every interface except loopback is summed, which counts routed traffic on both its inbound and outbound port. Example: `interfaceFilter: ["eth0", "wlan0"]` excludes loopback and virtual interfaces. This is useful for routers with many interface types.
 
 ## Endpoints
 
