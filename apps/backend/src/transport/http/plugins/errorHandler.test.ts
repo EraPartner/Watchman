@@ -6,12 +6,12 @@ import { UnavailableError } from "../../../core/errors.js";
 async function makeApp() {
   const app = Fastify();
   await app.register(errorHandlerPlugin);
-  app.post("/echo", async (req) => ({ data: req.body }));
-  app.get("/boom", async () => {
-    throw new Error("secret detail");
+  app.post("/echo", (req) => Promise.resolve({ data: req.body }));
+  app.get("/boom", () => {
+    return Promise.reject(new Error("secret detail"));
   });
-  app.get("/down", async () => {
-    throw new UnavailableError("service down");
+  app.get("/down", () => {
+    return Promise.reject(new UnavailableError("service down"));
   });
   return app;
 }

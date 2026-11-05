@@ -25,18 +25,18 @@ default            172.16.0.1         UGScg          en0`;
 
 function fakeArp(mac: string | null): ArpLookup {
   return {
-    async lookup({ serviceIp }) {
-      return {
+    lookup({ serviceIp }) {
+      return Promise.resolve({
         hosts: serviceIp ? [{ ip: serviceIp, mac, iface: "en0" }] : [],
         lanHosts: [],
         note: "",
-      };
+      });
     },
   };
 }
 
 function runnerReturning(output: string): GatewayRunner {
-  return { run: async () => output };
+  return { run: () => Promise.resolve(output) };
 }
 
 describe("parseGatewayIp", () => {

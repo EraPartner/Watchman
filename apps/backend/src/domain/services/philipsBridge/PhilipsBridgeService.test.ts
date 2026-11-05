@@ -23,16 +23,16 @@ function makeConfig(
 }
 
 function fakePing(result: PingResult): PingProber {
-  return { probe: async () => result };
+  return { probe: () => Promise.resolve(result) };
 }
 
 function fakeHttp(status: number, body: unknown): HttpClient {
   return {
-    send: vi.fn(async (_req: HttpRequest) => ({
+    send: vi.fn((_req: HttpRequest) => Promise.resolve({
       status,
       headers: {},
-      text: async () => JSON.stringify(body),
-      json: async <T>() => body as T,
+      text: () => Promise.resolve(JSON.stringify(body)),
+      json: <T>() => Promise.resolve(body as T),
     })),
   };
 }
@@ -92,7 +92,7 @@ describe("PhilipsBridgeService", () => {
 
   it("usePing=false skips ICMP probe entirely", async () => {
     const probe = vi.fn(
-      async (): Promise<PingResult> => ({ success: true, avgMs: 5 })
+      (): Promise<PingResult> => Promise.resolve({ success: true, avgMs: 5 })
     );
     const svc = new PhilipsBridgeService({
       ping: { probe },
@@ -112,7 +112,7 @@ describe("PhilipsBridgeService", () => {
 
   it("usePing=false + applicationKey set: still probes API and reports service reachable", async () => {
     const probe = vi.fn(
-      async (): Promise<PingResult> => ({ success: true, avgMs: 5 })
+      (): Promise<PingResult> => Promise.resolve({ success: true, avgMs: 5 })
     );
     const svc = new PhilipsBridgeService({
       ping: { probe },
@@ -238,20 +238,20 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
     let t = 0;
     let bodyRead = false;
     const http: HttpClient = {
-      send: vi.fn(async (_req: HttpRequest) => {
+      send: vi.fn((_req: HttpRequest) => {
         t += 40;
-        return {
+        return Promise.resolve({
           status: 200,
           headers: {},
-          text: async () => {
+          text: () => {
             bodyRead = true;
-            return "{}";
+            return Promise.resolve("{}");
           },
-          json: async <T>() => {
+          json: <T>() => {
             bodyRead = true;
-            return {} as T;
+            return Promise.resolve({} as T);
           },
-        };
+        });
       }),
     };
     const svc = new PhilipsBridgeService({
@@ -269,8 +269,8 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
 
   it("service unreachable when API call throws", async () => {
     const http: HttpClient = {
-      send: vi.fn(async () => {
-        throw new Error("connection refused");
+      send: vi.fn(() => {
+        return Promise.reject(new Error("connection refused"));
       }),
     };
     const svc = new PhilipsBridgeService({
@@ -305,8 +305,8 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
 
   it("getStats reports UNAVAILABLE when every API read fails, not a snapshot of blanks", async () => {
     const http: HttpClient = {
-      send: vi.fn(async () => {
-        throw new Error("network error");
+      send: vi.fn(() => {
+        return Promise.reject(new Error("network error"));
       }),
     };
     const svc = new PhilipsBridgeService({
@@ -345,23 +345,23 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
   // route-aware HTTP fake: responds per CLIP v2 resource path
   function routedHttp(routes: Record<string, unknown>): HttpClient {
     return {
-      send: vi.fn(async (req: HttpRequest) => {
+      send: vi.fn((req: HttpRequest) => {
         const path = new URL(req.url).pathname;
         const body = routes[path];
         if (body === undefined) {
-          return {
+          return Promise.resolve({
             status: 404,
             headers: {},
-            text: async () => "",
-            json: async <T>() => ({}) as T,
-          };
+            text: () => Promise.resolve(""),
+            json: <T>() => Promise.resolve(({}) as T),
+          });
         }
-        return {
+        return Promise.resolve({
           status: 200,
           headers: {},
-          text: async () => JSON.stringify(body),
-          json: async <T>() => body as T,
-        };
+          text: () => Promise.resolve(JSON.stringify(body)),
+          json: <T>() => Promise.resolve(body as T),
+        });
       }),
     };
   }

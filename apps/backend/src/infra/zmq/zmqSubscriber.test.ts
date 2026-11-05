@@ -17,9 +17,10 @@ function makeFakeHandle(): {
       handlers.add(h);
       return () => handlers.delete(h);
     },
-    async close() {
+    close() {
       closed = true;
       handlers.clear();
+      return Promise.resolve();
     },
   };
 

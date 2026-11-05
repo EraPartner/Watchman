@@ -7,12 +7,13 @@ function fakeHandle(
 ): PigpioHandle & { ended: () => boolean } {
   let ended = false;
   return {
-    read: async () => 1,
-    getHardwareRevision: async () => 42,
-    getPigpioVersion: async () => 79,
-    getCurrentTick: async () => 1000,
-    end: async () => {
+    read: () => Promise.resolve(1),
+    getHardwareRevision: () => Promise.resolve(42),
+    getPigpioVersion: () => Promise.resolve(79),
+    getCurrentTick: () => Promise.resolve(1000),
+    end: () => {
       ended = true;
+      return Promise.resolve();
     },
     ended: () => ended,
     ...overrides,
@@ -23,7 +24,7 @@ const REQ = { host: "pi.local", port: 8888, timeoutMs: 1000 };
 
 describe("createSharedPigpioClient", () => {
   it("reuses one underlying connection across connect() calls", async () => {
-    const connect = vi.fn(async () => fakeHandle());
+    const connect = vi.fn(() => Promise.resolve(fakeHandle()));
     const client = createSharedPigpioClient({ connect } as PigpioClient);
 
     const a = await client.connect(REQ);
@@ -37,11 +38,11 @@ describe("createSharedPigpioClient", () => {
   // if the underlying client offers write commands.
   it("hands out handles without write or setMode", async () => {
     const inner = Object.assign(fakeHandle(), {
-      write: async () => undefined,
-      setMode: async () => undefined,
+      write: () => Promise.resolve(undefined),
+      setMode: () => Promise.resolve(undefined),
     });
     const client = createSharedPigpioClient({
-      connect: async () => inner,
+      connect: () => Promise.resolve(inner),
     } as PigpioClient);
     const h = await client.connect(REQ);
     expect("write" in h).toBe(false);
@@ -50,7 +51,7 @@ describe("createSharedPigpioClient", () => {
 
   it("end() on a handed-out handle does not close the shared connection", async () => {
     const inner = fakeHandle();
-    const connect = vi.fn(async () => inner);
+    const connect = vi.fn(() => Promise.resolve(inner));
     const client = createSharedPigpioClient({ connect } as PigpioClient);
 
     const h = await client.connect(REQ);
@@ -62,8 +63,8 @@ describe("createSharedPigpioClient", () => {
 
   it("reconnects after a command failure", async () => {
     const bad = fakeHandle({
-      getCurrentTick: async () => {
-        throw new Error("broken pipe");
+      getCurrentTick: () => {
+        return Promise.reject(new Error("broken pipe"));
       },
     });
     const good = fakeHandle();
@@ -98,7 +99,7 @@ describe("createSharedPigpioClient", () => {
   it("close() ends the underlying connection", async () => {
     const inner = fakeHandle();
     const client = createSharedPigpioClient({
-      connect: async () => inner,
+      connect: () => Promise.resolve(inner),
     } as PigpioClient);
     await client.connect(REQ);
     await client.close();

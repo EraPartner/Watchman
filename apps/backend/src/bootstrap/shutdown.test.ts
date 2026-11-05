@@ -11,8 +11,9 @@ describe('runShutdownSteps', () => {
     await runShutdownSteps(
       ['server', 'lifecycle', 'db'].map((name) => ({
         name,
-        run: async () => {
+        run: () => {
           order.push(name);
+          return Promise.resolve();
         },
       })),
       silentLogger,

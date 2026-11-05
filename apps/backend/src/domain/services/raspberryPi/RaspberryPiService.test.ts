@@ -55,25 +55,25 @@ function fakeHandle(opts: FakeHandleOpts = {}): PigpioHandle {
   const maybe = <T>(v: T | Error | undefined, fallback: T): Promise<T> =>
     v instanceof Error ? Promise.reject(v) : Promise.resolve(v ?? fallback);
   return {
-    read: async () => opts.readValue ?? 0,
+    read: () => Promise.resolve(opts.readValue ?? 0),
     getHardwareRevision: () => maybe(opts.hwRevision, 0xa22082),
     getPigpioVersion: () => maybe(opts.pigpioVersion, 79),
     getCurrentTick: () => maybe(opts.currentTick, 123_456_789),
-    end: async () => opts.onEnd?.(),
+    end: () => Promise.resolve(opts.onEnd?.()),
   };
 }
 
 function fakePigpio(handle: PigpioHandle | Error): PigpioClient {
   return {
-    connect: async () => {
-      if (handle instanceof Error) throw handle;
-      return handle;
+    connect: () => {
+      if (handle instanceof Error) return Promise.reject(handle);
+      return Promise.resolve(handle);
     },
   };
 }
 
 function fakePing(result: PingResult): PingProber {
-  return { probe: async () => result };
+  return { probe: () => Promise.resolve(result) };
 }
 
 function fakeSsh(
@@ -87,7 +87,7 @@ function fakeSsh(
     return null;
   };
   return {
-    exec: async (req) => {
+    exec: (req) => {
       calls.push(req);
       // direct stats arrive as one compound command — synthesize the
       // delimiter-joined output from the per-command fixture map
@@ -99,15 +99,15 @@ function fakeSsh(
           const res = lookup(sub);
           return res && res.code === 0 ? res.stdout : "";
         });
-        return {
+        return Promise.resolve({
           stdout: segments.join(`\n${SSH_SEGMENT_DELIMITER}\n`),
           stderr: "",
           code: 0,
-        };
+        });
       }
       const res = lookup(req.command);
-      if (res) return res;
-      return { stdout: "", stderr: "no match", code: 127 };
+      if (res) return Promise.resolve(res);
+      return Promise.resolve({ stdout: "", stderr: "no match", code: 127 });
     },
   };
 }
@@ -455,8 +455,8 @@ describe("RaspberryPiService.getStats — direct SSH path", () => {
       pigpio: fakePigpio(new Error("connect ECONNREFUSED")),
       ping: fakePing({ success: true }),
       ssh: {
-        exec: async () => {
-          throw new Error("ssh down");
+        exec: () => {
+          return Promise.reject(new Error("ssh down"));
         },
       },
       config: makeDirectConfig(),
@@ -501,8 +501,8 @@ describe("RaspberryPiService.getStats — direct SSH path", () => {
       pigpio: fakePigpio(fakeHandle()),
       ping: fakePing({ success: true }),
       ssh: {
-        exec: async () => {
-          throw new Error("ECONNREFUSED");
+        exec: () => {
+          return Promise.reject(new Error("ECONNREFUSED"));
         },
       },
       config: makeDirectConfig(),
@@ -524,12 +524,12 @@ describe("RaspberryPiService.getStats — direct SSH path", () => {
     const calls: SshExecRequest[] = [];
     // Direct SSH commands fail (vcgencmd / cat → reject); only the relay's cli.js succeeds.
     const ssh: SshExecutor = {
-      exec: async (req) => {
+      exec: (req) => {
         calls.push(req);
         if (req.command.includes("cli.js")) {
-          return { stdout: rpiJson, stderr: "", code: 0 };
+          return Promise.resolve({ stdout: rpiJson, stderr: "", code: 0 });
         }
-        throw new Error("ECONNREFUSED");
+        return Promise.reject(new Error("ECONNREFUSED"));
       },
     };
     const svc = new RaspberryPiService({
@@ -564,9 +564,9 @@ describe("RaspberryPiService.getStats — direct SSH path", () => {
 
   it("combines errors from both paths when direct fails and relay also fails", async () => {
     const ssh: SshExecutor = {
-      exec: async (req) => {
-        if (req.command.includes("cli.js")) throw new Error("relay-down");
-        throw new Error("direct-down");
+      exec: (req) => {
+        if (req.command.includes("cli.js")) return Promise.reject(new Error("relay-down"));
+        return Promise.reject(new Error("direct-down"));
       },
     };
     const svc = new RaspberryPiService({
@@ -664,10 +664,10 @@ describe("RaspberryPiService read-only", () => {
     const handed: object[] = [];
     const svc = new RaspberryPiService({
       pigpio: {
-        connect: async () => {
+        connect: () => {
           const h = fakeHandle();
           handed.push(h);
-          return h;
+          return Promise.resolve(h);
         },
       },
       ping: fakePing({ success: true, avgMs: 1 }),

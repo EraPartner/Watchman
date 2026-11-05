@@ -122,8 +122,8 @@ export async function createDuckDbPool(
         release(conn);
       }
     },
-    async close(): Promise<void> {
-      if (closed) return;
+    close(): Promise<void> {
+      if (closed) return Promise.resolve();
       closed = true;
       for (const w of waiters.splice(0))
         w.reject(new Error("DuckDbPool closed"));
@@ -141,6 +141,7 @@ export async function createDuckDbPool(
       } catch {
         // Releases the DuckDB file lock; ignore double-close.
       }
+      return Promise.resolve();
     },
   };
 }

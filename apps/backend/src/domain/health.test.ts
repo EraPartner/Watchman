@@ -7,13 +7,13 @@ const signal = new AbortController().signal;
 
 function fakePing(success: boolean): PingProber {
   return {
-    probe: async () =>
-      success ? { success: true, avgMs: 5 } : { success: false },
+    probe: () =>
+      Promise.resolve(success ? { success: true, avgMs: 5 } : { success: false }),
   };
 }
 
 function probe(reachable: boolean): (s: AbortSignal) => Promise<ServiceHealth> {
-  return async () => ({ reachable, ...(reachable ? { latencyMs: 7 } : {}) });
+  return () => Promise.resolve({ reachable, ...(reachable ? { latencyMs: 7 } : {}) });
 }
 
 async function run(host: boolean, service: boolean) {

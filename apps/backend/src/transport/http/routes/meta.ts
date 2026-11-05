@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { SERVER_VERSION } from '../../../version.js';
 
-export const metaRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/meta/health', async () => ({
+export const metaRoutes: FastifyPluginAsync = (app) => {
+  app.get('/meta/health', () => Promise.resolve({
     ok: true,
     service: 'watchman-backend-v2',
     uptime: process.uptime(),
@@ -11,8 +11,9 @@ export const metaRoutes: FastifyPluginAsync = async (app) => {
 
   // Not npm_package_version: it is only set under npm scripts, so the desktop
   // app and `node dist/index.js` reported "dev".
-  app.get('/meta/version', async () => ({
+  app.get('/meta/version', () => Promise.resolve({
     version: SERVER_VERSION,
     node: process.version,
   }));
+  return Promise.resolve();
 };

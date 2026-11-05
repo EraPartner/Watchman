@@ -25,16 +25,16 @@ class Stub extends BaseService {
   healthy = false;
   statsError: DomainError | undefined;
 
-  async checkHealth(): Promise<HealthResult> {
+  checkHealth(): Promise<HealthResult> {
     this.healthCalls++;
-    return this.healthy
+    return Promise.resolve(this.healthy
       ? ok({ reachable: true, at: 0 })
-      : err(new UnavailableError("down"));
+      : err(new UnavailableError("down")));
   }
-  async getStats(): Promise<StatsResult> {
+  getStats(): Promise<StatsResult> {
     this.statsCalls++;
-    if (this.statsError !== undefined) return err(this.statsError);
-    return ok({ metrics: {}, at: 0 });
+    if (this.statsError !== undefined) return Promise.resolve(err(this.statsError));
+    return Promise.resolve(ok({ metrics: {}, at: 0 }));
   }
 }
 
@@ -178,7 +178,7 @@ describe("withBreakers", () => {
   // method, so a stray control() on an inner service never becomes reachable.
   it("does not forward control() from the inner service", () => {
     const inner = Object.assign(new Stub(), {
-      control: async () => ok<void>(undefined),
+      control: () => Promise.resolve(ok<void>(undefined)),
     });
     const { guarded } = makeGuarded(inner);
     expect("control" in guarded).toBe(false);

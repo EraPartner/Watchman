@@ -80,7 +80,7 @@ export const zmqConnect: ZmqConnectFn = async (endpoint, topics) => {
       handlers.add(handler);
       return () => handlers.delete(handler);
     },
-    async close() {
+    close() {
       closed = true;
       handlers.clear();
       try {
@@ -88,6 +88,7 @@ export const zmqConnect: ZmqConnectFn = async (endpoint, topics) => {
       } catch {
         /* already closed */
       }
+      return Promise.resolve();
     },
   } satisfies ZmqSubscriberHandle;
 };

@@ -55,16 +55,16 @@ function makeConfig(
 // only the read-only calls the collector makes
 function fakePigpio(tick: number): PigpioClient {
   const handle = {
-    getHardwareRevision: async () => 0xc03111,
-    getPigpioVersion: async () => 79,
-    getCurrentTick: async () => tick,
-    end: async () => undefined,
+    getHardwareRevision: () => Promise.resolve(0xc03111),
+    getPigpioVersion: () => Promise.resolve(79),
+    getCurrentTick: () => Promise.resolve(tick),
+    end: () => Promise.resolve(undefined),
   } as unknown as PigpioHandle;
-  return { connect: async () => handle };
+  return { connect: () => Promise.resolve(handle) };
 }
 
 function fakeSsh(result: SshExecResult): SshExecutor {
-  return { exec: async () => result };
+  return { exec: () => Promise.resolve(result) };
 }
 
 describe("PiStatsCollector uptime", () => {
@@ -113,9 +113,9 @@ describe("PiStatsCollector relay command", () => {
     const collector = new PiStatsCollector({
       pigpio: fakePigpio(1_000),
       ssh: {
-        exec: async (req) => {
+        exec: (req) => {
           commands.push(req.command);
-          return { stdout: "{}", stderr: "", code: 0 };
+          return Promise.resolve({ stdout: "{}", stderr: "", code: 0 });
         },
       },
       config: makeConfig({
@@ -143,9 +143,9 @@ describe("PiStatsCollector host key pinning", () => {
 
   function recordingSsh(requests: SshExecRequest[]): SshExecutor {
     return {
-      exec: async (req) => {
+      exec: (req) => {
         requests.push(req);
-        return { stdout: "{}", stderr: "", code: 0 };
+        return Promise.resolve({ stdout: "{}", stderr: "", code: 0 });
       },
     };
   }
@@ -225,25 +225,25 @@ describe("PiStatsCollector model from /proc/cpuinfo (direct SSH)", () => {
   // dynamic commands), os-release the 9th
   function cpuinfoSsh(cpuinfo: string): SshExecutor {
     return {
-      exec: async (req) => {
+      exec: (req) => {
         const subs = req.command.split(`; echo "${SSH_SEGMENT_DELIMITER}"; `);
         const segments = subs.map((sub) => {
           if (sub.includes("/proc/cpuinfo")) return cpuinfo;
           if (sub.includes("/proc/uptime")) return "12345.67 23456.78";
           return "";
         });
-        return {
+        return Promise.resolve({
           stdout: segments.join(`\n${SSH_SEGMENT_DELIMITER}\n`),
           stderr: "",
           code: 0,
-        };
+        });
       },
     };
   }
 
   const noPigpiod: PigpioClient = {
-    connect: async () => {
-      throw new Error("connect ECONNREFUSED");
+    connect: () => {
+      return Promise.reject(new Error("connect ECONNREFUSED"));
     },
   };
 
@@ -355,7 +355,7 @@ describe("PiStatsCollector host basics (direct SSH)", () => {
     let poll = 0;
     let nowMs = 0;
     const ssh: SshExecutor = {
-      exec: async (req) => {
+      exec: (req) => {
         const subs = req.command.split(`; echo "${SSH_SEGMENT_DELIMITER}"; `);
         const segments = subs.map((sub) => {
           if (sub.includes("/proc/stat")) return poll === 0 ? "cpu  100 0 100 800 0 0 0 0" : "cpu  175 0 125 900 0 0 0 0";
@@ -367,11 +367,11 @@ describe("PiStatsCollector host basics (direct SSH)", () => {
           if (sub.includes("/proc/uptime")) return "100.0 50.0";
           return "";
         });
-        return { stdout: segments.join(`\n${SSH_SEGMENT_DELIMITER}\n`), stderr: "", code: 0 };
+        return Promise.resolve({ stdout: segments.join(`\n${SSH_SEGMENT_DELIMITER}\n`), stderr: "", code: 0 });
       },
     };
     const collector = new PiStatsCollector({
-      pigpio: { connect: async () => { throw new Error("connect ECONNREFUSED"); } },
+      pigpio: { connect: () => { return Promise.reject(new Error("connect ECONNREFUSED")); } },
       ssh,
       config: makeConfig({ sshUser: "pi", sshKeyPath: "/tmp/k" }),
       now: () => nowMs,

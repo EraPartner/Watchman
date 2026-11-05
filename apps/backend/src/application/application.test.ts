@@ -19,12 +19,12 @@ class FakeSvc extends BaseService {
     this.kind = kind;
     this.instanceId = instanceId;
   }
-  async checkHealth(): Promise<HealthResult> {
-    if (!this.healthy) return err(new UnavailableError('down'));
-    return ok({ reachable: true, at: 1 });
+  checkHealth(): Promise<HealthResult> {
+    if (!this.healthy) return Promise.resolve(err(new UnavailableError('down')));
+    return Promise.resolve(ok({ reachable: true, at: 1 }));
   }
-  async getStats(): Promise<StatsResult> {
-    return ok({ metrics: { count: 1 }, at: 1 });
+  getStats(): Promise<StatsResult> {
+    return Promise.resolve(ok({ metrics: { count: 1 }, at: 1 }));
   }
 }
 

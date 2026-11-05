@@ -184,7 +184,7 @@ describe("startSseStream", () => {
     mode = "stream";
   });
 
-  it("stops cleanly when aborted before any connection", async () => {
+  it("stops cleanly when aborted before any connection", () => {
     const abort = new AbortController();
     abort.abort();
     expect(() =>
@@ -194,6 +194,7 @@ describe("startSseStream", () => {
         signal: abort.signal,
       })
     ).not.toThrow();
+    return Promise.resolve();
   });
 });
 

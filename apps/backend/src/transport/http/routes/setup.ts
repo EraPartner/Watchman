@@ -57,7 +57,7 @@ export interface SetupRouteDeps {
 }
 
 export function setupRoutes(deps: SetupRouteDeps): FastifyPluginAsync {
-  return async (app) => {
+  return (app) => {
     app.get('/setup/status', async () => {
       const services = await deps.store.loadAll();
       const needsSetup = services.length === 0;
@@ -104,5 +104,6 @@ export function setupRoutes(deps: SetupRouteDeps): FastifyPluginAsync {
         }
       },
     );
+    return Promise.resolve();
   };
 }

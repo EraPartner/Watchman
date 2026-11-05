@@ -13,7 +13,7 @@ import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
 import { TimeoutError } from "../../../core/errors.js";
 
 function fakePing(): PingProber {
-  return { probe: async () => ({ success: true, avgMs: 5 }) };
+  return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
 }
 
 let server: Server;
@@ -482,7 +482,7 @@ describe("AlbyHubService", () => {
   } {
     const responses: Array<{ url: string; read: boolean }> = [];
     const http: HttpClient = {
-      send: async (req) => {
+      send: (req) => {
         const entry = { url: req.url, read: false };
         responses.push(entry);
         const status = statusFor(req.url);
@@ -490,16 +490,16 @@ describe("AlbyHubService", () => {
         const res: HttpResponse = {
           status,
           headers: {},
-          text: async () => {
+          text: () => {
             entry.read = true;
-            return body;
+            return Promise.resolve(body);
           },
-          json: async <T>() => {
+          json: <T>() => {
             entry.read = true;
-            return JSON.parse(body) as T;
+            return Promise.resolve(JSON.parse(body) as T);
           },
         };
-        return res;
+        return Promise.resolve(res);
       },
     };
     return {
@@ -579,8 +579,8 @@ describe("AlbyHubService", () => {
 
   it("NWC checkHealth keeps the timeout reason in its message", async () => {
     const http: HttpClient = {
-      send: async () => {
-        throw new TimeoutError("aborted after 2000ms");
+      send: () => {
+        return Promise.reject(new TimeoutError("aborted after 2000ms"));
       },
     };
     const svc = new AlbyHubService({

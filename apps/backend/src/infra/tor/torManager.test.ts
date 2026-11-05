@@ -46,22 +46,24 @@ function fakeFs(): FsLike & { writes: Array<[string, string]>; unlinks: string[]
   return {
     writes,
     unlinks,
-    async mkdir() {
-      return undefined;
+    mkdir() {
+      return Promise.resolve(undefined);
     },
-    async writeFile(p, data) {
+    writeFile(p, data) {
       writes.push([p, data]);
+      return Promise.resolve();
     },
-    async unlink(p) {
+    unlink(p) {
       unlinks.push(p);
+      return Promise.resolve();
     },
   };
 }
 
 function fakeProber(result: boolean | (() => boolean)): TcpProber {
   return {
-    async probe() {
-      return typeof result === 'function' ? result() : result;
+    probe() {
+      return Promise.resolve(typeof result === 'function' ? result() : result);
     },
   };
 }
@@ -156,12 +158,12 @@ describe('torManager', () => {
   it('startTor spawns tor and returns true when port opens', async () => {
     let probeCalls = 0;
     const prober: TcpProber = {
-      async probe() {
+      probe() {
         probeCalls++;
-        return probeCalls > 2;
+        return Promise.resolve(probeCalls > 2);
       },
     };
-    const clock: Clock = { now: () => 0, sleep: async () => undefined };
+    const clock: Clock = { now: () => 0, sleep: () => Promise.resolve(undefined) };
     const spawnCalls: string[] = [];
     const spawn = fakeSpawn((cmd) => {
       spawnCalls.push(cmd);
@@ -185,8 +187,9 @@ describe('torManager', () => {
     let t = 0;
     const clock: Clock = {
       now: () => t,
-      sleep: async (ms) => {
+      sleep: (ms) => {
         t += ms;
+        return Promise.resolve();
       },
     };
     const child = fakeChild();
@@ -230,13 +233,13 @@ describe('torManager', () => {
     });
     let running = false;
     const prober: TcpProber = {
-      async probe() {
+      probe() {
         const was = running;
         running = true;
-        return was;
+        return Promise.resolve(was);
       },
     };
-    const clock: Clock = { now: () => 0, sleep: async () => undefined };
+    const clock: Clock = { now: () => 0, sleep: () => Promise.resolve(undefined) };
     const mgr = createTorManager({
       config: baseCfg,
       spawn,
@@ -261,13 +264,13 @@ describe('torManager', () => {
     });
     let running = false;
     const prober: TcpProber = {
-      async probe() {
+      probe() {
         const was = running;
         running = true;
-        return was;
+        return Promise.resolve(was);
       },
     };
-    const clock: Clock = { now: () => 0, sleep: async () => undefined };
+    const clock: Clock = { now: () => 0, sleep: () => Promise.resolve(undefined) };
     const mgr = createTorManager({
       config: { ...baseCfg, stopGraceMs: 5 },
       spawn,
@@ -284,8 +287,8 @@ describe('torManager', () => {
 
   it('cleanup unlinks torrc and ignores missing file', async () => {
     const fs = fakeFs();
-    fs.unlink = vi.fn(async () => {
-      throw new Error('ENOENT');
+    fs.unlink = vi.fn(() => {
+      return Promise.reject(new Error('ENOENT'));
     });
     const mgr = createTorManager({
       config: baseCfg,

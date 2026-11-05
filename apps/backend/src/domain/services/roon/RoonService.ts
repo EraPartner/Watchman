@@ -149,14 +149,14 @@ export class RoonService extends BaseService {
     });
   }
 
-  async getStats(_signal: AbortSignal): Promise<StatsResult> {
+  getStats(_signal: AbortSignal): Promise<StatsResult> {
     const zones = this.handle?.getZones() ?? [];
     const paired = this.handle?.isPaired() ?? false;
     const activeZones = zones.filter((z) => z.state === "playing").length;
     const nowPlaying = zones.find((z) => z.state === "playing")?.nowPlaying
       ?.oneLine;
 
-    return ok({
+    return Promise.resolve(ok({
       at: this.now(),
       metrics: {
         host: this.host,
@@ -186,6 +186,6 @@ export class RoonService extends BaseService {
             }
           : {}),
       },
-    });
+    }));
   }
 }

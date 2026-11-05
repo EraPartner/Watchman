@@ -39,11 +39,12 @@ describe('withTimeout', () => {
     expect(s.aborted).toBe(true);
   });
 
-  it('parent abort later propagates', async () => {
+  it('parent abort later propagates', () => {
     const parent = new AbortController();
     const s = withTimeout(1000, parent.signal);
     parent.abort(new Error('bye'));
     expect(s.aborted).toBe(true);
+    return Promise.resolve();
   });
 
   it('does not keep the event loop alive', () => {

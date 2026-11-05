@@ -14,7 +14,7 @@ import type { PingProber } from "../../../infra/net/pingProbe.js";
 import type { DsmClient } from "../../../infra/synology/dsmClient.js";
 
 function fakePing(): PingProber {
-  return { probe: async () => ({ success: true, avgMs: 5 }) };
+  return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
 }
 
 function makeConfig(
@@ -43,12 +43,12 @@ function makeConfig(
 
 function fakeDsm(responses: Record<string, unknown>): DsmClient {
   return {
-    call: async (api, _version, method) => {
+    call: (api, _version, method) => {
       const key = `${api}/${method}`;
-      if (key in responses) return responses[key] as never;
-      throw new Error(`unexpected dsm call: ${key}`);
+      if (key in responses) return Promise.resolve(responses[key] as never);
+      return Promise.reject(new Error(`unexpected dsm call: ${key}`));
     },
-    close: async () => undefined,
+    close: () => Promise.resolve(undefined),
   };
 }
 
@@ -107,7 +107,7 @@ function fakeSnmp(
       calls.push(req);
       return fn(req);
     },
-    walk: async (req) => walk(req),
+    walk: (req) => Promise.resolve(walk(req)),
   };
 }
 
@@ -466,10 +466,10 @@ describe("SynologyService", () => {
       }),
       ping: fakePing(),
       dsm: {
-        call: async () => {
-          throw new Error("DSM unreachable");
+        call: () => {
+          return Promise.reject(new Error("DSM unreachable"));
         },
-        close: async () => undefined,
+        close: () => Promise.resolve(undefined),
       },
       now: () => 0,
     });
@@ -703,10 +703,10 @@ describe("SynologyService", () => {
       config: makeConfig(DSM_ONLY),
       ping: fakePing(),
       dsm: {
-        call: async () => {
-          throw new UnauthorizedError("synology dsm login failed: code 400");
+        call: () => {
+          return Promise.reject(new UnauthorizedError("synology dsm login failed: code 400"));
         },
-        close: async () => undefined,
+        close: () => Promise.resolve(undefined),
       },
       now: () => 0,
     });
@@ -721,10 +721,10 @@ describe("SynologyService", () => {
       config: makeConfig(DSM_ONLY),
       ping: fakePing(),
       dsm: {
-        call: async () => {
-          throw new UnauthorizedError("synology dsm login failed: code 400");
+        call: () => {
+          return Promise.reject(new UnauthorizedError("synology dsm login failed: code 400"));
         },
-        close: async () => undefined,
+        close: () => Promise.resolve(undefined),
       },
       now: () => 0,
     });
@@ -826,10 +826,10 @@ describe("SynologyService", () => {
       }),
       ping: fakePing(),
       dsm: {
-        call: async () => {
-          throw new UnauthorizedError("synology dsm login failed: code 400");
+        call: () => {
+          return Promise.reject(new UnauthorizedError("synology dsm login failed: code 400"));
         },
-        close: async () => undefined,
+        close: () => Promise.resolve(undefined),
       },
       now: () => 0,
     });

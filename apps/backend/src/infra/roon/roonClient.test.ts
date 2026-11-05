@@ -18,7 +18,7 @@ function makeFakeRoon(): FakeRoonControl {
     closed: boolean;
   } | null = null;
 
-  const connect: RoonConnectFn = async (opts) => {
+  const connect: RoonConnectFn = (opts) => {
     handle = {
       zones: new Map(),
       paired: false,
@@ -28,15 +28,16 @@ function makeFakeRoon(): FakeRoonControl {
     const h: RoonHandle = {
       getZones: () => (handle ? Array.from(handle.zones.values()) : []),
       isPaired: () => handle?.paired ?? false,
-      close: async () => {
+      close: () => {
         if (handle) {
           handle.zones.clear();
           handle.paired = false;
           handle.closed = true;
         }
+        return Promise.resolve();
       },
     };
-    return h;
+    return Promise.resolve(h);
   };
 
   return {

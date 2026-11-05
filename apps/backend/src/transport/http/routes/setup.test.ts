@@ -27,11 +27,11 @@ const CERT_HASH = "aabbcc00" + "0".repeat(56);
 
 function makeApp() {
   const logger = pino({ level: "silent" });
-  const fakeStore = { loadAll: async () => [] } as unknown as ConfigStore;
+  const fakeStore = { loadAll: () => Promise.resolve([]) } as unknown as ConfigStore;
   const fakeLifecycle = {} as ServiceLifecycle;
   const fakeHttp = {
-    send: async () => {
-      throw new Error("not used");
+    send: () => {
+      return Promise.reject(new Error("not used"));
     },
   } as HttpClient;
   const registry = new ServiceRegistry();
@@ -47,13 +47,13 @@ function makeApp() {
       store: fakeStore,
       lifecycle: fakeLifecycle,
       registry,
-      profiles: { getProfile: async () => undefined },
+      profiles: { getProfile: () => Promise.resolve(undefined) },
     },
     profiles: {
       profiles: {} as never,
       store: fakeStore,
       lifecycle: fakeLifecycle,
-      detector: { detect: async () => ({}) },
+      detector: { detect: () => Promise.resolve({}) },
     },
     setup: { store: fakeStore, http: fakeHttp },
   });

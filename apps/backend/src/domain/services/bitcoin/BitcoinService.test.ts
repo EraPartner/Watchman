@@ -16,7 +16,7 @@ import type {
 } from "../../../infra/zmq/zmqSubscriber.js";
 
 function fakePing(): PingProber {
-  return { probe: async () => ({ success: true, avgMs: 5 }) };
+  return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
 }
 
 let server: Server;
@@ -209,15 +209,16 @@ function makeFakeZmq(): {
       handlers.add(h);
       return () => handlers.delete(h);
     },
-    async close() {
+    close() {
       closed = true;
       handlers.clear();
+      return Promise.resolve();
     },
   };
 
-  const connect: ZmqConnectFn = async (endpoint, topics) => {
+  const connect: ZmqConnectFn = (endpoint, topics) => {
     connectCalls.push({ endpoint, topics });
-    return handle;
+    return Promise.resolve(handle);
   };
 
   const emit = (msg: ZmqMessage) => {
@@ -519,8 +520,8 @@ describe("BitcoinService — ZMQ (BT2)", () => {
       ping: fakePing(),
       config: makeConfig({ zmqHashblockEndpoint: "tcp://127.0.0.1:28332" }),
       now: () => 0,
-      zmqConnect: async () => {
-        throw new Error("zeromq not installed");
+      zmqConnect: () => {
+        return Promise.reject(new Error("zeromq not installed"));
       },
     });
     await svc.onStart();
@@ -807,8 +808,8 @@ describe("BitcoinService — ZMQ (BT2)", () => {
   });
 
   it("ZMQ connect failure is non-fatal — service continues without ZMQ metrics", async () => {
-    const failingConnect: ZmqConnectFn = async () => {
-      throw new Error("zeromq not installed");
+    const failingConnect: ZmqConnectFn = () => {
+      return Promise.reject(new Error("zeromq not installed"));
     };
     const svc = new BitcoinService({
       http: createHttpClient(),
@@ -955,8 +956,8 @@ describe("BitcoinService — ZMQ (BT2)", () => {
               return {
                 status: 403,
                 headers: {},
-                text: async () => "",
-                json: async <T>() => ({}) as T,
+                text: () => Promise.resolve(""),
+                json: <T>() => Promise.resolve(({}) as T),
               };
             }
             return http.send(req);

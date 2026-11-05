@@ -6,7 +6,7 @@ interface ErrorBody {
   error: { code: string; message: string };
 }
 
-const plugin: FastifyPluginAsync = async (app) => {
+const plugin: FastifyPluginAsync = (app) => {
   app.setErrorHandler((err: unknown, _req: FastifyRequest, reply: FastifyReply) => {
     if (isDomainError(err)) {
       const body: ErrorBody = { error: { code: err.code, message: err.message } };
@@ -30,6 +30,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   app.setNotFoundHandler((_req, reply) => {
     reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'route not found' } });
   });
+  return Promise.resolve();
 };
 
 export const errorHandlerPlugin = fp(plugin, { name: 'errorHandler' });

@@ -19,7 +19,7 @@ class Stub extends BaseService {
   constructor(
     pollPolicy: PollPolicy,
     healthImpl: () => Promise<HealthResult>,
-    statsImpl: () => Promise<StatsResult> = async () => ok({ metrics: {}, at: 0 })
+    statsImpl: () => Promise<StatsResult> = () => Promise.resolve(ok({ metrics: {}, at: 0 }))
   ) {
     super();
     this.pollPolicy = pollPolicy;
@@ -42,8 +42,8 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const spy = vi.fn();
     bus.on('service.health.updated', spy);
-    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -58,8 +58,8 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const spy = vi.fn();
     bus.on('service.error', spy);
-    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, async () =>
-      err(new UnavailableError('down')),
+    const svc = new Stub({ healthMs: 100, statsMs: 100, jitterRatio: 0 }, () =>
+      Promise.resolve(err(new UnavailableError('down'))),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -74,8 +74,8 @@ describe('BackgroundPoller', () => {
     const bus = createEventBus();
     const spy = vi.fn();
     bus.on('service.health.updated', spy);
-    const svc = new Stub({ healthMs: 50, statsMs: 50, jitterRatio: 0 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const svc = new Stub({ healthMs: 50, statsMs: 50, jitterRatio: 0 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -91,8 +91,8 @@ describe('BackgroundPoller', () => {
   it('ignores duplicate track calls', () => {
     const clock = createFakeClock();
     const bus = createEventBus();
-    const svc = new Stub({ healthMs: 100, statsMs: 100 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const svc = new Stub({ healthMs: 100, statsMs: 100 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(svc);
@@ -142,8 +142,8 @@ describe('BackgroundPoller', () => {
         releaseOld = r;
       }),
     );
-    const newSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, async () =>
-      ok({ reachable: true, at: 0 }),
+    const newSvc = new Stub({ healthMs: 100, statsMs: 1_000_000, jitterRatio: 0 }, () =>
+      Promise.resolve(ok({ reachable: true, at: 0 })),
     );
     const poller = createBackgroundPoller({ clock, bus, logger: silentLogger });
     poller.track(oldSvc);

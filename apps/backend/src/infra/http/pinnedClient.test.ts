@@ -123,10 +123,11 @@ describe("createPinnedConnector", () => {
 });
 
 describe("createPinnedClient", () => {
-  it("builds an HttpClient whose requests enforce the pin on the wire", async () => {
+  it("builds an HttpClient whose requests enforce the pin on the wire", () => {
     const client = createPinnedClient("a".repeat(64));
     expect(typeof client.send).toBe("function");
     // No TLS server with a known cert available in unit tests; full-path
     // behavior is covered by the connector tests above.
+    return Promise.resolve();
   });
 });

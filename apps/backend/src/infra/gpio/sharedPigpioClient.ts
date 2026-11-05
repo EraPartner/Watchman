@@ -93,7 +93,7 @@ export function createSharedPigpioClient(
         getHardwareRevision: () => guarded(req, (h) => h.getHardwareRevision()),
         getPigpioVersion: () => guarded(req, (h) => h.getPigpioVersion()),
         getCurrentTick: () => guarded(req, (h) => h.getCurrentTick()),
-        end: async () => undefined,
+        end: () => Promise.resolve(undefined),
       };
     },
     async close(): Promise<void> {

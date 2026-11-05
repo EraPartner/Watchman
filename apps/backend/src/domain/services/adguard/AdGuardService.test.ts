@@ -11,7 +11,7 @@ import type { AdGuardInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 
 function fakePing(): PingProber {
-  return { probe: async () => ({ success: true, avgMs: 5 }) };
+  return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
 }
 
 let server: Server;
@@ -502,11 +502,11 @@ describe("AdGuardService query log (opt-in) and transport warning", () => {
     const remote = new AdGuardService({
       // answers every endpoint with an empty object
       http: {
-        send: async () => ({
+        send: () => Promise.resolve({
           status: 200,
           headers: { "content-type": "application/json" },
-          text: async () => "{}",
-          json: async () => ({}) as never,
+          text: () => Promise.resolve("{}"),
+          json: () => Promise.resolve(({}) as never),
         }),
       },
       ping: fakePing(),
@@ -531,7 +531,7 @@ function recordingHttp(
   return {
     calls,
     http: {
-      send: async (req) => {
+      send: (req) => {
         const path = new URL(req.url).pathname + new URL(req.url).search;
         calls.push({
           method: req.method ?? "GET",
@@ -539,12 +539,12 @@ function recordingHttp(
           body: typeof req.body === "string" ? req.body : undefined,
         });
         const route = routes[path] ?? fallback;
-        return {
+        return Promise.resolve({
           status: route.status,
           headers: { "content-type": "application/json" },
-          text: async () => JSON.stringify(route.body),
-          json: async () => route.body as never,
-        };
+          text: () => Promise.resolve(JSON.stringify(route.body)),
+          json: () => Promise.resolve(route.body as never),
+        });
       },
     },
   };

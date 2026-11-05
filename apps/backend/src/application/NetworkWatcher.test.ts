@@ -20,34 +20,37 @@ interface FakeProfileState {
 
 function makeProfiles(state: FakeProfileState): ProfileStore {
   return {
-    listProfiles: async () => state.profiles as never,
-    getProfile: async () => undefined,
-    createProfile: async () => {
-      throw new Error("nu");
+    listProfiles: () => Promise.resolve(state.profiles as never),
+    getProfile: () => Promise.resolve(undefined),
+    createProfile: () => {
+      return Promise.reject(new Error("nu"));
     },
-    updateProfile: async () => {
-      throw new Error("nu");
+    updateProfile: () => {
+      return Promise.reject(new Error("nu"));
     },
     deleteProfile: async () => {},
-    serviceCounts: async () => ({}),
-    getActiveProfileId: async () => state.active,
-    setActiveProfileId: async (id: string) => {
+    serviceCounts: () => Promise.resolve({}),
+    getActiveProfileId: () => Promise.resolve(state.active),
+    setActiveProfileId: (id: string) => {
       state.active = id;
+      return Promise.resolve();
     },
-    getAutoSwitch: async () => state.autoSwitch,
-    setAutoSwitch: async (v: boolean) => {
+    getAutoSwitch: () => Promise.resolve(state.autoSwitch),
+    setAutoSwitch: (v: boolean) => {
       state.autoSwitch = v;
+      return Promise.resolve();
     },
-    getLastSignature: async () => state.lastSig,
-    setLastSignature: async (s: NetworkSignature | undefined) => {
+    getLastSignature: () => Promise.resolve(state.lastSig),
+    setLastSignature: (s: NetworkSignature | undefined) => {
       state.lastSig = s;
+      return Promise.resolve();
     },
     ensureBootstrap: async () => {},
   } as unknown as ProfileStore;
 }
 
 function makeDetector(sig: NetworkSignature): NetworkDetector {
-  return { detect: async () => sig };
+  return { detect: () => Promise.resolve(sig) };
 }
 
 function makeLifecycle(): {
@@ -59,8 +62,9 @@ function makeLifecycle(): {
     calls,
     lifecycle: {
       switchActiveProfile: vi.fn(
-        async (id: string, reason?: "manual" | "auto") => {
+        (id: string, reason?: "manual" | "auto") => {
           calls.push([id, reason]);
+          return Promise.resolve();
         }
       ),
     },
@@ -201,7 +205,7 @@ describe("NetworkWatcher.tick", () => {
     ];
     const { lifecycle, calls } = makeLifecycle();
     const watcher = createNetworkWatcher({
-      detector: { detect: async () => readings.shift()! },
+      detector: { detect: () => Promise.resolve(readings.shift()!) },
       profiles: makeProfiles(state),
       lifecycle,
       bus: createEventBus(),
@@ -227,7 +231,7 @@ describe("NetworkWatcher.tick", () => {
     ];
     const { lifecycle, calls } = makeLifecycle();
     const watcher = createNetworkWatcher({
-      detector: { detect: async () => readings.shift()! },
+      detector: { detect: () => Promise.resolve(readings.shift()!) },
       profiles: makeProfiles(state),
       lifecycle,
       bus: createEventBus(),
@@ -269,9 +273,10 @@ describe("NetworkWatcher.tick", () => {
     };
     let attempts = 0;
     const lifecycle = {
-      switchActiveProfile: vi.fn(async () => {
+      switchActiveProfile: vi.fn(() => {
         attempts += 1;
-        if (attempts === 1) throw new Error("reload failed");
+        if (attempts === 1) return Promise.reject(new Error("reload failed"));
+        return Promise.resolve();
       }),
     };
     const watcher = createNetworkWatcher({

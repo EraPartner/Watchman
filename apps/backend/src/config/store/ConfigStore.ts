@@ -293,7 +293,7 @@ export function createConfigStore(
       const errors: LoadError[] = [];
       for (const r of rows) {
         try {
-          services.push(await rowToStored(r));
+          services.push(rowToStored(r));
         } catch (err) {
           const entry: LoadError = {
             id: String(r["id"] ?? ""),
@@ -317,9 +317,7 @@ export function createConfigStore(
     });
   }
 
-  async function rowToStored(
-    row: Record<string, unknown>
-  ): Promise<StoredService> {
+  function rowToStored(row: Record<string, unknown>): StoredService {
     const kind = String(row["kind"]);
     if (!isServiceKind(kind)) {
       throw new Error(`Unknown service kind in DB: ${kind}`);

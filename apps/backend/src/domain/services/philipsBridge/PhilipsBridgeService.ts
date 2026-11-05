@@ -139,8 +139,8 @@ export class PhilipsBridgeService extends BaseService {
     this.roomMemo = resource("/resource/room");
   }
 
-  override async onStart(): Promise<void> {
-    if (!this.applicationKey) return;
+  override onStart(): Promise<void> {
+    if (!this.applicationKey) return Promise.resolve();
     // the bridge pushes every state change over SSE — light state stays
     // fresh between polls without re-fetching the light list
     this.sseAbort = new AbortController();
@@ -158,12 +158,14 @@ export class PhilipsBridgeService extends BaseService {
         if (isCredentialRejection(e)) this.sseKeyRejected = true;
       },
     });
+    return Promise.resolve();
   }
 
-  override async onStop(): Promise<void> {
+  override onStop(): Promise<void> {
     this.sseAbort?.abort();
     this.sseAbort = undefined;
     this.sseHealthy = false;
+    return Promise.resolve();
   }
 
   private handleSseMessage(data: string): void {

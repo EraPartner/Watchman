@@ -21,8 +21,8 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
   const unknownProfile = async (profileId: string): Promise<boolean> =>
     (await profiles.getProfile(profileId)) === undefined;
 
-  return async (app) => {
-    app.get("/config/kinds", async () => {
+  return (app) => {
+    app.get("/config/kinds", () => {
       const kinds = SERVICE_KINDS.map((k) => {
         const m = KIND_META[k];
         return {
@@ -33,7 +33,7 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
           secretFields: m.secretFields,
         };
       });
-      return { data: kinds };
+      return Promise.resolve({ data: kinds });
     });
 
     app.get("/config/services", async () => {
@@ -273,5 +273,6 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
         };
       }
     );
+    return Promise.resolve();
   };
 }

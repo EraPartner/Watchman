@@ -36,7 +36,7 @@ function toDto(
 export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
   const { profiles, store, lifecycle, detector } = deps;
 
-  return async (app) => {
+  return (app) => {
     app.get("/profiles", async () => {
       const [list, counts, activeId] = await Promise.all([
         profiles.listProfiles(),
@@ -245,5 +245,6 @@ export function profileRoutes(deps: ProfileRouteDeps): FastifyPluginAsync {
         return { data: toDto(updated, counts, activeId) };
       }
     );
+    return Promise.resolve();
   };
 }

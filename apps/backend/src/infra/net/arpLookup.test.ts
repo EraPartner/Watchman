@@ -9,9 +9,9 @@ import {
 
 function fakeRunner(output: string, calls: Array<{ platform: NodeJS.Platform; timeoutMs: number }> = []): NeighborRunner {
   return {
-    run: async (platform, timeoutMs) => {
+    run: (platform, timeoutMs) => {
       calls.push({ platform, timeoutMs });
-      return output;
+      return Promise.resolve(output);
     },
   };
 }

@@ -133,7 +133,7 @@ export const wsPlugin = fp(
       ws.on("error", (err) => opts.logger.warn({ err }, "ws client error"));
     });
 
-    app.addHook("onClose", async () => {
+    app.addHook("onClose", () => {
       heartbeat.stop();
       broadcaster.stop();
       for (const [ws] of manager.entries()) {
@@ -144,6 +144,7 @@ export const wsPlugin = fp(
         }
       }
       manager.clear();
+      return Promise.resolve();
     });
   }
 );

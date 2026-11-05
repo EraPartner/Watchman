@@ -15,7 +15,7 @@ import type { QbittorrentInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 
 function fakePing(): PingProber {
-  return { probe: async () => ({ success: true, avgMs: 5 }) };
+  return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
 }
 
 let server: Server;
@@ -723,8 +723,8 @@ describe("QBittorrentService", () => {
     ): HttpResponse => ({
       status,
       headers,
-      text: async () => body,
-      json: async <T>() => JSON.parse(body) as T,
+      text: () => Promise.resolve(body),
+      json: <T>() => Promise.resolve(JSON.parse(body) as T),
     });
     const http: HttpClient = {
       send: async (req) => {

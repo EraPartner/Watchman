@@ -180,10 +180,11 @@ export function createBackgroundPoller(opts: PollerOptions): Poller {
     isRunning(id) {
       return tasks.has(id);
     },
-    async stop() {
+    stop() {
       for (const list of tasks.values()) list.forEach((t) => t.cancel());
       tasks.clear();
       services.clear();
+      return Promise.resolve();
     },
   };
 }

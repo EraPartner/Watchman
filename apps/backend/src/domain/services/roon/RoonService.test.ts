@@ -38,10 +38,11 @@ function makeFakeConnect(): { connect: RoonConnectFn; handle: FakeRoonHandle } {
   const handle: FakeRoonHandle = {
     getZones: () => (closed ? [] : [...zones]),
     isPaired: () => !closed && paired,
-    close: async () => {
+    close: () => {
       closed = true;
       zones = [];
       paired = false;
+      return Promise.resolve();
     },
     _setZones: (z: RoonZone[], p: boolean) => {
       zones = z;
@@ -49,17 +50,17 @@ function makeFakeConnect(): { connect: RoonConnectFn; handle: FakeRoonHandle } {
     },
   };
 
-  const connect: RoonConnectFn = async () => handle;
+  const connect: RoonConnectFn = () => Promise.resolve(handle);
 
   return { connect, handle };
 }
 
 function fakePing(result: PingResult): PingProber {
-  return { probe: async () => result };
+  return { probe: () => Promise.resolve(result) };
 }
 
 function fakeTcp(map: Record<number, boolean>): TcpProber {
-  return { probe: async (req: TcpProbeRequest) => Boolean(map[req.port]) };
+  return { probe: (req: TcpProbeRequest) => Promise.resolve(Boolean(map[req.port])) };
 }
 
 describe('RoonService', () => {
@@ -91,9 +92,9 @@ describe('RoonService', () => {
   it('skips ping when usePing=false', async () => {
     let pinged = false;
     const ping: PingProber = {
-      probe: async () => {
+      probe: () => {
         pinged = true;
-        return { success: true };
+        return Promise.resolve({ success: true });
       },
     };
     const svc = new RoonService({
@@ -231,9 +232,9 @@ describe('RoonService — Roon API (RN2)', () => {
     const svc = new RoonService({
       ping: fakePing({ success: true }),
       tcp: {
-        probe: async (req: TcpProbeRequest) => {
+        probe: (req: TcpProbeRequest) => {
           probed.push(req.port);
-          return req.port === 9330;
+          return Promise.resolve(req.port === 9330);
         },
       },
       config: makeConfig({ useRoonApi: true, apiPort: 9330 }),

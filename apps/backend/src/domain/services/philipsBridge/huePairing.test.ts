@@ -11,11 +11,11 @@ function fakeProbeCertHash(_host: string, _port: number, _timeoutMs: number): Pr
 
 function fakeHttp(status: number, body: unknown): HttpClient {
   return {
-    send: vi.fn(async (_req: HttpRequest) => ({
+    send: vi.fn((_req: HttpRequest) => Promise.resolve({
       status,
       headers: {},
-      text: async () => JSON.stringify(body),
-      json: async <T>() => body as T,
+      text: () => Promise.resolve(JSON.stringify(body)),
+      json: <T>() => Promise.resolve(body as T),
     })),
   };
 }
@@ -60,12 +60,12 @@ describe('pairBridge', () => {
 
   it('throws UnavailableError when the bridge reply is not JSON', async () => {
     const http: HttpClient = {
-      send: vi.fn(async () => ({
+      send: vi.fn(() => Promise.resolve({
         status: 200,
         headers: {},
-        text: async () => '<html>',
-        json: async <T>(): Promise<T> => {
-          throw new SyntaxError('Unexpected token <');
+        text: () => Promise.resolve('<html>'),
+        json: <T>(): Promise<T> => {
+          return Promise.reject(new SyntaxError('Unexpected token <'));
         },
       })),
     };
@@ -125,7 +125,7 @@ describe('pairBridge', () => {
 
   it('propagates http error', async () => {
     const failHttp: HttpClient = {
-      send: vi.fn(async () => { throw new UnavailableError('connection refused'); }),
+      send: vi.fn(() => { return Promise.reject(new UnavailableError('connection refused')); }),
     };
     await expect(
       pairBridge('192.168.1.50', { http: failHttp, probeCertHash: fakeProbeCertHash }),
@@ -134,7 +134,7 @@ describe('pairBridge', () => {
 
   it('uses custom timeoutMs when provided', async () => {
     const http = fakeHttp(200, [{ success: { username: 'key' } }]);
-    const probeSpy = vi.fn(async (_h: string, _p: number, _t: number) => FAKE_CERT_HASH);
+    const probeSpy = vi.fn((_h: string, _p: number, _t: number) => Promise.resolve(FAKE_CERT_HASH));
     await pairBridge('192.168.1.50', { http, probeCertHash: probeSpy }, 3_000);
     expect(probeSpy).toHaveBeenCalledWith('192.168.1.50', 443, 3_000);
     const req = vi.mocked(http.send).mock.calls[0]![0];

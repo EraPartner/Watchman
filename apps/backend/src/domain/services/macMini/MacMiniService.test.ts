@@ -41,7 +41,7 @@ function makeConfig(overrides: Partial<MacMiniInstance> = {}): MacMiniInstance {
 }
 
 function fakePing(result: PingResult): PingProber {
-  return { probe: async () => result };
+  return { probe: () => Promise.resolve(result) };
 }
 
 type ExecMap = Record<
@@ -53,7 +53,7 @@ type ExecMap = Record<
 // output from a per-command fixture map (positional, delimiter-joined).
 function fakeSsh(map: ExecMap, calls: SshExecRequest[] = []): SshExecutor {
   return {
-    exec: async (req) => {
+    exec: (req) => {
       calls.push(req);
       const segments = MAC_STATS_COMMANDS.map((command) => {
         const entry = map[command];
@@ -61,11 +61,11 @@ function fakeSsh(map: ExecMap, calls: SshExecRequest[] = []): SshExecutor {
         const res = typeof entry === "function" ? entry(req) : entry;
         return res.code === 0 ? res.stdout : "";
       });
-      return {
+      return Promise.resolve({
         stdout: segments.join(`\n${SSH_SEGMENT_DELIMITER}\n`),
         stderr: "",
         code: 0,
-      };
+      });
     },
   };
 }
@@ -248,8 +248,8 @@ describe("MacMiniService", () => {
     const svc = new MacMiniService({
       ping: fakePing({ success: true }),
       ssh: {
-        exec: async () => {
-          throw new Error("connection refused");
+        exec: () => {
+          return Promise.reject(new Error("connection refused"));
         },
       },
       config: makeConfig(),

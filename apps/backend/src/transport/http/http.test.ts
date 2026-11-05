@@ -35,23 +35,23 @@ class FakeSvc extends BaseService {
     this.kind = kind;
     this.instanceId = instanceId;
   }
-  async checkHealth(): Promise<HealthResult> {
-    return this.healthy
+  checkHealth(): Promise<HealthResult> {
+    return Promise.resolve(this.healthy
       ? ok({ reachable: true, at: 1 })
-      : err(new UnavailableError("down"));
+      : err(new UnavailableError("down")));
   }
-  async getStats(): Promise<StatsResult> {
-    return ok({ metrics: { count: 42 }, at: 1 });
+  getStats(): Promise<StatsResult> {
+    return Promise.resolve(ok({ metrics: { count: 42 }, at: 1 }));
   }
 }
 
 async function makeApp(registry: ServiceRegistry) {
   const logger = pino({ level: "silent" });
-  const fakeStore = { loadAll: async () => [] } as unknown as ConfigStore;
+  const fakeStore = { loadAll: () => Promise.resolve([]) } as unknown as ConfigStore;
   const fakeLifecycle = {} as ServiceLifecycle;
   const fakeHttp = {
-    send: async () => {
-      throw new Error("not used in tests");
+    send: () => {
+      return Promise.reject(new Error("not used in tests"));
     },
   } as HttpClient;
   return buildServer({
@@ -66,13 +66,13 @@ async function makeApp(registry: ServiceRegistry) {
       store: fakeStore,
       lifecycle: fakeLifecycle,
       registry,
-      profiles: { getProfile: async () => undefined },
+      profiles: { getProfile: () => Promise.resolve(undefined) },
     },
     profiles: {
       profiles: {} as never,
       store: fakeStore,
       lifecycle: fakeLifecycle,
-      detector: { detect: async () => ({}) },
+      detector: { detect: () => Promise.resolve({}) },
     },
     setup: { store: fakeStore, http: fakeHttp },
   });
