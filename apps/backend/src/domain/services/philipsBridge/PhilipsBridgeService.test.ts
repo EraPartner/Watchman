@@ -428,14 +428,30 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
       ...ROUTES,
       "/clip/v2/resource/zigbee_connectivity": {
         data: [
-          { id: "z1", status: "connected", owner: { rid: "d1", rtype: "device" } },
-          { id: "z2", status: "connectivity_issue", owner: { rid: "d2", rtype: "device" } },
+          {
+            id: "z1",
+            status: "connected",
+            owner: { rid: "d1", rtype: "device" },
+          },
+          {
+            id: "z2",
+            status: "connectivity_issue",
+            owner: { rid: "d2", rtype: "device" },
+          },
         ],
       },
       "/clip/v2/resource/device_power": {
         data: [
-          { id: "p1", owner: { rid: "d1" }, power_state: { battery_state: "normal", battery_level: 80 } },
-          { id: "p2", owner: { rid: "d3" }, power_state: { battery_state: "low", battery_level: 12 } },
+          {
+            id: "p1",
+            owner: { rid: "d1" },
+            power_state: { battery_state: "normal", battery_level: 80 },
+          },
+          {
+            id: "p2",
+            owner: { rid: "d3" },
+            power_state: { battery_state: "low", battery_level: 12 },
+          },
         ],
       },
       "/clip/v2/resource/device": {
@@ -580,7 +596,10 @@ describe("PhilipsBridgeService extended resources + eventstream", () => {
     // only l2 changed; l1 is unknown until the light list is fetched
     emit?.(
       JSON.stringify([
-        { type: "update", data: [{ id: "l2", type: "light", on: { on: true } }] },
+        {
+          type: "update",
+          data: [{ id: "l2", type: "light", on: { on: true } }],
+        },
       ])
     );
     const res = await svc.getStats(new AbortController().signal);
@@ -729,7 +748,7 @@ describe("PhilipsBridgeService rejected application key", () => {
     }
   });
 
-  it("health has no key message when the bridge is just unreachable", async () => {
+  it("an unreachable bridge is not reported as a rejected key", async () => {
     const svc = new PhilipsBridgeService({
       ping: fakePing({ success: false }),
       http: fakeHttp(503, {}),
@@ -739,23 +758,28 @@ describe("PhilipsBridgeService rejected application key", () => {
     const res = await svc.checkHealth(new AbortController().signal);
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value.service?.message).toBeUndefined();
-      expect(res.value.message).toBeUndefined();
+      expect(res.value.service?.message ?? "").not.toMatch(/key rejected/);
+      expect(res.value.message ?? "").not.toMatch(/key rejected/);
+      // no certHash in this config: it reports the missing fingerprint instead
+      expect(res.value.service?.message).toMatch(/certificate fingerprint/);
     }
   });
 
-  it.each([401, 403])("getStats returns UnauthorizedError on %i", async (status) => {
-    const svc = new PhilipsBridgeService({
-      ping: fakePing({ success: true }),
-      http: fakeHttp(status, {}),
-      config: makeConfig({ applicationKey: "revoked" }),
-      now: () => 0,
-    });
-    const res = await svc.getStats(new AbortController().signal);
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(res.error).toBeInstanceOf(UnauthorizedError);
-      expect(res.error.message).toContain("re-pair the bridge");
+  it.each([401, 403])(
+    "getStats returns UnauthorizedError on %i",
+    async (status) => {
+      const svc = new PhilipsBridgeService({
+        ping: fakePing({ success: true }),
+        http: fakeHttp(status, {}),
+        config: makeConfig({ applicationKey: "revoked" }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error).toBeInstanceOf(UnauthorizedError);
+        expect(res.error.message).toContain("re-pair the bridge");
+      }
     }
-  });
+  );
 });
