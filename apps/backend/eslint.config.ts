@@ -55,7 +55,13 @@ export default [
       react: react,
     },
     rules: {
-      ...typescriptEslint.configs.recommended.rules,
+      // typescript-eslint's recommended rules (flat config form; the plugin's
+      // legacy `configs.recommended` is untyped).
+      ...Object.fromEntries(
+        tseslint.configs.recommended.flatMap((config) =>
+          Object.entries(config.rules ?? {})
+        )
+      ),
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": [
         "warn",
