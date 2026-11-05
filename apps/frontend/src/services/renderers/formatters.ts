@@ -1,3 +1,4 @@
+import { toText } from "@/lib/text";
 import type { MetricFormatter } from "./types";
 
 const toNumber = (v: unknown): number | undefined => {
@@ -9,7 +10,7 @@ const toNumber = (v: unknown): number | undefined => {
   return undefined;
 };
 
-export const fmtRaw: MetricFormatter = (v) => (v == null ? "—" : String(v));
+export const fmtRaw: MetricFormatter = (v) => toText(v);
 
 export const fmtNumber =
   (precision = 0): MetricFormatter =>
@@ -88,7 +89,7 @@ export const fmtVolt: MetricFormatter = (v) => {
 };
 
 export const fmtVersion: MetricFormatter = (v) => {
-  if (typeof v !== "string") return v == null ? "—" : String(v);
+  if (typeof v !== "string") return toText(v);
   const match = v.match(/\/Satoshi:([^/]+)\//);
   return match?.[1] ?? v;
 };

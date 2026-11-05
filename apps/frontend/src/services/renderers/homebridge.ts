@@ -1,3 +1,4 @@
+import { toText } from "@/lib/text";
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
 import {
@@ -80,8 +81,8 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
           label: "Outdated plugins",
           format: fmtList((p) =>
             p["latestVersion"]
-              ? `${String(p["name"])} → ${String(p["latestVersion"])}`
-              : String(p["name"])
+              ? `${toText(p["name"])} → ${toText(p["latestVersion"])}`
+              : toText(p["name"])
           ),
         },
         { key: "accessoryCount", label: "Accessories", format: fmtRaw },

@@ -8,6 +8,8 @@ import {
   recordStats,
   _resetMetricHistoryForTests,
 } from "./metricHistory";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 beforeEach(() => {
   (
@@ -27,7 +29,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -56,7 +58,7 @@ describe("useMetricSeries", () => {
 
     const { root } = await render(<Consumer />);
     expect(captured).toHaveLength(1);
-    expect(captured[0]!.v).toBe(500);
+    expect(required(captured[0]).v).toBe(500);
     act(() => root.unmount());
   });
 
@@ -74,13 +76,13 @@ describe("useMetricSeries", () => {
     const initialCount = renderCount;
     expect(captured).toHaveLength(0);
 
-    await act(async () => {
+    await actAsync(() => {
       recordStats("router", "home", { latency: 42 }, ["latency"], 2000);
     });
 
     expect(renderCount).toBeGreaterThan(initialCount);
     expect(captured).toHaveLength(1);
-    expect(captured[0]!.v).toBe(42);
+    expect(required(captured[0]).v).toBe(42);
     act(() => root.unmount());
   });
 });

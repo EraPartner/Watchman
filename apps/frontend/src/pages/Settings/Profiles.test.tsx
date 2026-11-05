@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Profile } from "../../services/profilesApi";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 const PROFILE: Profile = {
   id: "p1",
@@ -16,10 +18,10 @@ const PROFILE: Profile = {
   updatedAt: "2026-01-01T00:00:00Z",
 };
 
-const updateMutateAsync = vi.fn(async (_vars: unknown) => PROFILE);
-const createMutateAsync = vi.fn(async (_vars: unknown) => PROFILE);
+const updateMutateAsync = vi.fn<(vars: unknown) => Promise<typeof PROFILE>>(() => Promise.resolve(PROFILE));
+const createMutateAsync = vi.fn<(vars: unknown) => Promise<typeof PROFILE>>(() => Promise.resolve(PROFILE));
 
-function mutation(mutateAsync: (vars: never) => Promise<unknown> = vi.fn(async () => undefined)) {
+function mutation(mutateAsync: (vars: never) => Promise<unknown> = vi.fn(() => Promise.resolve(undefined))) {
   return { mutate: vi.fn(), mutateAsync, isPending: false };
 }
 
@@ -75,14 +77,14 @@ function buttonByText(root: HTMLElement, text: string): HTMLButtonElement {
     (b) => b.textContent === text,
   );
   if (!btn) throw new Error(`button "${text}" not found`);
-  return btn as HTMLButtonElement;
+  return btn;
 }
 
 function inputByLabel(root: HTMLElement, label: RegExp): HTMLInputElement {
   for (const lab of root.querySelectorAll("label")) {
-    if (label.test(lab.textContent ?? "")) {
+    if (label.test(lab.textContent)) {
       const input = lab.querySelector("input");
-      if (input) return input as HTMLInputElement;
+      if (input) return input;
     }
   }
   throw new Error(`input ${label} not found`);
@@ -93,7 +95,7 @@ async function typeInto(input: HTMLInputElement, value: string) {
     window.HTMLInputElement.prototype,
     "value",
   )?.set;
-  await act(async () => {
+  await actAsync(() => {
     setter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -114,14 +116,14 @@ describe("Profiles editor", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
-    await act(async () => root.render(<Profiles />));
+    await actAsync(() => root.render(<Profiles />));
 
-    await act(async () => buttonByText(container, "Edit").click());
+    await actAsync(() => buttonByText(container, "Edit").click());
     await typeInto(inputByLabel(container, /description/i), "");
-    await act(async () => buttonByText(container, "Save").click());
+    await actAsync(() => buttonByText(container, "Save").click());
 
     expect(updateMutateAsync).toHaveBeenCalledTimes(1);
-    const arg = updateMutateAsync.mock.calls[0]![0] as {
+    const arg = required(updateMutateAsync.mock.calls[0])[0] as {
       id: string;
       patch: { description?: string };
     };

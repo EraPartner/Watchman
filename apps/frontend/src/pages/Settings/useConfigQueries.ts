@@ -29,8 +29,8 @@ const KEYS = {
 function invalidateDashboardQueries(
   qc: ReturnType<typeof useQueryClient>
 ): void {
-  qc.invalidateQueries({ queryKey: queryKeys.servicesInstances() });
-  qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
+  void qc.invalidateQueries({ queryKey: queryKeys.servicesInstances() });
+  void qc.invalidateQueries({ queryKey: queryKeys.servicesHealth() });
 }
 
 // SetupGate on "/" redirects to /setup while needsSetup is true. The status
@@ -94,8 +94,8 @@ export function useCreateService() {
   return useMutation({
     mutationFn: (input: ServiceInstanceInput) => configApi.createService(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.services });
-      qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      void qc.invalidateQueries({ queryKey: KEYS.services });
+      void qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
       resetSetupStatus(qc);
     },
@@ -113,9 +113,9 @@ export function useUpdateService() {
       input: Partial<ServiceInstanceInput>;
     }) => configApi.updateService(id, input),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: KEYS.services });
-      qc.invalidateQueries({ queryKey: KEYS.service(id) });
-      qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      void qc.invalidateQueries({ queryKey: KEYS.services });
+      void qc.invalidateQueries({ queryKey: KEYS.service(id) });
+      void qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
     },
   });
@@ -126,9 +126,9 @@ export function useDeleteService() {
   return useMutation({
     mutationFn: (id: string) => configApi.deleteService(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.services });
-      qc.invalidateQueries({ queryKey: KEYS.loadErrors });
-      qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      void qc.invalidateQueries({ queryKey: KEYS.services });
+      void qc.invalidateQueries({ queryKey: KEYS.loadErrors });
+      void qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
       resetSetupStatus(qc);
     },
@@ -148,7 +148,7 @@ export function usePairPhilipsBridge() {
 }
 
 export function useExportConfig() {
-  return useMutation<ExportBundle, Error, void>({
+  return useMutation({
     mutationFn: () => configApi.exportConfig(),
   });
 }
@@ -158,11 +158,11 @@ export function useImportConfig() {
   return useMutation<ImportResult, Error, ExportBundle>({
     mutationFn: (bundle) => configApi.importConfig(bundle),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.services });
+      void qc.invalidateQueries({ queryKey: KEYS.services });
       // A bundle can restore profiles and replace rows that failed to load.
-      qc.invalidateQueries({ queryKey: KEYS.loadErrors });
-      qc.invalidateQueries({ queryKey: queryKeys.profiles() });
-      qc.invalidateQueries({ queryKey: ["config", "audit"] });
+      void qc.invalidateQueries({ queryKey: KEYS.loadErrors });
+      void qc.invalidateQueries({ queryKey: queryKeys.profiles() });
+      void qc.invalidateQueries({ queryKey: ["config", "audit"] });
       invalidateDashboardQueries(qc);
       resetSetupStatus(qc);
     },

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { required } from "@/test/required";
 import { ApiClientCore } from "./core";
 
 // ─── Fetch mock helpers ─────────────────────────────────────────────────────
@@ -23,17 +24,17 @@ function mockResponse(init: MockResponseInit = {}): Response {
       get: (name: string) =>
         name.toLowerCase() === "content-type" ? contentType : null,
     },
-    json: async () => {
-      if (init.jsonThrows) throw new SyntaxError("Unexpected token");
-      return init.json ?? {};
-    },
+    json: () =>
+      init.jsonThrows
+        ? Promise.reject(new SyntaxError("Unexpected token"))
+        : Promise.resolve(init.json ?? {}),
   } as unknown as Response;
 }
 
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: Mock<typeof fetch>;
 
 beforeEach(() => {
-  fetchMock = vi.fn();
+  fetchMock = vi.fn<typeof fetch>();
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -51,7 +52,7 @@ describe("ApiClientCore.request", () => {
     const core = new ApiClientCore();
     await expect(core.request("/x")).resolves.toEqual({ foo: 1 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, opts] = fetchMock.mock.calls[0] ?? [];
+    const [url, opts] = required(fetchMock.mock.calls[0]);
     expect(url).toBe("/x");
     expect((opts as RequestInit).method).toBe("GET");
   });

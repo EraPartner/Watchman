@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AggregatedEntry } from "../services/apiClient/types";
 
-const useQueryMock = vi.fn();
-const getAggregatedServicesMock = vi.fn();
+const useQueryMock = vi.fn<(...args: unknown[]) => unknown>();
+const getAggregatedServicesMock = vi.fn<(...args: unknown[]) => unknown>();
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
@@ -119,7 +119,7 @@ describe("pickError", () => {
 describe("useAggregatedHealth", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("calls useQuery with correct queryKey and refetchInterval", async () => {
+  it("calls useQuery with correct queryKey and refetchInterval", () => {
     useQueryMock.mockReturnValue({ data: undefined, isLoading: true });
 
     useAggregatedHealth(15000);

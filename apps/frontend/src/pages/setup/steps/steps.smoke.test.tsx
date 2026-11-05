@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement as h } from "react";
+import { actAsync } from "@/test/actAsync";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ vi.mock("react-router-dom", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
   useMutation: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({ id: "test:main" })),
+    mutateAsync: vi.fn(() => Promise.resolve({ id: "test:main" })),
     mutate: vi.fn(),
     isPending: false,
     isError: false,
@@ -51,11 +52,11 @@ vi.mock("../../Settings/useConfigQueries", () => ({
     isLoading: false,
   })),
   useCreateService: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({ id: "tor:main" })),
+    mutateAsync: vi.fn(() => Promise.resolve({ id: "tor:main" })),
     isPending: false,
   })),
   useTestService: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({ ok: true })),
+    mutateAsync: vi.fn(() => Promise.resolve({ ok: true })),
     isPending: false,
   })),
 }));
@@ -65,17 +66,17 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("../../../services/ApiClient", () => ({
-  apiClient: { getAggregatedServices: vi.fn(async () => []) },
-  sharedCore: { request: vi.fn(async () => ({})) },
+  apiClient: { getAggregatedServices: vi.fn(() => Promise.resolve([])) },
+  sharedCore: { request: vi.fn(() => Promise.resolve({})) },
 }));
 
 vi.mock("../../../services/configApi", () => ({
   configApi: {
-    getKinds: vi.fn(async () => []),
-    listServices: vi.fn(async () => []),
-    createService: vi.fn(async () => ({ id: "tor:main" })),
-    testService: vi.fn(async () => ({ ok: true })),
-    getSetupStatus: vi.fn(async () => ({ needsSetup: false })),
+    getKinds: vi.fn(() => Promise.resolve([])),
+    listServices: vi.fn(() => Promise.resolve([])),
+    createService: vi.fn(() => Promise.resolve({ id: "tor:main" })),
+    testService: vi.fn(() => Promise.resolve({ ok: true })),
+    getSetupStatus: vi.fn(() => Promise.resolve({ needsSetup: false })),
   },
 }));
 
@@ -100,6 +101,7 @@ import { KindPickerStep } from "./KindPickerStep";
 import { ReviewStep } from "./ReviewStep";
 import { ConfigureStep } from "./ConfigureStep";
 import SetupWizard from "../SetupWizard";
+import { required } from "@/test/required";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -116,7 +118,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -154,9 +156,9 @@ describe("WelcomeStep", () => {
       <WelcomeStep onStart={onStart} onSkip={vi.fn()} />
     );
     const btn = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Begin setup")
+      b.textContent.includes("Begin setup")
     );
-    await act(async () => btn?.click());
+    await actAsync(() => btn?.click());
     expect(onStart).toHaveBeenCalledTimes(1);
     act(() => root.unmount());
   });
@@ -167,9 +169,9 @@ describe("WelcomeStep", () => {
       <WelcomeStep onStart={vi.fn()} onSkip={onSkip} />
     );
     const btn = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Skip for now")
+      b.textContent.includes("Skip for now")
     );
-    await act(async () => btn?.click());
+    await actAsync(() => btn?.click());
     expect(onSkip).toHaveBeenCalledTimes(1);
     act(() => root.unmount());
   });
@@ -220,10 +222,10 @@ describe("KindPickerStep", () => {
         "Couldn't load service kinds: Network error"
       );
       expect(container.textContent).not.toContain("No kinds match");
-      const retry = Array.from(container.querySelectorAll("button")).find(
+      const retry = required(Array.from(container.querySelectorAll("button")).find(
         (b) => b.textContent === "Retry"
-      )!;
-      await act(async () => retry.click());
+      ));
+      await actAsync(() => retry.click());
       expect(refetch).toHaveBeenCalledTimes(1);
       act(() => root.unmount());
     } finally {
@@ -243,7 +245,7 @@ describe("KindPickerStep", () => {
       <KindPickerStep onSelect={vi.fn()} onBack={vi.fn()} />
     );
     const btns = Array.from(container.querySelectorAll("button"));
-    expect(btns.some((b) => b.textContent?.includes("Back"))).toBe(true);
+    expect(btns.some((b) => b.textContent.includes("Back"))).toBe(true);
     act(() => root.unmount());
   });
 });
@@ -309,7 +311,7 @@ describe("ConfigureStep", () => {
       <ConfigureStep kind="tor" onDone={vi.fn()} onBack={vi.fn()} />
     );
     const btns = Array.from(container.querySelectorAll("button"));
-    expect(btns.some((b) => b.textContent?.includes("Back"))).toBe(true);
+    expect(btns.some((b) => b.textContent.includes("Back"))).toBe(true);
     act(() => root.unmount());
   });
 });
@@ -338,9 +340,9 @@ describe("SetupWizard", () => {
   it("navigates to pick step when Begin setup clicked", async () => {
     const { container, root } = await render(<SetupWizard />);
     const beginBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Begin setup")
+      (b) => b.textContent.includes("Begin setup")
     );
-    await act(async () => beginBtn?.click());
+    await actAsync(() => beginBtn?.click());
     expect(container.textContent).toContain("Pick");
     act(() => root.unmount());
   });

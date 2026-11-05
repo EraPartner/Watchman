@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useIsMobile } from "./use-mobile";
+import { actAsync } from "@/test/actAsync";
 
 function Probe({ onValue }: { onValue: (value: boolean) => void }) {
   const value = useIsMobile();
@@ -61,7 +62,7 @@ describe("useIsMobile", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<Probe onValue={(value) => (currentValue = value)} />);
     });
 
@@ -73,7 +74,7 @@ describe("useIsMobile", () => {
       value: 1024,
     });
 
-    await act(async () => {
+    await actAsync(() => {
       mql.trigger();
     });
 
@@ -93,7 +94,7 @@ describe("useIsMobile", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<Probe onValue={() => {}} />);
     });
 

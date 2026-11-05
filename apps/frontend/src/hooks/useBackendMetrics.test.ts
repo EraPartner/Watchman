@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const useQueryMock = vi.fn();
-const sharedCoreMock = vi.fn();
+const useQueryMock = vi.fn<(...args: unknown[]) => unknown>();
+const sharedCoreMock = vi.fn<(...args: unknown[]) => unknown>();
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),

@@ -18,6 +18,12 @@ const BACKEND_PREFIXES: ReadonlyArray<string> = [
   "/profiles",
 ];
 
+/** A port from the environment, or `fallback` when it is unset, 0 or not a number. */
+function envPort(value: string | undefined, fallback: number): number {
+  const port = parseInt(value ?? "");
+  return Number.isNaN(port) || port === 0 ? fallback : port;
+}
+
 function backendProxyRules(): Record<string, ProxyOptions> {
   const httpRule: ProxyOptions = {
     target: "http://localhost:3001",
@@ -45,10 +51,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react({
-        // Enable React Fast Refresh
-        fastRefresh: true,
-      }),
+      // Fast Refresh is always on in @vitejs/plugin-react v6; the old
+      // `fastRefresh` option no longer exists.
+      react(),
     ],
     resolve: {
       alias: {
@@ -56,7 +61,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: parseInt(env.VITE_FRONTEND_PORT) || 5173,
+      port: envPort(env.VITE_FRONTEND_PORT, 5173),
       host: true,
       strictPort: true,
       // Allow access from both localhost and production domain
@@ -68,7 +73,7 @@ export default defineConfig(({ mode }) => {
       ],
       // Enable HMR over network
       hmr: {
-        port: parseInt(env.VITE_HMR_PORT) || 24678,
+        port: envPort(env.VITE_HMR_PORT, 24678),
       },
       // Proxy API calls to backend server.
       // The backend exposes resources at the root (e.g. /services, /instances)
@@ -77,7 +82,7 @@ export default defineConfig(({ mode }) => {
       proxy: backendProxyRules(),
     },
     preview: {
-      port: parseInt(env.VITE_PREVIEW_PORT) || 4173,
+      port: envPort(env.VITE_PREVIEW_PORT, 4173),
       strictPort: false,
       proxy: backendProxyRules(),
       // Security headers for dev server

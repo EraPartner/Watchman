@@ -127,6 +127,8 @@ export default function Profiles() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const currentMac = network?.signature.gatewayMac;
+  const currentNetworkLabel = network?.signature.subnet ?? currentMac;
+  const networkRecognized = Boolean(network?.matchedProfileId);
 
   return (
     <SettingsLayout
@@ -144,7 +146,7 @@ export default function Profiles() {
       )}
       {error && (
         <p className="text-fs-label text-[var(--crit)]">
-          {(error as Error).message ?? "Failed to load"}
+          {error.message || "Failed to load"}
         </p>
       )}
 
@@ -154,9 +156,9 @@ export default function Profiles() {
             <>
               Current network:{" "}
               <span className="font-mono text-[var(--text-hi)]">
-                {network?.signature.subnet ?? currentMac}
+                {currentNetworkLabel}
               </span>{" "}
-              {network?.matchedProfileId ? (
+              {networkRecognized ? (
                 <span className="text-[var(--ok)]">· recognized</span>
               ) : (
                 <span className="text-[var(--warn)]">· unrecognized</span>
@@ -308,7 +310,7 @@ export default function Profiles() {
 
       {pendingDelete ? (
         <ConfirmDialog
-          open={!!pendingDelete}
+          open
           onOpenChange={(open) => !open && setPendingDelete(null)}
           title={`Delete profile "${pendingDelete.name}"?`}
           description={

@@ -30,7 +30,7 @@ vi.mock("react-router-dom", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
   useMutation: vi.fn(() => ({
-    mutateAsync: vi.fn(async () => ({})),
+    mutateAsync: vi.fn(() => Promise.resolve({})),
     mutate: vi.fn(),
     isPending: false,
     isError: false,
@@ -51,22 +51,22 @@ vi.mock("../../hooks/useWebSocket", () => ({
 }));
 
 vi.mock("../../services/ApiClient", () => ({
-  apiClient: { getAggregatedServices: vi.fn(async () => []) },
-  sharedCore: { request: vi.fn(async () => ({})) },
+  apiClient: { getAggregatedServices: vi.fn(() => Promise.resolve([])) },
+  sharedCore: { request: vi.fn(() => Promise.resolve({})) },
 }));
 
 vi.mock("../../services/configApi", () => ({
   configApi: {
-    getAuditLog: vi.fn(async () => []),
-    getServices: vi.fn(async () => []),
-    getKinds: vi.fn(async () => []),
-    exportConfig: vi.fn(async () => ({ services: [] })),
-    importConfig: vi.fn(async () => ({ imported: 0, skipped: 0, errors: [] })),
-    testConnection: vi.fn(async () => ({ ok: true })),
-    createService: vi.fn(async () => ({})),
-    updateService: vi.fn(async () => ({})),
-    deleteService: vi.fn(async () => undefined),
-    getSetupStatus: vi.fn(async () => ({ needsSetup: false })),
+    getAuditLog: vi.fn(() => Promise.resolve([])),
+    getServices: vi.fn(() => Promise.resolve([])),
+    getKinds: vi.fn(() => Promise.resolve([])),
+    exportConfig: vi.fn(() => Promise.resolve({ services: [] })),
+    importConfig: vi.fn(() => Promise.resolve({ imported: 0, skipped: 0, errors: [] })),
+    testConnection: vi.fn(() => Promise.resolve({ ok: true })),
+    createService: vi.fn(() => Promise.resolve({})),
+    updateService: vi.fn(() => Promise.resolve({})),
+    deleteService: vi.fn(() => Promise.resolve(undefined)),
+    getSetupStatus: vi.fn(() => Promise.resolve({ needsSetup: false })),
   },
 }));
 
@@ -78,7 +78,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Audit from "./Audit";
 import BackupRestore from "./BackupRestore";
 import Services from "./Services";
+import { actAsync } from "@/test/actAsync";
 import { SettingsLayout } from "./SettingsLayout";
+import { required } from "@/test/required";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -95,7 +97,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -213,9 +215,7 @@ describe("BackupRestore page", () => {
 
   it("does not leak an unhandled rejection when export fails", async () => {
     const failing = {
-      mutateAsync: vi.fn(async () => {
-        throw new Error("boom");
-      }),
+      mutateAsync: vi.fn(() => Promise.reject(new Error("boom"))),
       mutate: vi.fn(),
       isPending: false,
       isError: true,
@@ -234,7 +234,7 @@ describe("BackupRestore page", () => {
         (b) => b.textContent === "Download backup"
       );
       await act(async () => {
-        button!.click();
+        required(button).click();
         await new Promise((r) => setTimeout(r, 0));
       });
       expect(failing.mutateAsync).toHaveBeenCalledTimes(1);
@@ -279,16 +279,16 @@ describe("Services page", () => {
       error: null,
     })) as unknown as typeof useQuery);
     vi.mocked(useMutation).mockImplementation((() => ({
-      mutateAsync: vi.fn(async () => ({})),
+      mutateAsync: vi.fn(() => Promise.resolve({})),
       mutate,
       isPending: false,
     })) as unknown as typeof useMutation);
     try {
       const { container, root } = await render(<Services />);
-      const btn = Array.from(container.querySelectorAll("button")).find(
+      const btn = required(Array.from(container.querySelectorAll("button")).find(
         (b) => b.textContent === "Disable"
-      )!;
-      await act(async () => {
+      ));
+      await actAsync(() => {
         btn.click();
       });
       expect(mutate).toHaveBeenCalledWith(
@@ -314,7 +314,7 @@ describe("Services page", () => {
         error: null,
       })) as unknown as typeof useQuery);
       vi.mocked(useMutation).mockImplementation((() => ({
-        mutateAsync: vi.fn(async () => ({})),
+        mutateAsync: vi.fn(() => Promise.resolve({})),
         mutate: vi.fn(),
         isPending: false,
         isError: false,
@@ -346,7 +346,7 @@ describe("Services page", () => {
       error: null,
     })) as unknown as typeof useQuery);
     vi.mocked(useMutation).mockImplementation((() => ({
-      mutateAsync: vi.fn(async () => ({})),
+      mutateAsync: vi.fn(() => Promise.resolve({})),
       mutate: vi.fn((_vars: unknown, opts?: { onError?: (e: Error) => void }) =>
         opts?.onError?.(new Error("server said no"))
       ),
@@ -354,10 +354,10 @@ describe("Services page", () => {
     })) as unknown as typeof useMutation);
     try {
       const { container, root } = await render(<Services />);
-      const btn = Array.from(container.querySelectorAll("button")).find(
+      const btn = required(Array.from(container.querySelectorAll("button")).find(
         (b) => b.textContent === "Disable"
-      )!;
-      await act(async () => {
+      ));
+      await actAsync(() => {
         btn.click();
       });
       expect(toast.error).toHaveBeenCalledWith(
@@ -371,7 +371,7 @@ describe("Services page", () => {
         error: null,
       })) as unknown as typeof useQuery);
       vi.mocked(useMutation).mockImplementation((() => ({
-        mutateAsync: vi.fn(async () => ({})),
+        mutateAsync: vi.fn(() => Promise.resolve({})),
         mutate: vi.fn(),
         isPending: false,
         isError: false,

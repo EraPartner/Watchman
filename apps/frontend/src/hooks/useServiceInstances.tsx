@@ -19,12 +19,19 @@ export interface ServiceInstancesData {
   timestamp: string;
 }
 
-function groupByKind(list: InstanceInfo[] | unknown): ServiceInstancesData {
+function isInstanceInfo(v: unknown): v is InstanceInfo {
+  if (typeof v !== "object" || v === null) return false;
+  const i = v as Record<string, unknown>;
+  return typeof i["kind"] === "string" && typeof i["instanceId"] === "string";
+}
+
+function groupByKind(list: unknown): ServiceInstancesData {
   const instances: ServiceInstancesData["instances"] = {};
   if (!Array.isArray(list)) {
     return { instances, timestamp: new Date().toISOString() };
   }
-  for (const info of list) {
+  // The response is untyped JSON: skip entries without a kind and id.
+  for (const info of list.filter(isInstanceInfo)) {
     const bucket = instances[info.kind] ?? { count: 0, instances: [] };
     bucket.instances = [
       ...bucket.instances,
@@ -45,11 +52,11 @@ export const useServiceInstances = () => {
   });
 
   const getInstances = (serviceType: string): ServiceInstance[] => {
-    return query.data?.instances[serviceType]?.instances || [];
+    return query.data?.instances[serviceType]?.instances ?? [];
   };
 
   const getInstanceCount = (serviceType: string): number => {
-    return query.data?.instances[serviceType]?.count || 0;
+    return query.data?.instances[serviceType]?.count ?? 0;
   };
 
   const hasMultipleInstances = (serviceType: string): boolean => {

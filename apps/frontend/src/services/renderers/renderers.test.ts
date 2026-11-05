@@ -14,6 +14,7 @@ import { roonRenderer } from "./roon";
 import { synologyRenderer } from "./synology";
 import { getRenderer, rendererTrackedMetrics } from "./index";
 import { healthStatus } from "@/lib/healthStatus";
+import { required } from "@/test/required";
 
 // ─── torRenderer ──────────────────────────────────────────────────────────────
 
@@ -49,12 +50,12 @@ describe("torRenderer", () => {
 
   it("has summary metrics", () => {
     expect(Array.isArray(torRenderer.summary)).toBe(true);
-    expect(torRenderer.summary?.length).toBeGreaterThan(0);
+    expect(torRenderer.summary.length).toBeGreaterThan(0);
   });
 
   it("has detail sections", () => {
     expect(Array.isArray(torRenderer.detail)).toBe(true);
-    expect(torRenderer.detail?.length).toBeGreaterThan(0);
+    expect(torRenderer.detail.length).toBeGreaterThan(0);
   });
 });
 
@@ -76,22 +77,22 @@ describe("routerRenderer", () => {
   });
 
   it("tone returns ok for healthy router", () => {
-    const tone = routerRenderer.tone?.({ stats: { reachable: true }, health: { status: "online" } });
+    const tone = routerRenderer.tone({ stats: { reachable: true }, health: { status: "online" } });
     expect(tone).toBe("ok");
   });
 
   it("tone returns crit for offline status", () => {
-    const tone = routerRenderer.tone?.({ stats: {}, health: { status: "offline" } });
+    const tone = routerRenderer.tone({ stats: {}, health: { status: "offline" } });
     expect(tone).toBe("crit");
   });
 
   it("tone returns warn for warning status", () => {
-    const tone = routerRenderer.tone?.({ stats: {}, health: { status: "warning" } });
+    const tone = routerRenderer.tone({ stats: {}, health: { status: "warning" } });
     expect(tone).toBe("warn");
   });
 
   it("tone returns crit when stats show reachable=false", () => {
-    const tone = routerRenderer.tone?.({ stats: { reachable: false }, health: { status: "online" } });
+    const tone = routerRenderer.tone({ stats: { reachable: false }, health: { status: "online" } });
     expect(tone).toBe("crit");
   });
 
@@ -102,7 +103,7 @@ describe("routerRenderer", () => {
 
   it("has chart definitions", () => {
     expect(Array.isArray(routerRenderer.charts)).toBe(true);
-    expect(routerRenderer.charts!.length).toBeGreaterThan(0);
+    expect(routerRenderer.charts.length).toBeGreaterThan(0);
   });
 });
 
@@ -166,14 +167,14 @@ describe("rendererTrackedMetrics", () => {
   });
 
   it("returns unique metric keys from summary, detail, and charts", () => {
-    const metrics = rendererTrackedMetrics(getRenderer("router")!);
+    const metrics = rendererTrackedMetrics(getRenderer("router"));
     expect(metrics.length).toBeGreaterThan(0);
     const set = new Set(metrics);
     expect(set.size).toBe(metrics.length);
   });
 
   it("includes metrics from all renderer sections", () => {
-    const metrics = rendererTrackedMetrics(getRenderer("bitcoin")!);
+    const metrics = rendererTrackedMetrics(getRenderer("bitcoin"));
     expect(metrics.some((m) => typeof m === "string" && m.length > 0)).toBe(true);
   });
 });
@@ -201,7 +202,7 @@ describe("raspberryPiRenderer throttling tone", () => {
 
 describe("bitcoinRenderer sync progress", () => {
   const sync = (spec: { key: string; format: (v: unknown) => string }[]) =>
-    spec.find((m) => m.key === "verificationProgress")!;
+    required(spec.find((m) => m.key === "verificationProgress"));
 
   it("formats Bitcoin Core's 0..1 verificationProgress as a percent", () => {
     // regression: treated as already-a-percent, so 0.9995 showed "1.00%"
@@ -218,7 +219,7 @@ describe("bitcoinRenderer sync progress", () => {
 
 describe("torRenderer ControlPort mode", () => {
   it("tile hero reads bandwidthCurrent, which ControlPort stats now fill", () => {
-    const hero = torRenderer.summary[0]!;
+    const hero = required(torRenderer.summary[0]);
     expect(hero.key).toBe("bandwidthCurrent");
     expect(hero.format(2048)).toBe("2.00 KiB");
   });
@@ -256,7 +257,7 @@ describe("ipfsRenderer quickLink", () => {
 
 describe("synologyRenderer network", () => {
   it("shows byte rates, not cumulative counters, in summary and charts", () => {
-    const rx = synologyRenderer.summary.find((m) => m.label === "Net RX")!;
+    const rx = required(synologyRenderer.summary.find((m) => m.label === "Net RX"));
     expect(rx.key).toBe("networkRxBps");
     expect(rx.format(2048)).toBe("2.00 KiB/s");
     expect(synologyRenderer.charts.map((c) => c.metric)).toEqual(
@@ -273,9 +274,9 @@ describe("synologyRenderer DSM error", () => {
     synologyRenderer.tone({ stats, health: { status } });
 
   it("shows dsmError in the detail sheet", () => {
-    const metric = synologyRenderer.detail
+    const metric = required(synologyRenderer.detail
       .flatMap((g) => g.metrics)
-      .find((m) => m.key === "dsmError")!;
+      .find((m) => m.key === "dsmError"));
     expect(metric).toBeDefined();
     expect(metric.format("synology dsm login failed")).toBe("synology dsm login failed");
     expect(metric.format(undefined)).toBe("—");
@@ -385,7 +386,7 @@ describe("home and media renderers surface data that needs attention", () => {
 
   it("Homebridge lists outdated plugins and child bridges by name", () => {
     const find = (key: string) =>
-      homebridgeRenderer.detail.flatMap((g) => g.metrics).find((m) => m.key === key)!;
+      required(homebridgeRenderer.detail.flatMap((g) => g.metrics).find((m) => m.key === key));
     expect(
       find("outdatedPlugins").format([{ name: "Homebridge Hue", latestVersion: "0.13.1" }])
     ).toBe("Homebridge Hue → 0.13.1");

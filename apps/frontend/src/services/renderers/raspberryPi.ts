@@ -1,3 +1,4 @@
+import { toText } from "@/lib/text";
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
 import type { MetricFormatter } from "./types";
@@ -24,7 +25,7 @@ function fmtThrottled(v: unknown): string {
   if (typeof v === "number") {
     return v === 0 ? "OK" : `0x${v.toString(16).toUpperCase()}`;
   }
-  return String(v);
+  return toText(v);
 }
 
 // vcgencmd get_throttled: bits 0-3 are the current state, bits 16-19 record

@@ -87,7 +87,7 @@ function makeFakeService(overrides: Partial<ServiceInstance> = {}): ServiceInsta
     kind: "bitcoin",
     instanceId: "main",
     enabled: true,
-    config: {} as unknown as Record<string, unknown>,
+    config: {},
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,
@@ -121,7 +121,7 @@ describe("useConfigQueries dashboard invalidation", () => {
         instanceId: "main",
         enabled: true,
         config: {},
-      } as ServiceInstanceInput);
+      } satisfies ServiceInstanceInput);
       await flushMicrotasks();
     });
 
@@ -222,7 +222,7 @@ describe("useConfigQueries setup status reset", () => {
       instanceId: "main",
       enabled: true,
       config: {},
-    } as ServiceInstanceInput);
+    } satisfies ServiceInstanceInput);
     expect(qc.getQueryData(SETUP_KEY)).toBeUndefined();
   });
 
@@ -239,7 +239,7 @@ describe("useConfigQueries setup status reset", () => {
       version: 1,
       exportedAt: new Date().toISOString(),
       payload: "{}",
-    } as ExportBundle);
+    } satisfies ExportBundle);
     expect(qc.getQueryData(SETUP_KEY)).toBeUndefined();
   });
 });

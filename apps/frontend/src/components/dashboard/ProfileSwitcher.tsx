@@ -161,7 +161,7 @@ export function ProfileSwitcher() {
             className="w-full justify-start text-[var(--text-md)]"
             onClick={() => {
               setOpen(false);
-              navigate("/settings/profiles");
+              void navigate("/settings/profiles");
             }}
           >
             Manage profiles →

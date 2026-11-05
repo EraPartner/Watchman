@@ -1,3 +1,4 @@
+import { toText } from "@/lib/text";
 import type { ReactNode } from "react";
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
@@ -212,7 +213,7 @@ export const adguardRenderer: ServiceRenderer<Stats> = {
         {
           key: "staleFilters",
           label: "Lists not updated for 7+ days",
-          format: fmtList((f) => String(f), 5),
+          format: fmtList((f) => toText(f), 5),
         },
       ],
     },

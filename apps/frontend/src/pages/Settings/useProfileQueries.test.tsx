@@ -119,7 +119,7 @@ describe("profile mutation errors", () => {
       apiMock.mockRejectedValueOnce(new Error("boom"));
       const { result, unmount } = renderHook(() => useHook(), qc);
       await act(async () => {
-        (result.current as unknown as Mutation).mutate(arg);
+        (result.current as Mutation).mutate(arg);
         await flush();
       });
       expect(toastError).toHaveBeenCalledWith(message);

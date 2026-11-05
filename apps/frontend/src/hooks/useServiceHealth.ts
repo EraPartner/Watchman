@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { isNonZero } from "@/lib/number";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../services/ApiClient";
 import { queryKeys } from "../lib/queryKeys";
@@ -42,7 +43,8 @@ export const useServiceHealth = (
   const { data, isLoading } = useAggregatedHealth();
   return {
     data: pickHealth(data, kind, instance),
-    isLoading: isLoading && !data,
+    // A pending query (isLoading) never has data yet.
+    isLoading,
     error: pickError(data, kind, instance),
   };
 };
@@ -80,14 +82,17 @@ export const useServiceStats = (
   useEffect(() => {
     if (!query.data) return;
     if (trackedMetrics.length === 0) return;
+    const parsedAt = Number(query.data.at);
     const at =
       typeof query.data.at === "number"
         ? query.data.at
-        : Number(query.data.at) || Date.now();
+        : isNonZero(parsedAt)
+          ? parsedAt
+          : Date.now();
     recordStats(
       kind,
       instance,
-      query.data.metrics as Record<string, unknown>,
+      query.data.metrics,
       trackedMetrics,
       at
     );

@@ -5,6 +5,7 @@ import {
   getSeries,
   recordStats,
 } from "./metricHistory";
+import { required } from "@/test/required";
 
 describe("metricHistory", () => {
   afterEach(() => {
@@ -59,8 +60,8 @@ describe("metricHistory", () => {
     }
     const series = getSeries("tor", "main", "bandwidthCurrent");
     expect(series.length).toBe(HISTORY_CAPACITY);
-    expect(series[0]!.v).toBe(25);
-    expect(series[series.length - 1]!.v).toBe(HISTORY_CAPACITY + 24);
+    expect(required(series[0]).v).toBe(25);
+    expect(required(series[series.length - 1]).v).toBe(HISTORY_CAPACITY + 24);
   });
 
   it("partitions samples per (kind, instance, metric)", () => {

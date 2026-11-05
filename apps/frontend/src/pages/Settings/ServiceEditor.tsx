@@ -54,7 +54,7 @@ function defaultFor(f: FieldMeta): FormValue {
     return f.default as FormValue;
   }
   if (f.type === "boolean") return false;
-  if (f.type === "number") return "" as unknown as number;
+  if (f.type === "number") return "";
   if (f.type === "stringArray" || f.type === "numberArray") return [];
   return "";
 }
@@ -70,7 +70,7 @@ function initialValues(
   const values: FormValues = {};
   for (const f of kind.fields) {
     if (COMMON_FIELD_NAMES.has(f.name)) continue;
-    const current = existing?.config?.[f.name];
+    const current = existing?.config[f.name];
     // A saved secret comes back redacted as "***". Start the field blank so
     // the "leave blank to keep" placeholder shows; prefilling "***" meant any
     // typing was appended to it and saved as "***<new secret>".
@@ -164,8 +164,8 @@ export default function ServiceEditor({
       const timeoutField = kindSchema.fields.find(
         (f) => f.name === "timeoutMs"
       );
-      const existingCache = existing?.config?.cacheTtlMs;
-      const existingTimeout = existing?.config?.timeoutMs;
+      const existingCache = existing?.config.cacheTtlMs;
+      const existingTimeout = existing?.config.timeoutMs;
       setCacheTtlMs(
         typeof existingCache === "number"
           ? existingCache
@@ -340,7 +340,7 @@ export default function ServiceEditor({
         // Only a stored non-empty secret comes back as "***"; an unset one
         // has nothing to keep or clear.
         const hasSavedSecret =
-          !!existing && !!f.secret && existing.config?.[f.name] === "***";
+          !!existing && !!f.secret && existing.config[f.name] === "***";
         const cleared = clearedSecrets.has(f.name);
         return (
           <FieldInput
@@ -499,7 +499,7 @@ function FieldInput({
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
-          checked={!!value}
+          checked={value === true}
           onChange={(e) => onChange(e.target.checked)}
         />
         {field.label}
@@ -537,7 +537,7 @@ function FieldInput({
         <input
           type="text"
           className={base}
-          value={arrayToCsv(value as FormValue)}
+          value={arrayToCsv(value)}
           placeholder={field.placeholder ?? "comma-separated"}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -563,7 +563,7 @@ function FieldInput({
       <input
         type={inputType}
         className={base}
-        value={value === undefined || value === null ? "" : String(value)}
+        value={value === undefined ? "" : String(value)}
         placeholder={secretPlaceholder ?? field.placeholder}
         onChange={(e) => {
           const v = e.target.value;

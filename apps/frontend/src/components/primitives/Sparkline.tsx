@@ -38,18 +38,19 @@ interface ScaleResult {
 
 /** Smooth a polyline with midpoint quadratic curves — calm, organic line. */
 function smoothPath(pts: ReadonlyArray<readonly [number, number]>): string {
-  if (pts.length === 0) return "";
-  const p0 = pts[0]!;
+  const p0 = pts[0];
+  const last = pts.at(-1);
+  if (!p0 || !last) return "";
   if (pts.length === 1) return `M${p0[0].toFixed(2)},${p0[1].toFixed(2)}`;
   let d = `M${p0[0].toFixed(2)},${p0[1].toFixed(2)}`;
-  for (let i = 1; i < pts.length - 1; i++) {
-    const [cx, cy] = pts[i]!;
-    const [nx, ny] = pts[i + 1]!;
-    const mx = (cx + nx) / 2;
-    const my = (cy + ny) / 2;
+  // Each interior point is a control point; the curve passes through the
+  // midpoint to the next point.
+  pts.slice(1, -1).forEach(([cx, cy], i) => {
+    const next = pts[i + 2] ?? last;
+    const mx = (cx + next[0]) / 2;
+    const my = (cy + next[1]) / 2;
     d += `Q${cx.toFixed(2)},${cy.toFixed(2)} ${mx.toFixed(2)},${my.toFixed(2)}`;
-  }
-  const last = pts[pts.length - 1]!;
+  });
   d += `L${last[0].toFixed(2)},${last[1].toFixed(2)}`;
   return d;
 }
@@ -85,8 +86,10 @@ function buildPaths(
 
   const pts = finite.map((v, i) => [xFor(i), yFor(v)] as [number, number]);
   const pathD = smoothPath(pts);
-  const first = pts[0]!;
-  const last = pts[pts.length - 1]!;
+  const first = pts[0];
+  const last = pts.at(-1);
+  // finite is non-empty here, so pts is too.
+  if (!first || !last) return null;
   const areaD = `${pathD}L${last[0].toFixed(2)},${height.toFixed(2)}L${first[0].toFixed(2)},${height.toFixed(2)}Z`;
 
   return { pathD, areaD, lastX: last[0], lastY: last[1] };

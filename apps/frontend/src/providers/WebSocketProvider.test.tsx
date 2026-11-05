@@ -15,6 +15,8 @@ vi.mock("@/hooks/useWebSocket", () => ({
 }));
 
 import { WebSocketProvider, useWebSocketContext } from "./WebSocketProvider";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 beforeEach(() => {
   (
@@ -33,7 +35,7 @@ async function render(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(element));
+  await actAsync(() => root.render(element));
   return { container, root };
 }
 
@@ -62,8 +64,8 @@ describe("WebSocketProvider", () => {
         <Consumer />
       </WebSocketProvider>
     );
-    expect(captured!.isConnected).toBe(true);
-    expect(captured!.reconnectAttempts).toBe(0);
+    expect(required(captured).isConnected).toBe(true);
+    expect(required(captured).reconnectAttempts).toBe(0);
     act(() => root.unmount());
   });
 });
@@ -79,8 +81,8 @@ describe("useWebSocketContext (outside provider)", () => {
     }
 
     const { root } = await render(<Standalone />);
-    expect(captured!.isConnected).toBe(false);
-    expect(captured!.reconnectAttempts).toBe(0);
+    expect(required(captured).isConnected).toBe(false);
+    expect(required(captured).reconnectAttempts).toBe(0);
     act(() => root.unmount());
   });
 });

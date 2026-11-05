@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const queryClientConfigRef = vi.hoisted(() => ({
-  config: undefined as unknown,
+const queryClientConfigRef = vi.hoisted((): { config: unknown } => ({
+  config: undefined,
 }));
 
 vi.mock("sonner", () => ({
@@ -23,11 +23,10 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
     await importOriginal<typeof import("@tanstack/react-query")>();
   return {
     ...actual,
-    QueryClient: class QueryClient {
-      constructor(config?: unknown) {
-        queryClientConfigRef.config = config;
-      }
-    },
+    // A plain function so `new QueryClient(config)` records the config.
+    QueryClient: vi.fn(function QueryClient(config?: unknown) {
+      queryClientConfigRef.config = config;
+    }),
     QueryClientProvider: ({ children }: { children: ReactNode }) => children,
     useQueryClient: () => ({
       invalidateQueries: () => {},

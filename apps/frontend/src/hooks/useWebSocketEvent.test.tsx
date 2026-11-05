@@ -3,14 +3,16 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const subscribeMock = vi.fn();
+const subscribeMock = vi.fn<(fn: (ev: WsEvent) => void) => () => void>();
 
 vi.mock("../lib/wsEventBus", () => ({
-  subscribeWsEvent: (...args: unknown[]) => subscribeMock(...args),
+  subscribeWsEvent: (fn: (ev: WsEvent) => void) => subscribeMock(fn),
 }));
 
 import { useWebSocketEvent } from "./useWebSocketEvent";
 import type { WsEvent } from "../lib/wsEventBus";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 function makeEvent(type: WsEvent["type"]): WsEvent {
   return { type, timestamp: new Date().toISOString() };
@@ -44,7 +46,7 @@ describe("useWebSocketEvent", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe type="connection" handler={() => {}} />);
     });
 
@@ -61,7 +63,7 @@ describe("useWebSocketEvent", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(<HookProbe type="connection" handler={() => {}} />);
     });
 
@@ -82,14 +84,14 @@ describe("useWebSocketEvent", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(
         <HookProbe type="service_update" handler={(ev) => received.push(ev)} />
       );
     });
 
-    await act(async () => {
-      capturedSubscriber!(makeEvent("service_update"));
+    await actAsync(() => {
+      required(capturedSubscriber)(makeEvent("service_update"));
     });
 
     expect(received).toHaveLength(1);
@@ -110,14 +112,14 @@ describe("useWebSocketEvent", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(
         <HookProbe type="alert" handler={(ev) => received.push(ev)} />
       );
     });
 
-    await act(async () => {
-      capturedSubscriber!(makeEvent("service_update"));
+    await actAsync(() => {
+      required(capturedSubscriber)(makeEvent("service_update"));
     });
 
     expect(received).toHaveLength(0);
@@ -137,16 +139,16 @@ describe("useWebSocketEvent", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    await act(async () => {
+    await actAsync(() => {
       root.render(
         <HookProbe type="*" handler={(ev) => received.push(ev)} />
       );
     });
 
-    await act(async () => {
-      capturedSubscriber!(makeEvent("connection"));
-      capturedSubscriber!(makeEvent("alert"));
-      capturedSubscriber!(makeEvent("metrics"));
+    await actAsync(() => {
+      required(capturedSubscriber)(makeEvent("connection"));
+      required(capturedSubscriber)(makeEvent("alert"));
+      required(capturedSubscriber)(makeEvent("metrics"));
     });
 
     expect(received).toHaveLength(3);

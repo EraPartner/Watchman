@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { anyString } from "@/test/matchers";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 
-const loggerErrorMock = vi.fn();
+const loggerErrorMock = vi.fn<(...args: unknown[]) => void>();
 
 vi.mock("../lib/logger", () => ({
   logger: {
@@ -72,8 +73,8 @@ describe("ErrorBoundary", () => {
       "[ERROR_BOUNDARY] Caught component error",
       expect.objectContaining({
         error: "boom",
-        stack: expect.any(String),
-        componentStack: expect.any(String),
+        stack: anyString(),
+        componentStack: anyString(),
       })
     );
 

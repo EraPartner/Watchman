@@ -24,7 +24,7 @@ export default function Audit() {
       )}
       {error && (
         <p className="text-fs-label text-[var(--crit)]">
-          {(error as Error).message ?? "Failed to load"}
+          {error.message || "Failed to load"}
         </p>
       )}
 

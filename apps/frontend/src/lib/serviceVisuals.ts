@@ -38,7 +38,7 @@ const KIND_ICON: Partial<Record<ServiceKind, LucideIcon>> = {
 };
 
 export function serviceIcon(kind: ServiceKind | undefined): LucideIcon {
-  return (kind && KIND_ICON[kind]) || Activity;
+  return (kind ? KIND_ICON[kind] : undefined) ?? Activity;
 }
 
 export function ServiceIcon({

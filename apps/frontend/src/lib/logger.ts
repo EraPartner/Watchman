@@ -26,7 +26,7 @@ class Logger {
         if (data.stack) {
           logEntry.stack = data.stack;
         }
-      } else if (typeof data === "object" && data !== null) {
+      } else if (typeof data === "object") {
         // Data keys must not overwrite the entry's own timestamp/level/message;
         // keep the full payload under `data` when they collide.
         const collides = ["timestamp", "level", "message"].some(
@@ -47,7 +47,7 @@ class Logger {
   }
 
   private redact(message: string): string {
-    let redacted = String(message);
+    let redacted = message;
     const redactPatterns = [
       /password[=:]\s*["']?([^"'\s]+)["']?/gi,
       /token[=:]\s*["']?([^"'\s]+)["']?/gi,

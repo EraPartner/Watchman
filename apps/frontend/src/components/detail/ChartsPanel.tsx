@@ -22,7 +22,7 @@ interface ChartCardProps {
 function ChartCard({ kind, instanceId, spec, tone }: ChartCardProps) {
   const series = useMetricSeries(kind, instanceId, spec.metric);
   const data = series.map((s) => s.v);
-  const latest = data.length > 0 ? data[data.length - 1]! : undefined;
+  const latest = data.at(-1);
 
   return (
     <div className="glass-regular overflow-hidden rounded-r-2 p-s-3">

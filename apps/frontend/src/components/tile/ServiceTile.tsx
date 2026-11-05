@@ -1,3 +1,4 @@
+import { toText } from "@/lib/text";
 import { useMemo, type KeyboardEvent, type MouseEvent } from "react";
 import { ExternalLink, Check, X } from "lucide-react";
 import { ServiceIcon, heroState } from "@/lib/serviceVisuals";
@@ -84,7 +85,7 @@ function computeStatsErrorBadge(
 ): StatsErrorBadge | undefined {
   if (!error || data !== undefined) return undefined;
   const code = error instanceof StatsApiError ? error.code : undefined;
-  const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : toText(error);
   const needsConfig =
     (code !== undefined && NEEDS_CONFIG_CODES.has(code)) ||
     /credentials?/i.test(message);
@@ -211,7 +212,7 @@ export function ServiceTile({
     renderer.quickLink && configuredService
       ? renderer.quickLink({
           instance,
-          config: configuredService.config as Record<string, unknown>,
+          config: configuredService.config,
         })
       : undefined;
 
@@ -384,7 +385,7 @@ export function ServiceTile({
                 </span>
               ) : null}
             </div>
-            {subtitle ? (
+            {subtitle !== null && subtitle !== undefined ? (
               <div className="mt-s-1 truncate text-fs-label text-[var(--text-lo)]">
                 {subtitle}
               </div>

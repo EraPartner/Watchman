@@ -4,8 +4,8 @@ import type { AggregatedEntry } from "../services/apiClient/types";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-const useQueryMock = vi.fn();
-const getServiceStatsMock = vi.fn();
+const useQueryMock = vi.fn<(...args: unknown[]) => unknown>();
+const getServiceStatsMock = vi.fn<(...args: unknown[]) => unknown>();
 
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -18,7 +18,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("../services/ApiClient", () => ({
   apiClient: {
-    getAggregatedServices: vi.fn(async () => []),
+    getAggregatedServices: vi.fn(() => Promise.resolve([])),
     getServiceStats: (...args: unknown[]) => getServiceStatsMock(...args),
   },
 }));

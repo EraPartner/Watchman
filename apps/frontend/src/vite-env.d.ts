@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_DEFAULT_IP: string;
   readonly VITE_BACKEND_PORT: string;
   readonly VITE_FRONTEND_PORT: string;
+  readonly VITE_BACKEND_URL?: string;
+  readonly VITE_LOG_ENABLED?: string;
   readonly MODE: "development" | "production" | "test";
 }
 

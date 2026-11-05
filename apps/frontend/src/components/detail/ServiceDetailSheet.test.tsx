@@ -71,6 +71,8 @@ vi.mock("../detail/EventLog", () => ({ EventLog: () => null }));
 vi.mock("@/pages/Settings/ServiceEditor", () => ({ default: () => null }));
 
 import { ServiceDetailSheet } from "./ServiceDetailSheet";
+import { actAsync } from "@/test/actAsync";
+import { required } from "@/test/required";
 
 // ---- helpers -----------------------------------------------------------
 
@@ -78,7 +80,7 @@ async function render(open = true) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => {
+  await actAsync(() => {
     root.render(
       <ServiceDetailSheet
         kind="bitcoin"
@@ -124,10 +126,10 @@ describe("ServiceDetailSheet two-tier status dots", () => {
     const dots = statusDots(container);
 
     expect(dots.length).toBe(2);
-    expect(dots[0]!.getAttribute("aria-label")).toMatch(/host/i);
-    expect(dots[1]!.getAttribute("aria-label")).toMatch(/service/i);
+    expect(required(dots[0]).getAttribute("aria-label")).toMatch(/host/i);
+    expect(required(dots[1]).getAttribute("aria-label")).toMatch(/service/i);
 
-    await cleanup();
+    cleanup();
   });
 
   it("renders single dot when health has no tiers (backward compat)", async () => {
@@ -138,7 +140,7 @@ describe("ServiceDetailSheet two-tier status dots", () => {
 
     expect(dots.length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 
   it("renders single dot when health data is undefined", async () => {
@@ -149,7 +151,7 @@ describe("ServiceDetailSheet two-tier status dots", () => {
 
     expect(dots.length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 
   it("single dot fallback when only host present", async () => {
@@ -159,7 +161,7 @@ describe("ServiceDetailSheet two-tier status dots", () => {
 
     expect(statusDots(container).length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 
   it("single dot fallback when only service present", async () => {
@@ -169,7 +171,7 @@ describe("ServiceDetailSheet two-tier status dots", () => {
 
     expect(statusDots(container).length).toBe(1);
 
-    await cleanup();
+    cleanup();
   });
 });
 
@@ -209,11 +211,11 @@ describe("ServiceDetailSheet detail metrics", () => {
     statsData = { metrics: { blocks: 42, reachable: false }, at: 1 };
 
     const { container, cleanup } = await render();
-    const text = container.textContent ?? "";
+    const text = container.textContent;
 
     expect(text).toContain("reachable=true");
     expect(text).toContain("blocks=42");
 
-    await cleanup();
+    cleanup();
   });
 });
