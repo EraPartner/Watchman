@@ -75,11 +75,14 @@ class BreakerGuardedService extends BaseService {
   private readonly health: Lane;
   private readonly stats: Lane;
 
+  private readonly inner: BaseService;
+
   constructor(
-    private readonly inner: BaseService,
+    inner: BaseService,
     breakers: ServiceBreakers
   ) {
     super();
+    this.inner = inner;
     this.health = { breaker: breakers.health, lastError: undefined };
     this.stats = { breaker: breakers.stats, lastError: undefined };
     this.kind = inner.kind;

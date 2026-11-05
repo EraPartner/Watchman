@@ -5,11 +5,16 @@ import { ok } from '../core/result.js';
 import { NotFoundError } from '../core/errors.js';
 
 class Stub extends BaseService {
+  readonly kind: string;
+  readonly instanceId: string;
+
   constructor(
-    readonly kind: string,
-    readonly instanceId: string,
+    kind: string,
+    instanceId: string
   ) {
     super();
+    this.kind = kind;
+    this.instanceId = instanceId;
   }
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
   async checkHealth(): Promise<HealthResult> {

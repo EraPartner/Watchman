@@ -515,8 +515,11 @@ describe("POST /config/services/:id/test", () => {
     readonly kind = "bitcoin";
     readonly instanceId = "main";
     readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
-    constructor(private readonly healthy = true) {
+    private readonly healthy: boolean;
+
+    constructor(healthy = true) {
       super();
+      this.healthy = healthy;
     }
     async checkHealth(): Promise<HealthResult> {
       return this.healthy

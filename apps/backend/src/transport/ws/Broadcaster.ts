@@ -20,7 +20,11 @@ export class Broadcaster {
   // toast pair every stats interval).
   private errored = new Set<string>();
 
-  constructor(private readonly deps: BroadcasterDeps) {}
+  private readonly deps: BroadcasterDeps;
+
+  constructor(deps: BroadcasterDeps) {
+    this.deps = deps;
+  }
 
   start(): void {
     if (this.unsubs.length > 0) return;

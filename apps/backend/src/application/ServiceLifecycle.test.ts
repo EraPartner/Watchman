@@ -46,11 +46,16 @@ function makeProfiles(initialActive = "p1"): ProfileStore {
 
 class StubService extends BaseService {
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
+  readonly kind: string;
+  readonly instanceId: string;
+
   constructor(
-    readonly kind: string,
-    readonly instanceId: string
+    kind: string,
+    instanceId: string
   ) {
     super();
+    this.kind = kind;
+    this.instanceId = instanceId;
   }
   async checkHealth(): Promise<HealthResult> {
     return ok({ reachable: true, at: 0 });

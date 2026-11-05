@@ -154,7 +154,7 @@ export class TorService extends BaseService {
     this.now = deps.now;
   }
 
-  async onStart(): Promise<void> {
+  override async onStart(): Promise<void> {
     this.stopped = false;
     await this.subscribe();
   }
@@ -237,7 +237,7 @@ export class TorService extends BaseService {
     })();
   }
 
-  async onStop(): Promise<void> {
+  override async onStop(): Promise<void> {
     this.stopped = true;
     this.subAbort?.abort();
     await this.subscription?.close().catch(() => undefined);

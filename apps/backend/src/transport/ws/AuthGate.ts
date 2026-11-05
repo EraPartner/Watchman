@@ -20,7 +20,11 @@ export interface AuthGateDeps {
 }
 
 export class AuthGate {
-  constructor(private readonly deps: AuthGateDeps) {}
+  private readonly deps: AuthGateDeps;
+
+  constructor(deps: AuthGateDeps) {
+    this.deps = deps;
+  }
 
   isOriginAllowed(req: WsUpgradeRequest): boolean {
     const raw = req.headers["origin"];

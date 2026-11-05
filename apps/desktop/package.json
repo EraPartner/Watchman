@@ -7,7 +7,7 @@
   "author": "EraPartner",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "npm run build && cross-env NODE_ENV=development electron .",
     "start": "npm run build && electron .",
     "test": "node --test \"test/**/*.test.ts\"",

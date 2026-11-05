@@ -23,12 +23,15 @@ class FakeSvc extends BaseService {
   readonly kind: string;
   readonly instanceId: string;
   readonly pollPolicy: PollPolicy = { healthMs: 1000, statsMs: 2000 };
+  private readonly healthy: boolean;
+
   constructor(
     kind: string,
     instanceId: string,
-    private readonly healthy = true
+    healthy = true
   ) {
     super();
+    this.healthy = healthy;
     this.kind = kind;
     this.instanceId = instanceId;
   }

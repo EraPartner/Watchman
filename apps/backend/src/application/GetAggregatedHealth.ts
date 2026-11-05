@@ -11,10 +11,16 @@ export interface AggregatedEntry {
 }
 
 export class GetAggregatedHealth {
+  private readonly registry: ServiceRegistry;
+  private readonly snapshots: SnapshotCache | undefined;
+
   constructor(
-    private readonly registry: ServiceRegistry,
-    private readonly snapshots?: SnapshotCache
-  ) {}
+    registry: ServiceRegistry,
+    snapshots?: SnapshotCache
+  ) {
+    this.registry = registry;
+    this.snapshots = snapshots;
+  }
 
   async run(signal: AbortSignal): Promise<readonly AggregatedEntry[]> {
     const services = this.registry.all();

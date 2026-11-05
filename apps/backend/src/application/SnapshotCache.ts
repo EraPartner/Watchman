@@ -46,7 +46,11 @@ export class SnapshotCache {
   private readonly instances = new Map<string, BaseService>();
   private unsubs: Array<() => void> = [];
 
-  constructor(private readonly deps: SnapshotCacheDeps) {}
+  private readonly deps: SnapshotCacheDeps;
+
+  constructor(deps: SnapshotCacheDeps) {
+    this.deps = deps;
+  }
 
   start(): void {
     if (this.unsubs.length > 0) return;

@@ -8,7 +8,11 @@ export interface GpioDeps {
 }
 
 export class GpioController {
-  constructor(private readonly deps: GpioDeps) {}
+  private readonly deps: GpioDeps;
+
+  constructor(deps: GpioDeps) {
+    this.deps = deps;
+  }
 
   async read(gpio: number): Promise<0 | 1> {
     this.validate(gpio);

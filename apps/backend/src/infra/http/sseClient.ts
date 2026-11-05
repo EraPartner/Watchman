@@ -21,8 +21,11 @@ export type SseStarter = (opts: SseStreamOptions) => void;
 
 /** The endpoint answered the handshake with a non-2xx status. */
 export class SseStatusError extends Error {
-  constructor(readonly statusCode: number) {
+  readonly statusCode: number;
+
+  constructor(statusCode: number) {
     super(`sse endpoint returned ${statusCode}`);
+    this.statusCode = statusCode;
     this.name = "SseStatusError";
   }
 }

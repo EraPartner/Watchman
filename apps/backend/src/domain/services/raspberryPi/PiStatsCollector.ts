@@ -133,7 +133,11 @@ export class PiStatsCollector {
   private lastCpu: CpuSample | null = null;
   private lastNet: { at: number; rx: number; tx: number } | null = null;
 
-  constructor(private readonly deps: PiStatsDeps) {}
+  private readonly deps: PiStatsDeps;
+
+  constructor(deps: PiStatsDeps) {
+    this.deps = deps;
+  }
 
   async collect(signal: AbortSignal): Promise<PiStatsSnapshot> {
     const cfg = this.deps.config;

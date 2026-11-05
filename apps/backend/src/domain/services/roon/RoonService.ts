@@ -56,7 +56,7 @@ export class RoonService extends BaseService {
     this.roonConnect = deps.roonConnect;
   }
 
-  async onStart(): Promise<void> {
+  override async onStart(): Promise<void> {
     if (!this.useRoonApi || !this.roonConnect) return;
     this.handle = await this.roonConnect({
       host: this.host,
@@ -66,7 +66,7 @@ export class RoonService extends BaseService {
     });
   }
 
-  async onStop(): Promise<void> {
+  override async onStop(): Promise<void> {
     if (this.handle) {
       await this.handle.close();
       this.handle = null;

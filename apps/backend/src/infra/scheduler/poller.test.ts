@@ -12,12 +12,19 @@ const silentLogger = pino({ level: 'silent' });
 class Stub extends BaseService {
   readonly kind = 'test';
   readonly instanceId = 'a';
+  readonly pollPolicy: PollPolicy;
+  readonly healthImpl: () => Promise<HealthResult>;
+  readonly statsImpl: () => Promise<StatsResult>;
+
   constructor(
-    readonly pollPolicy: PollPolicy,
-    readonly healthImpl: () => Promise<HealthResult>,
-    readonly statsImpl: () => Promise<StatsResult> = async () => ok({ metrics: {}, at: 0 }),
+    pollPolicy: PollPolicy,
+    healthImpl: () => Promise<HealthResult>,
+    statsImpl: () => Promise<StatsResult> = async () => ok({ metrics: {}, at: 0 })
   ) {
     super();
+    this.pollPolicy = pollPolicy;
+    this.healthImpl = healthImpl;
+    this.statsImpl = statsImpl;
   }
   lastHealthSignal: AbortSignal | undefined;
   checkHealth(signal: AbortSignal): Promise<HealthResult> {

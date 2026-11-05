@@ -10,11 +10,14 @@ export abstract class DomainError extends Error {
   abstract readonly code: DomainErrorCode;
   abstract readonly httpStatus: number;
 
+  readonly context: Readonly<Record<string, unknown>> | undefined;
+
   constructor(
     message: string,
-    readonly context?: Readonly<Record<string, unknown>>,
+    context?: Readonly<Record<string, unknown>>
   ) {
     super(message);
+    this.context = context;
     this.name = this.constructor.name;
   }
 }
