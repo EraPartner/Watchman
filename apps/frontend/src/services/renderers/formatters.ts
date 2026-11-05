@@ -93,6 +93,32 @@ export const fmtVersion: MetricFormatter = (v) => {
   return match?.[1] ?? v;
 };
 
+/** Comma-separated list of items (objects rendered by `item`), with the
+ *  rest counted ("+3 more"). "none" for an empty list, "—" when absent. */
+export const fmtList =
+  (item: (x: Record<string, unknown>) => string, max = 5): MetricFormatter =>
+  (v) => {
+    if (!Array.isArray(v)) return "—";
+    if (v.length === 0) return "none";
+    const parts = v
+      .slice(0, max)
+      .map((x) =>
+        x !== null && typeof x === "object"
+          ? item(x as Record<string, unknown>)
+          : String(x)
+      );
+    return v.length > max
+      ? `${parts.join(", ")} +${v.length - max} more`
+      : parts.join(", ");
+  };
+
+/** Epoch milliseconds as a calendar date (YYYY-MM-DD, UTC). */
+export const fmtDate: MetricFormatter = (v) => {
+  const n = toNumber(v);
+  if (n === undefined || n <= 0) return "—";
+  return new Date(n).toISOString().slice(0, 10);
+};
+
 /** Access nested dot-path on a plain object. Returns undefined on miss. */
 export const dotGet = (obj: unknown, path: string): unknown => {
   if (obj == null || typeof obj !== "object") return undefined;

@@ -25,6 +25,15 @@ dependency audit, and documentation aligned with the code.
 
 ### Added
 
+- Home/media monitoring (read-only): Hue names the unreachable and low-battery devices and the
+  tile warns on them; Homebridge lists child bridges and outdated plugins by name and shows memory
+  and update status; AdGuard reports stale filter lists, HTTPS certificate expiry and, opt-in
+  (`checkUpdates`, off by default), its cached update info via `POST /control/version.json` with
+  `recheck_now: false`, the one POST Watchman sends to AdGuard; qBittorrent supports 5.2+ API keys
+  (no login) and shows errored torrents; Roon zones list their outputs and queue, and health
+  probes the API port and reports an unpaired extension.
+- Certificate pins (`certSha256`) for qBittorrent and Homebridge; for Homebridge the pin takes
+  precedence over `allowSelfSigned`.
 - Hosts/network monitoring (read-only): Synology disk, RAID, fan, power and DSM-update status over
   SNMPv3 alone (no DSM admin account needed); router link state (configured-up links that are
   down) and interface error totals; Raspberry Pi CPU %, available memory and swap, root disk
@@ -62,6 +71,11 @@ dependency audit, and documentation aligned with the code.
 
 ### Changed
 
+- Hue with an application key counts as reachable only when its API answers (ping alone used to
+  show green while the key or certificate was refused), and stats report `UNAVAILABLE` when every
+  read fails instead of a snapshot of blanks.
+- Homebridge `/api/accessories` moved to the 15-minute slow lane; Config UI X queries every
+  HomeKit accessory to answer it.
 - New Roon services default `apiPort` to 9330 instead of 9100 (#127). Saved
   services keep their port.
 - Backend: shared origin policy extracted for HTTP CORS and the WebSocket upgrade.
@@ -281,6 +295,15 @@ dependency audit, and documentation aligned with the code.
   `CORS_ALLOWED_ORIGINS`).
 
 ### Security
+
+- AdGuard, Homebridge and qBittorrent stop sending refused credentials: 5 minutes after the first
+  rejection one retry, then nothing until the service is saved again (shared
+  `infra/http/authGate.ts`). Homebridge used to log in on every 401, about 8 failed logins a
+  minute with a wrong password.
+- Hue's event stream backs off exponentially (5 s to 5 min) and stops on a refused application
+  key instead of reconnecting every 5 s forever. Hue pairing no longer requests an unused
+  Entertainment client key.
+- A guard test keeps any Roon transport control call (play, volume, standby, …) out of the code.
 
 - SSH hosts without a pinned host key are trusted on first use per run: a changed key is refused
   until restart, and the first fingerprint is logged so it can be pinned.

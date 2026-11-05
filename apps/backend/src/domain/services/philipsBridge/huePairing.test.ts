@@ -33,7 +33,7 @@ describe('pairBridge', () => {
     expect(result.certHash).toBe(FAKE_CERT_HASH);
   });
 
-  it('posts to /api with devicetype and generateclientkey', async () => {
+  it('posts to /api with devicetype only (no unused entertainment client key)', async () => {
     const http = fakeHttp(200, [{ success: { username: 'key' } }]);
     await pairBridge('192.168.1.50', { http, probeCertHash: fakeProbeCertHash });
     const req = vi.mocked(http.send).mock.calls[0]![0];
@@ -41,7 +41,7 @@ describe('pairBridge', () => {
     expect(req.method).toBe('POST');
     const body = JSON.parse(req.body as string);
     expect(body.devicetype).toBe('watchman#host');
-    expect(body.generateclientkey).toBe(true);
+    expect(body).toEqual({ devicetype: 'watchman#host' });
   });
 
   it('pairs over a client pinned to the probed cert when one is provided', async () => {

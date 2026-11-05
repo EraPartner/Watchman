@@ -193,6 +193,7 @@ function makeConfig(overrides: Partial<AdGuardInstance> = {}): AdGuardInstance {
     password: "",
     certSha256: "",
     readQueryLog: false,
+    checkUpdates: false,
     ...overrides,
   };
 }
@@ -515,5 +516,154 @@ describe("AdGuardService query log (opt-in) and transport warning", () => {
     const remoteRes = await remote.getStats(new AbortController().signal);
     expect(remoteRes.ok).toBe(true);
     if (remoteRes.ok) expect(remoteRes.value.metrics.cleartextCredentials).toBe(true);
+  });
+});
+
+/** Fake AdGuard that records every request and answers from a route table. */
+function recordingHttp(
+  routes: Record<string, { status: number; body: unknown }>,
+  fallback: { status: number; body: unknown } = { status: 200, body: {} }
+): {
+  http: import("../../../infra/http/client.js").HttpClient;
+  calls: Array<{ method: string; path: string; body: string | undefined }>;
+} {
+  const calls: Array<{ method: string; path: string; body: string | undefined }> = [];
+  return {
+    calls,
+    http: {
+      send: async (req) => {
+        const path = new URL(req.url).pathname + new URL(req.url).search;
+        calls.push({
+          method: req.method ?? "GET",
+          path,
+          body: typeof req.body === "string" ? req.body : undefined,
+        });
+        const route = routes[path] ?? fallback;
+        return {
+          status: route.status,
+          headers: { "content-type": "application/json" },
+          text: async () => JSON.stringify(route.body),
+          json: async () => route.body as never,
+        };
+      },
+    },
+  };
+}
+
+describe("AdGuardService credentials, update check and freshness", () => {
+  it("stops sending a refused password after the second rejection", async () => {
+    let t = 0;
+    // a wrong password is refused on every endpoint
+    const rec = recordingHttp({}, { status: 401, body: {} });
+    const svc = new AdGuardService({
+      http: rec.http,
+      ping: fakePing(),
+      config: makeConfig({ username: "u", password: "wrong" }),
+      now: () => t,
+    });
+    const first = await svc.getStats(new AbortController().signal);
+    expect(!first.ok && first.error.code).toBe("UNAUTHORIZED");
+    const afterFirst = rec.calls.length;
+
+    // inside the 5-minute backoff: no request reaches AdGuard
+    await svc.checkHealth(new AbortController().signal);
+    await svc.getStats(new AbortController().signal);
+    expect(rec.calls.length).toBe(afterFirst);
+
+    // one retry after the backoff, rejected again: stop for good
+    t += 5 * 60 * 1000;
+    await svc.checkHealth(new AbortController().signal);
+    const afterSecond = rec.calls.length;
+    expect(afterSecond).toBeGreaterThan(afterFirst);
+    t += 24 * 60 * 60 * 1000;
+    const stopped = await svc.getStats(new AbortController().signal);
+    const health = await svc.checkHealth(new AbortController().signal);
+    expect(rec.calls.length).toBe(afterSecond);
+    expect(!stopped.ok && stopped.error.message).toMatch(/save the credentials/);
+    expect(health.ok && health.value.message).toMatch(/save the credentials/);
+  });
+
+  it("sends only GET requests unless the update check is turned on", async () => {
+    const rec = recordingHttp({});
+    const svc = new AdGuardService({
+      http: rec.http,
+      ping: fakePing(),
+      config: makeConfig({ readQueryLog: true }),
+      now: () => 0,
+    });
+    await svc.checkHealth(new AbortController().signal);
+    await svc.getStats(new AbortController().signal);
+    expect(rec.calls.length).toBeGreaterThan(5);
+    expect(rec.calls.filter((c) => c.method !== "GET")).toEqual([]);
+  });
+
+  it("opt-in update check is one POST with recheck_now false, every 6 hours", async () => {
+    let t = 0;
+    const rec = recordingHttp({
+      "/control/status": { status: 200, body: { running: true, version: "v0.107.50" } },
+      "/control/version.json": {
+        status: 200,
+        body: { new_version: "v0.107.52", can_autoupdate: true },
+      },
+    });
+    const svc = new AdGuardService({
+      http: rec.http,
+      ping: fakePing(),
+      config: makeConfig({ checkUpdates: true }),
+      now: () => t,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    t += 60 * 60 * 1000;
+    await svc.getStats(new AbortController().signal);
+    const posts = rec.calls.filter((c) => c.method !== "GET");
+    expect(posts).toEqual([
+      {
+        method: "POST",
+        path: "/control/version.json",
+        body: JSON.stringify({ recheck_now: false }),
+      },
+    ]);
+    expect(res.ok && res.value.metrics).toMatchObject({
+      updateAvailable: true,
+      latestVersion: "v0.107.52",
+      updateCheckDisabled: false,
+    });
+  });
+
+  it("reports filter lists that have not downloaded for over a week", async () => {
+    const now = Date.parse("2026-11-05T12:00:00Z");
+    const rec = recordingHttp({
+      "/control/filtering/status": {
+        status: 200,
+        body: {
+          enabled: true,
+          filters: [
+            { name: "Fresh", enabled: true, rules_count: 1, last_updated: "2026-11-05T01:00:00Z" },
+            { name: "Old", enabled: true, rules_count: 1, last_updated: "2026-10-01T00:00:00Z" },
+            { name: "Never", enabled: true, rules_count: 0 },
+            { name: "Disabled", enabled: false, last_updated: "2020-01-01T00:00:00Z" },
+          ],
+        },
+      },
+      "/control/tls/status": {
+        status: 200,
+        body: { enabled: true, not_after: "2027-01-01T00:00:00Z", valid_cert: true, valid_chain: true },
+      },
+    });
+    const svc = new AdGuardService({
+      http: rec.http,
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => now,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok && res.value.metrics).toMatchObject({
+      staleFilterCount: 2,
+      staleFilters: ["Old", "Never"],
+      oldestFilterUpdate: Date.parse("2026-10-01T00:00:00Z"),
+      tlsEnabled: true,
+      tlsCertNotAfter: Date.parse("2027-01-01T00:00:00Z"),
+      tlsCertValid: true,
+    });
   });
 });

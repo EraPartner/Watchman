@@ -15,6 +15,7 @@ import {
 import type { QbittorrentInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 import { ttlMemo, type TtlMemo } from "../../../core/ttlMemo.js";
+import { createAuthGate, type AuthGate } from "../../../infra/http/authGate.js";
 
 export interface QbittorrentDeps {
   http: HttpClient;
@@ -79,9 +80,8 @@ interface LogEntry {
 
 const COOKIE_TTL_MS = 60 * 60 * 1000;
 // qBittorrent bans the client IP after WebUI\MaxAuthenticationFailCount (default
-// 5) failed logins. After a rejected login, stop retrying for this long so
-// health and stats polls can't trigger (or keep renewing) that ban.
-const AUTH_FAILURE_BACKOFF_MS = 5 * 60 * 1000;
+// 5) failed logins. The auth gate waits 5 minutes after a rejected login and
+// stops for good after the second, so polling can never reach that ban.
 const MAX_ACTIVE_TORRENTS = 20;
 // log/main is a cursor (only entries after last_known_id), so keep a rolling
 // window of the newest warnings/errors instead of only the last poll's delta
@@ -132,8 +132,9 @@ export class QBittorrentService extends BaseService {
   private cookie: string | null = null;
   private cookieExpiresAt = 0;
   private loginInflight: Promise<void> | null = null;
-  private authFailure: { error: UnauthorizedError; until: number } | null =
-    null;
+  private readonly authGate: AuthGate;
+  /** qBittorrent ≥ 5.2 API key: sent as a bearer token, so no login at all. */
+  private readonly apiKey: string;
   private rid = 0;
   private lastLogId = -1;
   private recentErrors: string[] = [];
@@ -152,6 +153,8 @@ export class QBittorrentService extends BaseService {
     this.baseUrl = deps.config.baseUrl.replace(/\/+$/, "");
     this.username = deps.config.username;
     this.password = deps.config.password;
+    this.apiKey = deps.config.apiKey;
+    this.authGate = createAuthGate({ now: deps.now, label: "qbittorrent" });
     this.timeoutMs = deps.config.timeoutMs;
     this.pinger = deps.ping;
     this.pingHost = new URL(deps.config.baseUrl).hostname;
@@ -360,6 +363,7 @@ export class QBittorrentService extends BaseService {
   }
 
   private async apiGet<T>(path: string, signal: AbortSignal): Promise<T> {
+    if (this.apiKey) return this.apiKeyGet<T>(path, signal);
     await this.ensureAuth(signal);
     const sentCookie = this.cookie;
     let res = await this.request(path, signal);
@@ -374,12 +378,28 @@ export class QBittorrentService extends BaseService {
     return this.parse<T>(res, path);
   }
 
+  private async apiKeyGet<T>(path: string, signal: AbortSignal): Promise<T> {
+    this.authGate.check();
+    const res = await this.request(path, signal);
+    if (res.status === 401 || res.status === 403) {
+      await res.text().catch(() => "");
+      const error = new UnauthorizedError(
+        `qbittorrent rejected the API key (${res.status})`
+      );
+      this.authGate.reject(error);
+      throw error;
+    }
+    if (res.status >= 200 && res.status < 300) this.authGate.accept();
+    return this.parse<T>(res, path);
+  }
+
   private async request(
     path: string,
     signal: AbortSignal
   ): Promise<HttpResponse> {
     const headers: Record<string, string> = {};
-    if (this.cookie) headers["cookie"] = this.cookie;
+    if (this.apiKey) headers["authorization"] = `Bearer ${this.apiKey}`;
+    else if (this.cookie) headers["cookie"] = this.cookie;
     return this.http.send({
       url: `${this.baseUrl}${path}`,
       method: "GET",
@@ -391,9 +411,7 @@ export class QBittorrentService extends BaseService {
 
   private async ensureAuth(signal: AbortSignal): Promise<void> {
     if (this.cookie && this.now() < this.cookieExpiresAt) return;
-    if (this.authFailure && this.now() < this.authFailure.until) {
-      throw this.authFailure.error;
-    }
+    this.authGate.check();
     // getStats fans out several requests in parallel; share one login so a
     // cold start or expired session costs one attempt, not one per request.
     this.loginInflight ??= this.login(signal).finally(() => {
@@ -405,14 +423,9 @@ export class QBittorrentService extends BaseService {
   private async login(signal: AbortSignal): Promise<void> {
     try {
       await this.loginOnce(signal);
-      this.authFailure = null;
+      this.authGate.accept();
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        this.authFailure = {
-          error: e,
-          until: this.now() + AUTH_FAILURE_BACKOFF_MS,
-        };
-      }
+      if (e instanceof UnauthorizedError) this.authGate.reject(e);
       throw e;
     }
   }

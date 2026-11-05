@@ -2,7 +2,7 @@
 title: Set up Homebridge
 type: guide
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags: [guide, setup, services, homebridge, config-ui-x, credentials]
 description: Create a dedicated Homebridge Config UI X user and add Homebridge to Watchman
 aliases: [homebridge setup, set up homebridge]
@@ -27,14 +27,14 @@ Create a **separate user for Watchman** in Config UI X (**User Accounts** in the
 long random password and without two-factor authentication: Watchman's login sends only a user
 name and password.
 
-Try it **without** the Administrator option first. The status endpoints Watchman needs most should
-work for any logged-in user; if the tile then shows no plugin information, the plugin list needs an
-admin account on your Config UI X version.
+**Admin or not.** The plugin list (`GET /api/plugins`) is admin-only in Config UI X: its
+controller carries `AdminGuard` (checked in the published 4.76.0 code). So plugin counts and the
+names of outdated plugins need the Administrator option. Without it, everything else still works
+and only the plugin rows stay empty. Watchman never calls Config UI X's write endpoints either way.
 
-> [!warning] Unverified
-> Which Config UI X endpoints a non-admin user may read was not checked against a live
-> Homebridge. Watchman treats plugins, CPU, RAM, uptime and child bridges as optional: if one fails,
-> only that number is missing.
+> [!note] Wrong password
+> If Config UI X refuses the login, Watchman waits 5 minutes, tries once more, and after a second
+> refusal stops until you save the service again. It no longer retries on every poll.
 
 Prefer user name and password over the **Auth token** field. Config UI X tokens expire; with a user
 name and password Watchman logs in again by itself on a `401`. A pasted token is used until it
@@ -54,7 +54,8 @@ unless you already use it.
 | Username / Password   | The Watchman user from step 2                                                             |
 | Auth token            | Leave empty                                                                               |
 | Status / Version / Login path | Leave the defaults unless you run Config UI X behind a reverse proxy with a path prefix |
-| Allow self-signed TLS | Only for `https://` with Config UI X's own self-signed certificate. It turns off certificate checks for this service, so use it only on a trusted network. |
+| Certificate fingerprint | For `https://` with Config UI X's own self-signed certificate: paste its SHA-256 fingerprint (`openssl s_client -connect <host>:8581 </dev/null \| openssl x509 -noout -fingerprint -sha256`). Watchman then trusts exactly that certificate. |
+| Allow self-signed TLS | Fallback when you can't pin the certificate. It turns off certificate checks for this service, so use it only on a trusted network. The fingerprint wins when both are set. |
 
 ## 4. Check it works
 

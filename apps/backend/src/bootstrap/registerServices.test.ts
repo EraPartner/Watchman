@@ -4,6 +4,7 @@ import type { ServiceInfra } from "./registerServices.js";
 import type {
   AdGuardInstance,
   HomebridgeInstance,
+  QbittorrentInstance,
   SynologyInstance,
 } from "../config/services.js";
 import type { HttpClient } from "../infra/http/client.js";
@@ -24,6 +25,7 @@ const baseCfg: HomebridgeInstance = {
   versionPath: "/api/status/homebridge-version",
   loginPath: "/api/auth/login",
   allowSelfSigned: false,
+  certSha256: "",
 };
 
 /** HttpClient that records the tag of whichever client handled a request. */
@@ -192,6 +194,7 @@ describe("createService — AdGuard certificate pin", () => {
     password: "pass",
     certSha256: "",
     readQueryLog: false,
+    checkUpdates: false,
   };
 
   function statusHttp(tag: string, calls: string[]): HttpClient {
@@ -236,5 +239,53 @@ describe("createService — AdGuard certificate pin", () => {
     const svc = createService(adguardCfg, infra);
     await svc.checkHealth(new AbortController().signal);
     expect(new Set(calls)).toEqual(new Set(["strict"]));
+  });
+});
+
+describe("createService — certificate pins for Homebridge and qBittorrent", () => {
+  it("a Homebridge fingerprint wins over allowSelfSigned: pinned client, not the insecure one", async () => {
+    const calls: string[] = [];
+    const pins: string[] = [];
+    const infra: ServiceInfra = {
+      ...infraWith(recordingHttp("strict", calls), recordingHttp("insecure", calls)),
+      pinnedHttp: (sha) => {
+        pins.push(sha);
+        return recordingHttp("pinned", calls);
+      },
+    };
+    const svc = createService(
+      { ...baseCfg, allowSelfSigned: true, certSha256: "AB:CD" },
+      infra
+    );
+    await svc.checkHealth(new AbortController().signal);
+    expect(pins).toEqual(["AB:CD"]);
+    expect(new Set(calls)).toEqual(new Set(["pinned"]));
+  });
+
+  it("qBittorrent uses a client pinned to its fingerprint", async () => {
+    const pins: string[] = [];
+    const qbCfg: QbittorrentInstance = {
+      kind: "qbittorrent",
+      instanceId: "main",
+      enabled: true,
+      pollPolicy: { healthMs: 10_000, statsMs: 30_000, jitterRatio: 0.1 },
+      cacheTtlMs: 10_000,
+      timeoutMs: 5_000,
+      baseUrl: "https://qb.local:8069",
+      username: "admin",
+      password: "pw",
+      apiKey: "",
+      certSha256: "EF:01",
+    };
+    const calls: string[] = [];
+    const infra: ServiceInfra = {
+      ...infraWith(recordingHttp("strict", calls), undefined),
+      pinnedHttp: (sha) => {
+        pins.push(sha);
+        return recordingHttp("pinned", calls);
+      },
+    };
+    createService(qbCfg, infra);
+    expect(pins).toEqual(["EF:01"]);
   });
 });

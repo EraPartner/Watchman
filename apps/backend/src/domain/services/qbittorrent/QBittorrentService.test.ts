@@ -27,6 +27,8 @@ let state: {
   cookie: string;
   expireNextRequest: boolean;
   loginCalls: number;
+  // qBittorrent ≥ 5.2 API key accepted as a bearer token ("" = none)
+  apiKey: string;
   lastRid: number;
   torrentsInfoCalls: number;
   transferInfoCalls: number;
@@ -105,7 +107,18 @@ function handler(req: IncomingMessage, res: ServerResponse) {
   }
 
   const cookie = req.headers["cookie"] ?? "";
-  if (!cookie.includes(`SID=${state.cookie}`) || state.expireNextRequest) {
+  const bearerOk =
+    state.apiKey !== "" &&
+    req.headers["authorization"] === `Bearer ${state.apiKey}`;
+  if (req.headers["authorization"] !== undefined && !bearerOk) {
+    res.writeHead(401);
+    res.end("Unauthorized");
+    return;
+  }
+  if (
+    (!bearerOk && !cookie.includes(`SID=${state.cookie}`)) ||
+    state.expireNextRequest
+  ) {
     state.expireNextRequest = false;
     res.writeHead(403);
     res.end("Forbidden");
@@ -227,6 +240,7 @@ beforeEach(() => {
     preferencesCalls: 0,
     lastLogQuery: "",
     extraLogEntries: [],
+    apiKey: "",
   };
 });
 
@@ -243,6 +257,8 @@ function makeConfig(
     baseUrl: `http://127.0.0.1:${port}`,
     username: "admin",
     password: "secret",
+    apiKey: "",
+    certSha256: "",
     ...overrides,
   };
 }
@@ -450,6 +466,69 @@ describe("QBittorrentService", () => {
     const recovered = await svc.getStats(new AbortController().signal);
     expect(recovered.ok).toBe(true);
     expect(state.loginCalls).toBe(2);
+  });
+
+  it("a second rejected login stops logging in until the config is saved", async () => {
+    state.loginRejects = true;
+    let t = 1;
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig(),
+      now: () => t,
+    });
+    await svc.getStats(new AbortController().signal);
+    t += 5 * 60 * 1000;
+    await svc.getStats(new AbortController().signal);
+    expect(state.loginCalls).toBe(2);
+
+    // qBittorrent bans after 5 failures; Watchman never gets there
+    t += 7 * 24 * 60 * 60 * 1000;
+    state.loginRejects = false;
+    const stopped = await svc.getStats(new AbortController().signal);
+    const health = await svc.checkHealth(new AbortController().signal);
+    expect(state.loginCalls).toBe(2);
+    expect(!stopped.ok && stopped.error.message).toMatch(
+      /save the credentials/
+    );
+    expect(health.ok && health.value.reachable).toBe(false);
+  });
+
+  it("an API key is sent as a bearer token and no login happens", async () => {
+    state.apiKey = "qbt_key";
+    const svc = new QBittorrentService({
+      http: createHttpClient(),
+      ping: fakePing(),
+      config: makeConfig({ apiKey: "qbt_key", password: "" }),
+      now: () => 1,
+    });
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok).toBe(true);
+    expect(state.loginCalls).toBe(0);
+  });
+
+  it("a refused API key is reported and not retried during the backoff", async () => {
+    state.apiKey = "right";
+    const sent: string[] = [];
+    const base = createHttpClient();
+    const http: HttpClient = {
+      send: (req) => {
+        sent.push(req.url);
+        return base.send(req);
+      },
+    };
+    const svc = new QBittorrentService({
+      http,
+      ping: fakePing(),
+      config: makeConfig({ apiKey: "wrong" }),
+      now: () => 1,
+    });
+    const first = await svc.getStats(new AbortController().signal);
+    expect(!first.ok && first.error.code).toBe("UNAUTHORIZED");
+    const count = sent.length;
+    await svc.getStats(new AbortController().signal);
+    expect(sent.length).toBe(count);
+    expect(state.loginCalls).toBe(0);
   });
 
   it("wrong credentials report a clear message", async () => {

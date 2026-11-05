@@ -1,6 +1,7 @@
 import type { HttpClient, HttpRequest, HttpResponse } from '../../../infra/http/client.js';
 import { createJwtClient } from '../../../infra/http/jwtClient.js';
 import { UnauthorizedError, UnavailableError } from '../../../core/errors.js';
+import { createAuthGate } from '../../../infra/http/authGate.js';
 
 export interface HomebridgeClientConfig {
   baseUrl: string;
@@ -18,11 +19,17 @@ export interface HomebridgeClient {
 export interface HomebridgeClientDeps {
   http: HttpClient;
   config: HomebridgeClientConfig;
+  /** Clock for the login backoff (default Date.now). */
+  now?: () => number;
 }
 
 export function createHomebridgeClient(deps: HomebridgeClientDeps): HomebridgeClient {
   const baseUrl = deps.config.baseUrl.replace(/\/+$/, '');
   let cookie: string | null = null;
+  // Every 401 used to trigger a fresh login, so a wrong password meant a
+  // failed login every few seconds forever. The gate waits after the first
+  // refused login and stops after the second until the config is saved.
+  const authGate = createAuthGate({ now: deps.now ?? Date.now, label: 'homebridge' });
 
   const captureCookies = (res: HttpResponse): void => {
     const setCookie = res.headers['set-cookie'];
@@ -61,6 +68,7 @@ export function createHomebridgeClient(deps: HomebridgeClientDeps): HomebridgeCl
     if (!deps.config.username || !deps.config.password) {
       throw new UnauthorizedError('homebridge credentials not configured');
     }
+    authGate.check();
     const url = `${baseUrl}${deps.config.loginPath}`;
     const res = await deps.http.send({
       url,
@@ -74,8 +82,13 @@ export function createHomebridgeClient(deps: HomebridgeClientDeps): HomebridgeCl
     });
     captureCookies(res);
     if (res.status < 200 || res.status >= 300) {
-      throw new UnauthorizedError(`homebridge login failed with status ${res.status}`);
+      await res.text().catch(() => '');
+      const error = new UnauthorizedError(`homebridge login failed with status ${res.status}`);
+      // 5xx is the server failing, not the password being refused
+      if (res.status < 500) authGate.reject(error);
+      throw error;
     }
+    authGate.accept();
     const text = await res.text().catch(() => '');
     try {
       const body = text ? (JSON.parse(text) as Record<string, unknown>) : null;
@@ -109,7 +122,9 @@ export function createHomebridgeClient(deps: HomebridgeClientDeps): HomebridgeCl
     });
     const ct = String(res.headers['content-type'] ?? '');
     const text = await res.text().catch(() => '');
-    if (ct.includes('text/html') || /<html/i.test(text)) {
+    // Only an HTML page (the UI's login screen) means "not logged in"; a JSON
+    // body that merely contains "<html" (e.g. a plugin description) is data.
+    if (ct.includes('text/html') || (!ct.includes('json') && /^\s*<(!doctype\s+)?html/i.test(text))) {
       throw new UnauthorizedError('homebridge returned HTML login page');
     }
     if (res.status < 200 || res.status >= 300) {
@@ -129,6 +144,8 @@ export function createHomebridgeClient(deps: HomebridgeClientDeps): HomebridgeCl
   return {
     async get<T>(path: string, signal: AbortSignal): Promise<T> {
       if (!baseUrl) throw new UnavailableError('homebridge baseUrl not configured');
+      // while a refused login is being backed off, don't poll at all
+      authGate.check();
       return attempt<T>(path, signal);
     },
   };

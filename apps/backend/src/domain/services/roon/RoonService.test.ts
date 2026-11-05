@@ -221,4 +221,50 @@ describe('RoonService — Roon API (RN2)', () => {
     const res = await svc.getStats(new AbortController().signal);
     if (res.ok) expect(res.value.metrics.zoneCount).toBe(0);
   });
+
+  it('with the Roon API on, health probes the API port and reports an unpaired extension', async () => {
+    const { connect } = makeFakeConnect();
+    const probed: number[] = [];
+    const svc = new RoonService({
+      ping: fakePing({ success: true }),
+      tcp: {
+        probe: async (req: TcpProbeRequest) => {
+          probed.push(req.port);
+          return req.port === 9330;
+        },
+      },
+      config: makeConfig({ useRoonApi: true, apiPort: 9330 }),
+      now: () => 0,
+      roonConnect: connect,
+    });
+    await svc.onStart();
+    const res = await svc.checkHealth(new AbortController().signal);
+    expect(probed.sort()).toEqual([9100, 9200, 9330]);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.details?.paired).toBe(false);
+      expect(res.value.message).toMatch(/not paired/);
+      expect((res.value.details?.ports as Record<string, boolean>)['9330']).toBe(true);
+    }
+  });
+
+  it('zones carry output names and queue info', async () => {
+    const { connect, handle } = makeFakeConnect();
+    const svc = new RoonService({
+      ping: fakePing({ success: true }),
+      tcp: fakeTcp({}),
+      config: makeConfig({ useRoonApi: true }),
+      now: () => 0,
+      roonConnect: connect,
+    });
+    await svc.onStart();
+    (handle as unknown as Record<string, unknown>)._setZones(
+      [{ zoneId: 'z1', displayName: 'Kitchen', state: 'paused', queueItemsRemaining: 3, queueTimeRemaining: 600, outputCount: 1, outputNames: ['Kitchen DAC'] }],
+      true,
+    );
+    const res = await svc.getStats(new AbortController().signal);
+    expect(res.ok && res.value.metrics.zones).toEqual([
+      { name: 'Kitchen', state: 'paused', outputs: 1, outputNames: ['Kitchen DAC'], queueItemsRemaining: 3, queueTimeRemaining: 600 },
+    ]);
+  });
 });

@@ -8,26 +8,61 @@ export interface SseStreamOptions {
   /** Called with each event's joined `data:` payload. */
   onMessage: (data: string) => void;
   onError?: (err: unknown) => void;
-  /** Delay before reconnecting after a drop/failure (default 5s). */
+  /** First delay before reconnecting after a drop/failure (default 5s). Each
+   *  further failure in a row doubles it, up to maxReconnectDelayMs. */
   reconnectDelayMs?: number;
+  /** Upper bound for the reconnect delay (default 5 min). */
+  maxReconnectDelayMs?: number;
   /** Abort to stop the stream and the reconnect loop. */
   signal: AbortSignal;
 }
 
 export type SseStarter = (opts: SseStreamOptions) => void;
 
+/** The endpoint answered the handshake with a non-2xx status. */
+export class SseStatusError extends Error {
+  constructor(readonly statusCode: number) {
+    super(`sse endpoint returned ${statusCode}`);
+    this.name = "SseStatusError";
+  }
+}
+
+/** 401/403 mean the credential was refused; retrying cannot fix that, and
+ *  every retry is another rejected request at the device. */
+export function isCredentialRejection(e: unknown): boolean {
+  return (
+    e instanceof SseStatusError &&
+    (e.statusCode === 401 || e.statusCode === 403)
+  );
+}
+
+/** Reconnect delay after `failures` consecutive failures (1-based). */
+export function reconnectDelay(
+  failures: number,
+  baseMs: number,
+  maxMs: number
+): number {
+  const exp = Math.min(Math.max(failures - 1, 0), 30);
+  return Math.min(baseMs * 2 ** exp, maxMs);
+}
+
 /**
  * Minimal Server-Sent-Events consumer with automatic reconnect. Runs as a
  * detached loop until the signal aborts; transport errors and clean stream
- * ends are reported via onError and retried — SSE is an optimization layer, never a hard
- * dependency for the caller.
+ * ends are reported via onError and retried with exponential backoff — SSE is
+ * an optimization layer, never a hard dependency for the caller. A 401/403
+ * handshake is reported and ends the loop: the caller must start a new
+ * stream (e.g. after the credential is re-saved).
  */
 export const startSseStream: SseStarter = (opts) => {
-  const delayMs = opts.reconnectDelayMs ?? 5_000;
+  const baseMs = opts.reconnectDelayMs ?? 5_000;
+  const maxMs = Math.max(opts.maxReconnectDelayMs ?? 300_000, baseMs);
   void (async () => {
+    let failures = 0;
     while (!opts.signal.aborted) {
+      const session = { opened: false };
       try {
-        await consumeOnce(opts);
+        await consumeOnce(opts, session);
         // a clean end (server closed the stream) still loses the events sent
         // before the reconnect, so callers must hear about it like an error
         if (opts.signal.aborted) return;
@@ -35,14 +70,21 @@ export const startSseStream: SseStarter = (opts) => {
       } catch (e) {
         if (opts.signal.aborted) return;
         opts.onError?.(e);
+        if (isCredentialRejection(e)) return;
       }
       if (opts.signal.aborted) return;
-      await sleep(delayMs, opts.signal);
+      // a stream that was up counts as a fresh start; refused handshakes and
+      // transport errors in a row back off further each time
+      failures = session.opened ? 1 : failures + 1;
+      await sleep(reconnectDelay(failures, baseMs, maxMs), opts.signal);
     }
   })();
 };
 
-async function consumeOnce(opts: SseStreamOptions): Promise<void> {
+async function consumeOnce(
+  opts: SseStreamOptions,
+  session: { opened: boolean }
+): Promise<void> {
   const res = await request(opts.url, {
     method: "GET",
     headers: { accept: "text/event-stream", ...opts.headers },
@@ -55,8 +97,9 @@ async function consumeOnce(opts: SseStreamOptions): Promise<void> {
   if (res.statusCode < 200 || res.statusCode >= 300) {
     // drain to release the connection before throwing
     await res.body.text().catch(() => undefined);
-    throw new Error(`sse endpoint returned ${res.statusCode}`);
+    throw new SseStatusError(res.statusCode);
   }
+  session.opened = true;
 
   let buffer = "";
   // streaming decode: a multi-byte UTF-8 character can straddle two chunks

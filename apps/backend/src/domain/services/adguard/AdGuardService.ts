@@ -13,6 +13,7 @@ import {
   isDomainError,
 } from "../../../core/errors.js";
 import { ttlMemo, type TtlMemo } from "../../../core/ttlMemo.js";
+import { createAuthGate, type AuthGate } from "../../../infra/http/authGate.js";
 import type { AdGuardInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 
@@ -52,8 +53,35 @@ interface AdGuardStats {
 
 interface FilteringStatus {
   enabled?: boolean;
-  filters?: Array<{ rules_count?: number; enabled?: boolean }>;
+  /** update interval in hours (AdGuard's filters_update_interval) */
+  interval?: number;
+  filters?: Array<{
+    rules_count?: number;
+    enabled?: boolean;
+    name?: string;
+    /** ISO time of the list's last successful download */
+    last_updated?: string;
+  }>;
   user_rules?: string[];
+}
+
+/** POST /control/version.json answer (AdGuard OpenAPI VersionInfo). */
+interface VersionInfo {
+  new_version?: string;
+  announcement?: string;
+  announcement_url?: string;
+  can_autoupdate?: boolean;
+  /** true when AdGuard's own update check is disabled */
+  disabled?: boolean;
+}
+
+/** GET /control/tls/status; only the fields Watchman reports. Field names
+ *  from the AdGuard OpenAPI TlsConfig schema (unverified on a live server). */
+interface TlsStatus {
+  enabled?: boolean;
+  not_after?: string;
+  valid_cert?: boolean;
+  valid_chain?: boolean;
 }
 
 interface ClientsResponse {
@@ -94,6 +122,12 @@ interface DnsInfo {
 // filter lists, clients, DHCP config, protection toggles and upstream config
 // are configuration-grade — refresh every 10 minutes, not every stats poll
 const CONFIG_LANE_TTL_MS = 10 * 60 * 1000;
+// AdGuard refreshes its own update info every few hours; asking more often
+// adds nothing
+const UPDATE_LANE_TTL_MS = 6 * 60 * 60 * 1000;
+// a filter list whose last download is older than this is reported stale
+// (AdGuard's default update interval is 24 h)
+export const STALE_FILTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class AdGuardService extends BaseService {
   readonly kind = "adguard";
@@ -113,6 +147,9 @@ export class AdGuardService extends BaseService {
   private readonly parentalMemo: TtlMemo<ToggleStatus>;
   private readonly safesearchMemo: TtlMemo<ToggleStatus>;
   private readonly dnsInfoMemo: TtlMemo<DnsInfo>;
+  private readonly tlsMemo: TtlMemo<TlsStatus>;
+  private readonly updateMemo: TtlMemo<VersionInfo> | undefined;
+  private readonly authGate: AuthGate;
   private readonly readQueryLog: boolean;
   /** Admin credentials over plain http to another host: shown as a warning. */
   private readonly cleartextCredentials: boolean;
@@ -152,6 +189,21 @@ export class AdGuardService extends BaseService {
     this.parentalMemo = lane<ToggleStatus>("/control/parental/status");
     this.safesearchMemo = lane<ToggleStatus>("/control/safesearch/status");
     this.dnsInfoMemo = lane<DnsInfo>("/control/dns_info");
+    this.tlsMemo = lane<TlsStatus>("/control/tls/status");
+    this.authGate = createAuthGate({ now: deps.now, label: "adguard" });
+    // Opt-in (checkUpdates), approved by the user on 2026-11-05: the only
+    // POST Watchman sends to AdGuard. recheck_now:false returns AdGuard's
+    // cached update info; it starts no download and changes no setting.
+    this.updateMemo = deps.config.checkUpdates
+      ? ttlMemo(UPDATE_LANE_TTL_MS, deps.now, (signal) =>
+          this.request<VersionInfo>(
+            "POST",
+            "/control/version.json",
+            signal,
+            JSON.stringify({ recheck_now: false })
+          )
+        )
+      : undefined;
   }
 
   async checkHealth(signal: AbortSignal): Promise<HealthResult> {
@@ -194,6 +246,8 @@ export class AdGuardService extends BaseService {
         safesearch,
         dnsInfo,
         queryLog,
+        tls,
+        update,
       ] = await Promise.all([
         this.get<AdGuardStatus>("/control/status", signal),
         this.get<AdGuardStats>("/control/stats", signal),
@@ -209,6 +263,10 @@ export class AdGuardService extends BaseService {
               `/control/querylog?limit=${QUERY_LOG_LIMIT}`,
               signal
             ).catch((): QueryLogResponse | null => null)
+          : Promise.resolve(null),
+        this.tlsMemo(signal).catch((): TlsStatus | null => null),
+        this.updateMemo
+          ? this.updateMemo(signal).catch((): VersionInfo | null => null)
           : Promise.resolve(null),
       ]);
 
@@ -233,6 +291,7 @@ export class AdGuardService extends BaseService {
         .filter((f) => f.enabled !== false)
         .reduce((sum, f) => sum + (f.rules_count ?? 0), 0);
       const userRules = (filtering?.user_rules ?? []).length;
+      const freshness = filterFreshness(filterList, this.now());
 
       return ok({
         at: this.now(),
@@ -270,6 +329,16 @@ export class AdGuardService extends BaseService {
           safesearchEnabled: safesearch?.enabled ?? null,
           upstreamCount: (dnsInfo?.upstream_dns ?? []).length,
           upstreamMode: dnsInfo?.upstream_mode ?? null,
+          oldestFilterUpdate: freshness.oldest,
+          staleFilterCount: filtering ? freshness.staleCount : null,
+          staleFilters: freshness.staleNames,
+          tlsEnabled: tls?.enabled ?? null,
+          tlsCertNotAfter: parseTime(tls?.not_after),
+          tlsCertValid:
+            tls?.enabled && typeof tls.valid_cert === "boolean"
+              ? tls.valid_cert && tls.valid_chain !== false
+              : null,
+          ...(update ? updateMetrics(update, status.version) : {}),
           cleartextCredentials: this.cleartextCredentials,
           ...(queryLog ? summarizeQueryLog(queryLog.data ?? []) : {}),
         },
@@ -281,15 +350,29 @@ export class AdGuardService extends BaseService {
     }
   }
 
-  private async get<T>(path: string, signal: AbortSignal): Promise<T> {
+  private get<T>(path: string, signal: AbortSignal): Promise<T> {
+    return this.request<T>("GET", path, signal);
+  }
+
+  /** Every AdGuard call goes through here. GET only, except the opt-in
+   *  update check above. A refused password stops the requests (auth gate)
+   *  so AdGuard's login lockout is never triggered by polling. */
+  private async request<T>(
+    method: "GET" | "POST",
+    path: string,
+    signal: AbortSignal,
+    body?: string
+  ): Promise<T> {
+    this.authGate.check();
     const headers: Record<string, string> = {
       "content-type": "application/json",
     };
     if (this.authHeader) headers["authorization"] = this.authHeader;
     const res = await this.http.send({
       url: `${this.baseUrl}${path}`,
-      method: "GET",
+      method,
       headers,
+      ...(body !== undefined ? { body } : {}),
       signal,
       timeoutMs: this.timeoutMs,
     });
@@ -300,16 +383,64 @@ export class AdGuardService extends BaseService {
     if (res.status < 200 || res.status >= 300) {
       const text = await res.text().catch(() => "");
       if (res.status === 401 || res.status === 403) {
-        throw new UnauthorizedError(
+        const error = new UnauthorizedError(
           `adguard ${path} returned ${res.status}: check the username and password`
         );
+        this.authGate.reject(error);
+        throw error;
       }
       throw new UnavailableError(
         `adguard ${path} returned ${res.status}: ${text.slice(0, 200)}`
       );
     }
+    this.authGate.accept();
     return res.json<T>();
   }
+}
+
+function parseTime(value: string | undefined): number | null {
+  if (typeof value !== "string" || value === "") return null;
+  const t = Date.parse(value);
+  return Number.isFinite(t) && t > 0 ? t : null;
+}
+
+/** Last-download times of the enabled filter lists. A list that never
+ *  downloaded (no last_updated) counts as stale. */
+export function filterFreshness(
+  filters: NonNullable<FilteringStatus["filters"]>,
+  now: number
+): { oldest: number | null; staleCount: number; staleNames: string[] } {
+  let oldest: number | null = null;
+  const staleNames: string[] = [];
+  for (const f of filters) {
+    if (f.enabled === false) continue;
+    const t = parseTime(f.last_updated);
+    if (t !== null && (oldest === null || t < oldest)) oldest = t;
+    if (t === null || now - t > STALE_FILTER_MS) {
+      staleNames.push(f.name ?? "unnamed list");
+    }
+  }
+  return { oldest, staleCount: staleNames.length, staleNames: staleNames.slice(0, 10) };
+}
+
+/** An empty new_version means AdGuard knows of no newer release. */
+export function updateMetrics(
+  info: VersionInfo,
+  currentVersion: string | undefined
+): {
+  updateAvailable: boolean | null;
+  latestVersion: string | null;
+  updateCheckDisabled: boolean;
+} {
+  if (info.disabled) {
+    return { updateAvailable: null, latestVersion: null, updateCheckDisabled: true };
+  }
+  const latest = typeof info.new_version === "string" ? info.new_version : "";
+  return {
+    updateAvailable: latest !== "" && latest !== currentVersion,
+    latestVersion: latest !== "" ? latest : (currentVersion ?? null),
+    updateCheckDisabled: false,
+  };
 }
 
 function isLoopbackHost(host: string): boolean {

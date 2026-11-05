@@ -2,6 +2,9 @@ import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
 import {
   dotGet,
+  fmtBool,
+  fmtBytes,
+  fmtList,
   fmtNumber,
   fmtPercent,
   fmtRaw,
@@ -42,6 +45,11 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
         // from /api/status/homebridge-version: the Homebridge package, not the UI
         { key: "currentVersion", label: "Homebridge installed", format: fmtRaw },
         { key: "latestVersion", label: "Latest", format: fmtRaw },
+        {
+          key: "updateAvailable",
+          label: "Update available",
+          format: fmtBool("yes", "no"),
+        },
         { key: "homebridgeVersion", label: "Homebridge", format: fmtRaw },
         { key: "serverVersion", label: "Server", format: fmtRaw },
       ],
@@ -52,11 +60,29 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
         { key: "status", label: "Status", format: fmtRaw },
         { key: "childBridgesUp", label: "Child bridges up", format: fmtRaw },
         { key: "childBridgeCount", label: "Child bridges", format: fmtRaw },
+        {
+          key: "childBridges",
+          label: "Child bridge status",
+          format: fmtList((b) =>
+            b["up"] === true
+              ? String(b["name"])
+              : `${String(b["name"])} (${String(b["status"])})`
+          ),
+        },
         { key: "pluginCount", label: "Plugins", format: fmtRaw },
         {
           key: "pluginUpdatesAvailable",
           label: "Plugin updates",
           format: fmtRaw,
+        },
+        {
+          key: "outdatedPlugins",
+          label: "Outdated plugins",
+          format: fmtList((p) =>
+            p["latestVersion"]
+              ? `${String(p["name"])} → ${String(p["latestVersion"])}`
+              : String(p["name"])
+          ),
         },
         { key: "accessoryCount", label: "Accessories", format: fmtRaw },
       ],
@@ -68,6 +94,8 @@ export const homebridgeRenderer: ServiceRenderer<Stats> = {
         { key: "platform", label: "Platform", format: fmtRaw },
         { key: "cpuLoad", label: "CPU load", format: fmtPercent(0, 100) },
         { key: "cpuTemp", label: "CPU temp", format: fmtTempC },
+        { key: "memUsedBytes", label: "Memory used", format: fmtBytes },
+        { key: "memTotalBytes", label: "Memory total", format: fmtBytes },
         { key: "hostUptime", label: "Host uptime", format: fmtUptime },
         { key: "processUptime", label: "Process uptime", format: fmtUptime },
       ],

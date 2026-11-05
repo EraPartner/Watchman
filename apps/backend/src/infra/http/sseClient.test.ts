@@ -1,18 +1,23 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type Server, type ServerResponse } from "node:http";
-import { startSseStream } from "./sseClient.js";
+import { reconnectDelay, SseStatusError, startSseStream } from "./sseClient.js";
 
 let server: Server;
 let port: number;
 let activeRes: ServerResponse | null = null;
 let connections = 0;
-let mode: "stream" | "error" = "stream";
+let mode: "stream" | "error" | "unauthorized" = "stream";
 
 beforeAll(
   () =>
     new Promise<void>((resolve) => {
       server = createServer((_req, res) => {
         connections++;
+        if (mode === "unauthorized") {
+          res.writeHead(403);
+          res.end("forbidden");
+          return;
+        }
         if (mode === "error") {
           res.writeHead(503);
           res.end("unavailable");
@@ -152,6 +157,30 @@ describe("startSseStream", () => {
     mode = "stream";
   });
 
+  it("stops after a 401/403 handshake instead of retrying a refused credential", async () => {
+    mode = "unauthorized";
+    connections = 0;
+    const errors: unknown[] = [];
+    const abort = new AbortController();
+    startSseStream({
+      url: `http://127.0.0.1:${port}/events`,
+      onMessage: () => undefined,
+      onError: (e) => errors.push(e),
+      reconnectDelayMs: 5,
+      signal: abort.signal,
+    });
+
+    await waitFor(() => errors.length >= 1);
+    // several reconnect delays' worth of time: no further attempt is made
+    await new Promise((r) => setTimeout(r, 100));
+    expect(connections).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(SseStatusError);
+    expect((errors[0] as SseStatusError).statusCode).toBe(403);
+    abort.abort();
+    mode = "stream";
+  });
+
   it("stops cleanly when aborted before any connection", async () => {
     const abort = new AbortController();
     abort.abort();
@@ -162,5 +191,15 @@ describe("startSseStream", () => {
         signal: abort.signal,
       })
     ).not.toThrow();
+  });
+});
+
+describe("reconnectDelay", () => {
+  it("doubles per consecutive failure and caps at the maximum", () => {
+    expect(reconnectDelay(1, 5_000, 300_000)).toBe(5_000);
+    expect(reconnectDelay(2, 5_000, 300_000)).toBe(10_000);
+    expect(reconnectDelay(4, 5_000, 300_000)).toBe(40_000);
+    expect(reconnectDelay(7, 5_000, 300_000)).toBe(300_000);
+    expect(reconnectDelay(1_000, 5_000, 300_000)).toBe(300_000);
   });
 });

@@ -2,7 +2,7 @@
 title: Set up qBittorrent
 type: guide
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags: [guide, setup, services, qbittorrent, web-ui, credentials]
 description: Enable the qBittorrent Web UI and add it to Watchman
 aliases: [qbittorrent setup, set up qbittorrent]
@@ -36,8 +36,14 @@ account, keep the Web UI on your LAN, and don't reuse the password elsewhere.
 Leave **Bypass authentication for clients on localhost / in whitelisted IP subnets** off for the
 Watchman host: Watchman always logs in and expects the session cookie the login returns.
 
-If **Ban client after consecutive failures** is on, a wrong password in Watchman can get the
-Watchman machine banned for the configured time.
+If **Ban client after consecutive failures** is on, a wrong password could get the Watchman
+machine banned. Watchman avoids that: after a refused login it waits 5 minutes, tries once more,
+and after a second refusal stops logging in until you save the service again.
+
+**qBittorrent 5.2 or newer:** create an API key (Options → Web UI) and paste it in the **API key**
+field instead of the password. Watchman then sends it as a bearer token and never logs in, so there
+is no login to fail. The key has the same full access as the account (no read-only scope, as far as
+the qBittorrent docs say).
 
 ## 3. Add it in Watchman
 
@@ -48,6 +54,8 @@ Watchman machine banned for the configured time.
 | Base URL | `http://<host>:<port>`. Watchman's form default is `http://127.0.0.1:8069`; change the port to match step 1. |
 | Username | The Web UI user name                                                                   |
 | Password | The Web UI password                                                                    |
+| API key  | qBittorrent 5.2+: the API key instead of the password (optional)                       |
+| Certificate fingerprint | Only for `https://` with qBittorrent's self-signed certificate: its SHA-256 fingerprint. Watchman then trusts exactly that certificate instead of falling back to plain `http://`. |
 
 ## 4. Check it works
 
@@ -59,7 +67,8 @@ speeds and torrent counts.
 | Symptom                                   | Likely cause                                                                    |
 | ----------------------------------------- | ------------------------------------------------------------------------------- |
 | `qbittorrent auth returned 403`           | The Watchman machine is banned after failed logins. Wait or restart qBittorrent, then fix the password. |
-| `qbittorrent rejected the username or password` | Wrong user name or password. Watchman then waits 5 minutes before logging in again (or until you save new credentials), so it doesn't trigger a ban. |
+| `qbittorrent rejected the username or password` | Wrong user name or password. Watchman then waits 5 minutes before logging in again, and after a second refusal stops until you save the service again, so it can't trigger a ban. |
+| `credentials rejected 2 times, so Watchman stopped trying` | Fix the password (or API key) and save the service; that restarts it. |
 | `qbittorrent login missing set-cookie`    | The login answered without a session cookie, e.g. a reverse proxy stripping it. |
 | Connection refused                        | Web UI is off, wrong port, or it listens on another interface.                  |
 | `returned 401` on every call              | Host header validation rejects the host name in the Base URL. Use the IP, or add the name under **Server domains**. |
