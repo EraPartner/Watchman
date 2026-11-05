@@ -2,7 +2,7 @@
 title: Set up IPFS (Kubo)
 type: guide
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags: [guide, setup, services, ipfs, kubo, rpc]
 description: Expose the Kubo RPC API safely to Watchman and add the IPFS node
 aliases: [ipfs setup, set up ipfs, kubo setup]
@@ -31,13 +31,37 @@ Watchman does not send RPC credentials, so the only protection is **where the AP
   Then allow port 5001 only from the Watchman host in the node's firewall. Don't use `0.0.0.0`
   on a machine with a public address, and never forward 5001 on your router.
 
-> [!info] Kubo RPC authorization
-> Kubo can require credentials on the RPC (`API.Authorizations`). Watchman has no field for them
-> yet, so a node that enforces them will answer `401`/`403`. Use network restriction instead.
+## 2. Credentials (optional, recommended for a node Watchman reaches over the LAN)
 
-## 2. Credentials
+Kubo can require a secret on the RPC and limit each secret to a list of paths
+(`API.Authorizations`). That turns Watchman's access into a real read-only key: with only these
+paths allowed, the secret can't pin, add, or change config.
 
-None.
+```json
+"API": {
+  "Authorizations": {
+    "watchman": {
+      "AuthSecret": "bearer:a-long-random-token",
+      "AllowedPaths": [
+        "/api/v0/version", "/api/v0/id", "/api/v0/swarm/peers", "/api/v0/repo/stat",
+        "/api/v0/stats/bw", "/api/v0/diag/sys", "/api/v0/stats/bitswap",
+        "/api/v0/swarm/addrs/listen", "/api/v0/pin/ls", "/api/v0/stats/dht",
+        "/debug/metrics/prometheus"
+      ]
+    }
+  }
+}
+```
+
+Restart Kubo, then put the same `AuthSecret` value (`bearer:…`, or `basic:<user>:<password>`) in
+Watchman's **API auth** field. Without it, keep the network restriction from step 1.
+
+> [!warning] Unverified
+> The `API.Authorizations` / `AuthSecret` / `AllowedPaths` shape is from Kubo's config
+> documentation (`docs/config.md`) and was not confirmed against a live node here. The RPC
+> reference confirms only that the secret is sent as `Authorization: Bearer <secret>`
+> (docs.ipfs.tech/reference/kubo/rpc). Watchman sends `bearer:` secrets as `Bearer` and `basic:`
+> secrets as HTTP Basic.
 
 ## 3. Add it in Watchman
 
@@ -46,6 +70,7 @@ None.
 | Field   | Enter                                                       |
 | ------- | ----------------------------------------------------------- |
 | API URL | `http://127.0.0.1:5001` (default) or `http://192.168.1.40:5001`. The RPC port, not the gateway (8080). |
+| API auth | Empty, or the `AuthSecret` from step 2. |
 
 Watchman pings the host taken from the API URL.
 

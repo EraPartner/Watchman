@@ -75,6 +75,7 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> =
       "setupCompleted",
       "backendType",
       "appCount",
+      "tokenStatus",
     ],
     bitcoin: [
       "version",
@@ -102,6 +103,12 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> =
       "hashesPerSec",
       "txIndexSynced",
       "txIndexHeight",
+      "tipAgeSec",
+      "forkTipsCount",
+      "pruned",
+      "warnings",
+      "zmqBlocksMissed",
+      "zmqStale",
     ],
     homebridge: [
       "hostname",
@@ -132,6 +139,9 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> =
       "dhtPeers",
       "pinnedCount",
       "listenAddrCount",
+      "storageMax",
+      "storageUsedPercent",
+      "providesTotal",
     ],
     macMini: [
       "host",
@@ -178,6 +188,9 @@ const BACKEND_STATS_KEYS: Partial<Record<ServiceKind, ReadonlyArray<string>>> =
       "activeTorrents",
       "recentErrors",
       "recentWarnings",
+      "torrentsNoWorkingTracker",
+      "categoryCount",
+      "peerConnections",
     ],
     raspberryPi: [
       "piModel",

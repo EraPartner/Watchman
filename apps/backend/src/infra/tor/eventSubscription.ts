@@ -278,5 +278,9 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
 }
 
 function escapePassword(password: string): string {
+  // a line break would end AUTHENTICATE and send the rest as another command
+  if (/[\r\n]/.test(password)) {
+    throw new UnauthorizedError('tor event password must not contain line breaks');
+  }
   return password.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }

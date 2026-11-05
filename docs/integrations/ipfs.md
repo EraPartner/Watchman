@@ -2,7 +2,7 @@
 title: IPFS Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -48,13 +48,15 @@ Configure via the Settings UI or `/config` API (`kind: "ipfs"`). Environment var
 | `instanceId`             | text    | yes      | `"main"`                  | no     | Unique identifier within this service kind        |
 | `enabled`                | boolean | —        | `true`                    | no     | Enables/disables polling                          |
 | `apiUrl`                 | url     | yes      | `"http://127.0.0.1:5001"` | no     | IPFS HTTP API base URL (Kubo default port 5001)   |
+| `apiAuth`                | password | —       | `""`                      | **yes** | Kubo `API.Authorizations` secret in `--api-auth` notation: `bearer:<token>` (or a bare token) → `Authorization: Bearer`, `basic:<user>:<pass>` → HTTP Basic. Empty = no header |
 | `cacheTtlMs`             | number  | —        | `10000`                   | no     | Response cache TTL in milliseconds                |
 | `timeoutMs`              | number  | —        | `5000`                    | no     | Per-request HTTP timeout in milliseconds          |
 | `pollPolicy.healthMs`    | number  | —        | `10000`                   | no     | Health check interval in milliseconds             |
 | `pollPolicy.statsMs`     | number  | —        | `30000`                   | no     | Stats poll interval in milliseconds               |
 | `pollPolicy.jitterRatio` | number  | —        | `0.1`                     | no     | Fractional jitter applied to poll intervals (0–1) |
 
-No secret fields.
+Secret fields: `apiAuth`. A `401`/`403` from Kubo is reported as `UnauthorizedError` (a secret
+is missing, wrong, or its `AllowedPaths` lack a path), not as the node being down.
 
 ## Endpoints
 
@@ -67,7 +69,8 @@ No authentication or rate-limiting (single-user trusted-network design — ADR-0
 
 ## RPC Transport
 
-All Kubo API calls are **POST-only** (Kubo ≥ 0.5 dropped GET support). The previous GET-with-405-fallback path and the `forcePost` config field have been removed. The service unconditionally uses `POST /api/v0/<method>`.
+All Kubo RPC calls are **POST-only** (Kubo ≥ 0.5 dropped GET support); the one `GET` is the
+Prometheus endpoint, which is not part of the RPC. The previous GET-with-405-fallback path and the `forcePost` config field have been removed. The service unconditionally uses `POST /api/v0/<method>`.
 
 ## Service Class
 
@@ -87,9 +90,10 @@ All Kubo API calls are **POST-only** (Kubo ≥ 0.5 dropped GET support). The pre
 | `/api/v0/version`                          | `version`                                                                                                                          | IPFS version string                                                                                                                 |
 | `/api/v0/id`                               | `nodeId`, `addressCount`                                                                                                           | Node ID and multiaddr count                                                                                                         |
 | `/api/v0/swarm/peers?format=json`          | `peers`                                                                                                                            | Connected peer count                                                                                                                |
-| `/api/v0/repo/stat?size-only=true` (every poll); `/api/v0/repo/stat` (slow lane, 10 min) | `repoSize`, `numObjects` | Repository size in bytes every poll; object count every 10 minutes, because counting walks the whole blockstore |
+| `/api/v0/repo/stat?size-only=true` (every poll); `/api/v0/repo/stat` (slow lane, 10 min) | `repoSize`, `storageMax`, `storageUsedPercent`, `numObjects` | Repository size in bytes every poll, against `Datastore.StorageMax` (`StorageMax`; null when missing or 0); object count every 10 minutes, because counting walks the whole blockstore |
+| `GET /debug/metrics/prometheus` | `memAllocMb`, `providesTotal` | Kubo's own Prometheus endpoint on the RPC port (GET, read-only). `go_memstats_alloc_bytes` → `memAllocMb`; `provider_reprovider_provide_count` + `provider_provides_total` (legacy and sweep provider) → `providesTotal`. Optional, null on failure. |
 | `/api/v0/stats/bw?format=json`             | `bwTotalIn`, `bwTotalOut`, `bwRateIn`, `bwRateOut`                                                                                 | Bandwidth totals and rates in bytes/sec                                                                                             |
-| `/api/v0/diag/sys`                         | `sysMemUsedMb`, `goroutines`, `numCPU` (`memAllocMb` legacy)                                                                       | `memory.virt` (host used memory, rounded MB; system-wide, not Kubo's own), `runtime.numgoroutines`, `runtime.numcpu`. `memAllocMb` reads a flat `MemoryAlloc` key Kubo does not emit, so it is null. Optional, null on failure. |
+| `/api/v0/diag/sys`                         | `sysMemUsedMb`, `goroutines`, `numCPU`                                                                                             | `memory.virt` (host used memory, rounded MB; system-wide, not Kubo's own), `runtime.numgoroutines`, `runtime.numcpu`. Optional, null on failure. (`memAllocMb` now comes from the Prometheus endpoint; a flat `MemoryAlloc` key here is only a fallback.) |
 | `/api/v0/stats/dht`                        | `dhtPeers`                                                                                                                         | **Slow lane (10-min ttlMemo).** Sum of `Buckets[].Peers` across all DHT routing tables (`wan`, `lan`). Parses NDJSON. Defaults to 0 on failure. Kubo marks this output unstable. |
 | `/api/v0/pin/ls?type=recursive&quiet=true` | `pinnedCount`                                                                                                                      | **Slow lane (10-min ttlMemo).** Count of recursively pinned content hashes. Optional, null on failure.                              |
 | `/api/v0/swarm/addrs/listen`               | `listenAddrCount`                                                                                                                  | Count of listen addresses (multiaddrs). Optional, null on failure.                                                                  |

@@ -73,6 +73,30 @@ describe('createTorControlClient', () => {
     await handle.close();
   });
 
+  it('refuses a password with a line break instead of sending a second command', async () => {
+    const received: string[] = [];
+    serverHandler = (socket) => {
+      socket.setEncoding('utf8');
+      socket.on('error', () => undefined);
+      let buf = '';
+      socket.on('data', (chunk: string) => {
+        buf += chunk;
+        while (buf.includes('\r\n')) {
+          const idx = buf.indexOf('\r\n');
+          received.push(buf.slice(0, idx));
+          buf = buf.slice(idx + 2);
+        }
+      });
+    };
+    const client = createTorControlClient();
+    await expect(
+      client.connect({ ...OPTS, port, password: 'x"\r\nSIGNAL SHUTDOWN' }, new AbortController().signal),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(received.some((l) => l.startsWith('SIGNAL'))).toBe(false);
+    expect(received.some((l) => l.startsWith('AUTHENTICATE'))).toBe(false);
+  });
+
   it('sends AUTHENTICATE without quotes when password is empty', async () => {
     const received: string[] = [];
     serverHandler = (socket) => {

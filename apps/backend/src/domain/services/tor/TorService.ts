@@ -3,6 +3,7 @@ import {
   type HealthResult,
   type HostHealth,
   type PollPolicy,
+  type StatsMetricValue,
   type StatsResult,
 } from "../../BaseService.js";
 import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
@@ -13,6 +14,10 @@ import {
   isDomainError,
 } from "../../../core/errors.js";
 import type { TorInstance } from "../../../config/services.js";
+import {
+  pickPrometheusPrefix,
+  sumPrometheusSamples,
+} from "../../../core/prometheusText.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 import type { TorControlClient } from "../../../infra/tor/controlClient.js";
 import type {
@@ -40,6 +45,9 @@ const BW_STALE_MS = 30 * 1000;
  * public service on every poll (10 s health + 30 s stats by default).
  */
 const ONIONOO_RELAY_TTL_MS = 10 * 60 * 1000;
+
+/** Tor WARN/ERR log events kept for the detail view (newest first). */
+const MAX_RECENT_TOR_WARNINGS = 10;
 
 export interface TorDeps {
   http: HttpClient;
@@ -91,6 +99,9 @@ export class TorService extends BaseService {
   private readonly controlPassword: string;
   private readonly cookieAuthFile: string;
   private readonly useControlPort: boolean;
+  private readonly metricsUrl: string;
+  /** Newest-first WARN/ERR log lines from the event subscription. */
+  private recentWarnings: string[] = [];
   private readonly timeoutMs: number;
   private readonly pingCount: number;
   private readonly now: () => number;
@@ -130,6 +141,7 @@ export class TorService extends BaseService {
     this.controlPassword = deps.config.controlPassword;
     this.cookieAuthFile = deps.config.cookieAuthFile;
     this.useControlPort = deps.config.useControlPort;
+    this.metricsUrl = deps.config.metricsUrl;
     this.timeoutMs = deps.config.timeoutMs;
     this.pingCount = deps.config.pingCount;
     this.now = deps.now;
@@ -159,8 +171,18 @@ export class TorService extends BaseService {
       this.bwWritten = parseInt(args[1] ?? "0", 10);
       this.lastBwAt = this.now();
     });
+    // Tor's own warnings (what Nyx shows in its log panel); read-only events
+    const onLog = (event: string, args: string[]): void => {
+      const line = `${event}: ${args.join(" ")}`.trim();
+      this.recentWarnings = [line, ...this.recentWarnings].slice(
+        0,
+        MAX_RECENT_TOR_WARNINGS
+      );
+    };
+    sub.on("WARN", onLog);
+    sub.on("ERR", onLog);
     try {
-      await sub.setevents(["BW"], this.subAbort.signal);
+      await sub.setevents(["BW", "WARN", "ERR"], this.subAbort.signal);
     } catch (e) {
       // the socket is open and authenticated; don't leak it
       await sub.close().catch(() => undefined);
@@ -224,9 +246,55 @@ export class TorService extends BaseService {
   }
 
   async getStats(signal: AbortSignal): Promise<StatsResult> {
-    if (!this.useControlPort) return this.getStatsOnionoo(signal);
-    if (this.isControlPortInCooldown()) return this.fallbackGetStats(signal);
-    return this.getStatsControlPort(signal);
+    const [result, metricsPort] = await Promise.all([
+      !this.useControlPort
+        ? this.getStatsOnionoo(signal)
+        : this.isControlPortInCooldown()
+          ? this.fallbackGetStats(signal)
+          : this.getStatsControlPort(signal),
+      this.readMetricsPort(signal),
+    ]);
+    if (!result.ok || metricsPort === null) return result;
+    return ok({
+      ...result.value,
+      metrics: { ...result.value.metrics, ...metricsPort },
+    });
+  }
+
+  /**
+   * Tor's MetricsPort (Prometheus text, counters only): the relay overload
+   * counters (tor_relay_load_*), summed over labels. Read-only GET; null when
+   * no metricsUrl is configured. A failure is reported, not fatal.
+   */
+  private async readMetricsPort(
+    signal: AbortSignal
+  ): Promise<Record<string, StatsMetricValue> | null> {
+    if (this.metricsUrl === "") return null;
+    try {
+      const res = await this.http.send({
+        url: this.metricsUrl,
+        method: "GET",
+        headers: { accept: "text/plain" },
+        signal,
+        timeoutMs: this.timeoutMs,
+      });
+      const text = await res.text();
+      if (res.status < 200 || res.status >= 300) {
+        return {
+          metricsPortError: `MetricsPort returned ${res.status}${res.status === 403 ? " (check MetricsPortPolicy)" : ""}`,
+        };
+      }
+      return {
+        metricsPortError: null,
+        overload: pickPrometheusPrefix(
+          sumPrometheusSamples(text),
+          "tor_relay_load_"
+        ),
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { metricsPortError: `MetricsPort unreachable: ${msg}` };
+    }
   }
 
   // ─── Fallback orchestration ────────────────────────────────────────────────
@@ -384,6 +452,26 @@ export class TorService extends BaseService {
         const identityInfo = await handle
           .getinfo(["fingerprint", "address"], signal)
           .catch(() => new Map<string, string>());
+        // status keys; each group separate so an older Tor or a client-only
+        // node that lacks one key can't blank the others
+        const statusInfo = await handle
+          .getinfo(["status/bootstrap-phase", "status/version/current"], signal)
+          .catch(() => new Map<string, string>());
+        const uptimeInfo = await handle
+          .getinfo(["uptime"], signal)
+          .catch(() => new Map<string, string>());
+        const reachInfo = await handle
+          .getinfo(
+            [
+              "status/reachability-succeeded/or",
+              "status/reachability-succeeded/dir",
+            ],
+            signal
+          )
+          .catch(() => new Map<string, string>());
+        const hibernateInfo = await handle
+          .getinfo(["accounting/hibernating"], signal)
+          .catch(() => new Map<string, string>());
 
         // own consensus entry (flags + bandwidth weight) and GeoIP country
         // come from the local node — no external Onionoo round-trip needed
@@ -459,6 +547,22 @@ export class TorService extends BaseService {
             ),
             accountingBytes: acctInfo.get("accounting/bytes") ?? "",
             accountingBytesLeft: acctInfo.get("accounting/bytes-left") ?? "",
+            // "awake" | "soft" | "hard"; null when accounting is off
+            hibernating: hibernateInfo.get("accounting/hibernating") ?? null,
+            bootstrapProgress: parseBootstrapProgress(
+              statusInfo.get("status/bootstrap-phase")
+            ),
+            // "recommended" | "obsolete" | "new" | "old" | "unrecommended" | …
+            versionStatus: statusInfo.get("status/version/current") ?? null,
+            uptimeSec: parseOptionalInt(uptimeInfo.get("uptime")),
+            // relay self-test: can the outside reach our ORPort / DirPort?
+            orPortReachable: parseFlag(
+              reachInfo.get("status/reachability-succeeded/or")
+            ),
+            dirPortReachable: parseFlag(
+              reachInfo.get("status/reachability-succeeded/dir")
+            ),
+            recentWarnings: [...this.recentWarnings],
             connections: {
               current: connectionsCurrent,
               total: connectionsTotal,
@@ -681,6 +785,25 @@ function counterDelta(current: number, last: number): number | null {
   if (last < 0) return 0;
   if (current < last) return null;
   return current - last;
+}
+
+/** PROGRESS=<n> from GETINFO status/bootstrap-phase; null when absent. */
+function parseBootstrapProgress(raw: string | undefined): number | null {
+  const m = raw?.match(/PROGRESS=(\d+)/);
+  return m?.[1] ? parseInt(m[1], 10) : null;
+}
+
+/** "1" → true, "0" → false, anything else (missing key) → null. */
+function parseFlag(raw: string | undefined): boolean | null {
+  if (raw === "1") return true;
+  if (raw === "0") return false;
+  return null;
+}
+
+function parseOptionalInt(raw: string | undefined): number | null {
+  if (raw === undefined) return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 function parseIntMetric(value: string | undefined): number {

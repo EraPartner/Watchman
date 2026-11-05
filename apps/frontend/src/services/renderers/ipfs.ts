@@ -1,6 +1,6 @@
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
-import { fmtBytes, fmtNumber, fmtRaw } from "./formatters";
+import { fmtBytes, fmtNumber, fmtPercent, fmtRaw } from "./formatters";
 
 type Stats = Record<string, unknown>;
 
@@ -36,6 +36,9 @@ export const ipfsRenderer: ServiceRenderer<Stats> = {
       metrics: [
         { key: "repoSize", label: "Size", format: fmtBytes },
         { key: "numObjects", label: "Objects", format: fmtNumber(0) },
+        { key: "storageMax", label: "StorageMax", format: fmtBytes },
+        { key: "storageUsedPercent", label: "Used", format: fmtPercent(1) },
+        { key: "providesTotal", label: "DHT provides", format: fmtNumber(0) },
       ],
     },
     {
@@ -61,7 +64,12 @@ export const ipfsRenderer: ServiceRenderer<Stats> = {
     { metric: "repoSize", label: "Repo size", kind: "area", format: fmtBytes },
     { metric: "bwRateIn", label: "BW in", kind: "area", format: fmtBytes },
     { metric: "bwRateOut", label: "BW out", kind: "area", format: fmtBytes },
-    { metric: "numObjects", label: "Objects", kind: "area", format: fmtNumber(0) },
+    {
+      metric: "numObjects",
+      label: "Objects",
+      kind: "area",
+      format: fmtNumber(0),
+    },
   ],
 
   tone: ({ health }) => {

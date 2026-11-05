@@ -101,8 +101,16 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
         required: true,
         default: "http://127.0.0.1:5001",
       },
+      {
+        name: "apiAuth",
+        label: "API auth",
+        type: "password",
+        secret: true,
+        placeholder: "bearer:<token>",
+        help: "Only for a node with API.Authorizations: the AuthSecret, e.g. bearer:<token> or basic:<user>:<password>. Limit its AllowedPaths to the read endpoints Watchman uses (see the IPFS setup guide).",
+      },
     ]),
-    secretFields: [],
+    secretFields: ["apiAuth"],
   },
   router: {
     kind: "router",
@@ -289,6 +297,13 @@ export const KIND_META: Record<ServiceKind, KindMeta> = {
         type: "text",
         placeholder: "/var/lib/tor/control_auth_cookie",
         help: "Path to Tor control_auth_cookie. Takes precedence over password when set.",
+      },
+      {
+        name: "metricsUrl",
+        label: "MetricsPort URL",
+        type: "url",
+        placeholder: "http://127.0.0.1:9035/metrics",
+        help: "Optional. Tor's read-only MetricsPort (torrc: MetricsPort + MetricsPortPolicy accept <Watchman IP>). Adds the relay overload counters.",
       },
       {
         name: "pingCount",

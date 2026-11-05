@@ -25,6 +25,13 @@ dependency audit, and documentation aligned with the code.
 
 ### Added
 
+- Crypto/p2p monitoring (read-only): Bitcoin tip age, node warnings, pruning, reachable
+  networks, chain-tip/fork summary and locked memory (`getchaintips`/`getmemoryinfo` in their own
+  slow batch), ZMQ missed-message counts and a "silent subscription" flag; Tor bootstrap,
+  ORPort/DirPort reachability, uptime, hibernation, version status, WARN/ERR log lines and
+  optional MetricsPort overload counters; IPFS StorageMax headroom and DHT provide count from
+  Kubo's Prometheus endpoint; qBittorrent torrents without a working tracker, category count and
+  peer connections; Alby Hub `tokenStatus`.
 - Service setup guides (`docs/guides/service-setup/`): for each of the 13
   service kinds, what to enable on the service, which least-privilege
   (read-only where possible) credentials to create, and how to add it in
@@ -70,6 +77,10 @@ dependency audit, and documentation aligned with the code.
 
 ### Fixed
 
+- IPFS `memAllocMb` was always null (Kubo's `diag/sys` has no `MemoryAlloc`); it now reads
+  `go_memstats_alloc_bytes` from Kubo's Prometheus endpoint.
+- An expired or revoked Alby Hub token no longer just blanks the wallet numbers: stats say
+  `tokenStatus: rejected` and the tile turns amber.
 - Service flow bug pass (2026-10-28), backend: Bitcoin subscribes to `rawtx`
   when `zmqRawtxEndpoint` is set (the field had no effect) and reports
   `zmqTxCount`, `zmqRawtxConnected` and `zmqRawtxError`, sharing one socket
@@ -254,6 +265,11 @@ dependency audit, and documentation aligned with the code.
 
 ### Security
 
+- IPFS: optional `apiAuth` secret for Kubo `API.Authorizations`, so the RPC no longer has to
+  stay open with full admin rights; 401/403 are reported as auth errors.
+- Tor: a control password containing a line break is rejected (schema and client) instead of
+  letting the rest run as a second control command. The setup guide documents onion-grater
+  (whitelisting control-port filter) and the read-only MetricsPort.
 - Adopted a documented **trusted-network, single-user** security model — no auth,
   CSRF, or rate limiting by design (see ADR-017 / ADR-025 and `SECURITY.md`).
 - Patched Dependabot-flagged dependencies across both lockfiles.

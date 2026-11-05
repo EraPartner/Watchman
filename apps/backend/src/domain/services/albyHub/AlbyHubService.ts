@@ -282,6 +282,20 @@ export class AlbyHubService extends BaseService {
         )
       );
 
+      // An expired token (tokenExpiryDays), a changed unlock password or a
+      // wrong token all answer 401/403 on the JWT endpoints; say so instead
+      // of only nulling the wallet numbers
+      const walletResponses = [appsRes, balancesRes, channelsRes].filter(
+        (r): r is HttpResponse => r !== null
+      );
+      const tokenStatus: "none" | "ok" | "rejected" | "unknown" = !wantWallet
+        ? "none"
+        : walletResponses.some((r) => r.status === 401 || r.status === 403)
+          ? "rejected"
+          : walletResponses.some((r) => r.status >= 200 && r.status < 300)
+            ? "ok"
+            : "unknown";
+
       const reachable =
         infoRes !== null && infoRes.status >= 200 && infoRes.status < 300;
       const info =
@@ -341,6 +355,13 @@ export class AlbyHubService extends BaseService {
           setupCompleted: info?.setupCompleted ?? null,
           backendType: info?.backendType ?? null,
           appCount,
+          tokenStatus,
+          ...(tokenStatus === "rejected"
+            ? {
+                warning:
+                  "albyHub: token rejected (expired, revoked or wrong); create a new read-only token",
+              }
+            : {}),
           balanceLightningSpendableMsat:
             balances?.lightning?.totalSpendableMsat ??
             balances?.lightning?.totalSpendable ??
@@ -367,8 +388,7 @@ export class AlbyHubService extends BaseService {
             : null,
           channelRemoteBalanceMsat: channels
             ? channels.reduce(
-                (sum, c) =>
-                  sum + (c.remoteBalanceMsat ?? c.remoteBalance ?? 0),
+                (sum, c) => sum + (c.remoteBalanceMsat ?? c.remoteBalance ?? 0),
                 0
               )
             : null,

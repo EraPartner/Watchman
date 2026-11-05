@@ -1,5 +1,5 @@
 import type { ServiceRenderer } from "./types";
-import { dotGet, fmtBytes, fmtNumber, fmtRaw } from "./formatters";
+import { dotGet, fmtBytes, fmtNumber, fmtRaw, fmtUptime } from "./formatters";
 
 type Stats = Record<string, unknown>;
 
@@ -57,6 +57,12 @@ export const torRenderer: ServiceRenderer<Stats> = {
         { key: "circuits.active", label: "Circuits built", format: fmtNumber(0) },
         { key: "connections.current", label: "OR connections", format: fmtNumber(0) },
         { key: "dormant", label: "Dormant", format: fmtRaw },
+        { key: "bootstrapProgress", label: "Bootstrap %", format: fmtNumber(0) },
+        { key: "orPortReachable", label: "ORPort reachable", format: fmtRaw },
+        { key: "dirPortReachable", label: "DirPort reachable", format: fmtRaw },
+        { key: "uptimeSec", label: "Uptime", format: fmtUptime },
+        { key: "versionStatus", label: "Version status", format: fmtRaw },
+        { key: "metricsPortError", label: "MetricsPort", format: fmtRaw },
       ],
     },
     {
@@ -87,6 +93,10 @@ export const torRenderer: ServiceRenderer<Stats> = {
     if (health?.status === "warning") return "warn";
     if (stats && dotGet(stats, "running") === false) return "crit";
     if (stats && dotGet(stats, "hibernating") === true) return "warn";
+    // ControlPort mode: soft/hard accounting hibernation, failed self-test
+    const hib = stats ? dotGet(stats, "hibernating") : undefined;
+    if (hib === "soft" || hib === "hard") return "warn";
+    if (stats && dotGet(stats, "orPortReachable") === false) return "warn";
     return "ok";
   },
 };

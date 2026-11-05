@@ -64,6 +64,8 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
         },
         { key: "backendType", label: "Backend", format: fmtRaw },
         { key: "appCount", label: "Apps", format: fmtNumber(0) },
+        // "rejected" = the token expired or was revoked: create a new one
+        { key: "tokenStatus", label: "Token", format: fmtRaw },
       ],
     },
     {
@@ -111,6 +113,8 @@ export const albyHubRenderer: ServiceRenderer<Stats> = {
     if (stats && dotGet(stats, "reachable") === false) return "crit";
     // hub answers but its node is locked or still starting
     if (stats && dotGet(stats, "running") === false) return "warn";
+    // wallet numbers are gone because the token expired or was revoked
+    if (stats && dotGet(stats, "tokenStatus") === "rejected") return "warn";
     return "ok";
   },
 };

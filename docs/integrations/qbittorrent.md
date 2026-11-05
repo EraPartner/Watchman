@@ -2,7 +2,7 @@
 title: qBittorrent Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -97,6 +97,8 @@ Steady-state polling therefore requires only **2 outbound requests per cycle**: 
 | `torrentsPaused`      | number        | Count of paused/stopped torrents (`pausedDL`, `pausedUP`, `stoppedDL`, `stoppedUP`)                     |
 | `torrentsCompleted`   | number        | Count of torrents at 100% progress or in any seeding state                                              |
 | `torrentsError`       | number        | Count of torrents in error/missingFiles state                                                           |
+| `torrentsNoWorkingTracker` | number   | Downloading/seeding torrents whose maindata `tracker` is `""` (no tracker working, or none at all), so they can only find peers via DHT/PeX |
+| `categoryCount`       | number        | Categories, kept from maindata `categories` / `categories_removed`                                      |
 | `dlSpeed`             | number        | Current download speed (bytes/s)                                                                        |
 | `upSpeed`             | number        | Current upload speed (bytes/s)                                                                          |
 | `dlData`              | number        | All-time total downloaded bytes (`alltime_dl`; falls back to session `dl_info_data`)                    |
@@ -106,6 +108,9 @@ Steady-state polling therefore requires only **2 outbound requests per cycle**: 
 | `listenPort`          | number        | Listening port                                                                                          |
 | `dhtNodes`            | number        | Number of DHT nodes                                                                                     |
 | `freeSpaceOnDisk`     | number        | Free disk space (bytes)                                                                                 |
+| `peerConnections`     | number \| null | `server_state.total_peer_connections`                                                                   |
+| `queuedIoJobs`        | number \| null | `server_state.queued_io_jobs` (disk backlog)                                                            |
+| `altSpeedLimits`      | bool \| null   | `server_state.use_alt_speed_limits`                                                                     |
 | `activeTorrents`      | TorrentInfo[] | Top 20 torrents by combined dl+ul speed                                                                 |
 | `recentErrors`        | string[]      | Newest 20 critical log messages, newest first (kept across polls)                                       |
 | `recentWarnings`      | string[]      | Newest 20 warning log messages, newest first (kept across polls)                                        |

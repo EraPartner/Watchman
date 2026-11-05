@@ -23,6 +23,24 @@ let state: { status: number; payload: unknown; lastSearch: string | null };
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://localhost");
+  if (url.pathname === "/metrics") {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end(
+      [
+        "# TYPE tor_relay_load_tcp_exhaustion_total counter",
+        "tor_relay_load_tcp_exhaustion_total 0",
+        'tor_relay_load_onionskins_total{type="ntor",action="dropped"} 4',
+        'tor_relay_load_onionskins_total{type="ntor",action="processed"} 6',
+        "tor_relay_connections_total 99",
+      ].join("\n")
+    );
+    return;
+  }
+  if (url.pathname === "/metrics-denied") {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
   if (url.pathname === "/details") {
     state.lastSearch = url.searchParams.get("search");
     res.writeHead(state.status, { "content-type": "application/json" });
@@ -82,6 +100,10 @@ beforeEach(() => {
   };
 });
 
+/** getinfo round trips per ControlPort stats poll when the node has no
+ *  fingerprint/address (so ns/id and ip-to-country are skipped). */
+const GETINFO_CALLS_PER_POLL = 8;
+
 function makeConfig(overrides: Partial<TorInstance> = {}): TorInstance {
   return {
     kind: "tor",
@@ -98,6 +120,7 @@ function makeConfig(overrides: Partial<TorInstance> = {}): TorInstance {
     controlPassword: "",
     cookieAuthFile: "",
     useControlPort: false,
+    metricsUrl: "",
     ...overrides,
   };
 }
@@ -307,9 +330,7 @@ describe("TorService", () => {
 
   it("matches a relay by fingerprint (with or without $)", async () => {
     state.payload = {
-      relays: [
-        { nickname: "Other", fingerprint: "ABCDEF0123", running: true },
-      ],
+      relays: [{ nickname: "Other", fingerprint: "ABCDEF0123", running: true }],
     };
     const svc = new TorService({
       http: createHttpClient(),
@@ -694,19 +715,17 @@ describe("TorService", () => {
         ["traffic/read", "4000"],
         ["traffic/written", "2500"],
       ]);
-      // Each getStatsControlPort does 4 getinfo calls (core, accounting,
-      // orconn/circuit listings, relay identity — ns/country are skipped when
-      // identity is empty).
-      const torControl = sequenceTorControl([
-        poll1,
-        new Map(),
-        new Map(),
-        new Map(),
-        poll2,
-        new Map(),
-        new Map(),
-        new Map(),
-      ]);
+      // Each getStatsControlPort does 8 getinfo calls (core, accounting,
+      // orconn/circuit listings, relay identity, status, uptime,
+      // reachability, hibernation — ns/country are skipped when identity is
+      // empty).
+      const empty = (): Map<string, string> => new Map();
+      const torControl = sequenceTorControl(
+        [poll1, poll2].flatMap((core) => [
+          core,
+          ...Array.from({ length: GETINFO_CALLS_PER_POLL - 1 }, empty),
+        ])
+      );
       const svc = new TorService({
         http: createHttpClient(),
         ping: fakePing(),
@@ -740,9 +759,7 @@ describe("TorService", () => {
       const torControl = sequenceTorControl(
         [before, afterRestart, later].flatMap((core) => [
           core,
-          empty(),
-          empty(),
-          empty(),
+          ...Array.from({ length: GETINFO_CALLS_PER_POLL - 1 }, empty),
         ])
       );
       const svc = new TorService({
@@ -1072,6 +1089,139 @@ describe("TorService", () => {
       });
       const res = await svc.getStats(new AbortController().signal);
       expect(res.ok).toBe(true); // enrichment failure is non-fatal
+    });
+  });
+
+  describe("relay status, log events and MetricsPort", () => {
+    it("getStats reports bootstrap, version status, uptime, reachability and hibernation", async () => {
+      const info = new Map([
+        ["traffic/read", "1"],
+        ["traffic/written", "1"],
+        [
+          "status/bootstrap-phase",
+          'NOTICE BOOTSTRAP PROGRESS=100 TAG=done SUMMARY="Done"',
+        ],
+        ["status/version/current", "recommended"],
+        ["uptime", "3600"],
+        ["status/reachability-succeeded/or", "1"],
+        ["status/reachability-succeeded/dir", "0"],
+        ["accounting/hibernating", "awake"],
+      ]);
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(info),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 1,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics).toMatchObject({
+          bootstrapProgress: 100,
+          versionStatus: "recommended",
+          uptimeSec: 3600,
+          orPortReachable: true,
+          dirPortReachable: false,
+          hibernating: "awake",
+        });
+      }
+    });
+
+    it("status keys a node does not know come back as null", async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(new Map()),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 1,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics).toMatchObject({
+          bootstrapProgress: null,
+          versionStatus: null,
+          uptimeSec: null,
+          orPortReachable: null,
+          dirPortReachable: null,
+          hibernating: null,
+        });
+      }
+    });
+
+    it("subscribes to WARN/ERR and lists the newest log lines first", async () => {
+      const sub = makeFakeSub();
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        eventSubscriptionFactory: makeFakeSubFactory(sub),
+        config: makeConfig({ useControlPort: true }),
+        now: () => 0,
+      });
+      await svc.onStart?.();
+      expect(sub.lastSetevents).toEqual(["BW", "WARN", "ERR"]);
+      sub.fire("WARN", ["Your", "clock", "is", "skewed"]);
+      sub.fire("ERR", ["Could", "not", "bind"]);
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.recentWarnings).toEqual([
+          "ERR: Could not bind",
+          "WARN: Your clock is skewed",
+        ]);
+      }
+    });
+
+    it("reads relay overload counters from the MetricsPort when configured", async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig({ metricsUrl: `http://127.0.0.1:${port}/metrics` }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.metricsPortError).toBeNull();
+        expect(res.value.metrics.overload).toEqual({
+          tor_relay_load_tcp_exhaustion_total: 0,
+          tor_relay_load_onionskins_total: 10,
+        });
+      }
+    });
+
+    it("a refused MetricsPort is reported without failing the stats", async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig({
+          metricsUrl: `http://127.0.0.1:${port}/metrics-denied`,
+        }),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value.metrics.metricsPortError).toContain("403");
+        expect(res.value.metrics.nickname).toBe("MyRelay");
+      }
+    });
+
+    it("no metricsUrl means no MetricsPort keys", async () => {
+      const svc = new TorService({
+        http: createHttpClient(),
+        ping: fakePing(),
+        torControl: fakeTorControl(),
+        config: makeConfig(),
+        now: () => 0,
+      });
+      const res = await svc.getStats(new AbortController().signal);
+      expect(res.ok).toBe(true);
+      if (res.ok) expect("metricsPortError" in res.value.metrics).toBe(false);
     });
   });
 });

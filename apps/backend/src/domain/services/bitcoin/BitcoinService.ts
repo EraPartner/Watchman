@@ -8,6 +8,7 @@ import { withHostPing } from "../../health.js";
 import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
 import { ok, err } from "../../../core/result.js";
 import { withTimeout } from "../../../core/abort.js";
+import { ttlMemo, type TtlMemo } from "../../../core/ttlMemo.js";
 import {
   UnavailableError,
   UnauthorizedError,
@@ -43,6 +44,30 @@ interface BlockchainInfo {
   verificationprogress?: number;
   initialblockdownload?: boolean;
   size_on_disk?: number;
+  /** tip block timestamp, seconds (newer Core) */
+  time?: number;
+  /** median time past of the tip, seconds */
+  mediantime?: number;
+  pruned?: boolean;
+  pruneheight?: number;
+  /** string on older Core, string[] on newer */
+  warnings?: string | string[];
+}
+
+interface ChainTip {
+  height?: number;
+  branchlen?: number;
+  status?: string;
+}
+
+interface MemoryInfo {
+  locked?: { used?: number; total?: number };
+}
+
+/** Slow-lane extras, fetched in their own batch (see EXTRAS_TTL_MS). */
+interface BitcoinExtras {
+  chainTips: ChainTip[] | null;
+  memory: MemoryInfo | null;
 }
 
 interface NetworkInfo {
@@ -52,6 +77,8 @@ interface NetworkInfo {
   connections?: number;
   connections_in?: number;
   connections_out?: number;
+  networks?: Array<{ name?: string; reachable?: boolean }>;
+  warnings?: string | string[];
 }
 
 interface MempoolInfo {
@@ -78,6 +105,20 @@ interface IndexInfo {
     best_block_height?: number;
   };
 }
+
+/**
+ * getchaintips and getmemoryinfo change slowly and are not part of the core
+ * batch: with rpcwhitelist a node rejects a whole batch when one method is
+ * not allowed, so these ride a separate batch whose failure only blanks them.
+ */
+const EXTRAS_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * After the RPC tip advanced, ZMQ has this long to deliver the matching
+ * hashblock before the subscription is reported stale (ZMQ connect() never
+ * fails for an endpoint nobody publishes on, so silence is the only signal).
+ */
+const ZMQ_STALE_GRACE_MS = 2 * 60 * 1000;
 
 export class BitcoinService extends BaseService {
   readonly kind = "bitcoin";
@@ -117,6 +158,19 @@ export class BitcoinService extends BaseService {
   private zmqEndpointMatch: boolean | null = null;
   /** pubhashblock endpoint(s) the node reports, comma-joined ('' = none). */
   private zmqServerHashblockEndpoint = "";
+  /** Last ZMQ sequence number per topic (Core numbers each topic 0,1,2,…). */
+  private readonly zmqLastSeq = new Map<string, number>();
+  /** Messages missed per topic, from gaps in the sequence numbers. */
+  private readonly zmqMissed = new Map<string, number>();
+  /** RPC block height seen at the previous stats poll. */
+  private lastRpcHeight: number | null = null;
+  /** zmqBlockCount when the RPC height last changed. */
+  private zmqCountAtHeight = 0;
+  /** When the RPC tip advanced without a ZMQ hashblock (null = in step). */
+  private zmqBehindSince: number | null = null;
+  private readonly extrasMemo: TtlMemo<BitcoinExtras>;
+  /** Why the slow-lane extras batch failed (null = fine / not tried). */
+  private extrasError: string | null = null;
 
   constructor(deps: BitcoinDeps) {
     super();
@@ -137,6 +191,59 @@ export class BitcoinService extends BaseService {
       ).toString("base64");
       this.authHeader = `Basic ${token}`;
     }
+    this.extrasMemo = ttlMemo(EXTRAS_TTL_MS, deps.now, (signal) =>
+      this.fetchExtras(signal)
+    );
+  }
+
+  private async fetchExtras(signal: AbortSignal): Promise<BitcoinExtras> {
+    const {
+      results: [tipsRaw, memRaw],
+    } = await this.rpcBatch(
+      [{ method: "getchaintips" }, { method: "getmemoryinfo" }],
+      signal
+    );
+    return {
+      chainTips: Array.isArray(tipsRaw) ? (tipsRaw as ChainTip[]) : null,
+      memory:
+        memRaw && typeof memRaw === "object" ? (memRaw as MemoryInfo) : null,
+    };
+  }
+
+  /** Count messages lost between two ZMQ sequence numbers of one topic. */
+  private trackZmqSequence(topic: string, seq: number): void {
+    const last = this.zmqLastSeq.get(topic);
+    this.zmqLastSeq.set(topic, seq);
+    // a lower or equal number means the node restarted (or wrapped at 2^32):
+    // new baseline, nothing counted
+    if (last === undefined || seq <= last) return;
+    const missed = seq - last - 1;
+    if (missed > 0) {
+      this.zmqMissed.set(topic, (this.zmqMissed.get(topic) ?? 0) + missed);
+    }
+  }
+
+  /** Update the "RPC tip moved but ZMQ said nothing" tracker. */
+  private trackZmqAgainstRpc(height: number): boolean {
+    const now = this.now();
+    if (this.zmqBlockCount > this.zmqCountAtHeight) {
+      this.zmqBehindSince = null;
+    }
+    if (this.lastRpcHeight !== null && height > this.lastRpcHeight) {
+      if (this.zmqBlockCount > this.zmqCountAtHeight) {
+        this.zmqBehindSince = null;
+      } else {
+        this.zmqBehindSince ??= now;
+      }
+      this.zmqCountAtHeight = this.zmqBlockCount;
+    } else if (this.zmqBlockCount > this.zmqCountAtHeight) {
+      this.zmqCountAtHeight = this.zmqBlockCount;
+    }
+    this.lastRpcHeight = height;
+    return (
+      this.zmqBehindSince !== null &&
+      now - this.zmqBehindSince > ZMQ_STALE_GRACE_MS
+    );
   }
 
   override async onStart(): Promise<void> {
@@ -186,6 +293,7 @@ export class BitcoinService extends BaseService {
         this.zmqRawtxError = null;
       }
       handle.onMessage((msg) => {
+        this.trackZmqSequence(msg.topic, msg.sequence);
         if (msg.topic === "hashblock") {
           this.lastBlockHashZmq = msg.data.toString("hex");
           this.lastBlockAtZmq = this.now();
@@ -344,6 +452,28 @@ export class BitcoinService extends BaseService {
         );
       }
       const uptime = typeof uptimeRaw === "number" ? uptimeRaw : 0;
+      const extras = await this.extrasMemo(signal).then(
+        (v) => {
+          this.extrasError = null;
+          return v;
+        },
+        (e: unknown): BitcoinExtras | null => {
+          this.extrasError = e instanceof Error ? e.message : String(e);
+          return null;
+        }
+      );
+      const tipTime = chain.time ?? chain.mediantime;
+      const tipAgeSec =
+        typeof tipTime === "number"
+          ? Math.max(0, Math.round(this.now() / 1000 - tipTime))
+          : null;
+      const tips = extras?.chainTips ?? null;
+      const forkTips = tips
+        ? tips.filter((t) => t.status !== undefined && t.status !== "active")
+        : null;
+      const zmqStale = this.zmqHashblockEndpoint
+        ? this.trackZmqAgainstRpc(chain.blocks ?? 0)
+        : false;
       const netTotals = netTotalsRaw as NetTotals | null;
       const miningInfo = miningRaw as MiningInfo | null;
       const indexInfo = indexRaw as IndexInfo | null;
@@ -362,6 +492,27 @@ export class BitcoinService extends BaseService {
           verificationProgress: chain.verificationprogress ?? 0,
           initialBlockDownload: Boolean(chain.initialblockdownload),
           blockchainSize: chain.size_on_disk ?? 0,
+          // seconds since the tip block's timestamp: the "is my node stuck"
+          // signal (block timestamps can be off by up to ~2 h, so treat as rough)
+          tipAgeSec,
+          pruned: Boolean(chain.pruned),
+          pruneHeight: chain.pruned ? (chain.pruneheight ?? null) : null,
+          // the node's own warnings (e.g. unknown new rules, clock, disk)
+          warnings: collectWarnings(chain.warnings, net.warnings),
+          reachableNetworks: Array.isArray(net.networks)
+            ? net.networks
+                .filter((n) => n.reachable === true && n.name)
+                .map((n) => n.name as string)
+            : [],
+          // slow lane: null when the extras batch failed (see extrasError)
+          chainTipsCount: tips ? tips.length : null,
+          forkTipsCount: forkTips ? forkTips.length : null,
+          longestForkLength: forkTips
+            ? forkTips.reduce((m, t) => Math.max(m, t.branchlen ?? 0), 0)
+            : null,
+          memoryLockedUsed: extras?.memory?.locked?.used ?? null,
+          memoryLockedTotal: extras?.memory?.locked?.total ?? null,
+          extrasError: this.extrasError,
           // getblockchaininfo has no networkhashps; getmininginfo does
           networkHashPs: miningInfo?.networkhashps ?? 0,
           mempoolSize: mempool.size ?? 0,
@@ -391,6 +542,10 @@ export class BitcoinService extends BaseService {
                 zmqError: this.zmqError,
                 zmqEndpointMatch: this.zmqEndpointMatch,
                 zmqServerHashblockEndpoint: this.zmqServerHashblockEndpoint,
+                zmqBlocksMissed: this.zmqMissed.get("hashblock") ?? 0,
+                // RPC saw a new block over ZMQ_STALE_GRACE_MS ago and no
+                // hashblock arrived: the subscription is up but silent
+                zmqStale,
               }
             : {}),
           // ZMQ rawtx count since start (null when zmqRawtxEndpoint is unset)
@@ -399,6 +554,7 @@ export class BitcoinService extends BaseService {
             ? {
                 zmqRawtxConnected: this.zmqRawtxHandle !== null,
                 zmqRawtxError: this.zmqRawtxError,
+                zmqTxMissed: this.zmqMissed.get("rawtx") ?? 0,
               }
             : {}),
         },
@@ -559,6 +715,20 @@ function toSatPerVb(feeResult: unknown): number | null {
   const feerate = (feeResult as { feerate?: unknown }).feerate;
   if (typeof feerate !== "number" || !Number.isFinite(feerate)) return null;
   return Math.round(feerate * 100_000 * 10) / 10;
+}
+
+function collectWarnings(
+  ...sources: Array<string | string[] | undefined>
+): string[] {
+  const out: string[] = [];
+  for (const src of sources) {
+    const list = Array.isArray(src) ? src : src ? [src] : [];
+    for (const w of list) {
+      const text = typeof w === "string" ? w.trim() : "";
+      if (text !== "" && !out.includes(text)) out.push(text);
+    }
+  }
+  return out;
 }
 
 function endpointPort(endpoint: string): string {

@@ -350,5 +350,9 @@ function parseGetInfoLines(lines: string[]): Map<string, string> {
 }
 
 function escapePassword(password: string): string {
+  // a line break would end AUTHENTICATE and send the rest as another command
+  if (/[\r\n]/.test(password)) {
+    throw new UnauthorizedError('tor control password must not contain line breaks');
+  }
   return password.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
