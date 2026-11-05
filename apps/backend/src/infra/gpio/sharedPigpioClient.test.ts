@@ -25,7 +25,7 @@ const REQ = { host: "pi.local", port: 8888, timeoutMs: 1000 };
 describe("createSharedPigpioClient", () => {
   it("reuses one underlying connection across connect() calls", async () => {
     const connect = vi.fn(() => Promise.resolve(fakeHandle()));
-    const client = createSharedPigpioClient({ connect } as PigpioClient);
+    const client = createSharedPigpioClient({ connect });
 
     const a = await client.connect(REQ);
     const b = await client.connect(REQ);
@@ -43,7 +43,7 @@ describe("createSharedPigpioClient", () => {
     });
     const client = createSharedPigpioClient({
       connect: () => Promise.resolve(inner),
-    } as PigpioClient);
+    });
     const h = await client.connect(REQ);
     expect("write" in h).toBe(false);
     expect("setMode" in h).toBe(false);
@@ -52,7 +52,7 @@ describe("createSharedPigpioClient", () => {
   it("end() on a handed-out handle does not close the shared connection", async () => {
     const inner = fakeHandle();
     const connect = vi.fn(() => Promise.resolve(inner));
-    const client = createSharedPigpioClient({ connect } as PigpioClient);
+    const client = createSharedPigpioClient({ connect });
 
     const h = await client.connect(REQ);
     await h.end();
@@ -74,7 +74,7 @@ describe("createSharedPigpioClient", () => {
       .mockResolvedValueOnce(good);
     const client = createSharedPigpioClient({
       connect,
-    } as unknown as PigpioClient);
+    });
 
     const h = await client.connect(REQ);
     await expect(h.getCurrentTick()).rejects.toThrow("broken pipe");
@@ -89,7 +89,7 @@ describe("createSharedPigpioClient", () => {
       .mockResolvedValueOnce(fakeHandle());
     const client = createSharedPigpioClient({
       connect,
-    } as unknown as PigpioClient);
+    });
 
     await expect(client.connect(REQ)).rejects.toThrow("refused");
     const h = await client.connect(REQ);
@@ -100,7 +100,7 @@ describe("createSharedPigpioClient", () => {
     const inner = fakeHandle();
     const client = createSharedPigpioClient({
       connect: () => Promise.resolve(inner),
-    } as PigpioClient);
+    });
     await client.connect(REQ);
     await client.close();
     expect(inner.ended()).toBe(true);

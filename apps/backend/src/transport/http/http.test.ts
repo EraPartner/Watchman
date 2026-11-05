@@ -95,7 +95,7 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/services" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { data: Array<{ id: string }> };
+    const body = res.json<{ data: Array<{ id: string }> }>();
     expect(body.data).toHaveLength(2);
     await app.close();
   });
@@ -106,9 +106,9 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/services" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ result: { ok: boolean; error?: unknown } }>;
-    };
+    }>();
     expect(required(body.data[0]).result).toEqual({
       ok: false,
       error: { code: "UNAVAILABLE", message: "down" },
@@ -137,7 +137,7 @@ describe("http routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(
-      (res.json() as { data: { metrics: { count: number } } }).data.metrics
+      res.json<{ data: { metrics: { count: number } } }>().data.metrics
         .count
     ).toBe(42);
     await app.close();
@@ -200,7 +200,7 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/instances" });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(2);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(2);
     await app.close();
   });
 
@@ -210,7 +210,7 @@ describe("http routes", () => {
     r.register(new FakeSvc("ipfs", "main"));
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/instances/ipfs" });
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(1);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(1);
     await app.close();
   });
 
@@ -218,10 +218,10 @@ describe("http routes", () => {
     const app = await makeApp(new ServiceRegistry());
     const res = await app.inject({ method: "GET", url: "/metrics" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       breakers: unknown;
       process: { uptimeSec: number };
-    };
+    }>();
     expect(body.breakers).toBeDefined();
     expect(body.process.uptimeSec).toBeGreaterThanOrEqual(0);
     await app.close();
@@ -239,7 +239,7 @@ describe("http routes", () => {
     const app = await makeApp(new ServiceRegistry());
     const res = await app.inject({ method: "GET", url: "/meta/version" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { version: string; node: string };
+    const body = res.json<{ version: string; node: string }>();
     expect(body.node).toMatch(/^v\d+/);
     // Regression: was npm_package_version, so "dev" outside npm scripts.
     expect(body.version).toBe(SERVER_VERSION);
@@ -253,7 +253,7 @@ describe("http routes", () => {
     const app = await makeApp(r);
     const res = await app.inject({ method: "GET", url: "/kinds" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { data: string[] };
+    const body = res.json<{ data: string[] }>();
     expect(body.data).toContain("bitcoin");
     expect(body.data).toContain("ipfs");
     await app.close();

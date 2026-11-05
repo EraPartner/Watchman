@@ -627,7 +627,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       expect(sub.lastSetevents).toContain("BW");
     });
 
@@ -641,8 +641,8 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await svc.onStart?.();
-      await svc.onStop?.();
+      await svc.onStart();
+      await svc.onStop();
       expect(sub.wasClosed).toBe(true);
     });
 
@@ -656,7 +656,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 7,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       sub.fire("BW", ["2048", "1024"]);
       const res = await svc.getStats(new AbortController().signal);
       expect(res.ok).toBe(true);
@@ -678,7 +678,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 7,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       sub.fire("BW", ["1024", "4096"]);
       const res = await svc.getStats(new AbortController().signal);
       expect(res.ok).toBe(true);
@@ -697,7 +697,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => t,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       sub.fire("BW", ["2048", "1024"]);
       t = 60_000;
       const res = await svc.getStats(new AbortController().signal);
@@ -727,7 +727,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await expect(svc.onStart?.()).rejects.toThrow();
+      await expect(svc.onStart()).rejects.toThrow();
       await svc.getStats(new AbortController().signal);
       // resubscribe runs in the background
       await new Promise((r) => setTimeout(r, 0));
@@ -736,7 +736,7 @@ describe("TorService", () => {
       sub.fire("BW", ["10", "20"]);
       const res = await svc.getStats(new AbortController().signal);
       if (res.ok) expect(res.value.metrics.bwRead).toBe(10);
-      await svc.onStop?.();
+      await svc.onStop();
     });
 
     it("closes the subscription when SETEVENTS fails", async () => {
@@ -752,7 +752,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await expect(svc.onStart?.()).rejects.toThrow("SETEVENTS");
+      await expect(svc.onStart()).rejects.toThrow("SETEVENTS");
       expect(sub.wasClosed).toBe(true);
     });
 
@@ -765,8 +765,8 @@ describe("TorService", () => {
         now: () => 0,
       });
       // Must not throw; no subscription created
-      await svc.onStart?.();
-      await svc.onStop?.();
+      await svc.onStart();
+      await svc.onStop();
     });
   });
 
@@ -1084,7 +1084,7 @@ describe("TorService", () => {
     });
 
     it("getStats honors cooldown set by checkHealth and serves Onionoo metrics", async () => {
-      let nowMs = 1_000;
+      const nowMs = 1_000;
       const svc = new TorService({
         http: createHttpClient(),
         ping: fakePing(false),
@@ -1246,7 +1246,7 @@ describe("TorService", () => {
         config: makeConfig({ useControlPort: true }),
         now: () => 0,
       });
-      await svc.onStart?.();
+      await svc.onStart();
       expect(sub.lastSetevents).toEqual(["BW", "WARN", "ERR"]);
       sub.fire("WARN", ["Your", "clock", "is", "skewed"]);
       sub.fire("ERR", ["Could", "not", "bind"]);

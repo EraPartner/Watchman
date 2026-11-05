@@ -243,7 +243,7 @@ describe('RoonService — Roon API (RN2)', () => {
     });
     await svc.onStart();
     const res = await svc.checkHealth(new AbortController().signal);
-    expect(probed.sort()).toEqual([9100, 9200, 9330]);
+    expect(probed.sort((a, b) => a - b)).toEqual([9100, 9200, 9330]);
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.details?.paired).toBe(false);

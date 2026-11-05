@@ -18,6 +18,7 @@ import {
   RaspberryPiInstanceSchema,
   type RaspberryPiInstance,
 } from "../../../config/services.js";
+import { toText } from "../../../core/text.js";
 
 function makeConfig(
   overrides: Partial<RaspberryPiInstance> = {}
@@ -306,7 +307,7 @@ describe("RaspberryPiService.getStats", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.metrics["rpiCliAvailable"]).toBe(false);
-      expect(String(res.value.metrics["rpiCliError"])).toMatch(
+      expect(toText(res.value.metrics["rpiCliError"])).toMatch(
         /rpi cli exit 2/
       );
     }
@@ -512,7 +513,7 @@ describe("RaspberryPiService.getStats — direct SSH path", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.metrics["rpiCliAvailable"]).toBe(false);
-      expect(String(res.value.metrics["rpiCliError"])).toMatch(/ECONNREFUSED/);
+      expect(toText(res.value.metrics["rpiCliError"])).toMatch(/ECONNREFUSED/);
     }
   });
 
@@ -587,7 +588,7 @@ describe("RaspberryPiService.getStats — direct SSH path", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.metrics["rpiCliAvailable"]).toBe(false);
-      const err = String(res.value.metrics["rpiCliError"]);
+      const err = toText(res.value.metrics["rpiCliError"]);
       expect(err).toMatch(/direct-down/);
       expect(err).toMatch(/relay-down/);
     }

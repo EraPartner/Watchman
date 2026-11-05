@@ -86,7 +86,7 @@ function makeApp(opts: {
         send: () => {
           return Promise.reject(new Error());
         },
-      } as HttpClient,
+      },
     },
   });
 }
@@ -97,9 +97,9 @@ describe("GET /profiles", () => {
     const res = await app.inject({ method: "GET", url: "/profiles" });
     await app.close();
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ id: string; serviceCount: number; isActive: boolean }>;
-    };
+    }>();
     expect(body.data[0]).toMatchObject({
       id: "p1",
       serviceCount: 2,
@@ -267,6 +267,6 @@ describe("PUT /profiles/:id", () => {
     });
     await app.close();
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe("VALIDATION");
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("VALIDATION");
   });
 });

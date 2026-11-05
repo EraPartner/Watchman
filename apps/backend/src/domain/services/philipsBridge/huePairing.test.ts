@@ -1,8 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import { pairBridge } from './huePairing.js';
 import type { HttpClient, HttpRequest } from '../../../infra/http/client.js';
 import { UnavailableError, ValidationError } from '../../../core/errors.js';
 import { required } from "../../../test/required.js";
+
+/** A fake client whose send mock tests can read directly. */
+type FakeHttp = { send: Mock<HttpClient["send"]> };
 
 const FAKE_CERT_HASH = 'aabbcc112233aabbcc112233aabbcc112233aabbcc112233aabbcc112233aabb';
 
@@ -10,9 +13,9 @@ function fakeProbeCertHash(_host: string, _port: number, _timeoutMs: number): Pr
   return Promise.resolve(FAKE_CERT_HASH);
 }
 
-function fakeHttp(status: number, body: unknown): HttpClient {
+function fakeHttp(status: number, body: unknown): FakeHttp {
   return {
-    send: vi.fn((_req: HttpRequest) => Promise.resolve({
+    send: vi.fn<HttpClient["send"]>((_req: HttpRequest) => Promise.resolve({
       status,
       headers: {},
       text: () => Promise.resolve(JSON.stringify(body)),
@@ -40,7 +43,7 @@ describe('pairBridge', () => {
     const req = required(vi.mocked(http.send).mock.calls[0])[0];
     expect(req.url).toBe('https://192.168.1.50/api');
     expect(req.method).toBe('POST');
-    const body = JSON.parse(req.body as string);
+    const body = JSON.parse(req.body as string) as { devicetype: string };
     expect(body.devicetype).toBe('watchman#host');
     expect(body).toEqual({ devicetype: 'watchman#host' });
   });

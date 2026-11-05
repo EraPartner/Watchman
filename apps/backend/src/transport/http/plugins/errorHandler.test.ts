@@ -26,7 +26,7 @@ describe("errorHandlerPlugin", () => {
       payload: "{not json",
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe("VALIDATION");
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("VALIDATION");
     await app.close();
   });
 
@@ -39,7 +39,7 @@ describe("errorHandlerPlugin", () => {
       payload: "x",
     });
     expect(res.statusCode).toBe(415);
-    expect(res.json().error.code).toBe("VALIDATION");
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("VALIDATION");
     await app.close();
   });
 

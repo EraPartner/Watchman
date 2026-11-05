@@ -315,7 +315,7 @@ export class PhilipsBridgeService extends BaseService {
       .map((p) => p.power_state?.battery_level)
       .filter((lvl): lvl is number => typeof lvl === "number");
     const batteryLow = power
-      ? (power ?? []).filter((p) => {
+      ? power.filter((p) => {
           const state = p.power_state?.battery_state;
           const level = p.power_state?.battery_level;
           return (

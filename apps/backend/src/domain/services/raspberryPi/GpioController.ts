@@ -18,7 +18,7 @@ export class GpioController {
     this.validate(gpio);
     return this.withHandle(async (h) => {
       const v = await h.read(gpio);
-      return (v === 1 ? 1 : 0) as 0 | 1;
+      return v === 1 ? 1 : 0;
     });
   }
 

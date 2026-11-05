@@ -38,7 +38,7 @@ function fakeSpawn(handler: (cmd: string, args: readonly string[]) => FakeChild 
       queueMicrotask(() => child.emit('close', exit));
     }
     return child as unknown as ReturnType<SpawnLike>;
-  }) as SpawnLike;
+  });
 }
 
 function fakeFs(): FsLike & { writes: Array<[string, string]>; unlinks: string[] } {

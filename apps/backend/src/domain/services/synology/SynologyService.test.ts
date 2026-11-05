@@ -286,8 +286,8 @@ describe("SynologyService", () => {
           new Map(names.map((n, i) => [String(i + 1), n]))
         ),
       ]
-        .map((idx) => names[Number(idx) - 1])
-        .sort();
+        .map((idx) => names[Number(idx) - 1] ?? "")
+        .sort((a, b) => a.localeCompare(b));
     expect(pick(["lo", "eth0", "eth1", "bond0"])).toEqual(["bond0"]);
     expect(pick(["lo", "eth0", "ovs_eth0", "docker0"])).toEqual(["ovs_eth0"]);
     expect(pick(["lo", "eth0", "eth1", "veth12ab"])).toEqual(["eth0", "eth1"]);

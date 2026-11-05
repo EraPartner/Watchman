@@ -143,7 +143,7 @@ function makeFakeLifecycle(): ServiceLifecycle {
     applyDelete: vi.fn(),
     switchActiveProfile: vi.fn(),
     idByStoredId: vi.fn(() => undefined),
-  } as unknown as ServiceLifecycle;
+  };
 }
 
 function makeApp(store: ConfigStore, registry = new ServiceRegistry()) {
@@ -178,9 +178,9 @@ describe("GET /config/kinds", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ kind: string; label: string; description: string }>;
-    };
+    }>();
     expect(Array.isArray(body.data)).toBe(true);
     expect(body.data.length).toBeGreaterThan(0);
     const bitcoin = body.data.find((k) => k.kind === "bitcoin");
@@ -197,7 +197,7 @@ describe("GET /config/services", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(0);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(0);
   });
 
   it("returns redacted services", async () => {
@@ -212,7 +212,7 @@ describe("GET /config/services", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { data: RedactedService[] };
+    const body = res.json<{ data: RedactedService[] }>();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.id).toBe("svc-uuid-1");
   });
@@ -235,9 +235,9 @@ describe("GET /config/load-errors", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ id: string; kind: string; message: string }>;
-    };
+    }>();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.id).toBe("svc-uuid-9");
     expect(body.data[0]?.message).toBe("decrypt failed");
@@ -275,7 +275,7 @@ describe("GET /config/services/:id", () => {
     expect(res.json()).toMatchObject({
       error: {
         code: "CONFLICT",
-        message: expect.stringContaining("fails to load"),
+        message: expect.stringContaining("fails to load") as unknown,
       },
     });
   });
@@ -295,7 +295,7 @@ describe("GET /config/services/:id", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: RedactedService }).data.id).toBe(
+    expect(res.json<{ data: RedactedService }>().data.id).toBe(
       "svc-uuid-1"
     );
   });
@@ -318,7 +318,7 @@ describe("POST /config/services", () => {
     await app.close();
 
     expect(res.statusCode).toBe(201);
-    expect((res.json() as { data: RedactedService }).data.id).toBe(
+    expect(res.json<{ data: RedactedService }>().data.id).toBe(
       "svc-uuid-1"
     );
   });
@@ -381,7 +381,7 @@ describe("PUT /config/services/:id", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: RedactedService }).data.instanceId).toBe(
+    expect(res.json<{ data: RedactedService }>().data.instanceId).toBe(
       "updated"
     );
   });
@@ -568,7 +568,7 @@ describe("POST /config/services/:id/test", () => {
           send: () => {
             return Promise.reject(new Error());
           },
-        } as HttpClient,
+        },
       },
     });
     const res = await app.inject({
@@ -609,7 +609,7 @@ describe("POST /config/services/:id/test", () => {
           send: () => {
             return Promise.reject(new Error());
           },
-        } as HttpClient,
+        },
       },
     });
     const res = await app.inject({
@@ -620,7 +620,7 @@ describe("POST /config/services/:id/test", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: { ok: boolean } }).data.ok).toBe(true);
+    expect(res.json<{ data: { ok: boolean } }>().data.ok).toBe(true);
   });
 
   it("returns ok:false when the probe resolves with reachable:false", async () => {
@@ -656,7 +656,7 @@ describe("POST /config/services/:id/test", () => {
           send: () => {
             return Promise.reject(new Error());
           },
-        } as HttpClient,
+        },
       },
     });
     const res = await app.inject({
@@ -693,7 +693,7 @@ describe("GET /config/export", () => {
     expect(res.headers["content-disposition"]).toMatch(
       /watchman-config-.*\.json/
     );
-    expect((res.json() as ExportBundle).payload).toBe("base64payload");
+    expect(res.json<ExportBundle>().payload).toBe("base64payload");
   });
 });
 
@@ -715,7 +715,7 @@ describe("POST /config/import", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: ImportResult }).data.imported).toBe(2);
+    expect(res.json<{ data: ImportResult }>().data.imported).toBe(2);
   });
 
   it("returns 400 on invalid bundle", async () => {
@@ -745,7 +745,7 @@ describe("GET /config/audit", () => {
     await app.close();
 
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: unknown[] }).data).toHaveLength(0);
+    expect(res.json<{ data: unknown[] }>().data).toHaveLength(0);
   });
 
   it("returns formatted audit entries", async () => {
@@ -763,9 +763,9 @@ describe("GET /config/audit", () => {
     const res = await app.inject({ method: "GET", url: "/config/audit" });
     await app.close();
 
-    const body = res.json() as {
+    const body = res.json<{
       data: Array<{ action: string; actor: string }>;
-    };
+    }>();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.action).toBe("create");
     expect(body.data[0]?.actor).toBe("alice");

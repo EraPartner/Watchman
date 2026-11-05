@@ -10,6 +10,15 @@ import { Broadcaster } from "./Broadcaster.js";
 import type { WsClient, WsUpgradeRequest } from "./types.js";
 import type { EventBus } from "../../core/eventBus.js";
 
+/**
+ * Fastify types `req.ip` as a string, but without trustProxy it reads
+ * `socket.remoteAddress`, which is undefined once the socket has closed.
+ */
+function clientIp(req: FastifyRequest): string {
+  const ip: string | undefined = req.ip;
+  return ip ?? req.socket.remoteAddress ?? "unknown";
+}
+
 export interface WsPluginOptions {
   bus: EventBus;
   logger: Logger;
@@ -93,15 +102,18 @@ export const wsPlugin = fp(
       req: FastifyRequest,
       reply: FastifyReply
     ): Promise<void> => {
-      const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+      const ip = clientIp(req);
       if (!limiter.allow(ip)) {
         await reply.code(429).send({ error: "too_many_handshakes" });
       }
     };
 
     app.get(path, { websocket: true, preValidation }, (socket, req) => {
+      // The socket is a `ws` WebSocket; WsClient is the part of it this
+      // plugin uses (the backend does not install @types/ws).
+      const ws = socket as unknown as WsClient;
       const upgradeReq: WsUpgradeRequest = {
-        headers: req.headers as Record<string, string | string[] | undefined>,
+        headers: req.headers,
         url: req.url,
         socket: req.socket.remoteAddress
           ? { remoteAddress: req.socket.remoteAddress }
@@ -109,20 +121,19 @@ export const wsPlugin = fp(
       };
 
       if (!gate.isOriginAllowed(upgradeReq)) {
-        socket.close(1008, "origin_not_allowed");
+        ws.close(1008, "origin_not_allowed");
         return;
       }
       const auth = gate.authenticate(upgradeReq);
       if (!auth.ok) {
-        socket.close(1008, auth.reason);
+        ws.close(1008, auth.reason);
         return;
       }
 
-      const ws = socket as unknown as WsClient;
-      const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+      const ip = clientIp(req);
       const result = manager.add(ws, ip, auth.user);
       if (!result.ok) {
-        socket.close(1013, result.reason);
+        ws.close(1013, result.reason);
         return;
       }
 

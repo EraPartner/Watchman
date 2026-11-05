@@ -85,7 +85,7 @@ interface RoonZoneRaw {
     seek_position?: number;
     length?: number;
   };
-  outputs?: Array<{ display_name?: unknown }>;
+  outputs?: Array<{ display_name?: unknown } | null>;
 }
 
 interface ZonesBody {

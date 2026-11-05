@@ -27,7 +27,7 @@ let state: {
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   if (state.authRequired) {
-    state.lastAuth = req.headers["authorization"] as string | undefined;
+    state.lastAuth = req.headers["authorization"];
     if (!state.lastAuth) {
       res.writeHead(401);
       res.end();

@@ -18,6 +18,7 @@ import type {
 } from "../../../infra/snmp/snmpGetter.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 import type { DsmClient } from "../../../infra/synology/dsmClient.js";
+import { toText } from "../../../core/text.js";
 
 export interface SynologyDeps {
   snmp: SnmpGetter;
@@ -237,7 +238,7 @@ export class SynologyService extends BaseService {
   }> {
     const started = this.now();
     try {
-      const info = await dsm.call<DsmInfoData>(
+      const info = await dsm.call<DsmInfoData | undefined>(
         "SYNO.DSM.Info",
         1,
         "getinfo",
@@ -418,7 +419,7 @@ export class SynologyService extends BaseService {
           firstFailure &&
           dsmResults.every((r) => r.status === "rejected")
         ) {
-          throw (firstFailure as PromiseRejectedResult).reason as unknown;
+          throw firstFailure.reason as unknown;
         }
       }
       const snmpOk = snmpResult.status === "fulfilled";
@@ -427,7 +428,10 @@ export class SynologyService extends BaseService {
       // metrics are reported as null rather than 0 or "", so the UI shows
       // "no data" instead of an idle NAS at 0 °C.
       const v = snmpOk ? snmpResult.value.values.map(clean) : [];
-      const uptimeTicks = toOptInt(v[1]) || toOptInt(v[11]);
+      // 0 ticks from the first OID counts as missing, as before
+      const hrUptime = toOptInt(v[1]);
+      const uptimeTicks =
+        hrUptime !== undefined && hrUptime !== 0 ? hrUptime : toOptInt(v[11]);
       const cpuIdle = toOptInt(v[5]);
       const snmpCpuTemp = toOptInt(v[6]);
       const memoryTotalKB = toOptInt(v[7]);
@@ -576,7 +580,7 @@ export class SynologyService extends BaseService {
                 dsmError:
                   dsmErrorReason instanceof Error
                     ? dsmErrorReason.message
-                    : String(dsmErrorReason),
+                    : toText(dsmErrorReason),
               }
             : {}),
           ...(net ? { networkRx: net.rx, networkTx: net.tx } : {}),

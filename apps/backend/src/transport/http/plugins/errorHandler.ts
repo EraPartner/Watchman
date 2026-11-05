@@ -16,7 +16,7 @@ const plugin: FastifyPluginAsync = (app) => {
     if (fastifyErr.validation) {
       return reply.status(400).send({ error: { code: 'VALIDATION', message: fastifyErr.message ?? 'invalid request' } });
     }
-    const status = fastifyErr.statusCode && fastifyErr.statusCode >= 400 ? fastifyErr.statusCode : 500;
+    const status = fastifyErr.statusCode !== undefined && fastifyErr.statusCode >= 400 ? fastifyErr.statusCode : 500;
     if (status < 500) {
       // Client errors raised by Fastify itself (malformed JSON, body too
       // large, unsupported media type) are the caller's fault, not ours.

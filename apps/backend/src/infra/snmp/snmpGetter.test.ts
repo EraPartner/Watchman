@@ -19,7 +19,7 @@ interface FakeSession extends EventEmitter {
     feedCb: (varbinds: FakeVarbind[]) => void,
     doneCb: (err: Error | null) => void,
   ): void;
-  close(): void;
+  close: () => void;
 }
 
 function makeVarbind(oid: string, value: string): FakeVarbind {

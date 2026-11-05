@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import { PiHealthChecker } from './PiHealthChecker.js';
 import type { PigpioClient, PigpioHandle } from '../../../infra/gpio/pigpioClient.js';
 import type { PingProber } from '../../../infra/net/pingProbe.js';
@@ -21,13 +21,18 @@ const CONFIG: RaspberryPiInstance = RaspberryPiInstanceSchema.parse({
   timeoutMs: 3_000,
 });
 
-function makeFakeHandle(): PigpioHandle {
+/** `end` as a mock property, so tests can assert on it directly. */
+interface FakeHandle extends PigpioHandle {
+  end: Mock<PigpioHandle["end"]>;
+}
+
+function makeFakeHandle(): FakeHandle {
   return {
     read: vi.fn(() => Promise.resolve(0)),
     getHardwareRevision: vi.fn(() => Promise.resolve(0xb03141)),
     getPigpioVersion: () => Promise.resolve(78),
     getCurrentTick: () => Promise.resolve(12345),
-    end: vi.fn(() => Promise.resolve(undefined)),
+    end: vi.fn<PigpioHandle["end"]>(() => Promise.resolve(undefined)),
   };
 }
 
@@ -45,7 +50,7 @@ function makeFakePing(success: boolean, avgMs = 5): PingProber {
 
 describe('PiHealthChecker', () => {
   const signal = new AbortController().signal;
-  let now = 0;
+  const now = 0;
   const mockNow = () => now;
 
   it('reports reachable + pigpioOnline when pigpio connects successfully', async () => {

@@ -33,7 +33,7 @@ export function createHomebridgeClient(deps: HomebridgeClientDeps): HomebridgeCl
 
   const captureCookies = (res: HttpResponse): void => {
     const setCookie = res.headers['set-cookie'];
-    if (!setCookie) return;
+    if (setCookie === undefined) return;
     const arr = Array.isArray(setCookie) ? setCookie : [setCookie];
     const pairs = arr.map((c) => c.split(';')[0]).filter(Boolean) as string[];
     if (pairs.length > 0) cookie = pairs.join('; ');

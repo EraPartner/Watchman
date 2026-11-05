@@ -55,7 +55,7 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
       socket.off('timeout', onTimeout);
       socket.off('error', onError);
       socket.setTimeout(0);
-      if (signal) signal.removeEventListener('abort', onAbort);
+      signal.removeEventListener('abort', onAbort);
       if (result instanceof Error) {
         socket.destroy();
         reject(result);
@@ -71,14 +71,12 @@ function openSocket(opts: TorControlConnectOpts, signal: AbortSignal): Promise<n
     const onError = (err: Error): void =>
       done(new UnavailableError(`tor event subscription connect failed: ${err.message}`));
 
-    if (signal) {
-      if (signal.aborted) {
-        socket.destroy();
-        reject(new UnavailableError('tor event subscription connect aborted'));
-        return;
-      }
-      signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) {
+      socket.destroy();
+      reject(new UnavailableError('tor event subscription connect aborted'));
+      return;
     }
+    signal.addEventListener('abort', onAbort, { once: true });
 
     socket.setTimeout(opts.timeoutMs);
     socket.once('connect', onConnect);
@@ -260,7 +258,7 @@ class TorEventSubscriptionImpl implements TorEventSubscription {
         this.socket.destroy();
         reject(new UnavailableError(`tor event subscription timed out after ${this.timeoutMs}ms`));
       }, this.timeoutMs);
-      timer.unref?.();
+      timer.unref();
 
       signal.addEventListener('abort', onAbort, { once: true });
       this.socket.once('error', onSocketError);

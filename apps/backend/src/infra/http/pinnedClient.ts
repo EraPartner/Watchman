@@ -29,9 +29,11 @@ export function probeCertFingerprint(
 
     socket.once("secureConnect", () => {
       clearTimeout(timer);
-      const cert = socket.getPeerCertificate();
+      // Typed as always present, but Node returns {} when the peer sent no
+      // certificate.
+      const cert: { raw?: Buffer } = socket.getPeerCertificate();
       socket.destroy();
-      if (!cert?.raw) {
+      if (!cert.raw) {
         reject(new UnavailableError("no peer certificate received"));
         return;
       }
@@ -70,8 +72,8 @@ export function createPinnedConnector(
   const inner = base ?? buildConnector({ rejectUnauthorized: false });
   return (opts, callback) => {
     inner(opts, (err, socket) => {
-      if (err || !socket) {
-        callback(err ?? new UnavailableError("connect failed"), null);
+      if (err) {
+        callback(err, null);
         return;
       }
       const pinned = socket as unknown as PinnedSocket;
@@ -79,7 +81,7 @@ export function createPinnedConnector(
         pinned.destroy();
         callback(
           new UnauthorizedError(
-            `cert pin configured for ${String(opts.hostname)} but connection is not TLS`
+            `cert pin configured for ${opts.hostname} but connection is not TLS`
           ),
           null
         );
@@ -96,7 +98,7 @@ export function createPinnedConnector(
         pinned.destroy();
         callback(
           new UnauthorizedError(
-            `cert pin mismatch for ${String(opts.hostname)}: expected ${expected}, got ${actual}`
+            `cert pin mismatch for ${opts.hostname}: expected ${expected}, got ${actual}`
           ),
           null
         );

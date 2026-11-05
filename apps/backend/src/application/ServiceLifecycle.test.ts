@@ -42,7 +42,7 @@ function makeProfiles(initialActive = "p1"): ProfileStore {
     getLastSignature: () => Promise.resolve(undefined),
     setLastSignature: async () => {},
     ensureBootstrap: async () => {},
-  } as unknown as ProfileStore;
+  };
 }
 
 class StubService extends BaseService {

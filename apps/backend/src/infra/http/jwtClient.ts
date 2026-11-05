@@ -31,19 +31,17 @@ export function createJwtClient(inner: HttpClient, opts: JwtClientOptions): Http
   }
 
   async function doRefresh(): Promise<string> {
-    if (!pendingRefresh) {
-      pendingRefresh = opts.refresh().then(
+    pendingRefresh ??= opts.refresh().then(
         (token) => {
           currentToken = token;
           pendingRefresh = null;
           return token;
         },
-        (err) => {
+        (err: unknown) => {
           pendingRefresh = null;
           throw err;
         },
       );
-    }
     return pendingRefresh;
   }
 

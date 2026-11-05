@@ -99,8 +99,6 @@ describe("ProfileStore", () => {
 
     const counts = await store.serviceCounts();
     expect(counts[required(all[0]).id]).toBe(2);
-    void svc1;
-    void svc2;
   });
 
   it("ensureBootstrap is idempotent and keeps a valid active profile", async () => {

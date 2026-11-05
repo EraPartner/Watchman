@@ -227,7 +227,7 @@ export class PiStatsCollector {
       }
     }
 
-    const directSucceeded = snapshot.rpiCliAvailable === true;
+    const directSucceeded = snapshot.rpiCliAvailable;
     if (!directSucceeded && this.macMiniReady()) {
       try {
         this.applyRelayInfo(snapshot, await this.fetchRpiInfo(signal));
@@ -399,9 +399,9 @@ export class PiStatsCollector {
     }
 
     if (wantStatic) {
-      const cpuInfo = parseProcCpuinfo(cpuinfoOut ?? "");
+      const cpuInfo = parseProcCpuinfo(cpuinfoOut);
       this.staticInfo = {
-        prettyName: parseOsRelease(osOut ?? ""),
+        prettyName: parseOsRelease(osOut),
         processor: cpuInfo.processor,
         isRpi: cpuInfo.isRpi,
         hwRevision: cpuInfo.hwRevision,

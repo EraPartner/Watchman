@@ -47,7 +47,7 @@ function makeProfiles(state: FakeProfileState): ProfileStore {
       return Promise.resolve();
     },
     ensureBootstrap: async () => {},
-  } as unknown as ProfileStore;
+  };
 }
 
 function makeDetector(sig: NetworkSignature): NetworkDetector {

@@ -336,9 +336,9 @@ describe("ConfigStore", () => {
       );
       const bundle = await store.exportAll();
       const encryptor = createEncryptor(deriveKey("unit-test-key"));
-      const entries = encryptor.decryptJson<Array<{ profileId: string }>>(
+      const entries = encryptor.decryptJson(
         Buffer.from(bundle.payload, "base64")
-      );
+      ) as Array<{ profileId: string }>;
       expect(required(entries[0]).profileId).toBe("home");
     });
 

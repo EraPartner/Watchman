@@ -178,7 +178,7 @@ describe("withBreakers", () => {
   // method, so a stray control() on an inner service never becomes reachable.
   it("does not forward control() from the inner service", () => {
     const inner = Object.assign(new Stub(), {
-      control: () => Promise.resolve(ok<void>(undefined)),
+      control: () => Promise.resolve(ok(undefined)),
     });
     const { guarded } = makeGuarded(inner);
     expect("control" in guarded).toBe(false);
@@ -187,7 +187,7 @@ describe("withBreakers", () => {
   it("does not advertise lifecycle hooks the inner service lacks", () => {
     const inner = new Stub();
     const { guarded } = makeGuarded(inner);
-    expect(guarded.onStart).toBeUndefined();
-    expect(guarded.onStop).toBeUndefined();
+    expect(guarded.onStart === undefined).toBe(true);
+    expect(guarded.onStop === undefined).toBe(true);
   });
 });

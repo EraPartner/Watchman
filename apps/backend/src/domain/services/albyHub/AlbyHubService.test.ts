@@ -11,6 +11,7 @@ import type { AlbyHubInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
 import type { HttpClient, HttpResponse } from "../../../infra/http/client.js";
 import { TimeoutError } from "../../../core/errors.js";
+import { toText } from "../../../core/text.js";
 
 function fakePing(): PingProber {
   return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
@@ -57,7 +58,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
   const url = req.url ?? "";
   state.seenPaths.push(url);
   if (state.requireAuth) {
-    state.lastAuth = req.headers["authorization"] as string | undefined;
+    state.lastAuth = req.headers["authorization"];
   }
 
   // NWC-specific routes — only active when nwcMode is set, so legacy probe tests
@@ -537,7 +538,7 @@ describe("AlbyHubService", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.value.metrics.tokenStatus).toBe("rejected");
-      expect(String(res.value.metrics.warning)).toContain("token rejected");
+      expect(toText(res.value.metrics.warning)).toContain("token rejected");
       expect(res.value.metrics.balanceLightningSpendableMsat).toBeNull();
     }
   });

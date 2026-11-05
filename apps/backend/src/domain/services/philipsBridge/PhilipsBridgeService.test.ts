@@ -1,10 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, type Mock } from "vitest";
 import { PhilipsBridgeService } from "./PhilipsBridgeService.js";
 import type { PingProber, PingResult } from "../../../infra/net/pingProbe.js";
 import type { PhilipsBridgeInstance } from "../../../config/services.js";
 import type { HttpClient, HttpRequest } from "../../../infra/http/client.js";
 import { UnauthorizedError } from "../../../core/errors.js";
 import { required } from "../../../test/required.js";
+
+/** A fake client whose send mock tests can read directly. */
+type FakeHttp = { send: Mock<HttpClient["send"]> };
 
 function makeConfig(
   overrides: Partial<PhilipsBridgeInstance> = {}
@@ -27,9 +30,9 @@ function fakePing(result: PingResult): PingProber {
   return { probe: () => Promise.resolve(result) };
 }
 
-function fakeHttp(status: number, body: unknown): HttpClient {
+function fakeHttp(status: number, body: unknown): FakeHttp {
   return {
-    send: vi.fn((_req: HttpRequest) => Promise.resolve({
+    send: vi.fn<HttpClient["send"]>((_req: HttpRequest) => Promise.resolve({
       status,
       headers: {},
       text: () => Promise.resolve(JSON.stringify(body)),
@@ -344,9 +347,9 @@ describe("PhilipsBridgeService Hue API v2 (H1)", () => {
 
 describe("PhilipsBridgeService extended resources + eventstream", () => {
   // route-aware HTTP fake: responds per CLIP v2 resource path
-  function routedHttp(routes: Record<string, unknown>): HttpClient {
+  function routedHttp(routes: Record<string, unknown>): FakeHttp {
     return {
-      send: vi.fn((req: HttpRequest) => {
+      send: vi.fn<HttpClient["send"]>((req: HttpRequest) => {
         const path = new URL(req.url).pathname;
         const body = routes[path];
         if (body === undefined) {

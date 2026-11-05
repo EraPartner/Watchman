@@ -1,5 +1,14 @@
 import { TimeoutError } from './errors.js';
 
+/**
+ * `signal.aborted`, read through a call. TypeScript keeps a property it has
+ * already checked narrowed to `false` across an `await`, so a re-check after
+ * the await would otherwise read as dead code.
+ */
+export function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 export function linkAbort(...signals: Array<AbortSignal | undefined>): AbortSignal {
   const controller = new AbortController();
   for (const s of signals) {
@@ -28,7 +37,7 @@ export function withTimeout(ms: number, parent?: AbortSignal): AbortSignal {
     parent?.removeEventListener('abort', onParentAbort);
     controller.abort(new TimeoutError(`aborted after ${ms}ms`));
   }, ms);
-  timer.unref?.();
+  timer.unref();
   if (parent) {
     if (parent.aborted) {
       clearTimeout(timer);

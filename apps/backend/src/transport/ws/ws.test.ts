@@ -334,7 +334,7 @@ describe("Broadcaster", () => {
       at: 123,
     });
     expect(a.sent.length).toBe(1);
-    const msg = JSON.parse(required(a.sent[0]));
+    const msg = JSON.parse(required(a.sent[0])) as { snapshot?: unknown };
     expect(msg).toMatchObject({
       type: "service_update",
       scope: "health",
@@ -370,7 +370,7 @@ describe("Broadcaster", () => {
       at: 123,
       snapshot: snap,
     });
-    const msg = JSON.parse(required(a.sent[0]));
+    const msg = JSON.parse(required(a.sent[0])) as { snapshot?: unknown };
     expect(msg.snapshot).toMatchObject(snap);
     bc.stop();
   });
@@ -388,7 +388,7 @@ describe("Broadcaster", () => {
       instanceId: "main",
       at: 123,
     });
-    const msg = JSON.parse(required(a.sent[0]));
+    const msg = JSON.parse(required(a.sent[0])) as { snapshot?: unknown };
     expect("snapshot" in msg).toBe(false);
     bc.stop();
   });
@@ -408,7 +408,7 @@ describe("Broadcaster", () => {
       at: 456,
       snapshot: snap,
     });
-    const msg = JSON.parse(required(a.sent[0]));
+    const msg = JSON.parse(required(a.sent[0])) as { snapshot?: unknown };
     expect(msg.snapshot).toMatchObject(snap);
     bc.stop();
   });
@@ -505,7 +505,7 @@ describe("Broadcaster", () => {
     });
 
     const alerts = a.sent
-      .map((s) => JSON.parse(s))
+      .map((s) => JSON.parse(s) as { type: string })
       .filter((m) => m.type === "alert");
     expect(alerts).toHaveLength(1);
     expect(alerts[0]).toMatchObject({
@@ -524,7 +524,7 @@ describe("Broadcaster", () => {
       at: 3,
     });
     const after = a.sent
-      .map((s) => JSON.parse(s))
+      .map((s) => JSON.parse(s) as { type: string })
       .filter((m) => m.type === "alert");
     expect(after).toHaveLength(2);
     expect(after[1]).toMatchObject({
@@ -541,7 +541,7 @@ describe("Broadcaster", () => {
       at: 4,
     });
     const again = a.sent
-      .map((s) => JSON.parse(s))
+      .map((s) => JSON.parse(s) as { type: string })
       .filter((m) => m.type === "alert");
     expect(again).toHaveLength(3);
     bc.stop();

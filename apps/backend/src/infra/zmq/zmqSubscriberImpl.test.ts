@@ -32,11 +32,11 @@ function makeSubSocket(): FakeSubSocket {
       return {
         async next() {
           // Poll until there's a frame or socket is closed
-          while (true) {
+          for (;;) {
             if (idx < frameQueue.length) {
               return { value: required(frameQueue[idx++]), done: false };
             }
-            if (socketClosed) return { value: undefined as unknown as Buffer[], done: true };
+            if (socketClosed) return { value: undefined, done: true };
             await new Promise((r) => setTimeout(r, 5));
           }
         },
@@ -49,9 +49,10 @@ function makeSubSocket(): FakeSubSocket {
 }
 
 vi.mock('zeromq', () => ({
-  Subscriber: class {
-    constructor() { return makeSubSocket(); }
-  },
+  // `new Subscriber()` returns the fake socket.
+  Subscriber: vi.fn(function Subscriber() {
+    return makeSubSocket();
+  }),
 }));
 
 import { zmqConnect } from './zmqSubscriberImpl.js';

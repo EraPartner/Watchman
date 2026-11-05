@@ -173,7 +173,7 @@ export class HomebridgeService extends BaseService {
       async (sig) => {
         const started = this.now();
         const [status, version] = await Promise.all([
-          this.client.get<ServerInformation>(this.statusPath, sig),
+          this.client.get<ServerInformation | null>(this.statusPath, sig),
           this.versionMemo(sig).catch(() => null),
         ]);
         const details: Record<string, unknown> = {};
@@ -202,7 +202,7 @@ export class HomebridgeService extends BaseService {
         plugins,
         accessories,
       ] = await Promise.all([
-        this.client.get<ServerInformation>(this.statusPath, signal),
+        this.client.get<ServerInformation | null>(this.statusPath, signal),
         this.versionMemo(signal).catch(() => null),
         this.client
           .get<CpuStatus>(CPU_PATH, signal)
@@ -227,8 +227,8 @@ export class HomebridgeService extends BaseService {
       const childList = Array.isArray(childBridges) ? childBridges : null;
       const pluginList = Array.isArray(plugins) ? plugins : null;
       const versionInfo =
-        version && typeof version === "object"
-          ? (version as VersionInfo)
+        typeof version === "object" && version !== null
+          ? version
           : null;
       return ok({
         at: this.now(),

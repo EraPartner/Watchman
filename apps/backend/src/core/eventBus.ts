@@ -79,7 +79,7 @@ export function createEventBus(onError?: (err: unknown) => void): EventBus {
       for (const h of set) {
         try {
           const maybe = (h as Handler<typeof payload>)(payload);
-          if (maybe instanceof Promise) maybe.catch((e) => safeOnError(e));
+          if (maybe instanceof Promise) maybe.catch((e: unknown) => safeOnError(e));
         } catch (e) {
           safeOnError(e);
         }

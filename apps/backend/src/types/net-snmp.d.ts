@@ -47,9 +47,11 @@ declare module 'net-snmp' {
     AuthProtocols: { md5: number; sha: number };
     PrivProtocols: { des: number; aes: number };
     ObjectType: { Counter64: number };
-    createSession(target: string, community: string, options?: SessionOptions): Session;
-    createV3Session(target: string, user: V3User, options?: SessionOptions): Session;
-    isVarbindError(varbind: Varbind): boolean;
+    // Property signatures: these are plain module functions, not methods
+    // that depend on `this`.
+    createSession: (target: string, community: string, options?: SessionOptions) => Session;
+    createV3Session: (target: string, user: V3User, options?: SessionOptions) => Session;
+    isVarbindError: (varbind: Varbind) => boolean;
   }
 
   const snmp: NetSnmp;

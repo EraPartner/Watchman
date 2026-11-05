@@ -48,7 +48,7 @@ interface ConnectArgs {
 }
 
 function entryKey(req: SshExecRequest): PoolKey {
-  return `${req.host}:${req.port ?? 22}:${req.user}:${req.privateKeyPath ?? ''}`;
+  return `${req.host}:${req.port}:${req.user}:${req.privateKeyPath ?? ''}`;
 }
 
 function sameCredentials(args: ConnectArgs, req: SshExecRequest): boolean {
@@ -222,7 +222,7 @@ export function createSshPool(options: SshPoolOptions = {}): SshPool {
     const client = new Client();
     const connectArgs: ConnectArgs = {
       host: req.host,
-      port: req.port ?? 22,
+      port: req.port,
       username: req.user,
       privateKeyPath: req.privateKeyPath,
       passphrase: req.passphrase,

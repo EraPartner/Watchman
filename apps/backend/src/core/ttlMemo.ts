@@ -31,8 +31,7 @@ export function ttlMemo<T>(
       if (value !== undefined) return value;
       throw failure.error;
     }
-    if (!inflight) {
-      inflight = fetcher(signal).then(
+    inflight ??= fetcher(signal).then(
         (v) => {
           value = v;
           fetchedAt = now();
@@ -47,7 +46,6 @@ export function ttlMemo<T>(
           throw e;
         }
       );
-    }
     return inflight;
   };
 }

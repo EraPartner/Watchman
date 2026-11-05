@@ -40,7 +40,7 @@ let state: {
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   let body = "";
-  req.on("data", (c: Buffer) => (body += c));
+  req.on("data", (c: Buffer) => (body += c.toString()));
   req.on("end", () => {
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${port}`);
     const params = {
@@ -75,7 +75,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
     // First-call errors (consumed on use)
     if (key in state.firstCallErrors) {
       const code = required(state.firstCallErrors[key]);
-      delete state.firstCallErrors[key];
+      Reflect.deleteProperty(state.firstCallErrors, key);
       const envelope: DsmEnvelope = { success: false, error: { code } };
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(envelope));

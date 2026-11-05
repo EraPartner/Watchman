@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { pino } from 'pino';
 import { registerShutdown, runShutdownSteps } from './shutdown.js';
 import { required } from "../test/required.js";
@@ -40,7 +40,7 @@ describe('runShutdownSteps', () => {
 
 describe('registerShutdown', () => {
   let before: Map<string, ReturnType<typeof process.listeners>>;
-  let exit: ReturnType<typeof vi.spyOn>;
+  let exit: MockInstance<typeof process.exit>;
 
   beforeEach(() => {
     vi.useFakeTimers();

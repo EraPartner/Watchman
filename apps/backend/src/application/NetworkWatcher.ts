@@ -128,7 +128,7 @@ export function createNetworkWatcher(
       // Initial tick on boot, then on the interval.
       void tick();
       handle = setIntervalFn(() => void tick(), intervalMs);
-      (handle as { unref?: () => void })?.unref?.();
+      (handle as { unref?: () => void }).unref?.();
     },
     async stop(): Promise<void> {
       if (handle !== undefined) {

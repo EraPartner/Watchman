@@ -1,7 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { createJwtClient } from './jwtClient.js';
 import type { HttpClient, HttpRequest, HttpResponse } from './client.js';
 import { required } from "../../test/required.js";
+
+/** A fake client whose send mock tests can read directly. */
+type FakeHttp = { send: Mock<HttpClient["send"]> };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -15,10 +18,10 @@ function fakeResponse(status: number, body?: unknown): HttpResponse {
 }
 
 /** Returns an HttpClient that replays `responses` in order, then throws. */
-function sequentialHttp(responses: HttpResponse[]): HttpClient {
+function sequentialHttp(responses: HttpResponse[]): FakeHttp {
   let index = 0;
   return {
-    send: vi.fn((_req: HttpRequest): Promise<HttpResponse> => {
+    send: vi.fn<HttpClient["send"]>((_req: HttpRequest): Promise<HttpResponse> => {
       const r = responses[index++];
       if (!r) return Promise.reject(new Error(`unexpected extra send (call ${index})`));
       return Promise.resolve(r);

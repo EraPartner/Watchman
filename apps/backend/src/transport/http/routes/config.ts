@@ -5,6 +5,7 @@ import type { ServiceRegistry } from "../../../domain/ServiceRegistry.js";
 import type { ProfileStore } from "../../../config/store/ProfileStore.js";
 import { KIND_META, SERVICE_KINDS } from "../../../config/schemas/index.js";
 import { isDomainError } from "../../../core/errors.js";
+import { actorHeader } from "../actorHeader.js";
 
 export interface ConfigRouteDeps {
   store: ConfigStore;
@@ -78,16 +79,17 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
 
     app.post<{ Body: unknown }>("/config/services", async (req, reply) => {
       try {
-        const actor = (req.headers["x-actor"] as string) ?? null;
+        const actor = actorHeader(req);
         // Optional profileId travels alongside the config; the store strips it
         // from schema validation and defaults to the active profile when absent.
         const body = (req.body ?? {}) as Record<string, unknown>;
         const profileId =
           typeof body["profileId"] === "string"
-            ? (body["profileId"] as string)
+            ? body["profileId"]
             : undefined;
         if (profileId !== undefined && (await unknownProfile(profileId))) {
-          return reply.status(400).send({
+          // Fastify's documented await-the-reply form (return-await in try).
+          return await reply.status(400).send({
             error: {
               code: "VALIDATION",
               message: `unknown profile '${profileId}'`,
@@ -96,10 +98,10 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
         }
         const created = await store.create(
           req.body,
-          actor ?? undefined,
+          actor,
           profileId
         );
-        return reply.status(201).send({ data: store.redact(created) });
+        return await reply.status(201).send({ data: store.redact(created) });
       } catch (e) {
         return reply.status(400).send({
           error: {
@@ -114,11 +116,11 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
       "/config/services/:id",
       async (req, reply) => {
         try {
-          const actor = (req.headers["x-actor"] as string) ?? null;
+          const actor = actorHeader(req);
           const updated = await store.update(
             req.params.id,
             req.body,
-            actor ?? undefined
+            actor
           );
           return { data: store.redact(updated) };
         } catch (e) {
@@ -137,15 +139,15 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
     app.delete<{ Params: { id: string } }>(
       "/config/services/:id",
       async (req, reply) => {
-        const actor = (req.headers["x-actor"] as string) ?? null;
-        await store.delete(req.params.id, actor ?? undefined);
+        const actor = actorHeader(req);
+        await store.delete(req.params.id, actor);
         return reply.status(204).send();
       }
     );
 
     // Move a service to a different profile (ADR-027). Emits config:service.updated
     // so the lifecycle reconciles whether it runs under the active profile.
-    app.put<{ Params: { id: string }; Body: { profileId?: unknown } }>(
+    app.put<{ Params: { id: string }; Body: { profileId?: unknown } | undefined }>(
       "/config/services/:id/profile",
       async (req, reply) => {
         const profileId =
@@ -169,8 +171,8 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
             },
           });
         }
-        const actor = (req.headers["x-actor"] as string) ?? null;
-        await store.setProfile(req.params.id, profileId, actor ?? undefined);
+        const actor = actorHeader(req);
+        await store.setProfile(req.params.id, profileId, actor);
         const updated = await store.get(req.params.id);
         return { data: updated ? store.redact(updated) : null };
       }
@@ -227,8 +229,8 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
     );
 
     app.get("/config/export", async (req, reply) => {
-      const actor = (req.headers["x-actor"] as string) ?? null;
-      const bundle = await store.exportAll(actor ?? undefined);
+      const actor = actorHeader(req);
+      const bundle = await store.exportAll(actor);
       const filename = `watchman-config-${bundle.exportedAt.slice(0, 10)}.json`;
       reply.header("Content-Disposition", `attachment; filename="${filename}"`);
       return bundle;
@@ -236,8 +238,8 @@ export function configRoutes(deps: ConfigRouteDeps): FastifyPluginAsync {
 
     app.post<{ Body: unknown }>("/config/import", async (req, reply) => {
       try {
-        const actor = (req.headers["x-actor"] as string) ?? null;
-        const result = await store.importBundle(req.body, actor ?? undefined);
+        const actor = actorHeader(req);
+        const result = await store.importBundle(req.body, actor);
         return { data: result };
       } catch (e) {
         return reply.status(400).send({

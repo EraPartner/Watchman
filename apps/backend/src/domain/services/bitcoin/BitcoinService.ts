@@ -206,7 +206,7 @@ export class BitcoinService extends BaseService {
     return {
       chainTips: Array.isArray(tipsRaw) ? (tipsRaw as ChainTip[]) : null,
       memory:
-        memRaw && typeof memRaw === "object" ? (memRaw as MemoryInfo) : null,
+        memRaw && typeof memRaw === "object" ? memRaw : null,
     };
   }
 
@@ -502,8 +502,11 @@ export class BitcoinService extends BaseService {
           warnings: collectWarnings(chain.warnings, net.warnings),
           reachableNetworks: Array.isArray(net.networks)
             ? net.networks
-                .filter((n) => n.reachable === true && n.name)
-                .map((n) => n.name as string)
+                .flatMap((n) =>
+                  n.reachable === true && typeof n.name === "string" && n.name !== ""
+                    ? [n.name]
+                    : []
+                )
             : [],
           // slow lane: null when the extras batch failed (see extrasError)
           chainTipsCount: tips ? tips.length : null,
@@ -605,7 +608,7 @@ export class BitcoinService extends BaseService {
     calls: ReadonlyArray<{ method: string; params?: unknown[] }>,
     signal: AbortSignal
   ): Promise<{
-    results: Array<unknown | null>;
+    results: unknown[];
     errors: Array<string | undefined>;
   }> {
     if (!this.authHeader) {

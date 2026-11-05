@@ -28,7 +28,9 @@ function varbindToString(vb: Varbind): string {
   const v = vb.value;
   if (typeof v === 'string') return v;
   if (typeof v === 'number' || typeof v === 'bigint' || typeof v === 'boolean') return v.toString();
-  return JSON.stringify(v) ?? '';
+  // undefined for a function or symbol, which a typo'd decoder could hand back
+  const json: string | undefined = JSON.stringify(v);
+  return json ?? '';
 }
 
 function decodeUnsignedBE(buf: Buffer): string {

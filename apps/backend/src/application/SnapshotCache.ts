@@ -15,6 +15,7 @@ import type {
 } from "../domain/BaseService.js";
 import { createSwrCache, type SwrCache } from "../infra/cache/swr.js";
 import { withTimeout } from "../core/abort.js";
+import { toText } from "../core/text.js";
 
 // Same as the poller's default probe timeout.
 const DEFAULT_STATS_TIMEOUT_MS = 10_000;
@@ -170,14 +171,18 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
       },
       (e: unknown) => {
         signal.removeEventListener("abort", onAbort);
-        reject(e);
+        reject(e instanceof Error ? e : new UnavailableError(toText(e)));
       }
     );
   });
 }
 
-function abortError(signal: AbortSignal): unknown {
-  return signal.reason ?? new UnavailableError("stats request aborted");
+function abortError(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason;
+  return new UnavailableError(
+    reason === undefined ? "stats request aborted" : toText(reason)
+  );
 }
 
 function toDomainError(e: unknown): DomainError {

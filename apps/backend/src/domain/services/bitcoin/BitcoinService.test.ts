@@ -14,6 +14,7 @@ import type {
   ZmqMessage,
   ZmqSubscriberHandle,
 } from "../../../infra/zmq/zmqSubscriber.js";
+import { toText } from "../../../core/text.js";
 
 function fakePing(): PingProber {
   return { probe: () => Promise.resolve({ success: true, avgMs: 5 }) };
@@ -34,7 +35,7 @@ let state: {
 
 function handler(req: IncomingMessage, res: ServerResponse) {
   state.requests += 1;
-  state.lastAuth = req.headers["authorization"] as string | undefined;
+  state.lastAuth = req.headers["authorization"];
   if (
     state.requireAuth &&
     state.lastAuth !== "Basic " + Buffer.from("user:pw").toString("base64")
@@ -91,7 +92,7 @@ function handler(req: IncomingMessage, res: ServerResponse) {
       );
     } else {
       res.end(
-        JSON.stringify(envelopeFor((parsed ?? {}) as { method?: string }))
+        JSON.stringify(envelopeFor(parsed ?? {}))
       );
     }
   });
@@ -972,7 +973,7 @@ describe("BitcoinService — ZMQ (BT2)", () => {
       if (res.ok) {
         expect(res.value.metrics.blocks).toBe(850000);
         expect(res.value.metrics.chainTipsCount).toBeNull();
-        expect(String(res.value.metrics.extrasError)).toContain("rpcwhitelist");
+        expect(toText(res.value.metrics.extrasError)).toContain("rpcwhitelist");
       }
     });
   });

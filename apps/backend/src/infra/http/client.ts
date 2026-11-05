@@ -50,9 +50,7 @@ export function createHttpClient(opts: HttpClientOptions = {}): HttpClient {
         const res = await request(req.url, reqOpts);
         return {
           status: res.statusCode,
-          headers: res.headers as Readonly<
-            Record<string, string | string[] | undefined>
-          >,
+          headers: res.headers,
           text: () => res.body.text(),
           json: () => res.body.json(),
         };

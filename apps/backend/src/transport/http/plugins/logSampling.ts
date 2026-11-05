@@ -15,7 +15,7 @@ const plugin: FastifyPluginAsync<LogSamplingOptions> = (app, opts) => {
 
   app.addHook('onRequest', (req) => {
     const url = req.url.split('?')[0] ?? req.url;
-    const ua = (req.headers['user-agent'] ?? '').toString().toLowerCase();
+    const ua = (req.headers['user-agent'] ?? '').toLowerCase();
     const isHealth = healthPaths.includes(url);
     const isSkipUA = skipUAs.some((s) => ua.includes(s));
     if (isSkipUA || (isHealth && seen++ % rate !== 0)) {
