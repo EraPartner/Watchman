@@ -28,7 +28,9 @@ type HuePairItem = HuePairSuccess | HuePairError;
 
 const HUE_PAIR_URL = (host: string) => `https://${host}/api`;
 
-const PAIR_BODY = JSON.stringify({ devicetype: 'watchman#host', generateclientkey: true });
+// No generateclientkey: that asks for an Entertainment (streaming) key Watchman
+// never uses; least privilege.
+const PAIR_BODY = JSON.stringify({ devicetype: 'watchman#host' });
 
 /**
  * Pair with a Philips Hue Bridge by posting to its /api endpoint.

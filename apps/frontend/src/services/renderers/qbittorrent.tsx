@@ -26,6 +26,9 @@ const STATE_TONE: Record<string, string> = {
   stalledUP: "var(--warn)",
   pausedDL: "var(--text-md)",
   pausedUP: "var(--text-md)",
+  // qBittorrent 5 renamed paused* to stopped*
+  stoppedDL: "var(--text-md)",
+  stoppedUP: "var(--text-md)",
   error: "var(--crit)",
   missingFiles: "var(--crit)",
 };
@@ -196,6 +199,7 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
         { key: "torrentsSeeding", label: "Seeding", format: fmtNumber(0) },
         { key: "torrentsPaused", label: "Paused", format: fmtNumber(0) },
         { key: "torrentsCompleted", label: "Completed", format: fmtNumber(0) },
+        { key: "torrentsError", label: "Errored", format: fmtNumber(0) },
         {
           key: "torrentsNoWorkingTracker",
           label: "No working tracker",
@@ -259,6 +263,9 @@ export const qbittorrentRenderer: ServiceRenderer<Stats> = {
     const conn = stats ? dotGet(stats, "connectionStatus") : undefined;
     if (conn === "disconnected") return "crit";
     if (conn === "firewalled") return "warn";
+    // error / missingFiles torrents need the user (disk gone, files moved)
+    const errored = stats ? dotGet(stats, "torrentsError") : undefined;
+    if (typeof errored === "number" && errored > 0) return "warn";
     return "ok";
   },
 };

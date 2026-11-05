@@ -2,7 +2,7 @@
 title: Roon Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -35,6 +35,11 @@ Two-tier health with inline parallel probe:
 - **Host tier** — ICMP ping to Roon host
 - **Service tier** — TCP connection probe on Roon ports (default 9100)
 - **Composite reachability** — `host.reachable OR service.reachable` (device considered up if either tier responds)
+- **With `useRoonApi`** — the TCP probe also covers `apiPort` (added if it isn't in `ports`), health reports `details.paired`, and an unpaired extension adds the message "Roon API not paired — enable Watchman in Roon under Settings → Extensions". The tile turns to warning when `paired` is `false`.
+
+**Read-only:** Roon has no read-only grant. Reading zones requires declaring the transport service, which would also allow playback, volume and standby control. Watchman only subscribes to zones; `infra/roon/roonReadOnly.test.ts` fails the build if any transport control call appears in the Roon code (ADR-032).
+
+**Zones** carry `outputNames`, `queueItemsRemaining` and `queueTimeRemaining`; the detail sheet lists each zone with its state and outputs.
 
 ## Roon WebSocket API Integration (RN1 + RN2)
 

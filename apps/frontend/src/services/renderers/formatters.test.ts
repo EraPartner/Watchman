@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  fmtDate,
+  fmtList,
   fmtRaw,
   fmtNumber,
   fmtPercent,
@@ -216,5 +218,26 @@ describe("dotGet", () => {
 
   it("returns undefined when intermediate is null", () => {
     expect(dotGet({ a: null }, "a.b")).toBeUndefined();
+  });
+});
+
+describe("fmtList", () => {
+  const byName = fmtList((x) => String(x["name"]), 2);
+  it("joins item labels and counts the rest", () => {
+    expect(byName([{ name: "a" }, { name: "b" }, { name: "c" }])).toBe("a, b +1 more");
+    expect(byName([{ name: "a" }])).toBe("a");
+  });
+  it("says none for an empty list and — when absent", () => {
+    expect(byName([])).toBe("none");
+    expect(byName(null)).toBe("—");
+    expect(byName(undefined)).toBe("—");
+  });
+});
+
+describe("fmtDate", () => {
+  it("formats epoch ms as a UTC date", () => {
+    expect(fmtDate(Date.parse("2027-01-01T00:00:00Z"))).toBe("2027-01-01");
+    expect(fmtDate(null)).toBe("—");
+    expect(fmtDate(0)).toBe("—");
   });
 });

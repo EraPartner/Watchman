@@ -1,7 +1,15 @@
 import type { ReactNode } from "react";
 import type { ServiceRenderer } from "./types";
 import { buildQuickLink } from "./quickLink";
-import { dotGet, fmtNumber, fmtPercent, fmtRaw } from "./formatters";
+import {
+  dotGet,
+  fmtBool,
+  fmtDate,
+  fmtList,
+  fmtNumber,
+  fmtPercent,
+  fmtRaw,
+} from "./formatters";
 
 type Stats = Record<string, unknown>;
 
@@ -169,6 +177,16 @@ export const adguardRenderer: ServiceRenderer<Stats> = {
         { key: "running", label: "Running", format: fmtRaw },
         { key: "protectionEnabled", label: "Protection", format: fmtRaw },
         { key: "version", label: "Version", format: fmtRaw },
+        // only present with the opt-in update check
+        {
+          key: "updateAvailable",
+          label: "Update available",
+          format: fmtBool("yes", "no"),
+        },
+        { key: "latestVersion", label: "Latest", format: fmtRaw },
+        { key: "tlsEnabled", label: "HTTPS / DoH / DoT", format: fmtBool("on", "off") },
+        { key: "tlsCertNotAfter", label: "Certificate expires", format: fmtDate },
+        { key: "tlsCertValid", label: "Certificate valid", format: fmtBool("yes", "no") },
       ],
     },
     {
@@ -190,6 +208,12 @@ export const adguardRenderer: ServiceRenderer<Stats> = {
         { key: "filterCount", label: "Filter lists", format: fmtNumber(0) },
         { key: "totalRules", label: "Rules total", format: fmtNumber(0) },
         { key: "userRules", label: "Custom rules", format: fmtNumber(0) },
+        { key: "oldestFilterUpdate", label: "Oldest list update", format: fmtDate },
+        {
+          key: "staleFilters",
+          label: "Lists not updated for 7+ days",
+          format: fmtList((f) => String(f), 5),
+        },
       ],
     },
     {
@@ -247,6 +271,9 @@ export const adguardRenderer: ServiceRenderer<Stats> = {
     if (health?.status === "warning") return "warn";
     if (stats && dotGet(stats, "running") === false) return "crit";
     if (stats && dotGet(stats, "protectionEnabled") === false) return "warn";
+    const stale = stats ? dotGet(stats, "staleFilterCount") : undefined;
+    if (typeof stale === "number" && stale > 0) return "warn";
+    if (stats && dotGet(stats, "tlsCertValid") === false) return "warn";
     return "ok";
   },
 };

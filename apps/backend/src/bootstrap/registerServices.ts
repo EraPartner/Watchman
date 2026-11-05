@@ -88,7 +88,16 @@ function buildService(
         ...(roonConnect ? { roonConnect } : {}),
       });
     case "qbittorrent":
-      return new QBittorrentService({ http, ping, config: instance, now });
+      return new QBittorrentService({
+        // a pinned fingerprint admits the WebUI's self-signed certificate
+        // and nothing else
+        http: instance.certSha256
+          ? (pinnedHttp ?? createPinnedClient)(instance.certSha256)
+          : http,
+        ping,
+        config: instance,
+        now,
+      });
     case "adguard":
       return new AdGuardService({
         // a pinned fingerprint admits AdGuard's self-signed certificate and
@@ -151,8 +160,14 @@ function buildService(
       // Opt-in: a self-signed Config UI X cert is accepted only when the
       // operator sets allowSelfSigned (trusted-network model, ADR-017/ADR-025).
       // Default path stays strict (the shared `http`).
+      // A pinned fingerprint wins: it keeps verification on and trusts only
+      // that certificate.
       const client = createHomebridgeClient({
-        http: instance.allowSelfSigned ? (insecureHttp ?? http) : http,
+        http: instance.certSha256
+          ? (pinnedHttp ?? createPinnedClient)(instance.certSha256)
+          : instance.allowSelfSigned
+            ? (insecureHttp ?? http)
+            : http,
         config: {
           baseUrl: instance.baseUrl,
           username: instance.username,
@@ -161,6 +176,7 @@ function buildService(
           loginPath: instance.loginPath,
           timeoutMs: instance.timeoutMs,
         },
+        now,
       });
       return new HomebridgeService({ client, ping, config: instance, now });
     }

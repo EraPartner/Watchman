@@ -2,7 +2,7 @@
 title: Homebridge Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -51,10 +51,17 @@ Configuration is managed via the Settings UI or the `/config` API (DuckDB config
 | `versionPath`     | text     | no       | `/api/status/homebridge-version` | no      | Path for the version check (slow lane)                                                                                                                                                                     |
 | `loginPath`       | text     | no       | `/api/auth/login`                | no      | Path used by jwtClient to obtain a token on 401                                                                                                                                                            |
 | `allowSelfSigned` | boolean  | no       | `false`                          | no      | Accept a self-signed TLS cert from the Config UI X server. **Disables TLS verification for this instance (no MITM protection)** — trusted-network only. Default verifies the cert and rejects self-signed. |
+| `certSha256`      | text     | no       | `""`                             | no      | SHA-256 fingerprint of the Config UI X certificate. Trusts exactly that certificate with verification kept on; takes precedence over `allowSelfSigned`. |
 | `instanceId`      | text     | no       | `main`                           | no      | Unique ID when running multiple instances                                                                                                                                                                  |
 | `enabled`         | boolean  | no       | `true`                           | no      | Disable without removing the config                                                                                                                                                                        |
 | `cacheTtlMs`      | number   | no       | `10000`                          | no      | Stats cache TTL in milliseconds                                                                                                                                                                            |
 | `timeoutMs`       | number   | no       | `5000`                           | no      | HTTP request timeout in milliseconds                                                                                                                                                                       |
+
+**Login backoff:** a `401` makes Watchman log in (`POST loginPath`, the only non-GET call). If that login is refused, Watchman sends nothing to Homebridge for 5 minutes, then tries once more; a second refusal stops it until the configuration is saved again (or Watchman restarts). Before this, a wrong password meant a failed login on every poll (about 8 per minute). See `apps/backend/src/infra/http/authGate.ts`.
+
+**Admin user:** `GET /api/plugins` is admin-only in Config UI X (AdminGuard, checked in 4.76.0's published code), so plugin counts and outdated-plugin names need an admin user. The project owner runs Watchman with an admin user (decided 2026-11-05).
+
+**Named lists:** `childBridges` (`name`, `status`, `up`) and `outdatedPlugins` (`name`, `installedVersion`, `latestVersion`) come from data already fetched, capped at 20 entries. `/api/accessories` now rides the 15-minute slow lane, because Config UI X queries every HomeKit accessory to answer it.
 
 ## Endpoints
 

@@ -6,7 +6,7 @@ import {
   type StatsResult,
 } from "../../BaseService.js";
 import { ok, err } from "../../../core/result.js";
-import { UnauthorizedError } from "../../../core/errors.js";
+import { UnauthorizedError, UnavailableError } from "../../../core/errors.js";
 import { ttlMemo, type TtlMemo } from "../../../core/ttlMemo.js";
 import type { PhilipsBridgeInstance } from "../../../config/services.js";
 import type { PingProber } from "../../../infra/net/pingProbe.js";
@@ -16,6 +16,7 @@ import {
   createPinnedDispatcher,
 } from "../../../infra/http/pinnedClient.js";
 import {
+  isCredentialRejection,
   startSseStream,
   type SseStarter,
 } from "../../../infra/http/sseClient.js";
@@ -28,6 +29,12 @@ const EVENTSTREAM_PATH = "/eventstream/clip/v2";
 const RESOURCE_TTL_MS = 5 * 60 * 1000;
 const LOW_BATTERY_THRESHOLD = 20;
 const KEY_REJECTED_MESSAGE = "application key rejected — re-pair the bridge";
+// The bridge's certificate is self-signed; without the fingerprint pairing
+// stores, the verifying client refuses it and no API call can succeed.
+const NO_PIN_MESSAGE =
+  "no certificate fingerprint stored — re-pair the bridge so Watchman can trust its certificate";
+/** Longest device list kept in a snapshot. */
+const MAX_LISTED_DEVICES = 20;
 
 /** The bridge answers 401/403 for an unknown or revoked application key. */
 function isKeyRejected(status: number): boolean {
@@ -47,6 +54,11 @@ interface HueResource {
   status?: string;
   power_state?: { battery_state?: string; battery_level?: number };
   on?: { on: boolean };
+  /** zigbee_connectivity / device_power point at their device */
+  owner?: { rid?: string; rtype?: string };
+  /** device resources carry the user-facing name and model */
+  metadata?: { name?: string };
+  product_data?: { product_name?: string; model_id?: string };
 }
 
 interface HueListResponse<T> {
@@ -77,6 +89,7 @@ export class PhilipsBridgeService extends BaseService {
   private readonly pingCount: number;
   private readonly usePing: boolean;
   private readonly applicationKey: string | undefined;
+  private readonly pinned: boolean;
   private readonly pinger: PingProber;
   private readonly http: HttpClient;
   private readonly now: () => number;
@@ -94,6 +107,7 @@ export class PhilipsBridgeService extends BaseService {
   private lightsSeeded = false;
   private sseAbort: AbortController | undefined;
   private sseHealthy = false;
+  private sseKeyRejected = false;
   private lastEventAt = 0;
 
   constructor(deps: PhilipsBridgeDeps) {
@@ -105,6 +119,7 @@ export class PhilipsBridgeService extends BaseService {
     this.pingCount = deps.config.pingCount;
     this.usePing = deps.config.usePing;
     this.applicationKey = deps.config.applicationKey;
+    this.pinned = Boolean(deps.config.certHash);
     this.now = deps.now;
     this.pinger = deps.ping;
     this.http = deps.config.certHash
@@ -135,10 +150,12 @@ export class PhilipsBridgeService extends BaseService {
       ...(this.sseDispatcher ? { dispatcher: this.sseDispatcher } : {}),
       signal: this.sseAbort.signal,
       onMessage: (data) => this.handleSseMessage(data),
-      onError: () => {
+      onError: (e) => {
         // events may be missed until the stream recovers — re-seed on next poll
         this.sseHealthy = false;
         this.lightsSeeded = false;
+        // the stream gives up on a refused key; health keeps reporting it
+        if (isCredentialRejection(e)) this.sseKeyRejected = true;
       },
     });
   }
@@ -203,7 +220,11 @@ export class PhilipsBridgeService extends BaseService {
     const probe = await this.probeApi(signal);
     const apiReachable = probe.reachable;
     const apiLatencyMs = this.now() - apiStarted;
-    const message = probe.keyRejected ? KEY_REJECTED_MESSAGE : undefined;
+    const message = probe.keyRejected
+      ? KEY_REJECTED_MESSAGE
+      : !apiReachable && !this.pinned
+        ? NO_PIN_MESSAGE
+        : undefined;
     const service = {
       reachable: apiReachable,
       ...(apiReachable ? { latencyMs: apiLatencyMs } : {}),
@@ -214,7 +235,11 @@ export class PhilipsBridgeService extends BaseService {
     const latencyMs = apiReachable
       ? apiLatencyMs
       : (pingRes.avgMs ?? pingElapsedMs);
-    const reachable = host.reachable || service.reachable;
+    // With a key configured, the bridge counts as up only when its API
+    // answers (ADR-026: the protocol probe is the defining signal). A bridge
+    // that answers ping but refuses the key or the TLS handshake is not
+    // usable, and used to show green.
+    const reachable = service.reachable;
 
     return ok({
       reachable,
@@ -229,6 +254,7 @@ export class PhilipsBridgeService extends BaseService {
         apiReachable,
         pingEnabled: this.usePing,
         sseConnected: this.sseHealthy,
+        ...(this.sseKeyRejected ? { sseStopped: true } : {}),
       },
     });
   }
@@ -260,6 +286,24 @@ export class PhilipsBridgeService extends BaseService {
     const [connectivity, power, devices, rooms] = resourceResults.map((r) =>
       r.status === "fulfilled" ? r.value : null
     );
+    // every read failed: report it instead of a snapshot of blanks
+    if (
+      Object.keys(lightMetrics).length === 0 &&
+      resourceResults.every((r) => r.status === "rejected")
+    ) {
+      const first = resourceResults.find(
+        (r): r is PromiseRejectedResult => r.status === "rejected"
+      );
+      const reason =
+        first?.reason instanceof Error ? first.reason.message : "no response";
+      return err(
+        new UnavailableError(
+          this.pinned
+            ? `hue bridge API unavailable: ${reason}`
+            : `hue bridge API unavailable: ${NO_PIN_MESSAGE}`
+        )
+      );
+    }
 
     const unreachable = connectivity
       ? connectivity.filter((c) => (c.status ?? "connected") !== "connected")
@@ -279,11 +323,40 @@ export class PhilipsBridgeService extends BaseService {
         }).length
       : null;
 
+    const names = deviceNames(devices);
+    const unreachableDevices = connectivity
+      ? connectivity
+          .filter((c) => (c.status ?? "connected") !== "connected")
+          .slice(0, MAX_LISTED_DEVICES)
+          .map((c) => ({
+            name: names.get(c.owner?.rid ?? "") ?? "unknown device",
+            status: c.status ?? "unknown",
+          }))
+      : null;
+    const lowBatteryDevices = power
+      ? power
+          .filter((p) => {
+            const state = p.power_state?.battery_state;
+            const level = p.power_state?.battery_level;
+            return (
+              (state !== undefined && state !== "normal") ||
+              (typeof level === "number" && level < LOW_BATTERY_THRESHOLD)
+            );
+          })
+          .slice(0, MAX_LISTED_DEVICES)
+          .map((p) => ({
+            name: names.get(p.owner?.rid ?? "") ?? "unknown device",
+            level: p.power_state?.battery_level ?? null,
+          }))
+      : null;
+
     return ok({
       at: this.now(),
       metrics: {
         ...base,
         ...lightMetrics,
+        unreachableDevices,
+        lowBatteryDevices,
         zigbeeUnreachableCount: unreachable,
         batteryLowCount: batteryLow,
         minBatteryPercent:
@@ -393,4 +466,17 @@ export class PhilipsBridgeService extends BaseService {
       return {};
     }
   }
+}
+
+/** device id → display name (the name set in the Hue app, else the model). */
+function deviceNames(
+  devices: HueResource[] | null | undefined
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const d of devices ?? []) {
+    const name =
+      d.metadata?.name ?? d.product_data?.product_name ?? d.product_data?.model_id;
+    if (d.id && name) names.set(d.id, name);
+  }
+  return names;
 }

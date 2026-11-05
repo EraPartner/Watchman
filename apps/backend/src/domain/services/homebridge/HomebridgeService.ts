@@ -80,11 +80,19 @@ interface HomebridgeStatus {
 interface ChildBridge {
   status?: string;
   name?: string;
+  plugin?: string;
 }
 
 interface PluginInfo {
+  name?: string;
+  displayName?: string;
+  installedVersion?: string;
+  latestVersion?: string;
   updateAvailable?: boolean;
 }
+
+/** Longest list kept in a snapshot (child bridges, outdated plugins). */
+const MAX_LISTED = 20;
 
 const CPU_PATH = "/api/status/cpu";
 const RAM_PATH = "/api/status/ram";
@@ -128,6 +136,7 @@ export class HomebridgeService extends BaseService {
   private readonly now: () => number;
   private readonly versionMemo: TtlMemo<VersionInfo | string>;
   private readonly pluginsMemo: TtlMemo<PluginInfo[]>;
+  private readonly accessoriesMemo: TtlMemo<unknown[]>;
 
   constructor(deps: HomebridgeDeps) {
     super();
@@ -144,6 +153,12 @@ export class HomebridgeService extends BaseService {
     );
     this.pluginsMemo = ttlMemo(SLOW_LANE_TTL_MS, deps.now, (signal) =>
       this.client.get<PluginInfo[]>(PLUGINS_PATH, signal)
+    );
+    // /api/accessories makes Config UI X query every HomeKit accessory (and
+    // only works in insecure mode): an accessory count doesn't need that
+    // every 30 s
+    this.accessoriesMemo = ttlMemo(SLOW_LANE_TTL_MS, deps.now, (signal) =>
+      this.client.get<unknown[]>(ACCESSORIES_PATH, signal)
     );
   }
 
@@ -206,9 +221,7 @@ export class HomebridgeService extends BaseService {
           .catch((): ChildBridge[] | null => null),
         this.pluginsMemo(signal).catch((): PluginInfo[] | null => null),
         // requires Homebridge insecure mode; null when unavailable
-        this.client
-          .get<unknown[]>(ACCESSORIES_PATH, signal)
-          .catch((): unknown[] | null => null),
+        this.accessoriesMemo(signal).catch((): unknown[] | null => null),
       ]);
       const info = status ?? {};
       const childList = Array.isArray(childBridges) ? childBridges : null;
@@ -259,6 +272,24 @@ export class HomebridgeService extends BaseService {
             : null,
           accessoryCount: Array.isArray(accessories)
             ? accessories.length
+            : null,
+          // names, so the tile can say which bridge is down / what to update
+          childBridges: childList
+            ? childList.slice(0, MAX_LISTED).map((b) => ({
+                name: b.name ?? b.plugin ?? "unnamed",
+                status: b.status ?? "unknown",
+                up: RUNNING_CHILD_STATES.has((b.status ?? "").toLowerCase()),
+              }))
+            : null,
+          outdatedPlugins: pluginList
+            ? pluginList
+                .filter((p) => p.updateAvailable === true)
+                .slice(0, MAX_LISTED)
+                .map((p) => ({
+                  name: p.displayName ?? p.name ?? "unnamed",
+                  installedVersion: p.installedVersion ?? null,
+                  latestVersion: p.latestVersion ?? null,
+                }))
             : null,
         },
       });

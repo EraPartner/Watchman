@@ -2,7 +2,7 @@
 title: Philips Hue Bridge Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 last-updated: 2026-10-21
 tags:
   [
@@ -46,7 +46,10 @@ Two-tier health with inline parallel probe:
 
 - **Host tier** — ICMP ping to Hue Bridge host (`PING_COUNT` probes)
 - **Service tier** — HTTP `GET /clip/v2/resource/bridge` probe (when `applicationKey` is configured); its round trip is the reported latency
-- **Composite reachability** — `host.reachable OR service.reachable` (bridge considered up if either tier responds)
+- **Composite reachability** — with an `applicationKey`, `reachable = service.reachable`: the bridge counts as up only when its API answers (ADR-026). A bridge that answers ping but refuses the key or the TLS handshake used to show green. Without a key, only ping is available, so `reachable` = ping.
+- **Messages** — a `401`/`403` reports "application key rejected — re-pair the bridge"; an unreachable API without a stored `certHash` reports that the certificate fingerprint is missing (the bridge's certificate is self-signed, so the verifying client refuses it until pairing stores the pin).
+- **Live events** — the event stream backs off exponentially (5 s doubling to 5 min) after failures, and stops for good when the bridge answers `401`/`403` (`details.sseStopped`); re-pairing restarts it.
+- **Stats** — when every API read fails, stats return `UNAVAILABLE` instead of a snapshot of blanks. `unreachableDevices` and `lowBatteryDevices` name the devices (from `/resource/device`, joined by `owner.rid`), max 20 each. The tile turns to warning when any device is unreachable or low on battery.
 
 Health snapshot includes `host` and `service` tiers:
 
@@ -263,10 +266,10 @@ Initiates the pairing flow. Requires the physical **link button** on the bridge 
 3. **API Request** — POSTs to `https://<host>/api` with:
    ```json
    {
-     "devicetype": "watchman#host",
-     "generateclientkey": true
+     "devicetype": "watchman#host"
    }
    ```
+   No `generateclientkey`: that requests an Entertainment streaming key Watchman never uses.
 4. **Application Key** — Bridge returns a new unique key (username) for this application
 5. **Timeout** — Both certificate and API request must complete within `timeoutMs` (default 10s)
 
@@ -289,7 +292,7 @@ If the wizard doesn't work, obtain `applicationKey` and `certHash` manually:
 # Press link button, then within 30 seconds run:
 curl -X POST https://<bridge-ip>/api \
   -H "Content-Type: application/json" \
-  -d '{"devicetype":"watchman#host","generateclientkey":true}' \
+  -d '{"devicetype":"watchman#host"}' \
   -k  # Skip certificate verification (insecure, for testing only)
 ```
 

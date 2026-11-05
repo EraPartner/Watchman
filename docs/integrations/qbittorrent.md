@@ -36,7 +36,9 @@ Two-tier health via `withHostPing` helper:
 
 ## Login
 
-Watchman logs in with `POST /api/v2/auth/login` (the only non-GET call) and reuses the `SID` cookie. Parallel requests share one login. When a request gets `403` (expired session), Watchman drops the cookie only if it is still the one that request sent, then logs in again and retries once, so a parallel request that already logged in again does not lose its fresh cookie. After a rejected login it waits 5 minutes before trying again, because qBittorrent bans the client IP after 5 failed logins by default (`WebUI\MaxAuthenticationFailCount`), and that ban would also lock out your browser on the same machine. Saving new credentials restarts the service, which clears the wait.
+Watchman logs in with `POST /api/v2/auth/login` (the only non-GET call) and reuses the `SID` cookie. Parallel requests share one login. When a request gets `403` (expired session), Watchman drops the cookie only if it is still the one that request sent, then logs in again and retries once, so a parallel request that already logged in again does not lose its fresh cookie. After a rejected login it waits 5 minutes before trying again; after a second rejection in a row it stops logging in until the service's configuration is saved again (or Watchman restarts). qBittorrent bans the client IP after 5 failed logins by default (`WebUI\MaxAuthenticationFailCount`), and that ban would also lock out your browser on the same machine, so polling never gets close to it. The shared gate is `apps/backend/src/infra/http/authGate.ts`.
+
+**API key (qBittorrent 5.2+):** with `apiKey` set, Watchman sends `Authorization: Bearer <key>` on every request and never logs in. A refused key (`401`/`403`) goes through the same gate.
 
 ## Configuration
 
@@ -51,6 +53,8 @@ Service config lives in the DuckDB config store, managed via the Settings UI or 
 | `baseUrl`                | url      | `http://127.0.0.1:8069` | yes      | no      | Base URL of the qBittorrent Web UI.                  |
 | `username`               | text     | `admin`                 | no       | no      | Web UI login username.                               |
 | `password`               | password | _(empty)_               | no       | **yes** | Web UI login password (encrypted at rest).           |
+| `apiKey`                 | password | _(empty)_               | no       | **yes** | qBittorrent ≥ 5.2 API key; replaces the login.       |
+| `certSha256`             | text     | _(empty)_               | no       | no      | SHA-256 pin for a self-signed HTTPS Web UI.          |
 | `timeoutMs`              | number   | `5000`                  | no       | no      | Per-request HTTP timeout in milliseconds.            |
 | `cacheTtlMs`             | number   | `10000`                 | no       | no      | Response cache TTL in milliseconds.                  |
 | `pollPolicy.healthMs`    | number   | `10000`                 | no       | no      | Health check interval in milliseconds.               |

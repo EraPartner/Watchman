@@ -84,7 +84,12 @@ export class RoonService extends BaseService {
           signal,
         })
       : Promise.resolve({ success: false });
-    const portPromises = this.ports.map((port) =>
+    // with the Roon API on, its port is the one that matters: probe it too
+    const probePorts =
+      this.useRoonApi && !this.ports.includes(this.apiPort)
+        ? [...this.ports, this.apiPort]
+        : this.ports;
+    const portPromises = probePorts.map((port) =>
       this.tcp.probe({
         host: this.host,
         port,
@@ -98,7 +103,7 @@ export class RoonService extends BaseService {
     ]);
 
     const ports: Record<string, boolean> = {};
-    this.ports.forEach((port, i) => {
+    probePorts.forEach((port, i) => {
       ports[String(port)] = Boolean(portResults[i]);
     });
 
@@ -109,7 +114,20 @@ export class RoonService extends BaseService {
       reachable: icmpAlive,
       ...(pingMs !== undefined ? { pingMs } : {}),
     };
-    const service = { reachable: anyPortOpen, details: { ports } };
+    // pairing state from the live connection: an unpaired extension means
+    // Roon has not (or no longer) enabled Watchman under Settings → Extensions
+    const paired = this.useRoonApi
+      ? (this.handle?.isPaired() ?? false)
+      : undefined;
+    const message =
+      paired === false
+        ? "Roon API not paired — enable Watchman in Roon under Settings → Extensions"
+        : undefined;
+    const service = {
+      reachable: anyPortOpen,
+      details: { ports },
+      ...(message !== undefined ? { message } : {}),
+    };
     const reachable = host.reachable || service.reachable;
     const latencyMs = pingRes.avgMs ?? this.now() - started;
 
@@ -119,7 +137,9 @@ export class RoonService extends BaseService {
       at: this.now(),
       host,
       service,
+      ...(message !== undefined ? { message } : {}),
       details: {
+        ...(paired !== undefined ? { paired } : {}),
         icmpAlive,
         anyPortOpen,
         ports,
@@ -154,6 +174,11 @@ export class RoonService extends BaseService {
                 name: z.displayName,
                 state: z.state,
                 outputs: z.outputCount,
+                ...(z.outputNames && z.outputNames.length > 0
+                  ? { outputNames: z.outputNames }
+                  : {}),
+                queueItemsRemaining: z.queueItemsRemaining,
+                queueTimeRemaining: z.queueTimeRemaining,
                 ...(z.nowPlaying?.oneLine !== undefined
                   ? { nowPlaying: z.nowPlaying.oneLine }
                   : {}),

@@ -222,7 +222,16 @@ describe("HomebridgeService", () => {
             { name: "cam", status: "down" },
           ];
         if (p === "/api/plugins")
-          return [{ updateAvailable: true }, { updateAvailable: false }];
+          return [
+            {
+              name: "homebridge-hue",
+              displayName: "Homebridge Hue",
+              installedVersion: "0.13.0",
+              latestVersion: "0.13.1",
+              updateAvailable: true,
+            },
+            { name: "homebridge-cam", updateAvailable: false },
+          ];
         if (p === "/api/accessories") return [{}, {}, {}];
         return null;
       }),
@@ -249,6 +258,17 @@ describe("HomebridgeService", () => {
         pluginCount: 2,
         pluginUpdatesAvailable: 1,
         accessoryCount: 3,
+        childBridges: [
+          { name: "hue", status: "ok", up: true },
+          { name: "cam", status: "down", up: false },
+        ],
+        outdatedPlugins: [
+          {
+            name: "Homebridge Hue",
+            installedVersion: "0.13.0",
+            latestVersion: "0.13.1",
+          },
+        ],
       });
     }
   });
@@ -293,6 +313,8 @@ describe("HomebridgeService", () => {
     await svc.getStats(new AbortController().signal);
     expect(calls[cfg.versionPath]).toBe(1);
     expect(calls["/api/plugins"]).toBe(1);
+    // heavy on the UI server (queries every HomeKit accessory)
+    expect(calls["/api/accessories"]).toBe(1);
     expect(calls[cfg.statusPath]).toBe(2);
   });
 

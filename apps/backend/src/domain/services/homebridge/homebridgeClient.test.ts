@@ -217,4 +217,46 @@ describe('homebridgeClient', () => {
     // 4th call (index 3) should have Bearer new-tok
     expect(calls[3]?.headers?.['authorization']).toBe('Bearer new-tok');
   });
+
+  it('stops logging in after the password is refused twice', async () => {
+    let t = 0;
+    const { http, calls } = fakeHttp((req) =>
+      req.method === 'POST' ? { status: 401, body: '' } : { status: 401, body: '' },
+    );
+    const client = createHomebridgeClient({
+      http,
+      config: { ...baseCfg, username: 'u', password: 'wrong' },
+      now: () => t,
+    });
+    const logins = (): number => calls.filter((c) => c.method === 'POST').length;
+    const sig = new AbortController().signal;
+
+    await expect(client.get('/api/status/cpu', sig)).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(logins()).toBe(1);
+    // within the backoff nothing is sent at all
+    const before = calls.length;
+    await expect(client.get('/api/status/cpu', sig)).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(calls.length).toBe(before);
+
+    t += 5 * 60 * 1000;
+    await expect(client.get('/api/status/cpu', sig)).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(logins()).toBe(2);
+
+    t += 24 * 60 * 60 * 1000;
+    const stoppedAt = calls.length;
+    await expect(client.get('/api/status/cpu', sig)).rejects.toThrow(/save the credentials/);
+    expect(calls.length).toBe(stoppedAt);
+  });
+
+  it('a JSON body that mentions <html is data, not a login page', async () => {
+    const { http } = fakeHttp(() => ({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: '{"description":"renders <html> widgets"}',
+    }));
+    const client = createHomebridgeClient({ http, config: { ...baseCfg, authToken: 'T' } });
+    await expect(client.get('/api/plugins', new AbortController().signal)).resolves.toEqual({
+      description: 'renders <html> widgets',
+    });
+  });
 });

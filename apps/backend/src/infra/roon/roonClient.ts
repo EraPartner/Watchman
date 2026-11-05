@@ -11,6 +11,8 @@ export interface RoonZone {
     length?: number;
   };
   outputCount: number;
+  /** Display names of the zone's outputs (endpoints), in Roon's order. */
+  outputNames?: string[];
 }
 
 /** Handle for an active Roon Core connection. */

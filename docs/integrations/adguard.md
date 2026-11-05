@@ -2,7 +2,7 @@
 title: AdGuard Home Integration
 type: integration
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags:
   [
     integration,
@@ -63,6 +63,28 @@ Configuration lives in the DuckDB config store, managed via the Settings UI or t
   `GET /control/querylog?limit=100` and reports `queryLogSampleSize`, `queryLogBlocked` (Filtered*
   reasons except safe search), `queryLogAvgMs`, `queryLogTopBlockedDomain` and `queryLogTopClient`.
   Individual entries are not stored or shown.
+- `checkUpdates` (default `false`): when on, every 6 hours Watchman sends
+  `POST /control/version.json` with `{"recheck_now": false}`. This is the **only POST** Watchman
+  sends to AdGuard (approved by the project owner on 2026-11-05): it returns AdGuard's cached update
+  info, starts no download and changes no setting. Reports `updateAvailable`, `latestVersion` and
+  `updateCheckDisabled`.
+
+### Credential backoff
+
+AdGuard blocks an IP after `auth_attempts` failed logins (sample config: 5, for `block_auth_min`
+15 minutes). Whether Basic-auth failures count toward that is unverified, so Watchman does not
+risk it: after a `401`/`403` it sends nothing for 5 minutes, then tries once; a second rejection
+stops all requests until the configuration is saved again (or Watchman restarts). Health shows
+the reason. See `apps/backend/src/infra/http/authGate.ts`.
+
+### Filter freshness and TLS (10-minute slow lane)
+
+- From `/control/filtering/status` (already fetched): `oldestFilterUpdate` (epoch ms),
+  `staleFilterCount` and `staleFilters` (names, max 10) for enabled lists whose `last_updated` is
+  older than 7 days or missing. The tile turns to warning when any list is stale.
+- `GET /control/tls/status`: `tlsEnabled`, `tlsCertNotAfter` (epoch ms) and `tlsCertValid`
+  (`valid_cert` and `valid_chain`). Field names are from AdGuard's OpenAPI schema and unverified
+  on a live server; missing fields read as `null`.
 
 ## Endpoints
 

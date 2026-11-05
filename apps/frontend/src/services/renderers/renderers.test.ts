@@ -347,3 +347,53 @@ describe("routerRenderer link state", () => {
     expect(tone({ linksDown: 1, linksDownNames: "eth1" })).toBe("warn");
   });
 });
+
+// ─── home & media tones (2026-11-05 methodology review) ──────────────────────
+
+describe("home and media renderers surface data that needs attention", () => {
+  const online = { status: "online" } as never;
+
+  it("Hue warns on an unreachable device or a low battery", () => {
+    const tone = (stats: Record<string, unknown>) =>
+      philipsBridgeRenderer.tone({ stats, health: online });
+    expect(tone({ zigbeeUnreachableCount: 0, batteryLowCount: 0 })).toBe("ok");
+    expect(tone({ zigbeeUnreachableCount: 1, batteryLowCount: 0 })).toBe("warn");
+    expect(tone({ zigbeeUnreachableCount: 0, batteryLowCount: 2 })).toBe("warn");
+  });
+
+  it("qBittorrent warns on errored torrents", () => {
+    const tone = (stats: Record<string, unknown>) =>
+      qbittorrentRenderer.tone({ stats, health: online });
+    expect(tone({ connectionStatus: "connected", torrentsError: 0 })).toBe("ok");
+    expect(tone({ connectionStatus: "connected", torrentsError: 1 })).toBe("warn");
+  });
+
+  it("Roon warns when the API is on but Watchman is not enabled in Roon", () => {
+    expect(roonRenderer.tone({ stats: { paired: false }, health: online })).toBe("warn");
+    expect(roonRenderer.tone({ stats: { paired: true }, health: online })).toBe("ok");
+    // API off: no paired field, no warning
+    expect(roonRenderer.tone({ stats: {}, health: online })).toBe("ok");
+  });
+
+  it("AdGuard warns on stale filter lists or an invalid certificate", () => {
+    const tone = (stats: Record<string, unknown>) =>
+      adguardRenderer.tone({ stats, health: online });
+    expect(tone({ running: true, protectionEnabled: true, staleFilterCount: 0 })).toBe("ok");
+    expect(tone({ running: true, protectionEnabled: true, staleFilterCount: 1 })).toBe("warn");
+    expect(tone({ running: true, protectionEnabled: true, tlsCertValid: false })).toBe("warn");
+  });
+
+  it("Homebridge lists outdated plugins and child bridges by name", () => {
+    const find = (key: string) =>
+      homebridgeRenderer.detail.flatMap((g) => g.metrics).find((m) => m.key === key)!;
+    expect(
+      find("outdatedPlugins").format([{ name: "Homebridge Hue", latestVersion: "0.13.1" }])
+    ).toBe("Homebridge Hue → 0.13.1");
+    expect(
+      find("childBridges").format([
+        { name: "hue", status: "ok", up: true },
+        { name: "cam", status: "down", up: false },
+      ])
+    ).toBe("hue, cam (down)");
+  });
+});

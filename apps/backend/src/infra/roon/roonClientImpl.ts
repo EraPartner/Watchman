@@ -85,7 +85,7 @@ interface RoonZoneRaw {
     seek_position?: number;
     length?: number;
   };
-  outputs?: unknown[];
+  outputs?: Array<{ display_name?: unknown }>;
 }
 
 interface ZonesBody {
@@ -124,6 +124,13 @@ function parseZone(raw: RoonZoneRaw): RoonZone {
     queueTimeRemaining: raw.queue_time_remaining ?? 0,
     ...(nowPlaying !== undefined ? { nowPlaying } : {}),
     outputCount: Array.isArray(raw.outputs) ? raw.outputs.length : 0,
+    outputNames: Array.isArray(raw.outputs)
+      ? raw.outputs
+          .map((o) =>
+            o && typeof o.display_name === "string" ? o.display_name : ""
+          )
+          .filter((n) => n !== "")
+      : [],
   };
 }
 

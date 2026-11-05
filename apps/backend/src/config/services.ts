@@ -90,6 +90,11 @@ export const QbittorrentInstanceSchema = BaseInstanceSchema.extend({
   baseUrl: z.string().url().default("http://127.0.0.1:8069"),
   username: z.string().default("admin"),
   password: z.string().default(""),
+  // qBittorrent ≥ 5.2 WebUI API key: sent as a bearer token instead of
+  // logging in, so there is no login to fail and no IP ban to trigger
+  apiKey: z.string().default(""),
+  // Pin the WebUI's (self-signed) HTTPS certificate, like AdGuard's
+  certSha256: CertSha256Schema,
 });
 
 export const AdGuardInstanceSchema = BaseInstanceSchema.extend({
@@ -101,6 +106,11 @@ export const AdGuardInstanceSchema = BaseInstanceSchema.extend({
   certSha256: CertSha256Schema,
   // Opt-in: read the recent DNS query log (per-client history, so off by default)
   readQueryLog: z.boolean().default(false),
+  // Opt-in: ask AdGuard whether an update is available. This is the one POST
+  // Watchman sends to AdGuard (/control/version.json with recheck_now:false);
+  // it reads AdGuard's cached update info and changes nothing. User approved
+  // this exception on 2026-11-05.
+  checkUpdates: z.boolean().default(false),
 });
 
 export const AlbyHubInstanceSchema = BaseInstanceSchema.extend({
@@ -124,6 +134,9 @@ export const HomebridgeInstanceSchema = BaseInstanceSchema.extend({
   versionPath: z.string().default("/api/status/homebridge-version"),
   loginPath: z.string().default("/api/auth/login"),
   allowSelfSigned: z.boolean().default(false),
+  // Pin Config UI X's self-signed certificate instead of turning off
+  // verification; takes precedence over allowSelfSigned
+  certSha256: CertSha256Schema,
 });
 
 export const SynologyInstanceSchema = BaseInstanceSchema.extend({

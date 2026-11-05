@@ -2,7 +2,7 @@
 title: Set up AdGuard Home
 type: guide
 status: active
-date: 2026-10-28
+date: 2026-11-05
 tags: [guide, setup, services, adguard, dns, credentials]
 description: Prepare AdGuard Home, create a dedicated web user, and add it to Watchman
 aliases: [adguard setup, set up adguard home]
@@ -13,7 +13,9 @@ aliases: [adguard setup, set up adguard home]
 > [!abstract] What Watchman reads
 > Status, query statistics, filter lists, clients, DHCP leases and which protections are on, all through
 > `GET /control/*` with HTTP Basic auth. If you turn it on, also the latest 100 entries of the DNS
-> query log (`GET /control/querylog`, off by default). It never changes settings
+> query log (`GET /control/querylog`, off by default) and, if you turn it on, AdGuard's cached update
+> info (`POST /control/version.json`, read-only in effect). A refused password stops the requests
+> after the second try. It never changes settings
 > (`apps/backend/src/domain/services/adguard/AdGuardService.ts`). Details:
 > [[docs/integrations/adguard|AdGuard Home integration]].
 
@@ -73,6 +75,7 @@ If you turned authentication off in AdGuard Home, leave both fields empty in Wat
 | Password | The password from step 2                                                       |
 | Certificate fingerprint | Only for an `https://` URL with a self-signed certificate (step 1) |
 | Read the DNS query log | Off by default. On: each poll reads the latest 100 query-log entries for the recent blocked count, most-blocked domain, busiest client and response time. The query log is per-device DNS history, so leave it off unless you want that. |
+| Check for AdGuard updates | Off by default. On: every 6 hours Watchman asks AdGuard for its cached update info (`POST /control/version.json` with `recheck_now: false`). It is the only POST Watchman sends to AdGuard; it installs nothing and changes no setting. |
 
 Watchman pings the host taken from the Base URL, so the ping and the API always point at the same box.
 
