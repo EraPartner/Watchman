@@ -67,10 +67,10 @@
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.0.2",
     "audit-ci": "^7.1.0",
-    "concurrently": "^10.0.3",
+    "concurrently": "^10.0.7",
     "cross-env": "^10.1.0",
     "lint-staged": "^17.6.0",
     "openapi-typescript": "^7.4.4",
-    "prettier": "^3.9.10"
+    "prettier": "^3.10.1"
   }
 }
